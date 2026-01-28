@@ -12,7 +12,6 @@ managed_thread_t task_controller;
 managed_thread_t soft_plc;
 managed_thread_t path_plan;
 managed_thread_t pdo;
-managed_thread_t test_keyboard_thread;
 
 int threads_start() {
     // 检查系统CPU核心数
@@ -43,9 +42,6 @@ int threads_start() {
     pdo.config = pdo_config;
     pdo.function = pdo_thread_func;
 
-    // 7. 配置键盘CNC测试线程
-    test_keyboard_thread.config = test_keyboard_cnc_config;
-    test_keyboard_thread.function = test_keyboard_cnc_thread_func;
 
     // 8. 依次创建并启动所有线程
     printf("\n--- 开始创建控制器线程 ---\n");
@@ -53,7 +49,6 @@ int threads_start() {
     if (create_managed_thread(&soft_plc) != 0) return EXIT_FAILURE;
     if (create_managed_thread(&motion_controller) != 0) return EXIT_FAILURE;
     if (create_managed_thread(&path_plan) != 0) return EXIT_FAILURE;
-    if (create_managed_thread(&test_keyboard_thread) != 0) return EXIT_FAILURE;
     if (create_managed_thread(&task_controller) != 0) return EXIT_FAILURE;
 
     printf("--- 所有线程已创建 ---\n\n");
@@ -73,7 +68,5 @@ void threads_joint()
     printf("%s已退出\n",path_plan.config.thread_name);
     pthread_join(pdo.id, NULL);
     printf("%s已退出\n",pdo.config.thread_name);
-    pthread_join(test_keyboard_thread.id, NULL);
-    printf("%s已退出\n",test_keyboard_thread.config.thread_name);
 
 }

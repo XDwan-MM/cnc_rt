@@ -47,19 +47,27 @@ INCLUDEPATH += \
 HEADERS += \
     src/common/greecnc.h \
     src/common/rt_sem.h \
+    src/common/threads_controller.h \
     src/hal/hal_driver.h \
     src/hal/hal_io.h \
     src/master/main_demo.h \
-    src/master/master.h
+    src/master/master.h \
+    src/threads/api/threads_api.h \
+    src/threads/src/thread_manager.h
 
 SOURCES += \
     main.cpp \
     src/common/rt_sem.c \
+    src/common/threads_controller.cpp \
     src/hal/hal_driver.c \
     src/hal/hal_io.c \
-    src/master/master.c
+    src/master/master.c \
+    src/threads/src/thread_manager.cpp \
+    src/threads/src/threads.cpp
 
 INCLUDEPATH += \
     src/hal \
     src/common \
     src/master \
+    src/threads/api \
+    src/threads/src \

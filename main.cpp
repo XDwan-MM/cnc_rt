@@ -5,6 +5,8 @@
 #include "shmapi.h"
 #include <cstdio>
 #include "rt_sem.h"
+#include "threads_api.h"
+#include "threads_controller.h"
 
 void sigint_handler(int sig) {
     exit_flag = 1;
@@ -29,6 +31,17 @@ int main()
     Hal_Driver_Manager_Init();
     Hal_Driver_Array_Init();
     Hal_Io_Array_Init();
+    signal(SIGINT, sigint_handler);
+
+    init_rt_sem(); //需要放在线程启动（threads_start()函数）前
+    if (threads_start()) {
+        printf("\n线程创建失败，主线程退出。\n");
+        exit(true);
+    }
+
     Master_Start();
+
+    threads_joint();
+
     return 0;
 }
