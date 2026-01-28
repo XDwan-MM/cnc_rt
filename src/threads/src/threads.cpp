@@ -68,5 +68,4 @@ void threads_joint()
     printf("%s已退出\n",path_plan.config.thread_name);
     pthread_join(pdo.id, NULL);
     printf("%s已退出\n",pdo.config.thread_name);
-
 }
