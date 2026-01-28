@@ -43,6 +43,7 @@ LIBS += -L/opt/GreeMaster/lib -lGREEMASTER -lpthread -lxml2
 LIBS += -L "/usr/local/lib/" -lethercat
 
 INCLUDEPATH += \
+    /opt/GreeMaster/include/libGREEMASTER/
 
 HEADERS += \
     src/common/greecnc.h \
