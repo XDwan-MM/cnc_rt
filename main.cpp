@@ -13,9 +13,8 @@ void sigint_handler(int sig) {
 }
 int Master_Start()
 {
-//    const char * eni_path = "./ENI/speed.xml";
-    if (ethercat_init() < 0)
-    {
+    const char * eni_path = "./ENI/gugao.xml";
+    if (ethercat_init(eni_path) < 0) {
         printf("EtherCAT 启动失败！\n");
         return -1;
     }
@@ -33,14 +32,15 @@ int main()
     Hal_Io_Array_Init();
     signal(SIGINT, sigint_handler);
 
+    Master_Start();
     init_rt_sem(); //需要放在线程启动（threads_start()函数）前
     if (threads_start()) {
         printf("\n线程创建失败，主线程退出。\n");
         exit(true);
     }
-
-    Master_Start();
-
+    while (!exit_flag) {
+        sleep(1);
+    }
     threads_joint();
 
     return 0;

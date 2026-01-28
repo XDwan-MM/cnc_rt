@@ -16,17 +16,24 @@ thread_config_t path_plan_config = {.core_id = 2, .policy = SCHED_RR, .priority 
 
 // 软PLC线程的具体实现
 void* soft_plc_thread_func(void*) {
-    sem_wait(&plc_sem);
+    while (!exit_flag) {
+        sem_wait(&plc_sem);
     printf("soft_plc_thread_func\n");
+    }
 
     return NULL;
 }
 
 // 运动控制器线程的具体实现
 void* motion_controller_thread_func(void*) {
-    sem_wait(&plc_sem);
+    while (!exit_flag)
+    {
+    sem_wait(&motion_sem);
+    if (exit_flag) break;
+
     printf("motion_controller_thread_func\n");
     sem_post(&moton_sem_exec_done);
+    }
     return NULL;
 }
 
