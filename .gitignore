@@ -80,14 +80,10 @@ build*/
 # cache
 .cache/
 
-# bin
-bin/
+/bin/
 
 # data
 data/
-
-# lib
-libs/
 
 # .VSCodeCounter
 .VSCodeCounter/
