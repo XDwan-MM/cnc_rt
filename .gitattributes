@@ -1,0 +1,41 @@
+# 1. 默认策略：所有文本文件强制使用 LF（无论在 Windows 还是 Linux）
+* text=auto eol=lf
+
+# 2. 特殊例外：Windows 批处理脚本必须保留 CRLF，否则无法运行
+*.bat    text eol=crlf
+*.cmd    text eol=crlf
+*.ps1    text eol=crlf
+*.sln    text eol=crlf
+*.vcproj text eol=crlf
+
+# 3. 二进制文件例外：防止图片、DLL 损坏
+*.png       binary
+*.jpg       binary
+*.jpeg      binary
+*.gif       binary
+*.ico       binary
+*.svg       text
+*.webp      binary
+*.pdf       binary
+*.doc       binary
+*.docx      binary
+*.xls       binary
+*.xlsx      binary
+*.ppt       binary
+*.pptx      binary
+*.ttf       binary
+*.eot       binary
+*.woff      binary
+*.woff2     binary
+*.tar       binary
+*.gz        binary
+*.zip       binary
+*.7z        binary
+*.exe       binary
+*.dll       binary
+*.so        binary
+*.dylib     binary
+*.jar       binary
+*.war       binary
+*.pyc       binary
+*.iso       binary
