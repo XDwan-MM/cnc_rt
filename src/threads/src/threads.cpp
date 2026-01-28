@@ -3,8 +3,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
-#include "rt_sem.h"
-
 
 // 1. 定义所有线程的实例
 managed_thread_t motion_controller;
@@ -42,8 +40,7 @@ int threads_start() {
     pdo.config = pdo_config;
     pdo.function = pdo_thread_func;
 
-
-    // 8. 依次创建并启动所有线程
+    // 7. 依次创建并启动所有线程
     printf("\n--- 开始创建控制器线程 ---\n");
     if (create_managed_thread(&pdo) != 0) return EXIT_FAILURE;
     if (create_managed_thread(&soft_plc) != 0) return EXIT_FAILURE;
@@ -56,16 +53,15 @@ int threads_start() {
     return EXIT_SUCCESS;
 }
 
-void threads_joint()
-{
+void threads_joint() {
     pthread_join(motion_controller.id, NULL);
-    printf("%s已退出\n",motion_controller.config.thread_name);
+    printf("%s已退出\n", motion_controller.config.thread_name);
     pthread_join(soft_plc.id, NULL);
-    printf("%s已退出\n",soft_plc.config.thread_name);
+    printf("%s已退出\n", soft_plc.config.thread_name);
     pthread_join(task_controller.id, NULL);
-    printf("%s已退出\n",task_controller.config.thread_name);
+    printf("%s已退出\n", task_controller.config.thread_name);
     pthread_join(path_plan.id, NULL);
-    printf("%s已退出\n",path_plan.config.thread_name);
+    printf("%s已退出\n", path_plan.config.thread_name);
     pthread_join(pdo.id, NULL);
-    printf("%s已退出\n",pdo.config.thread_name);
+    printf("%s已退出\n", pdo.config.thread_name);
 }

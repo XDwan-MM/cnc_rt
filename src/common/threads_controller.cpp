@@ -2,14 +2,13 @@
 #include "debug_mode.h"
 #include "rt_sem.h"
 #include <stdio.h>
-//#include "shm_write.h"
 #include "greecnc.h"
 #include "hal_driver.h"
 #include "master.h"
+
 #ifdef DEBUG_MODE_ENABLED
 #include "master_sim.h"
 #endif
-
 
 #ifdef DEBUG_MODE_ENABLED
 // ============ 调试模式线程配置 ============
@@ -29,26 +28,23 @@ thread_config_t motion_config = {.core_id = 2, .policy = SCHED_FIFO, .priority =
 thread_config_t path_plan_config = {.core_id = 2, .policy = SCHED_RR, .priority = 30, .thread_name = "解释器线程"};
 #endif
 
-
 // 软PLC线程的具体实现
 void* soft_plc_thread_func(void*) {
     while (!exit_flag) {
         sem_wait(&plc_sem);
-    printf("soft_plc_thread_func\n");
+        printf("soft_plc_thread_func\n");
     }
-
     return NULL;
 }
 
 // 运动控制器线程的具体实现
 void* motion_controller_thread_func(void*) {
-    while (!exit_flag)
-    {
-    sem_wait(&motion_sem);
-    if (exit_flag) break;
+    while (!exit_flag) {
+        sem_wait(&motion_sem);
+        if (exit_flag) break;
 
-    printf("motion_controller_thread_func\n");
-    sem_post(&moton_sem_exec_done);
+        printf("motion_controller_thread_func\n");
+        sem_post(&moton_sem_exec_done);
     }
     return NULL;
 }
@@ -66,8 +62,7 @@ void* path_plan_thread_func(void*) {
     return NULL;
 }
 
-void* pdo_thread_func(void*)
-{
+void* pdo_thread_func(void*) {
 #ifdef DEBUG_MODE_ENABLED
     Master_Run_Simulated();  // 调试模式使用模拟主站
 #else

@@ -1,22 +1,20 @@
-#include "stdio.h"
+#include <stdio.h>
+#include <cstdio>
 #include "hal_driver.h"
 #include "hal_io.h"
 #include "main_demo.h"
 #include "shmapi.h"
-#include <cstdio>
 #include "rt_sem.h"
 #include "threads_api.h"
 #include "threads_controller.h"
 #include "debug_mode.h"
 
+// Ctrl + C 终止程序触发
 void sigint_handler(int sig) {
     exit_flag = 1;
 }
 
-#ifndef DEBUG_MODE_ENABLED
-// 仅在实时模式下需要启动真实主站
-int Master_Start()
-{
+int Master_Start() {
     const char * eni_path = "./ENI/gugao.xml";
     if (ethercat_init(eni_path) < 0) {
         printf("EtherCAT 启动失败！\n");
@@ -50,17 +48,19 @@ void printMode() {
 #endif
 }
 
-int main()
-{
+int main() {
     // 打印当前模式
     printMode();
     // 初始化共享内存
     if(!shmInit()) {
         printf("共享内存初始化失败\n");
+        return 1;
     }
+
     Hal_Driver_Manager_Init();
     Hal_Driver_Array_Init();
     Hal_Io_Array_Init();
+
     signal(SIGINT, sigint_handler);
 
 #ifndef DEBUG_MODE_ENABLED
@@ -71,7 +71,7 @@ int main()
     init_rt_sem(); //需要放在线程启动（threads_start()函数）前
     if (threads_start()) {
         printf("\n线程创建失败，主线程退出。\n");
-        exit(true);
+        exit(1);
     }
     while (!exit_flag) {
         sleep(1);

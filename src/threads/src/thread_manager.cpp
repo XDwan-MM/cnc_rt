@@ -29,11 +29,9 @@ void print_thread_info(const char* thread_name) {
     CPU_ZERO(&cpuset);
     if (pthread_getaffinity_np(self, sizeof(cpu_set_t), &cpuset) == 0) {
         printf("    运行核心: ");
-        int count = 0;
         for (int i = 0; i < sysconf(_SC_NPROCESSORS_CONF); i++) {
             if (CPU_ISSET(i, &cpuset)) {
                 printf("%d ", i);
-                count++;
             }
         }
         printf("\n");
@@ -99,14 +97,12 @@ int create_managed_thread(managed_thread_t* thread) {
     if (ret) {
         fprintf(stderr, "[%s] pthread_attr_init 失败: %s\n", thread->config.thread_name, strerror(ret));
         return -1;
-    } else {
     }
     // 设置调度策略继承方式 (必须显式设置，否则 setschedpolicy 可能无效)
     ret = pthread_attr_setinheritsched(&attr, PTHREAD_EXPLICIT_SCHED);
     if (ret) {
         fprintf(stderr, "[%s] pthread_attr_setinheritsched 失败: %s\n", thread->config.thread_name, strerror(ret));
         goto error_cleanup;
-    } else {
     }
 
     // 设置调度策略
@@ -114,7 +110,6 @@ int create_managed_thread(managed_thread_t* thread) {
     if (ret) {
         fprintf(stderr, "[%s] pthread_attr_setschedpolicy 失败: %s (提示: 实时策略可能需要 sudo)\n", thread->config.thread_name, strerror(ret));
         goto error_cleanup;
-    } else {
     }
     // 设置优先级
     param.sched_priority = thread->config.priority;
@@ -133,21 +128,15 @@ int create_managed_thread(managed_thread_t* thread) {
         if (ret) {
             fprintf(stderr, "[%s] pthread_attr_setaffinity_np 失败: %s\n", thread->config.thread_name, strerror(ret));
             goto error_cleanup;
-        } else {
         }
-    } else {
     }
     // 创建线程
     ret = pthread_create(&thread->id, &attr, thread->function, thread);
     if (ret) {
         fprintf(stderr, "[%s] pthread_create 失败: %s\n", thread->config.thread_name, strerror(ret));
         goto error_cleanup;
-    } else {
     }
     printf("[Main] 线程 [%s] 创建成功 -> 核心: %d, 策略: %d, 优先级: %d\n", thread->config.thread_name, thread->config.core_id, thread->config.policy, thread->config.priority);
-
-    // 线程分离：创建后自动回收资源，主线程不需要 join
-    pthread_detach(thread->id);
 
     pthread_attr_destroy(&attr);
     return 0;
