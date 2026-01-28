@@ -4,15 +4,19 @@
 #include "main_demo.h"
 #include "shmapi.h"
 #include <cstdio>
+#include "rt_sem.h"
 
+void sigint_handler(int sig) {
+    exit_flag = 1;
+}
 int Master_Start()
 {
 //    const char * eni_path = "./ENI/speed.xml";
-//    if (ethercat_init(eni_path) < 0)
-//    {
-//        printf("EtherCAT 启动失败！\n");
-//        return -1;
-//    }
+    if (ethercat_init() < 0)
+    {
+        printf("EtherCAT 启动失败！\n");
+        return -1;
+    }
     return 1;
 }
 

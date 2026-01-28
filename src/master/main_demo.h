@@ -17,11 +17,11 @@ extern "C" {
 
 
 // 注意：GreeMaster 的头文件如果是纯 C 的，也要确保不会被 C++ 混淆
-#include "GreeMasterAPI.h"
-#include "gm_errcode.h"
+#include "/opt/GreeMaster/include/libGREEMASTER/GreeMasterAPI.h"
+#include "/opt/GreeMaster/include/libGREEMASTER/gm_errcode.h"
 
 // =============== 程序配置参数 ===============
-//#define XMLPATH "/home/gree/Desktop/CNC/RT_CNC/rt_inter/ENI/speed_mode.xml"  //ENI文件路径
+#define XMLPATH "./ENI/gugao.xml"  //ENI文件路径
 #define SERVONUM 4                      //电机数
 #define IO_NUM 1                        //IO模块数
 #define CONTROL_NUM 1                   //控制面板数
@@ -37,7 +37,6 @@ extern "C" {
 extern int slave_num;
 extern int enable_data;
 extern int mode_change;
-extern volatile int op_flag;                                   //OP状态标志位，0:未到OP状态，1:到达OP状态
 extern sem_t master_sem;
 extern Slave_info* slave_list;
 // =============== 外部函数声明 ===============
@@ -46,7 +45,7 @@ extern Slave_info* slave_list;
  * @return: 0: 成功，非0: 失败
  * @note：失败时的返回值可以在GREE_EtherCat主站函数库使用手册v1.1.403中查询到是什么意义
  */
-extern int ethercat_init(const char* eni_path);
+extern int ethercat_init(void);
 /**
  * @brief: EtherCAT关闭函数
  * @return: 0: 成功，非0: 失败

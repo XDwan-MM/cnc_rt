@@ -40,6 +40,8 @@ unix:!macx: {
 
 LIBS += -L/opt/GreeMaster/lib -lGREEMASTER -lpthread -lxml2
 
+LIBS += -L "/usr/local/lib/" -lethercat
+
 INCLUDEPATH += \
 
 HEADERS += \
