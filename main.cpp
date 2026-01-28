@@ -2,7 +2,8 @@
 #include "hal_driver.h"
 #include "hal_io.h"
 #include "main_demo.h"
-
+#include "shmapi.h"
+#include <cstdio>
 
 int Master_Start()
 {
@@ -17,9 +18,13 @@ int Master_Start()
 
 int main()
 {
+    // 初始化共享内存
+    if(!shmInit()) {
+        printf("共享内存初始化失败\n");
+    }
     Hal_Driver_Manager_Init();
     Hal_Driver_Array_Init();
     Hal_Io_Array_Init();
     Master_Start();
-    return 1;
+    return 0;
 }
