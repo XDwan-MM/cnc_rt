@@ -1,7 +1,0 @@
-{
-    "cycle_time":0.001,
-    "feed_vel": 90,
-    "feed_acc": 600,
-    "feed_jerk": 30000
-}
-

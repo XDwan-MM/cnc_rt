@@ -1,4 +1,0 @@
-#ifndef TASKDATAAPI_H
-#define TASKDATAAPI_H
-
-#endif // TASKDATAAPI_H
