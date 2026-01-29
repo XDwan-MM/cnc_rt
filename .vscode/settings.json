@@ -1,0 +1,5 @@
+{
+    "cmake.cmakePath": "/usr/bin/cmake",
+    "cmake.generator": "Ninja",
+    "cmake.ignoreCMakeListsMissing": true
+}
