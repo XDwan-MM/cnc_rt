@@ -15,6 +15,8 @@ extern "C" {
 #endif
 
 #include <pthread.h>
+#include <stdbool.h>
+#include "pmc_io_map.h"
 #include "datatype.h"
 
 // 循环队列长度
@@ -30,18 +32,11 @@ typedef enum{
     EC_SRC_NET,          // 网络事件
 }EVENT_SRC;
 
-typedef struct 
-{
-    int src;    // 事件来源
-    int code;   // 事件代码
-    char buf[EVENT_DATA_MAX_LEN]; // 事件数据
-}EVENT_DATA;
-
 // 事件队列
 typedef struct
 {
     pthread_mutex_t mutex;
-    EVENT_DATA* event_data;
+    CNC_EVENT* event_data;
     int head;
     int tail;
     int size;
@@ -51,9 +46,9 @@ GNC_RES event_queue_init(EVENT_QUEUE* queue);
 
 GNC_RES event_queue_reset(EVENT_QUEUE* queue);
 
-GNC_RES event_queue_push(EVENT_QUEUE* queue, EVENT_DATA* event_data);    
+GNC_RES event_queue_push(EVENT_QUEUE* queue, CNC_EVENT* event_data);
 
-GNC_RES event_queue_pop(EVENT_QUEUE* queue, EVENT_DATA* event_data);
+GNC_RES event_queue_pop(EVENT_QUEUE* queue, CNC_EVENT* event_data);
 
 int event_queue_get_size(EVENT_QUEUE* queue);
 

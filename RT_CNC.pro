@@ -115,6 +115,10 @@ HEADERS += \
     src/plc/plcdatatype.h \
     src/spindle/spindle.h \
     src/spindle/spindlestatus.h \
+    src/task/pmc_input_scanner.h \
+    src/task/pmc_io_map.h \
+    src/task/pmc_output_handler.h \
+    src/task/signal_utils.h \
     src/task/task.h \
     src/threads/threads_api.h \
     src/threads/thread_manager.h \
@@ -152,6 +156,8 @@ SOURCES += \
     src/plc/hal_task.cpp \
     src/plc/cyclescanning.cpp \
     src/spindle/spindle.c \
+    src/task/pmc_input_scanner.c \
+    src/task/pmc_output_handler.c \
     src/task/task.c \
     src/threads/thread_manager.cpp \
     src/threads/threads.cpp \
