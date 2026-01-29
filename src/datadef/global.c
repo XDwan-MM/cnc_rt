@@ -38,7 +38,19 @@ TRAJ_PARAMS* traj_data;
 TRAJ_PARAMS* free_traj_data;
 bool is_paused_in_block;
 
-GNC_RES rt_var_init(){
+// 初始化实时var数据
+static GNC_RES rt_var_init(); 
+// 初始化共享内存var数据
+static GNC_RES shm_var_init();
+// 初始化实时par数据
+static GNC_RES rt_par_init(); 
+// 初始化共享内存par数据
+static GNC_RES shm_par_init();
+static GNC_RES sys_init();
+static GNC_RES tp_init();
+static GNC_RES traj_data_init();
+
+static GNC_RES rt_var_init(){
     var_data = (RT_VAR*)malloc(sizeof(RT_VAR));
     if(var_data == NULL) return GNC_DATA_NULL;
     var_axis = var_data->var_axis;
@@ -69,7 +81,7 @@ GNC_RES rt_var_init(){
     return GNC_CAL_SUCCESS;
 }
 
-GNC_RES shm_var_init(){
+static GNC_RES shm_var_init(){
     setVarSysDouble(VAR_SYS_CHAN_NUM, 1, 0);
     setVarChanDouble(0, VAR_CHAN_CMD_FEEDRATE, 0, 0);
     setVarChanDouble(0, VAR_CHAN_ACT_FEEDRATE, 0, 0);
@@ -138,7 +150,7 @@ GNC_RES shm_var_update_prog(){
     return GNC_CAL_SUCCESS;
 }
 
-GNC_RES rt_par_init(){
+static GNC_RES rt_par_init(){
     par_data = (PAR*)malloc(sizeof(PAR));
     if(par_data == NULL) return GNC_DATA_NULL;
     par_ncu = par_data->par_ncu;            // NC 参数
@@ -150,7 +162,7 @@ GNC_RES rt_par_init(){
     par_acmp = par_data->par_acmp;          // 误差补偿参数
 }
 
-GNC_RES shm_par_init(){
+static GNC_RES shm_par_init(){
     ParamUnit par_union = {};
     // NC参数
     getParData(PARAMAN_FILE_NCU, 0, PAR_NCU_CYCLE, &par_union);
@@ -474,7 +486,7 @@ GNC_RES rt_par_reset(){
     }
 }
 
-GNC_RES sys_init(){
+static GNC_RES sys_init(){
     sys = (SYS_DATA*)malloc(sizeof(SYS_DATA));
     if(sys == NULL) return GNC_DATA_NULL;
     sys->target_mode = MODE_IDLE;
@@ -499,7 +511,7 @@ GNC_RES sys_reset(){
     return GNC_CAL_SUCCESS;
 }
 
-GNC_RES tp_init(){
+static GNC_RES tp_init(){
     GNC_RES res = GNC_OPERATOR_SUCCESS;
     homing_tp = (HOMING_TP*)malloc(SYS_AXES_NUM * sizeof(HOMING_TP));
     res = homing_tp_init(homing_tp);
@@ -530,12 +542,33 @@ GNC_RES tp_reset(){
     return GNC_CAL_SUCCESS;
 }
 
-GNC_RES traj_data_init(){
+static GNC_RES traj_data_init(){
     traj_data = (TRAJ_PARAMS*)malloc(sizeof(TRAJ_PARAMS));
     if(traj_data == NULL) return GNC_DATA_NULL;
     memset(traj_data, 0, sizeof(TRAJ_PARAMS));
     free_traj_data = (TRAJ_PARAMS*)malloc(SYS_AXES_NUM * sizeof(TRAJ_PARAMS));
     if(free_traj_data == NULL) return GNC_DATA_NULL;
     memset(free_traj_data, 0, SYS_AXES_NUM * sizeof(TRAJ_PARAMS));
+    return GNC_CAL_SUCCESS;
+}
+
+GNC_RES rt_global_init(){
+    GNC_RES res = GNC_CAL_SUCCESS;
+    res = rt_var_init();
+    if(res != GNC_CAL_SUCCESS) return res;
+    res = rt_par_init();
+    if(res != GNC_CAL_SUCCESS) return res;
+    res = shm_var_init();
+    if(res != GNC_CAL_SUCCESS) return res;
+    res = shm_par_init();
+    if(res != GNC_CAL_SUCCESS) return res;
+    res = sys_init();
+    if(res != GNC_CAL_SUCCESS) return res;
+    res = tp_init();
+    if(res != GNC_CAL_SUCCESS) return res;
+    res = traj_data_init();
+    if(res != GNC_CAL_SUCCESS) return res;
+    res = task_mq_init();
+    if(res != GNC_CAL_SUCCESS) return res;
     return GNC_CAL_SUCCESS;
 }

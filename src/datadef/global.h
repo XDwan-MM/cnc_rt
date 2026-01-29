@@ -58,27 +58,17 @@ extern TRAJ_PARAMS* traj_data;
 extern TRAJ_PARAMS* free_traj_data;
 extern bool is_paused_in_block;
 
-// 初始化实时var数据
-GNC_RES rt_var_init(); 
-// 初始化共享内存var数据
-GNC_RES shm_var_init();
-// 更新共享内存var数据
-GNC_RES shm_var_update();
-// 更新共享内存程序相关数据
-GNC_RES shm_var_update_prog();
-// 初始化实时par数据
-GNC_RES rt_par_init(); 
-// 初始化共享内存par数据
-GNC_RES shm_par_init();
+GNC_RES rt_global_init();
+GNC_RES tp_reset();
+GNC_RES sys_reset();
 // 更新共享内存par数据
 GNC_RES rt_par_update();    // 每个插补周期都会更新的par数据
 // 复位更新共享内存var数据
 GNC_RES rt_par_reset();     // 按下复位后更新的par数据
-GNC_RES sys_init();
-GNC_RES sys_reset();
-GNC_RES tp_init();
-GNC_RES tp_reset();
-GNC_RES traj_data_init();
+// 更新共享内存var数据
+GNC_RES shm_var_update();
+// 更新共享内存程序相关数据
+GNC_RES shm_var_update_prog();
 
 #ifdef __cplusplus
 }

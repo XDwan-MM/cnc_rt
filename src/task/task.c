@@ -1,6 +1,5 @@
 #include "task.h"
 #include "eventdef.h"
-#include "global.h"
 #include <stdlib.h>
 
 EVENT_DATA event_data;
