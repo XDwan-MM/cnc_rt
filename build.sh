@@ -4,6 +4,8 @@
 
 set -e
 
+export PATH=$PATH:/opt/Qt5.15.16/5.15.16/gcc_64/bin/
+
 SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
 LIB_DIR="$SCRIPT_DIR/lib"
 BUILD_DIR="$SCRIPT_DIR/build"

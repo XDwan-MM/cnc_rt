@@ -20,9 +20,6 @@
 extern "C" {
 #endif
 
-extern TxEntry_Unit MCPDI[11];
-extern RxEntry_Unit MCPDO[7];
-
 void* hal_task();
 
 #ifdef __cplusplus

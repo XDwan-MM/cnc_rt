@@ -11,9 +11,6 @@
 
 static int sim_cycle_count = 0;
 
-TxEntry_Unit MCPDI[11];
-RxEntry_Unit MCPDO[7];
-
 void simulate_hal_data(void) {
     // 模拟驱动器数据更新
     // 这里可以根据需要添加模拟逻辑

@@ -11,7 +11,7 @@
             "program": "${workspaceFolder}/bin/rt_cnc_d", 
             "args": [],
             "stopAtEntry": false,
-            "cwd": "${workspaceFolder}/build", // 工作目录设为 build
+            "cwd": "${workspaceFolder}/bin", // 工作目录设为 build
             "environment": [],
             "externalConsole": false, // WSLg 不需要 externalConsole
             "MIMode": "gdb",
@@ -24,7 +24,7 @@
                 }
             ],
             // 【重点2】调试前先运行上面的编译任务
-            "preLaunchTask": "QMake Build"
+            // "preLaunchTask": "QMake Build"
         }
     ]
 }

@@ -10,6 +10,7 @@
 #ifndef __GLOABL_H__
 #define __GLOABL_H__
 
+#include <semaphore.h>
 #include "gcode_queue.h"
 #include "mcode_queue.h"
 #include "plan_queue.h"
@@ -19,13 +20,43 @@
 #include "mem.h"
 #include "homing.h"
 #include "trajectory.h"
+#include "hal_driver.h"
+#include "hal_io.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
+#define IRQ_TIMEOUT 5000        // 周期中断超时时间(ms)（主站通讯周期超时，当超过此超时时间还未收到主站信息时，自动判定错误，结束程序）
 #define TIME_MINUS_2_S 60
 #define TIME_US_2_S 1000000
+
+extern sem_t exit_sem;                         // 退出信号
+extern sem_t op_sem;                           // 已进入op信号，用于线程间通信
+extern int InterruptFlag;                      // 打断标志位
+extern Slave_info* slave_list;                 // 定义从站信息结构体以存储解析结果
+
+extern TxEntry_Unit DI0[MAX_IO_MODULES];
+extern TxEntry_Unit DI1[MAX_IO_MODULES];
+extern RxEntry_Unit DO0[MAX_IO_MODULES];
+extern RxEntry_Unit DO1[MAX_IO_MODULES];
+
+extern TxEntry_Unit StatusWord[MAX_DRIVERS];      // 状态字
+extern RxEntry_Unit OperationMode[MAX_DRIVERS];   // 操作模式
+extern TxEntry_Unit CurPos[MAX_DRIVERS];          // 当前位置
+extern TxEntry_Unit CurVel[MAX_DRIVERS];          // 当前速度
+extern TxEntry_Unit CurTor[MAX_DRIVERS];          // 当前转矩
+
+extern RxEntry_Unit ControlWord[MAX_DRIVERS];     // 控制字
+extern RxEntry_Unit PurPos[MAX_DRIVERS];          // 目标位置
+extern RxEntry_Unit PurVel[MAX_DRIVERS];          // 目标速度
+extern RxEntry_Unit PurTor[MAX_DRIVERS];          // 目标转矩
+
+extern RxEntry_Unit ErrorNumb[MAX_DRIVERS];       // 报警码
+
+// todo：修改，为什么要将hal_task的变量定义在master.c中
+extern TxEntry_Unit MCPDI[11];
+extern RxEntry_Unit MCPDO[7];
 
 // var 变量
 extern RT_VAR* var_data;

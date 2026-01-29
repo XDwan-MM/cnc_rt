@@ -5,6 +5,7 @@
 #include "cyclescanning.h"
 #include "mt_data.h"
 #include "ladapi.h"
+#include "global.h"
 
 MT_PLC_IN plc_in={0};
 PLC_MT_OUT plc_out={0};

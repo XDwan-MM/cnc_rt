@@ -8,7 +8,7 @@
             "args": [
                 "-c",
                 // 核心指令：建目录 -> 进目录 -> qmake生成Makefile -> make编译
-                "mkdir -p build && cd build && qmake ../*.pro && make -j$(nproc)"
+                // "mkdir -p build && cd build && qmake ../*.pro && make -j$(nproc)"
             ],
             "group": {
                 "kind": "build",
