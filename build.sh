@@ -4,7 +4,7 @@
 
 set -e
 
-export PATH=$PATH:/opt/Qt5.15.16/5.15.16/gcc_64/bin/
+# export PATH=$PATH:/opt/Qt5.15.16/5.15.16/gcc_64/bin/
 
 SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
 LIB_DIR="$SCRIPT_DIR/lib"
@@ -52,7 +52,7 @@ print_help() {
 build_shm_lib() {
     mkdir -p "$LIB_DIR/cncshm/build"
     cd "$LIB_DIR/cncshm/build"
-    qmake "../shm.pro"
+    qmake ../shm.pro CONFIG+=debug
     make -j$(nproc)
     if [ $? -eq 0 ]; then
         make install

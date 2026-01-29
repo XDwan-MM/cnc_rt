@@ -518,8 +518,10 @@ GNC_RES rt_par_reset(){
 static GNC_RES sys_init(){
     sys = (SYS_DATA*)malloc(sizeof(SYS_DATA));
     if(sys == NULL) return GNC_DATA_NULL;
-    sys->target_mode = MODE_IDLE;
-    sys->current_mode = MODE_IDLE;
+    // sys->target_mode = MODE_IDLE;
+    // sys->current_mode = MODE_IDLE;
+    sys->target_mode = MODE_MPG;
+    sys->current_mode = MODE_MPG;
     sys->nc_event = SYS_EVENT_NONE;
     sys->is_switching_mode = false;
     sys->is_parse_running = false;

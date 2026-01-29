@@ -15,8 +15,7 @@
             "environment": [],
             "externalConsole": false, // WSLg 不需要 externalConsole
             "MIMode": "gdb",
-            // "miDebuggerPath": "${workspaceFolder}/sudo_gdb.sh",
-            "miDebuggerPath": "/usr/bin/gdb",
+            "miDebuggerPath": "${workspaceFolder}/sudo_gdb.sh",
             "setupCommands": [
                 {
                     "description": "Enable pretty-printing for gdb",

@@ -42,7 +42,7 @@ void* soft_plc_thread_func(void*) {
     while (!exit_flag) {
         sem_wait(&plc_sem);
         printf("soft_plc_thread_func\n");
-        hal_task();
+        // hal_task();
     }
     return NULL;
 }
