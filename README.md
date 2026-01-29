@@ -19,16 +19,21 @@
 
 ### 使用方法
 
-1、运行 cnc_hmi
+1、编译
+
+sudo ./build.sh
 
 
+2、运行实时
 
-2、运行 RT_INTER
-
+cd bin
+sudo ./rt_cnc
 
 
 3、调试模式
 
+cd bin
+sudo ./rt_cnc_d
 
 
 
