@@ -63,6 +63,7 @@
 |   |--master		# 主站相关
 |   |--motion		# 运动相关
 |   |   |--emcmot	# 路径规划和轨迹规划
+|   |--plc          # plc相关
 |   |--spindle		# 主轴相关
 |   |--task			# 事件相关
 |   |--threads		# 线程相关
@@ -71,16 +72,6 @@
 |--build			# 运行脚本
 |--README			# 说明文档
 ```
-
-
-
-**threads**
-
-- soft_plc_thread_func：PLC线程
-- motion_controller_thread_func：运动线程
-- task_controller_thread_func：任务线程
-- path_plan_thread_func：路径规划线程
-- pdo_thread_func：pdo线程，产生信号量
 
 
 
@@ -97,7 +88,13 @@
 2、emcmotTrajPlan：读取抽象层数据 → 判断系统是否报错 → 判断运动模式 → 计算运动数据 → 补偿 → 检查超限位 → 更新抽象层数据 → 更新共享内存数据
 
 
+**threads_controller.cpp**
 
+- soft_plc_thread_func：PLC线程
+- motion_controller_thread_func：运动线程
+- task_controller_thread_func：任务线程
+- path_plan_thread_func：路径规划线程
+- pdo_thread_func：pdo线程，产生信号量
 
 
 

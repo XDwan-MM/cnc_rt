@@ -14,10 +14,13 @@
 #include "mpg.h"
 #include "homing.h"
 #include "mem.h"
+#include "spindle.h"
 #include <math.h>
 
 static void check_for_fault();
 static void set_operating_mode();
+static void handle_system_event();
+static void spindle_control();
 static void get_cmd_pos();
 static void update_status();
 static void check_ferror_fault();
@@ -51,6 +54,12 @@ void emcmotTrajPlan() {
 
         // 判断运动模式
         set_operating_mode();
+
+        // 处理事件
+        handle_system_event();
+
+        // 临时：主轴控制
+        spindle_control();
 
         // 根据运动模式计算运动位置
         get_cmd_pos();
@@ -176,6 +185,35 @@ static void set_operating_mode() {
             sys->is_switching_mode = true;
             break;
 
+        default:
+            break;
+    }
+}
+
+static void handle_system_event(){
+    switch (sys->nc_event)
+    {
+    case SYS_EVENT_RESET:
+    case SYS_EVENT_PAUSE:
+        break;
+    default:
+        break;
+    }
+}
+
+// 主轴控制
+static void spindle_control(){
+    switch (sys->current_mode){
+        case MODE_JOG:
+        case MODE_MPG:
+        case MODE_EDIT:
+            emcSpindleControl();
+            break;
+        case MODE_MEM:
+        case MODE_MDI:
+        case MODE_DNC:
+            emcmcodedeal();
+            break;
         default:
             break;
     }

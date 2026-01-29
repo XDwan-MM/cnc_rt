@@ -96,6 +96,12 @@ HEADERS += \
     src/motion/rapid.h \
     src/motion/simple_tp.h \
     src/motion/stored_stroke_check.h \
+    src/plc/ctimer.h \
+    src/plc/cyclescanning.h \
+    src/plc/hal_task.h \
+    src/plc/mt_data.h \
+    src/plc/nc_data.h \
+    src/plc/plcdatadef.h \
     src/spindle/spindle.h \
     src/spindle/spindlestatus.h \
     src/task/task.h \
@@ -145,6 +151,7 @@ SOURCES += \
     src/motion/rapid.c \
     src/motion/simple_tp.c \
     src/motion/stored_stroke_check.c \
+    src/plc/hal_task.cpp \
     src/spindle/spindle.c \
     src/task/task.c \
     src/threads/thread_manager.cpp \
@@ -160,6 +167,7 @@ INCLUDEPATH += \
     src/hal \
     src/master \
     src/motion \
+    src/plc \
     src/task \
     src/spindle \
     src/threads \

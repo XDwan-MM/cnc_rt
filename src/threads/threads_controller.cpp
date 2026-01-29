@@ -9,6 +9,9 @@
 #include "hal_driver.h"
 #include "master.h"
 #include "task.h"
+#include "hal_task.h"
+#include "emcmot.h"
+#include "spindle.h"
 #include <stdio.h>
 #ifdef DEBUG_MODE_ENABLED
 #include "master_sim.h"
@@ -31,22 +34,40 @@ thread_config_t pdo_config = {.core_id = 3, .policy = SCHED_FIFO, .priority = 40
 thread_config_t motion_config = {.core_id = 2, .policy = SCHED_FIFO, .priority = 39, .thread_name = "运动控制器"};
 thread_config_t path_plan_config = {.core_id = 2, .policy = SCHED_RR, .priority = 30, .thread_name = "解释器线程"};
 
+// todo：修改此处写法
+bool RESET = false;
+
 // 软PLC线程的具体实现
 void* soft_plc_thread_func(void*) {
     while (!exit_flag) {
         sem_wait(&plc_sem);
         printf("soft_plc_thread_func\n");
+        hal_task();
     }
     return NULL;
 }
 
 // 运动控制器线程的具体实现
 void* motion_controller_thread_func(void*) {
-    while (!exit_flag) {
+    while (!exit_flag)
+    {
         sem_wait(&motion_sem);
         if (exit_flag) break;
-
         printf("motion_controller_thread_func\n");
+        Hal_Driver_Update_All(true, false);
+        // todo：修改此处写法
+        if (sys->nc_event == SYS_EVENT_RESET || RESET || sys->nc_event == SYS_EVENT_PAUSE) {
+            RESET = true;
+            sp_sign = 0;
+            if (sp_sign == 0 && !sp_stop_sem) {
+                Spindle_Stop();
+            }
+            if (spindle.mode == DRV_MODE_DISABLED) {
+                RESET = false;
+            }
+        }
+        // emcmotTrajPlan();
+        Hal_Driver_Update_All(false, true);
         sem_post(&moton_sem_exec_done);
     }
     return NULL;
@@ -54,6 +75,8 @@ void* motion_controller_thread_func(void*) {
 
 // 任务控制器线程的具体实现
 void* task_controller_thread_func(void*) {
+    // todo：修改此处写法
+    usleep(5000);
     printf("task_controller_thread_func\n");
     emcmotTask();
     return NULL;
@@ -63,6 +86,7 @@ void* task_controller_thread_func(void*) {
 void* path_plan_thread_func(void*) {
     sem_wait(&path_plan_sem);
     printf("path_plan_thread_func\n");
+    // emcmotPathPlan();
     return NULL;
 }
 
