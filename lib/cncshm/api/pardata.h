@@ -8,6 +8,7 @@
  #define PARDATA_H
 
 #include "pardatadef.h"
+#include "gncdatadef.h"
 
 #ifdef __cplusplus
 extern "C" {
