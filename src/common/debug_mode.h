@@ -23,7 +23,7 @@
 #endif
 
 // ============ 周期时间配置 ============
-#define DEBUG_CYCLE_TIME_US 10000  // 调试模式周期: 10ms (较慢，便于调试)
+#define DEBUG_CYCLE_TIME_US 1000  // 调试模式周期: 1ms 
 #define RT_CYCLE_TIME_US    1000   // 实时模式周期: 1ms
 
 // ============ 调试模式线程配置 ============

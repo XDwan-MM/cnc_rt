@@ -1,5 +1,5 @@
 #!/bin/bash
-# RT_CNC 构建脚本
+# rt_cnc 构建脚本
 # 用法: ./build.sh [debug|release|all|clean|help]
 
 set -e
@@ -19,14 +19,14 @@ NC='\033[0m' # No Color
 
 print_help() {
     echo ""
-    echo "RT_CNC 构建脚本"
+    echo "rt_cnc 构建脚本"
     echo "==============="
     echo ""
     echo "用法: ./build.sh [选项]"
     echo ""
     echo "选项:"
-    echo "  debug     编译调试模式 (生成 RT_CNC_d，无需硬件)"
-    echo "  release   编译实时模式 (生成 RT_CNC，需要EtherCAT硬件)"
+    echo "  debug     编译调试模式 (生成 rt_cnc_d，无需硬件)"
+    echo "  release   编译实时模式 (生成 rt_cnc，需要EtherCAT硬件)"
     echo "  all       同时编译调试和实时模式 (默认)"
     echo "  clean     清理所有构建文件"
     echo "  help      显示此帮助信息"
@@ -36,8 +36,8 @@ print_help() {
     echo "    ├── debug/    调试模式构建文件"
     echo "    └── release/  实时模式构建文件"
     echo "  bin/"
-    echo "    ├── RT_CNC_d  调试版本可执行文件"
-    echo "    └── RT_CNC    实时版本可执行文件"
+    echo "    ├── rt_cnc_d  调试版本可执行文件"
+    echo "    └── rt_cnc    实时版本可执行文件"
     echo ""
     echo "示例:"
     echo "  ./build.sh          # 编译所有版本"
@@ -92,13 +92,13 @@ build_all() {
     echo -e "${BLUE}========== 编译结果 ==========${NC}"
 
     if [ $debug_ok -eq 1 ]; then
-        echo -e "  调试版本: ${GREEN}[OK]${NC} $BIN_DIR/RT_CNC_d"
+        echo -e "  调试版本: ${GREEN}[OK]${NC} $BIN_DIR/rt_cnc_d"
     else
         echo -e "  调试版本: ${RED}[FAIL]${NC}"
     fi
 
     if [ $release_ok -eq 1 ]; then
-        echo -e "  实时版本: ${GREEN}[OK]${NC} $BIN_DIR/RT_CNC"
+        echo -e "  实时版本: ${GREEN}[OK]${NC} $BIN_DIR/rt_cnc"
     else
         echo -e "  实时版本: ${RED}[FAIL]${NC}"
     fi
@@ -134,13 +134,13 @@ clean_build() {
     fi
 
     # 清理可执行文件
-    if [ -f "$BIN_DIR/RT_CNC" ]; then
-        rm -f "$BIN_DIR/RT_CNC"
-        echo "  已清理: $BIN_DIR/RT_CNC"
+    if [ -f "$BIN_DIR/rt_cnc" ]; then
+        rm -f "$BIN_DIR/rt_cnc"
+        echo "  已清理: $BIN_DIR/rt_cnc"
     fi
-    if [ -f "$BIN_DIR/RT_CNC_d" ]; then
-        rm -f "$BIN_DIR/RT_CNC_d"
-        echo "  已清理: $BIN_DIR/RT_CNC_d"
+    if [ -f "$BIN_DIR/rt_cnc_d" ]; then
+        rm -f "$BIN_DIR/rt_cnc_d"
+        echo "  已清理: $BIN_DIR/rt_cnc_d"
     fi
 
     echo -e "${GREEN}清理完成!${NC}"
@@ -151,12 +151,12 @@ case "${1:-all}" in
     debug)
         build_debug
         echo ""
-        echo -e "可执行文件: ${YELLOW}$BIN_DIR/RT_CNC_d${NC}"
+        echo -e "可执行文件: ${YELLOW}$BIN_DIR/rt_cnc_d${NC}"
         ;;
     release)
         build_release
         echo ""
-        echo -e "可执行文件: ${YELLOW}$BIN_DIR/RT_CNC${NC}"
+        echo -e "可执行文件: ${YELLOW}$BIN_DIR/rt_cnc${NC}"
         ;;
     all)
         build_all

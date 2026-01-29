@@ -33,7 +33,7 @@ void printMode() {
 #else
     printf("║         实时模式 (REALTIME MODE)         ║\n");
 #endif
-    printf("╠══════════════════════════════════════════╣\n");
+    printf("╚══════════════════════════════════════════╝\n");
     printf("\n");
 }
 
@@ -54,7 +54,11 @@ int main() {
 
 #ifndef DEBUG_MODE_ENABLED
     // 仅实时模式启动真实主站
-    Master_Start();
+    if (Master_Start() < 0) {
+        printf("\n[严重错误] EtherCAT 主站启动失败！程序将终止。\n");
+        printf("原因: 可能是 DMA 驱动未加载 (/dev/Gree_DMA0...) 或 XML 路径错误。\n");
+        return -1; // 直接退出，不再启动线程
+    }
 #endif
 
     init_rt_sem(); //需要放在线程启动（threads_start()函数）前
