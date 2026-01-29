@@ -1,6 +1,10 @@
 #ifndef STORED_STROKE_CHECK_H
 #define STORED_STROKE_CHECK_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include <stdbool.h>
 #include <stdint.h>
 
@@ -37,5 +41,10 @@ uint8_t Is_Outside_Limit(float position, LimitLevel limit);
 uint8_t Check_Axis_Limit_Violation(AxisLimitRuntime runtime);
 
 uint8_t Axis_Limit_Manager_Init(void);
+
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

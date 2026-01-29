@@ -15,6 +15,7 @@
 #include "homing.h"
 #include "mem.h"
 #include "spindle.h"
+#include "stored_stroke_check.h"
 #include <math.h>
 
 static void check_for_fault();

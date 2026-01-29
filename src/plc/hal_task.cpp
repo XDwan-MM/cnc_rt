@@ -1,10 +1,10 @@
-#include"hal_task.h"
-#include"hal_io.h"
-#include"time.h"
-#include"datatype.h"
-#include"cyclescanning.h"
-#include"mt_data.h"
-#include"ladapi.h"
+#include "hal_task.h"
+#include "hal_io.h"
+#include "time.h"
+#include "datatype.h"
+#include "cyclescanning.h"
+#include "mt_data.h"
+#include "ladapi.h"
 
 MT_PLC_IN plc_in={0};
 PLC_MT_OUT plc_out={0};

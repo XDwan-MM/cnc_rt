@@ -5,7 +5,6 @@
 #include "hal_driver.h"
 #include "master.h"
 #include "task.h"
-#include "greecnc.h"
 #include "hal_driver.h"
 #include "master.h"
 #include "task.h"
@@ -33,6 +32,7 @@ thread_config_t task_config = {.core_id = 3, .policy = SCHED_RR, .priority = 25,
 thread_config_t pdo_config = {.core_id = 3, .policy = SCHED_FIFO, .priority = 40, .thread_name = "PDO线程"};
 thread_config_t motion_config = {.core_id = 2, .policy = SCHED_FIFO, .priority = 39, .thread_name = "运动控制器"};
 thread_config_t path_plan_config = {.core_id = 2, .policy = SCHED_RR, .priority = 30, .thread_name = "解释器线程"};
+#endif
 
 // todo：修改此处写法
 bool RESET = false;

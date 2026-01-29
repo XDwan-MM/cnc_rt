@@ -14,8 +14,6 @@ extern "C" {
 #include <semaphore.h>
 #include <pthread.h>
 
-
-
 // 注意：GreeMaster 的头文件如果是纯 C 的，也要确保不会被 C++ 混淆
 #include "GreeMasterAPI.h"
 #include "gm_errcode.h"
@@ -31,15 +29,14 @@ extern "C" {
 #define REG_PTH_EN 0                    //是否开启REG线程，0:不开启，1:开启
 #define SDO_PTH_EN 0                    //是否开启SDO线程，0:不开启，1:开启
 
-
 // 可以直接访问这些全局变量
-
 extern int slave_num;
 extern int enable_data;
 extern int mode_change;
-extern volatile int op_flag;                                   //OP状态标志位，0:未到OP状态，1:到达OP状态
+extern volatile int op_flag;           //OP状态标志位，0:未到OP状态，1:到达OP状态
 extern sem_t master_sem;
 extern Slave_info* slave_list;
+
 // =============== 外部函数声明 ===============
 /**
  * @brief: EtherCAT初始化函数
@@ -54,7 +51,6 @@ extern int ethercat_init(const char* eni_path);
  */
 extern int ethercat_close(void);
 
-// =============== 结束 C++ 兼容 ===============
 #ifdef __cplusplus
 }
 #endif

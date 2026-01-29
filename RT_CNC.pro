@@ -51,12 +51,8 @@ INCLUDEPATH += $$PWD/lib/log/apilog $$PWD/lib/log
 INCLUDEPATH += $$PWD/lib/parser/include $$PWD/lib/parser
 
 # 添加运动库
+LIBS += -L"$$PWD/lib/kinematic/bin/" -lkinematic
 INCLUDEPATH += $$PWD/lib/kinematic/include $$PWD/lib/kinematic
-
-
-CONFIG += debug
-
-TARGET = RT_CNC
 
 unix:!macx: {
     DESTDIR = $$PWD/bin
@@ -66,9 +62,21 @@ LIBS += -L/opt/GreeMaster/lib -lGREEMASTER -lpthread -Wl,--no-as-needed -lxml2 -
 LIBS += -L "/usr/local/lib/" -lethercat
 INCLUDEPATH += /opt/GreeMaster/include/libGREEMASTER/
 
+
+# 调试模式使用模拟主站
+debug_mode {
+    HEADERS += src/master/master_sim.h
+    SOURCES += src/master/master_sim.c
+}
+
+# 实时模式使用真实主站
+!debug_mode {
+    HEADERS += src/master/main_demo.h
+    SOURCES += src/master/master.c
+}
+
 HEADERS += \
     src/common/debug_mode.h \
-    src/common/greecnc.h \
     src/datadef/datatype.h \
     src/datadef/event_queue.h \
     src/datadef/eventdef.h \
@@ -80,7 +88,6 @@ HEADERS += \
     src/datadef/rt_var.h \
     src/hal/hal_driver.h \
     src/hal/hal_io.h \
-    src/master/master.h \
     src/motion/alarm.h \
     src/motion/egear_ratio.h \
     src/motion/emcmot.h \
@@ -101,7 +108,7 @@ HEADERS += \
     src/plc/hal_task.h \
     src/plc/mt_data.h \
     src/plc/nc_data.h \
-    src/plc/plcdatadef.h \
+    src/plc/plcdatatype.h \
     src/spindle/spindle.h \
     src/spindle/spindlestatus.h \
     src/task/task.h \
@@ -113,18 +120,6 @@ HEADERS += \
     src/utils/log/log.h \
     src/utils/math/cnc_math.h
 
-# 调试模式使用模拟主站
-debug_mode {
-    HEADERS += src/master/master_sim.h
-    SOURCES += src/master/master_sim.c
-}
-
-# 实时模式使用真实主站
-!debug_mode {
-    HEADERS += src/master/main_demo.h
-    SOURCES += src/master/master.c
-}
-
 SOURCES += \
     main.cpp \
     src/datadef/datatype.c \
@@ -135,7 +130,6 @@ SOURCES += \
     src/datadef/plan_queue.c \
     src/hal/hal_driver.c \
     src/hal/hal_io.c \
-    src/master/master.c \
     src/motion/alarm.c \
     src/motion/egear_ratio.c \
     src/motion/emcmot.cpp \
@@ -152,6 +146,7 @@ SOURCES += \
     src/motion/simple_tp.c \
     src/motion/stored_stroke_check.c \
     src/plc/hal_task.cpp \
+    src/plc/cyclescanning.cpp \
     src/spindle/spindle.c \
     src/task/task.c \
     src/threads/thread_manager.cpp \
