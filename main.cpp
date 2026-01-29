@@ -14,6 +14,7 @@ void sigint_handler(int sig) {
     exit_flag = 1;
 }
 
+#ifndef DEBUG_MODE_ENABLED
 int Master_Start() {
     const char * eni_path = "./ENI/gugao.xml";
     if (ethercat_init(eni_path) < 0) {
@@ -25,27 +26,15 @@ int Master_Start() {
 #endif
 
 void printMode() {
+    printf("\n");
+    printf("╔══════════════════════════════════════════╗\n");
 #ifdef DEBUG_MODE_ENABLED
-    printf("\n");
-    printf("╔══════════════════════════════════════════╗\n");
     printf("║         调试模式 (DEBUG MODE)            ║\n");
-    printf("╠══════════════════════════════════════════╣\n");
-    printf("║  - 使用普通线程，可进行断点调试          ║\n");
-    printf("║  - 使用模拟主站，无需EtherCAT硬件        ║\n");
-    printf("║  - 无需root权限                          ║\n");
-    printf("╚══════════════════════════════════════════╝\n");
-    printf("\n");
 #else
-    printf("\n");
-    printf("╔══════════════════════════════════════════╗\n");
     printf("║         实时模式 (REALTIME MODE)         ║\n");
-    printf("╠══════════════════════════════════════════╣\n");
-    printf("║  - 使用实时线程 (SCHED_FIFO/RR)          ║\n");
-    printf("║  - 连接真实EtherCAT主站                  ║\n");
-    printf("║  - 需要root权限                          ║\n");
-    printf("╚══════════════════════════════════════════╝\n");
-    printf("\n");
 #endif
+    printf("╠══════════════════════════════════════════╣\n");
+    printf("\n");
 }
 
 int main() {
