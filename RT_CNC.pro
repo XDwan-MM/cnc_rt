@@ -1,6 +1,22 @@
 QT += core
 CONFIG += c++17 cmdline
 
+# ============ 编译模式配置 ============
+debug_mode {
+    message("========== 编译调试模式 ==========")
+    DEFINES += DEBUG_MODE_ENABLED
+    DEFINES += __DeveloperMode__
+    QMAKE_CXXFLAGS += -g -O0
+    QMAKE_CFLAGS += -g -O0
+    TARGET = rt_cnc_d
+} else {
+    message("========== 编译实时模式 ==========")
+    DEFINES += MASTER_RUN_ON
+    QMAKE_CXXFLAGS += -O2
+    QMAKE_CFLAGS += -O2
+    TARGET = rt_cnc
+}
+
 # 检查编译缓存工具 ccache 是否可用
 win32 {
     if(system(ccache --version > NUL 2>&1)) {
@@ -30,31 +46,45 @@ include(lib/log/apilog/logapi.pri)
 LIBS += -L"$$PWD/lib/log/bin/" -lcnclog
 INCLUDEPATH += $$PWD/lib/log/apilog $$PWD/lib/log
 
-CONFIG += debug
-
-TARGET = RT_CNC
-
 unix:!macx: {
     DESTDIR = $$PWD/bin
 }
 
-LIBS += -L/opt/GreeMaster/lib -lGREEMASTER -lpthread -lxml2
+# 实时模式需要链接 EtherCAT 主站库
+!debug_mode {
+    LIBS += -L/opt/GreeMaster/lib -lGREEMASTER -lpthread -Wl,--no-as-needed -lxml2 -Wl,--as-needed
+    LIBS += -L "/usr/local/lib/" -lethercat
+    INCLUDEPATH += /opt/GreeMaster/include/libGREEMASTER/
+}
 
-LIBS += -L "/usr/local/lib/" -lethercat
-
-INCLUDEPATH += \
-    /opt/GreeMaster/include/libGREEMASTER/
+# 调试模式只需要基本库
+debug_mode {
+    LIBS += -lpthread
+}
 
 HEADERS += \
+    src/common/debug_mode.h \
     src/common/greecnc.h \
     src/common/rt_sem.h \
     src/common/threads_controller.h \
     src/hal/hal_driver.h \
     src/hal/hal_io.h \
-    src/master/main_demo.h \
     src/master/master.h \
     src/threads/api/threads_api.h \
     src/threads/src/thread_manager.h
+
+# 调试模式使用模拟主站
+debug_mode {
+    HEADERS += src/master/master_sim.h
+    SOURCES += src/master/master_sim.c
+}
+
+# 实时模式使用真实主站
+!debug_mode {
+    HEADERS += src/master/main_demo.h
+    SOURCES += src/master/master.c
+    INCLUDEPATH += /opt/GreeMaster/include/libGREEMASTER/
+}
 
 SOURCES += \
     main.cpp \
@@ -62,7 +92,6 @@ SOURCES += \
     src/common/threads_controller.cpp \
     src/hal/hal_driver.c \
     src/hal/hal_io.c \
-    src/master/master.c \
     src/threads/src/thread_manager.cpp \
     src/threads/src/threads.cpp
 

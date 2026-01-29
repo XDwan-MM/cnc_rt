@@ -1,4 +1,5 @@
 #include "hal_driver.h"
+#include "debug_mode.h"
 #include <stddef.h>
 #include <stdio.h>
 
@@ -175,20 +176,22 @@ hal_retcode_t Hal_Driver_Update(hal_driver_t* drv, bool read, bool write)
     if (drv == NULL)
         return HAL_DRIVER_ERR_INVALID_PARAM;
 
+#ifndef DEBUG_MODE_ENABLED
     if (read)
     {
-        // 这里应该从硬件读取实际数据
         GM_TxPdoEntry_Read(CurPos[drv->axis_id], &drv->actual_pos, 4);
         GM_TxPdoEntry_Read(CurVel[drv->axis_id], &drv->actual_vel, 4);
-//        GM_TxPdoEntry_Read(CurTor[drv->axis_id], &drv->actual_torque, 4);
     }
     if (write)
     {
-        // 这里应该向硬件写入控制数据
         GM_RxPdoEntry_Write(PurPos[drv->axis_id], drv->target_pos);
         GM_RxPdoEntry_Write(PurVel[drv->axis_id], drv->target_vel);
-//        GM_RxPdoEntry_Write(PurTor[drv->axis_id], drv->target_torque);
     }
+#else
+    // 调试模式：数据由 master_sim.c 中的 simulate_hal_data() 更新
+    (void)read;
+    (void)write;
+#endif
     return HAL_DRIVER_SUCCESS;
 }
 

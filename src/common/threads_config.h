@@ -31,6 +31,4 @@ void task_run();
 void motion_run();
 void parser_run();
 
-
-
 #endif // THREADS_CONFIG_H
