@@ -1,5 +1,6 @@
 #define _GNU_SOURCE // 必须放在所有 include 之前，用于启用 CPU 亲和性等 GNU 扩展
 #include "thread_manager.h"
+#include "debug_mode.h"
 #include <errno.h>
 #include <pthread.h>
 #include <sched.h>
@@ -42,7 +43,48 @@ void print_thread_info(const char* thread_name) {
     printf("----------------------------------------\n");
 }
 
+#ifdef DEBUG_MODE_ENABLED
+/**
+ * @brief 创建调试模式下的普通线程（无实时属性）
+ *
+ * 调试模式下创建的线程特点：
+ * - 使用 SCHED_OTHER 普通调度策略
+ * - 不绑定 CPU 核心
+ * - 可被调试器正常断点
+ * - 无需 root 权限
+ */
+int create_debug_thread(managed_thread_t* thread) {
+    int ret;
+
+    if (!thread || !thread->function) {
+        fprintf(stderr, "错误: 线程配置或函数指针为空。\n");
+        return -1;
+    }
+
+    // 使用默认属性创建普通线程
+    ret = pthread_create(&thread->id, NULL, thread->function, thread);
+    if (ret) {
+        fprintf(stderr, "[%s] pthread_create 失败: %s\n",
+                thread->config.thread_name, strerror(ret));
+        return -1;
+    }
+
+    printf("[调试模式] 线程 [%s] 创建成功 (普通线程，可断点调试)\n",
+           thread->config.thread_name);
+
+    // 线程分离：创建后自动回收资源
+    pthread_detach(thread->id);
+
+    return 0;
+}
+#endif
+
 int create_managed_thread(managed_thread_t* thread) {
+#ifdef DEBUG_MODE_ENABLED
+    // 调试模式：创建普通线程
+    return create_debug_thread(thread);
+#else
+    // 实时模式：创建实时线程（原有逻辑）
     pthread_attr_t attr;
     struct sched_param param;
     int ret;
@@ -113,4 +155,5 @@ int create_managed_thread(managed_thread_t* thread) {
 error_cleanup:
     pthread_attr_destroy(&attr);
     return -1;
+#endif // !DEBUG_MODE_ENABLED
 }

@@ -1,6 +1,23 @@
 QT += core
 CONFIG += c++17 cmdline
 
+# 使用 CONFIG+=debug_mode 启用调试模式编译
+# 使用 CONFIG+=release 或不加参数使用实时模式编译
+# 调试模式编译: qmake RT_CNC.pro CONFIG+=debug_mode && make
+# 实时模式编译: qmake RT_CNC.pro && make
+
+debug_mode {
+    message("========== 编译调试模式 ==========")
+    DEFINES += DEBUG_MODE_ENABLED
+    DEFINES += __DeveloperMode__
+    QMAKE_CXXFLAGS += -g
+    QMAKE_CFLAGS += -g
+} else {
+    message("========== 编译实时模式 ==========")
+    QMAKE_CXXFLAGS += -O2
+    QMAKE_CFLAGS += -O2
+}
+
 # 检查编译缓存工具 ccache 是否可用
 win32 {
     if(system(ccache --version > NUL 2>&1)) {
@@ -30,15 +47,13 @@ include(lib/log/apilog/logapi.pri)
 LIBS += -L"$$PWD/lib/log/bin/" -lcnclog
 INCLUDEPATH += $$PWD/lib/log/apilog $$PWD/lib/log
 
-CONFIG += debug
-
 TARGET = RT_CNC
 
 unix:!macx: {
     DESTDIR = $$PWD/bin
 }
 
-LIBS += -L/opt/GreeMaster/lib -lGREEMASTER -lpthread -lxml2
+LIBS += -L/opt/GreeMaster/lib -lGREEMASTER -lpthread -Wl,--no-as-needed -lxml2 -Wl,--as-needed
 
 LIBS += -L "/usr/local/lib/" -lethercat
 
@@ -46,6 +61,7 @@ INCLUDEPATH += \
     /opt/GreeMaster/include/libGREEMASTER/
 
 HEADERS += \
+    src/common/debug_mode.h \
     src/common/greecnc.h \
     src/common/rt_sem.h \
     src/common/threads_controller.h \
@@ -53,6 +69,7 @@ HEADERS += \
     src/hal/hal_io.h \
     src/master/main_demo.h \
     src/master/master.h \
+    src/master/master_sim.h \
     src/threads/api/threads_api.h \
     src/threads/src/thread_manager.h
 
@@ -63,6 +80,7 @@ SOURCES += \
     src/hal/hal_driver.c \
     src/hal/hal_io.c \
     src/master/master.c \
+    src/master/master_sim.c \
     src/threads/src/thread_manager.cpp \
     src/threads/src/threads.cpp
 
