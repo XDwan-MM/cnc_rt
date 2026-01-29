@@ -5,6 +5,7 @@
 set -e
 
 SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
+LIB_DIR="$SCRIPT_DIR/lib"
 BUILD_DIR="$SCRIPT_DIR/build"
 BUILD_DIR_DEBUG="$BUILD_DIR/debug"
 BUILD_DIR_RELEASE="$BUILD_DIR/release"
@@ -46,8 +47,39 @@ print_help() {
     echo ""
 }
 
+build_shm_lib() {
+    mkdir -p "$LIB_DIR/cncshm/build"
+    cd "$LIB_DIR/cncshm/build"
+    qmake "../shm.pro"
+    make -j$(nproc)
+    if [ $? -eq 0 ]; then
+        make install
+        echo -e "${GREEN}[OK] 编译共享内存库成功, 安装到/usr/local/lib${NC}"
+        return 0
+    else
+        echo -e "${RED}[FAIL] 编译共享内存库失败${NC}"
+        return 1
+    fi
+}
+
+build_log_lib() {
+    mkdir -p "$LIB_DIR/log/build"
+    cd "$LIB_DIR/log/build"
+    qmake "../cnclogapp.pro"
+    make -j$(nproc)
+    if [ $? -eq 0 ]; then
+        make install
+        echo -e "${GREEN}[OK] 编译日志库成功, 安装到/usr/local/lib${NC}"
+        return 0
+    else
+        echo -e "${RED}[FAIL] 编译日志库失败${NC}"
+        return 1
+    fi
+}
+
 build_debug() {
     echo -e "${BLUE}========== 编译调试模式 ==========${NC}"
+
     mkdir -p "$BUILD_DIR_DEBUG"
     cd "$BUILD_DIR_DEBUG"
 
@@ -65,6 +97,7 @@ build_debug() {
 
 build_release() {
     echo -e "${BLUE}========== 编译实时模式 ==========${NC}"
+
     mkdir -p "$BUILD_DIR_RELEASE"
     cd "$BUILD_DIR_RELEASE"
 
@@ -115,6 +148,18 @@ build_all() {
 clean_build() {
     echo -e "${YELLOW}清理构建文件...${NC}"
 
+    # 清理 共享内存 构建目录
+    if [ -d "$LIB_DIR/cncshm/build" ]; then
+        rm -rf "$LIB_DIR/cncshm/build"
+        echo "  已清理: $LIB_DIR/cncshm/build"
+    fi
+
+        # 清理 共享内存 构建目录
+    if [ -d "$LIB_DIR/log/build" ]; then
+        rm -rf "$LIB_DIR/log/build"
+        echo "  已清理: $LIB_DIR/log/build"
+    fi
+
     # 清理 debug 构建目录
     if [ -d "$BUILD_DIR_DEBUG" ]; then
         rm -rf "$BUILD_DIR_DEBUG"
@@ -149,16 +194,22 @@ clean_build() {
 # 主逻辑
 case "${1:-all}" in
     debug)
+        build_shm_lib
+        build_log_lib
         build_debug
         echo ""
         echo -e "可执行文件: ${YELLOW}$BIN_DIR/rt_cnc_d${NC}"
         ;;
     release)
+        build_shm_lib
+        build_log_lib
         build_release
         echo ""
         echo -e "可执行文件: ${YELLOW}$BIN_DIR/rt_cnc${NC}"
         ;;
     all)
+        build_shm_lib
+        build_log_lib
         build_all
         ;;
     clean)

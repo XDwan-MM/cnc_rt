@@ -10,7 +10,7 @@
 #include "debug_mode.h"
 
 // Ctrl + C 终止程序触发
-void sigint_handler(int sig) {
+void sigint_handler([[maybe_unused]] int sig) {
     exit_flag = 1;
 }
 
@@ -43,7 +43,7 @@ int main() {
     // 初始化共享内存
     if(!shmInit()) {
         printf("共享内存初始化失败\n");
-        return 1;
+        return -1;
     }
 
     Hal_Driver_Manager_Init();

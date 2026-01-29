@@ -80,7 +80,7 @@ build*/
 # cache
 .cache/
 
-/bin/
+bin/
 
 # data
 data/

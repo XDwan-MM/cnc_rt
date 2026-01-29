@@ -3,8 +3,6 @@
 
 #include <sched.h>
 
-#define MIN_CPU_CORE_NUM 4  // 最小cpu核心数
-
 // 结构体定义
 typedef struct {
     int core_id;

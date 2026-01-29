@@ -1,14 +1,10 @@
 #ifndef THREADS_CONTROLLER_H
 #define THREADS_CONTROLLER_H
 
-
 #include <sched.h>
 #include <semaphore.h>
 #include "threads_api.h"
 #include "threads_config.h"  // 使用统一的类型定义
-
-#define debugflag 1
-#define MIN_CPU_CORE_NUM 4 // 最小cpu核心数
 
 // 声明所有全局变量
 extern thread_config_t plc_config;
@@ -24,6 +20,5 @@ void* task_controller_thread_func(void* arg);
 void* path_plan_thread_func(void* arg);
 void* pdo_thread_func(void*);
 void* test_keyboard_cnc_thread_func(void*);
-
 
 #endif // THREADS_CONTROLLER_H

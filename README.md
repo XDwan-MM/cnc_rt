@@ -8,6 +8,7 @@
 使用 CONFIG+=release 或不加参数使用实时模式编译
 调试模式编译: cd build/debug && qmake ../../RT_CNC.pro CONFIG+=debug_mode && make -j$(nproc)
 实时模式编译: cd build/release && qmake ../../RT_CNC.pro && make -j$(nproc)
+使用编译脚本可直接编译两个版本: sudo ./build.sh，有问题可以使用 ./build.sh help 查看帮助
 
 运行命令：
 1. 进入 bin 文件夹内

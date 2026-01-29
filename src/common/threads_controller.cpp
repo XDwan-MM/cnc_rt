@@ -2,7 +2,6 @@
 #include "debug_mode.h"
 #include "rt_sem.h"
 #include <stdio.h>
-#include "greecnc.h"
 #include "hal_driver.h"
 #include "master.h"
 

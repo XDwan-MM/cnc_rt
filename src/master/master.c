@@ -2,7 +2,6 @@
 #include "main_demo.h"
 #include "hal_driver.h"
 #include "hal_io.h"
-#include "greecnc.h"
 #include "rt_sem.h"
 
 #ifdef __DeveloperMode__
