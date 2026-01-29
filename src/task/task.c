@@ -5,6 +5,9 @@
 EVENT_DATA event_data;
 
 static GNC_RES task_handle_sys_event(EVENT_DATA event_data);
+static void task_scan_g_signal();
+static void task_send_f_signal();
+static void task_mq_proc();
 
 // 任务消息队列初始化
 GNC_RES task_mq_init(){
@@ -12,8 +15,18 @@ GNC_RES task_mq_init(){
     return event_queue_init(event_queue);
 }
 
-// 消息队列处理（放在任务线程中调用循环）
-GNC_RES task_mq_proc(){
+// 扫描G信号 PMC_Scan_G_Signals
+static void task_scan_g_signal(){
+
+}
+
+// 发送F信号 Send_PMC_F_Signals
+static void task_send_f_signal(){
+
+}
+
+// 处理消息队列
+static void task_mq_proc(){
     if(event_queue_is_empty(event_queue)) return GNC_DATA_EMPTY;
     if(event_queue_is_full(event_queue)) return GNC_OPERATOR_ERROR; // error!
     if(sys->nc_event != SYS_EVENT_NONE) return GNC_OPERATOR_WARNING;
@@ -25,6 +38,13 @@ GNC_RES task_mq_proc(){
         default:
             break;
     }
+}
+
+// 消息队列处理（放在任务线程中调用循环）
+GNC_RES emcmotTask(){
+    task_scan_g_signal();
+    task_mq_proc();
+    task_send_f_signal();
 }
 
 static GNC_RES task_handle_sys_event(EVENT_DATA event_data){

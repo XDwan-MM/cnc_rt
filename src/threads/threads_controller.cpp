@@ -55,7 +55,7 @@ void* motion_controller_thread_func(void*) {
 // 任务控制器线程的具体实现
 void* task_controller_thread_func(void*) {
     printf("task_controller_thread_func\n");
-    task_mq_proc();
+    emcmotTask();
     return NULL;
 }
 

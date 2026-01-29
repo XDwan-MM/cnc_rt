@@ -20,7 +20,7 @@ extern "C" {
 GNC_RES task_mq_init();
 
 // 任务消息队列处理
-GNC_RES task_mq_proc();
+GNC_RES emcmotTask();
 
 #ifdef __cplusplus
 }
