@@ -1,4 +1,6 @@
+#ifndef _GNU_SOURCE
 #define _GNU_SOURCE // 必须放在所有 include 之前，用于启用 CPU 亲和性等 GNU 扩展
+#endif
 #include "thread_manager.h"
 #include "debug_mode.h"
 #include <errno.h>

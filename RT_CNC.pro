@@ -50,21 +50,12 @@ unix:!macx: {
     DESTDIR = $$PWD/bin
 }
 
-# 实时模式需要链接 EtherCAT 主站库
-!debug_mode {
-    LIBS += -L/opt/GreeMaster/lib -lGREEMASTER -lpthread -Wl,--no-as-needed -lxml2 -Wl,--as-needed
-    LIBS += -L "/usr/local/lib/" -lethercat
-    INCLUDEPATH += /opt/GreeMaster/include/libGREEMASTER/
-}
-
-# 调试模式只需要基本库
-debug_mode {
-    LIBS += -lpthread
-}
+LIBS += -L/opt/GreeMaster/lib -lGREEMASTER -lpthread -Wl,--no-as-needed -lxml2 -Wl,--as-needed
+LIBS += -L "/usr/local/lib/" -lethercat
+INCLUDEPATH += /opt/GreeMaster/include/libGREEMASTER/
 
 HEADERS += \
     src/common/debug_mode.h \
-    src/common/greecnc.h \
     src/common/rt_sem.h \
     src/common/threads_controller.h \
     src/hal/hal_driver.h \
@@ -83,7 +74,6 @@ debug_mode {
 !debug_mode {
     HEADERS += src/master/main_demo.h
     SOURCES += src/master/master.c
-    INCLUDEPATH += /opt/GreeMaster/include/libGREEMASTER/
 }
 
 SOURCES += \
