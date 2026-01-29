@@ -1,0 +1,21 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "QMake Build", // 任务名称
+            "type": "shell",
+            "command": "sh", // 使用 shell 组合命令
+            "args": [
+                "-c",
+                // 核心指令：建目录 -> 进目录 -> qmake生成Makefile -> make编译
+                "mkdir -p build && cd build && qmake ../*.pro && make -j$(nproc)"
+            ],
+            "group": {
+                "kind": "build",
+                "isDefault": true // 设为默认，按 Ctrl+Shift+B 直接运行
+            },
+            "problemMatcher": "$gcc", // 让 VSCode 能捕捉编译错误
+            "detail": "编译 Qt 项目 (QMake)"
+        }
+    ]
+}

@@ -8,6 +8,7 @@
 #include "threads_api.h"
 #include "threads_controller.h"
 #include "debug_mode.h"
+#include "global.h"
 
 // Ctrl + C 终止程序触发
 void sigint_handler([[maybe_unused]] int sig) {
@@ -45,11 +46,12 @@ int main() {
         printf("共享内存初始化失败\n");
         return -1;
     }
-
+    // 初始化实时全局变量
+    rt_global_init();
+    // 初始化硬件抽象层
     Hal_Driver_Manager_Init();
     Hal_Driver_Array_Init();
     Hal_Io_Array_Init();
-
     signal(SIGINT, sigint_handler);
 
 #ifndef DEBUG_MODE_ENABLED
@@ -62,6 +64,7 @@ int main() {
 #endif
 
     init_rt_sem(); //需要放在线程启动（threads_start()函数）前
+    // 启动各个线程
     if (threads_start()) {
         printf("\n线程创建失败，主线程退出。\n");
         exit(1);
@@ -70,6 +73,5 @@ int main() {
         sleep(1);
     }
     threads_joint();
-
     return 0;
 }
