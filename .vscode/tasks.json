@@ -2,13 +2,14 @@
     "version": "2.0.0",
     "tasks": [
         {
-            "label": "QMake Build", // 任务名称
+            "label": "build_debug", // 任务名称
             "type": "shell",
             "command": "sh", // 使用 shell 组合命令
             "args": [
                 "-c",
                 // 核心指令：建目录 -> 进目录 -> qmake生成Makefile -> make编译
                 // "mkdir -p build && cd build && qmake ../*.pro && make -j$(nproc)"
+                "sudo ./build.sh"
             ],
             "group": {
                 "kind": "build",

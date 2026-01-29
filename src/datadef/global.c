@@ -106,7 +106,7 @@ static GNC_RES rt_var_init(){
         var_axis[i].cmd_pos = 0;            
         var_axis[i].act_pos = 0;            
     }
-    return GNC_CAL_SUCCESS;
+    return GNC_OPERATOR_SUCCESS;
 }
 
 static GNC_RES shm_var_init(){
@@ -127,7 +127,7 @@ static GNC_RES shm_var_init(){
         setVarAxisDouble(i, VAR_AXIS_CMD_POS, 0, 0);
         setVarAxisDouble(i, VAR_AXIS_ACT_POS_EX, 0, 0);
     }
-    return GNC_CAL_SUCCESS;
+    return GNC_OPERATOR_SUCCESS;
 }
 
 GNC_RES shm_var_update(){
@@ -175,7 +175,7 @@ GNC_RES shm_var_update_prog(){
     setVarChanValue(0, VAR_CHAN_MODAL, 0, &set_modal, 0);
     // 运行行号
     setVarChanInt(0, VAR_CHAN_RUN_ROW, cycle_tp->plan_block->line_number, 0);
-    return GNC_CAL_SUCCESS;
+    return GNC_OPERATOR_SUCCESS;
 }
 
 static GNC_RES rt_par_init(){
@@ -188,6 +188,7 @@ static GNC_RES rt_par_init(){
     par_chan = par_data->par_chan;          // 通道参数
     par_axis = par_data->par_axis;          // 坐标轴参数
     par_acmp = par_data->par_acmp;          // 误差补偿参数
+    return GNC_OPERATOR_SUCCESS;
 }
 
 static GNC_RES shm_par_init(){
@@ -497,7 +498,7 @@ static GNC_RES shm_par_init(){
     getParData(PARAMAN_FILE_ACMP, 2, PAR_CMP_PITCH_TYPE, &par_union);
     par_acmp[AXIS_Z].pitch_comp_type = par_union.value.val_real; //第2项垂直度补偿角度 (单位：um/m)
 
-    return GNC_CAL_SUCCESS;
+    return GNC_OPERATOR_SUCCESS;
 }
 
 // 每个插补周期都会更新的par数据
@@ -525,7 +526,7 @@ static GNC_RES sys_init(){
     sys->is_first_run = false;
     sys->is_mac_lock = false;
     sys->is_lookahead = true;
-    return GNC_CAL_SUCCESS;
+    return GNC_OPERATOR_SUCCESS;
 }
 
 GNC_RES sys_reset(){
@@ -536,7 +537,7 @@ GNC_RES sys_reset(){
     sys->is_parse_running = false;
     sys->is_first_run = false;
     sys->is_lookahead = true;
-    return GNC_CAL_SUCCESS;
+    return GNC_OPERATOR_SUCCESS;
 }
 
 static GNC_RES tp_init(){
@@ -558,7 +559,7 @@ static GNC_RES tp_init(){
     plan_queue = (PLAN_QUEUE*)malloc(sizeof(PLAN_QUEUE));
     res = queue_init(plan_queue);
     if(res != GNC_OPERATOR_SUCCESS) return res;
-    return GNC_CAL_SUCCESS;
+    return GNC_OPERATOR_SUCCESS;
 }
 
 GNC_RES tp_reset(){
@@ -567,7 +568,7 @@ GNC_RES tp_reset(){
     gcode_queue_reset(gcode_queue);
     queue_reset(pretreat_queue);
     queue_reset(plan_queue);
-    return GNC_CAL_SUCCESS;
+    return GNC_OPERATOR_SUCCESS;
 }
 
 static GNC_RES traj_data_init(){
@@ -577,26 +578,26 @@ static GNC_RES traj_data_init(){
     free_traj_data = (TRAJ_PARAMS*)malloc(SYS_AXES_NUM * sizeof(TRAJ_PARAMS));
     if(free_traj_data == NULL) return GNC_DATA_NULL;
     memset(free_traj_data, 0, SYS_AXES_NUM * sizeof(TRAJ_PARAMS));
-    return GNC_CAL_SUCCESS;
+    return GNC_OPERATOR_SUCCESS;
 }
 
 GNC_RES rt_global_init(){
-    GNC_RES res = GNC_CAL_SUCCESS;
+    GNC_RES res = GNC_OPERATOR_SUCCESS;
     res = rt_var_init();
-    if(res != GNC_CAL_SUCCESS) return res;
+    if(res != GNC_OPERATOR_SUCCESS) return res;
     res = rt_par_init();
-    if(res != GNC_CAL_SUCCESS) return res;
+    if(res != GNC_OPERATOR_SUCCESS) return res;
     res = shm_var_init();
-    if(res != GNC_CAL_SUCCESS) return res;
+    if(res != GNC_OPERATOR_SUCCESS) return res;
     res = shm_par_init();
-    if(res != GNC_CAL_SUCCESS) return res;
+    if(res != GNC_OPERATOR_SUCCESS) return res;
     res = sys_init();
-    if(res != GNC_CAL_SUCCESS) return res;
+    if(res != GNC_OPERATOR_SUCCESS) return res;
     res = tp_init();
-    if(res != GNC_CAL_SUCCESS) return res;
+    if(res != GNC_OPERATOR_SUCCESS) return res;
     res = traj_data_init();
-    if(res != GNC_CAL_SUCCESS) return res;
+    if(res != GNC_OPERATOR_SUCCESS) return res;
     res = task_mq_init();
-    if(res != GNC_CAL_SUCCESS) return res;
-    return GNC_CAL_SUCCESS;
+    if(res != GNC_OPERATOR_SUCCESS) return res;
+    return GNC_OPERATOR_SUCCESS;
 }

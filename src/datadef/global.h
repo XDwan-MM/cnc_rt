@@ -54,7 +54,6 @@ extern RxEntry_Unit PurTor[MAX_DRIVERS];          // 目标转矩
 
 extern RxEntry_Unit ErrorNumb[MAX_DRIVERS];       // 报警码
 
-// todo：修改，为什么要将hal_task的变量定义在master.c中
 extern TxEntry_Unit MCPDI[11];
 extern RxEntry_Unit MCPDO[7];
 

@@ -6,11 +6,13 @@ debug_mode {
     message("========== 编译调试模式 ==========")
     DEFINES += DEBUG_MODE_ENABLED
     DEFINES += __DeveloperMode__
+    CONFIG += debug
     QMAKE_CXXFLAGS += -g -O0
     QMAKE_CFLAGS += -g -O0
     TARGET = rt_cnc_d
 } else {
     message("========== 编译实时模式 ==========")
+    CONFIG += release
     DEFINES += MASTER_RUN_ON
     QMAKE_CXXFLAGS += -O2
     QMAKE_CFLAGS += -O2
