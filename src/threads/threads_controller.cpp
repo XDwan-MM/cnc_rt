@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include "hal_driver.h"
 #include "master.h"
+#include "task.h"
 
 #ifdef DEBUG_MODE_ENABLED
 #include "master_sim.h"
@@ -51,6 +52,7 @@ void* motion_controller_thread_func(void*) {
 // 任务控制器线程的具体实现
 void* task_controller_thread_func(void*) {
     printf("task_controller_thread_func\n");
+    task_mq_proc();
     return NULL;
 }
 

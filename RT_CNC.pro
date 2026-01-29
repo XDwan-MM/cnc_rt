@@ -40,11 +40,23 @@ unix:!macx {
 # 添加共享内存库
 include(lib/cncshm/api/apishm.pri)
 LIBS += -L"$$PWD/lib/cncshm/bin/" -lshm
+INCLUDEPATH += $$PWD/lib/cncshm/api $$PWD/lib/cncshm
 
 # 添加日志
 include(lib/log/apilog/logapi.pri)
 LIBS += -L"$$PWD/lib/log/bin/" -lcnclog
 INCLUDEPATH += $$PWD/lib/log/apilog $$PWD/lib/log
+
+# 添加译码
+INCLUDEPATH += $$PWD/lib/parser/include $$PWD/lib/parser
+
+# 添加运动库
+INCLUDEPATH += $$PWD/lib/kinematic/include $$PWD/lib/kinematic
+
+
+CONFIG += debug
+
+TARGET = RT_CNC
 
 unix:!macx: {
     DESTDIR = $$PWD/bin
@@ -56,13 +68,44 @@ INCLUDEPATH += /opt/GreeMaster/include/libGREEMASTER/
 
 HEADERS += \
     src/common/debug_mode.h \
-    src/common/rt_sem.h \
-    src/common/threads_controller.h \
+    src/common/greecnc.h \
+    src/datadef/datatype.h \
+    src/datadef/event_queue.h \
+    src/datadef/eventdef.h \
+    src/datadef/gcode_queue.h \
+    src/datadef/global.h \
+    src/datadef/mcode_queue.h \
+    src/datadef/plan_queue.h \
+    src/datadef/rt_par.h \
+    src/datadef/rt_var.h \
     src/hal/hal_driver.h \
     src/hal/hal_io.h \
     src/master/master.h \
-    src/threads/api/threads_api.h \
-    src/threads/src/thread_manager.h
+    src/motion/alarm.h \
+    src/motion/egear_ratio.h \
+    src/motion/emcmot.h \
+    src/motion/ferror_control.h \
+    src/motion/handwheel.h \
+    src/motion/homing.h \
+    src/motion/interpolation.h \
+    src/motion/jog.h \
+    src/motion/jog_control.h \
+    src/motion/mem.h \
+    src/motion/mpg.h \
+    src/motion/pathplan.h \
+    src/motion/rapid.h \
+    src/motion/simple_tp.h \
+    src/motion/stored_stroke_check.h \
+    src/spindle/spindle.h \
+    src/spindle/spindlestatus.h \
+    src/task/task.h \
+    src/threads/threads_api.h \
+    src/threads/thread_manager.h \
+    src/threads/rt_sem.h \
+    src/threads/threads_config.h \
+    src/threads/threads_controller.h \
+    src/utils/log/log.h \
+    src/utils/math/cnc_math.h
 
 # 调试模式使用模拟主站
 debug_mode {
@@ -78,16 +121,49 @@ debug_mode {
 
 SOURCES += \
     main.cpp \
-    src/common/rt_sem.c \
-    src/common/threads_controller.cpp \
+    src/datadef/datatype.c \
+    src/datadef/event_queue.c \
+    src/datadef/gcode_queue.c \
+    src/datadef/global.c \
+    src/datadef/mcode_queue.c \
+    src/datadef/plan_queue.c \
     src/hal/hal_driver.c \
     src/hal/hal_io.c \
-    src/threads/src/thread_manager.cpp \
-    src/threads/src/threads.cpp
+    src/master/master.c \
+    src/motion/alarm.c \
+    src/motion/egear_ratio.c \
+    src/motion/emcmot.cpp \
+    src/motion/ferror_control.c \
+    src/motion/handwheel.c \
+    src/motion/homing.c \
+    src/motion/interpolation.c \
+    src/motion/jog.c \
+    src/motion/jog_control.c \
+    src/motion/mem.c \
+    src/motion/mpg.c \
+    src/motion/pathplan.c \
+    src/motion/rapid.c \
+    src/motion/simple_tp.c \
+    src/motion/stored_stroke_check.c \
+    src/spindle/spindle.c \
+    src/task/task.c \
+    src/threads/thread_manager.cpp \
+    src/threads/threads.cpp \
+    src/threads/rt_sem.c \
+    src/threads/threads_controller.cpp \
+    src/utils/log/log.c \
+    src/utils/math/cnc_math.c
 
 INCLUDEPATH += \
-    src/hal \
     src/common \
+    src/datadef \
+    src/hal \
     src/master \
-    src/threads/api \
-    src/threads/src \
+    src/motion \
+    src/task \
+    src/spindle \
+    src/threads \
+    src/utils \
+    src/utils/math \
+    src/utils/log \
+    lib/kinematic/include \
