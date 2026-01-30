@@ -52,7 +52,8 @@ LIBS += -L"$$PWD/lib/log/bin/" -lcnclog
 INCLUDEPATH += $$PWD/lib/log/apilog $$PWD/lib/log
 
 # 添加译码
-INCLUDEPATH += $$PWD/lib/parser/include $$PWD/lib/parser
+LIBS += -L$$PWD/lib/parser/lib/ -lcnc_parser
+INCLUDEPATH += $$PWD/lib/parser/api $$PWD/lib/parser
 
 # 添加运动库
 LIBS += -L"$$PWD/lib/kinematic/bin/" -lkinematic
@@ -105,6 +106,7 @@ HEADERS += \
     src/motion/jog_control.h \
     src/motion/mem.h \
     src/motion/mpg.h \
+    src/motion/parser.h \
     src/motion/pathplan.h \
     src/motion/rapid.h \
     src/motion/simple_tp.h \
@@ -151,6 +153,7 @@ SOURCES += \
     src/motion/jog_control.c \
     src/motion/mem.c \
     src/motion/mpg.c \
+    src/motion/parser.cpp \
     src/motion/pathplan.c \
     src/motion/rapid.c \
     src/motion/simple_tp.c \
