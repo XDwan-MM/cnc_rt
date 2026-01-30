@@ -17,7 +17,7 @@ typedef enum {
 } CNC_MODE_INDEX;
 
 /**
- * @brief CNC 逻辑事件 ID
+ * @brief PMC事件 ID
  * 对应 EVENT_DATA 中的 code 字段，用于区分不同的动作类型
  */
 typedef enum {
@@ -28,9 +28,9 @@ typedef enum {
     EV_MSG_OVERRIDE,    /**< 倍率调节 (参数1: 类型, 参数2: 数值) */
     EV_MSG_AUTO_RUN,    /**< 运行控制 (参数1: 启动/中止) */
     EV_MSG_RESET        /**< 系统复位 */
-} CNC_EVENT_ID;
+} PMC_EVENT_ID;
 
-// 各个事件对应的参数结构体定义（子结构体）, 六种事件类型对应六个参数结构体
+// 各个PMC事件对应的参数结构体定义（子结构体）, 六种事件类型对应六个参数结构体
 /* 1、*/
 typedef struct {
     int mode;
@@ -68,7 +68,7 @@ typedef struct {
  * 用于在内存中统一事件格式，方便解析
  */
 typedef struct {
-    CNC_EVENT_ID id;    /**< 事件代码 */
+    PMC_EVENT_ID id;    /**< 事件代码 */
     union{
         EV_MSG_MODE_PAYLOAD mode_payload;
         EV_MSG_JOG_PAYLOAD jog_payload;
@@ -77,7 +77,7 @@ typedef struct {
         EV_MSG_AUTO_RUN_PAYLOAD run_payload;
         EV_MSG_RESET_PAYLOAD reset_payload;
     };
-} CNC_EVENT;
+} PMC_EVENT;
 
 #pragma pack(push, 1)
 /**

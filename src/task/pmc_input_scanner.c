@@ -11,8 +11,8 @@
 /** @brief 从寄存器系统同步数据到本地结构体 */
 static int pmc_input_fetch_snapshot(G_INPUT_MAP *local_snap);
 
-/** @brief 将解析出的逻辑打包为 CNC_EVENT 并入队 */
-static void pmc_dispatch_event(CNC_EVENT_ID id, int p1, int p2);
+/** @brief 将解析出的逻辑打包为 PMC_EVENT 并入队 */
+static void pmc_dispatch_event(PMC_EVENT_ID id, int p1, int p2);
 
 /**
  * @brief 模式解析逻辑实现
@@ -172,10 +172,10 @@ static int pmc_input_fetch_snapshot(G_INPUT_MAP *local_snap) {
     return (ret == REG_API_SUCCESS) ? REG_API_SUCCESS : REG_API_IDX_ERROR;
 }
 
-/** @brief 将解析出的逻辑打包为 CNC_EVENT 并入队 */
-static void pmc_dispatch_event(CNC_EVENT_ID id, int p1, int p2)
+/** @brief 将解析出的逻辑打包为 PMC_EVENT 并入队 */
+static void pmc_dispatch_event(PMC_EVENT_ID id, int p1, int p2)
 {
-    CNC_EVENT event;
+    PMC_EVENT event;
     switch (id) {
     case EV_MSG_NONE:
     {
@@ -223,7 +223,7 @@ static void pmc_dispatch_event(CNC_EVENT_ID id, int p1, int p2)
     default:
         break;
     }
-     /* 推送到线程安全的队列 */
+     /* 推送 PMC_EVENT 到线程安全的队列 */
     event_queue_push(p_target_queue, &event);
 }
 
