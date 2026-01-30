@@ -91,7 +91,8 @@ void pmc_input_scan_cycle(void) {
 
     /* 4. 倍率检测 (G12/G14) */
     // 进给倍率变化检测G12
-    if (curr_g.G0012 != last_g.G0012) {
+    if (curr_g.G0012 != last_g.G0012)
+    {
         pmc_dispatch_event(EV_MSG_OVERRIDE, 0, (int)curr_g.G0012);
     }
     // 快速进给倍率检测G14
@@ -130,20 +131,20 @@ void pmc_input_scan_cycle(void) {
         pmc_dispatch_event(EV_MSG_RESET, 0, 0);
     }
 
-    /* 7. 主轴正反停信号判断 (G70.4, G70.5) */
-    if (GET_BIT(curr_g.G0070, 4) == 1)
+    /* 7. 主轴正反信号检测 (G70.4, G70.5 上升沿触发) */
+    if (SIGNAL_RISING(curr_g.G0070, last_g.G0070, 4))
     {
-        // 主轴正转信号置位
+        // 产生主轴正转事件 入队
         pmc_dispatch_event(EV_MSG_SPINDLE, 1, 0);
     }
-    else if (GET_BIT(curr_g.G0070, 5) == 1)
+    if (SIGNAL_RISING(curr_g.G0070, last_g.G0070, 5))
     {
-        // 主轴反转信号置位
+        // 产生主轴反转事件 入队
         pmc_dispatch_event(EV_MSG_SPINDLE, -1, 0);
     }
-    else
+    if (SIGNAL_RISING(curr_g.G0029, last_g.G0029, 6))
     {
-        // 主轴停止
+        // 产生主轴停止事件 入队
         pmc_dispatch_event(EV_MSG_SPINDLE, 0, 0);
     }
 
