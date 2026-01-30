@@ -129,6 +129,7 @@ GNC_RES parser_reading(){
     GNC_RES res = GNC_CAL_SUCCESS;
     ItpGetMotionData(&parser_data->itp_datas);
     ItpGetState(&parser_data->itp_state);
+    ItpGetLineNumber(&parser_data->itp_line_no);
     if (parser_data->itp_datas.count > PARSER_BUF_SIZE) return GNC_CAL_ERROR;
     int error_no = ItpError();
     if (error_no >= 0)
