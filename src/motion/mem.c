@@ -66,6 +66,7 @@ static void mem_set_state(){
             break;
 
         case SYS_EVENT_RESET:
+            printf("mem: click reset\n");
             LOG_OUTPUT(INFO, "click reset");
             if(mem_exec_state == EXEC_RUNNING || mem_exec_state == EXEC_PAUSING){
                 mem_exec_state = EXEC_CANCELING;
@@ -77,6 +78,7 @@ static void mem_set_state(){
                 LOG_OUTPUT(ERROR, "reset line number: %d", cycle_tp->plan_block->line_number);
             }else if(mem_exec_state == EXEC_WAITING || mem_exec_state == EXEC_IDLE){
                 mem_exec_state = EXEC_IDLE;
+                sys->is_parse_running = false;
                 var_chan[0].is_running = false;
                 var_chan[0].is_moving = false;
                 var_chan[0].is_resetting = false;
@@ -90,10 +92,14 @@ static void mem_set_state(){
             break;
         
         case SYS_EVENT_RERUN:
-            LOG_OUTPUT(INFO, "click run");
-            LOG_OUTPUT(INFO, "vplan_mode: %d", par_chan[0].vplan_mode);
+            printf("mem: click run\n");
+            printf("mem_exec_state : %d, queue_is_empty: %d", mem_exec_state, queue_is_empty(plan_queue));
+            // LOG_OUTPUT(INFO, "click run");
+            // LOG_OUTPUT(INFO, "vplan_mode: %d", par_chan[0].vplan_mode);
             // 上一个状态为空闲或复位
             if(mem_exec_state == EXEC_IDLE && queue_is_empty(plan_queue)){
+                sys->is_parse_running = true;
+                printf("sys is parser running");
                 mem_exec_state = EXEC_WAITING;
             }
             // 上一个状态或当前状态为暂停
@@ -104,6 +110,7 @@ static void mem_set_state(){
             break;
         
         case SYS_EVENT_PAUSE:
+            printf("mem: click pause\n");
             LOG_OUTPUT(INFO, "click pause");
             if(mem_exec_state == EXEC_RUNNING){
                 mem_exec_state = EXEC_PAUSING;
@@ -184,6 +191,7 @@ static double mem_cal_pinc(){
             if (tp_is_arrived(pausing_tp)) {             
                 if(is_paused_in_block == true){ // 如果段内完成暂停                    
                     mem_exec_state = EXEC_IDLE;
+                    sys->is_parse_running = false;
                     var_chan[0].is_running = false;
                     var_chan[0].is_moving = false;
                     var_chan[0].is_resetting = false;
@@ -234,6 +242,7 @@ static bool mem_check_res(GNC_RES res){
         }
         // 译码已结束后无数据，则程序运行完成
         mem_exec_state = EXEC_IDLE;
+        sys->is_parse_running = false;
         var_chan[0].is_running = false;
         var_chan[0].is_moving = false;
         var_chan[0].is_progend = true;

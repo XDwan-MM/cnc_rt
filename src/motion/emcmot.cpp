@@ -17,6 +17,7 @@
 #include "spindle.h"
 #include "stored_stroke_check.h"
 #include "parser.h"
+#include "hmisysapi.h"
 #include <math.h>
 
 static void check_for_fault();
@@ -58,7 +59,7 @@ void emcmotTrajPlan() {
         set_operating_mode();
 
         // 处理事件
-        handle_system_event();
+        // handle_system_event();
 
         // 临时：主轴控制
         spindle_control();
@@ -82,20 +83,23 @@ void emcmotTrajPlan() {
 
 // 路径规划
 void emcmotPathPlan() {
-    if (!sys->is_parse_running) return;
+    if (sys->is_parse_running){
+        HmiSysData hmiSysData;
+        getHmiSysDataPtr(&hmiSysData);
+        printf("hmiSysData.ncFilePath: %s\n", hmiSysData.ncFilePath);
+        parser_init(hmiSysData.ncFilePath);
+        sys->is_parse_running = false;
+    }
     // 遍历多个通道
     for (int i = 0; i < var_sys.chan_num; i++) {
         // 解释器译码
-        // dcd_produce_blk();
         parser_run_mode();
-
         // 预处理，添加block
         chan_add_block();
     }
 }
 
 static void set_operating_mode() {
-    // 读取当前面板的加工模式 sys->target_mode：手动、手轮、回零、自动（单段）、MDI、报警
     // 检查是否急停
     if (var_chan[0].is_estop) {
         sys->current_mode = MODE_ALARM;
@@ -108,22 +112,20 @@ static void set_operating_mode() {
         sys->is_switching_mode = false;
         return;
     }
-    // printf("set_operating_modesys->current_mode == sys->target_mode %d %d \n", sys->current_mode, sys->target_mode);
     // 根据切换的加工模式和当前加工模式，判断是否可以切换
     switch (sys->current_mode) {
         case MODE_IDLE:
             sys->current_mode = sys->target_mode;
             var_chan[var_sys.active_chan].mode = sys->current_mode;
-
             break;
         case MODE_JOG:
             // 当前点动速度为零,才能切模式成功
-            if (fabs(var_axis[AXIS_X].jog_tp.curr_vel - 0.0) < 1e-7 && fabs(var_axis[AXIS_Y].jog_tp.curr_vel - 0.0) < 1e-7 && fabs(var_axis[AXIS_Z].jog_tp.curr_vel - 0.0) < 1e-7) {
+            printf("jog vel: %f\n", var_axis[AXIS_X].jog_tp.curr_vel);
+            if (fabs(var_axis[AXIS_X].jog_tp.curr_vel - 0.0) < 1e-3 && fabs(var_axis[AXIS_Y].jog_tp.curr_vel - 0.0) < 1e-3 && fabs(var_axis[AXIS_Z].jog_tp.curr_vel - 0.0) < 1e-3) {
                 sys->current_mode = sys->target_mode;
                 sys->is_switching_mode = false;
                 var_chan[var_sys.active_chan].mode = sys->current_mode;
-                printf("changesys->current_mode%s\n", mode_names[sys->current_mode]);
-
+                printf("change sys->current_mode%s\n", mode_names[sys->current_mode]);
                 break;
             }
             sys->nc_event = SYS_EVENT_RESET;
@@ -133,6 +135,7 @@ static void set_operating_mode() {
         case MODE_MPG:
             sys->current_mode = sys->target_mode;
             var_chan[var_sys.active_chan].mode = sys->current_mode;
+            printf("change sys->current_mode%s\n", mode_names[sys->current_mode]);
             break;
         case MODE_RAPID_JOG:
             // 当前快速点动速度为零,才能切模式成功
@@ -140,7 +143,7 @@ static void set_operating_mode() {
                 sys->current_mode = sys->target_mode;
                 sys->is_switching_mode = false;
                 var_chan[var_sys.active_chan].mode = sys->current_mode;
-                printf("changesys->current_mode%s\n", mode_names[sys->current_mode]);
+                printf("change sys->current_mode%s\n", mode_names[sys->current_mode]);
                 break;
             }
             sys->nc_event = SYS_EVENT_RESET;
@@ -150,15 +153,14 @@ static void set_operating_mode() {
         case MODE_ALARM:
             sys->current_mode = sys->target_mode;
             var_chan[var_sys.active_chan].mode = sys->current_mode;
-            printf("changesys->current_mode%s\n", mode_names[sys->current_mode]);
-
+            printf("change sys->current_mode%s\n", mode_names[sys->current_mode]);
             break;
         case MODE_HOMING:
             if (!var_chan[0].is_homing) {
                 sys->current_mode = sys->target_mode;
                 sys->is_switching_mode = false;
                 var_chan[var_sys.active_chan].mode = sys->current_mode;
-                printf("changesys->current_mode%s\n", mode_names[sys->current_mode]);
+                printf("change sys->current_mode%s\n", mode_names[sys->current_mode]);
                 break;
             }
             sys->nc_event = SYS_EVENT_RESET;
@@ -172,7 +174,7 @@ static void set_operating_mode() {
                 sys->current_mode = sys->target_mode;
                 sys->is_switching_mode = false;
                 var_chan[var_sys.active_chan].mode = sys->current_mode;
-                printf("changesys->current_mode%s\n", mode_names[sys->current_mode]);
+                printf("change sys->current_mode%s\n", mode_names[sys->current_mode]);
                 LOG_OUTPUT(INFO, "sys mode: %d", sys->current_mode);
                 break;
             } else if (mem_exec_state == EXEC_RUNNING) {
@@ -259,7 +261,6 @@ static void get_cmd_pos() {
             break;
 
         case MODE_MPG: // 手轮
-            printf("enter mpg\n");
             handle_mpg_cmd();
             break;
 

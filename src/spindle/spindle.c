@@ -97,6 +97,7 @@ void emcSpindleControl()
     //control logic
     if(sp_sign == 2 && spindle.state == DRV_STATE_OPERATION_ENABLED)
     {
+        printf("emc: 主轴正转\n");
         emot_speed = -1.0 * par_axis[AXIS_SP].default_s ;
         vel = Spindle_Ccw() ;
         sp_stop_sem = false;
@@ -106,6 +107,7 @@ void emcSpindleControl()
     }
     else if(sp_sign == 1 && spindle.state == DRV_STATE_OPERATION_ENABLED)
     {
+        printf("emc: 主轴反转\n");
         emot_speed = 1.0 * par_axis[AXIS_SP].default_s ;
         vel = Spindle_Cw() ;
         sp_stop_sem = false;
@@ -117,9 +119,9 @@ void emcSpindleControl()
     {
         printf("dx start \n");
     }
-
     if(sp_sign == 0 && !sp_stop_sem)
     {
+        printf("emc: 主轴停止\n");
         Spindle_Stop();
     }
     var_chan[0].cmd_spdl_speed = vel;
