@@ -8,6 +8,7 @@
 
 #include "shmglobal.h"
 #include "regdata.h"
+#include <stdbool.h>
 
 /**
  * @brief 寄存器API错误码

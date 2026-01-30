@@ -17,7 +17,7 @@
 #define REG_C_NUM 512
 #define REG_S_NUM 128
 
-enum RegType {
+typedef enum {
     REG_TYPE_NONE = 0,
     REG_A = 'A',
     REG_R = 'R',
@@ -35,7 +35,7 @@ enum RegType {
     REG_C = 'C',
     REG_S = 'S',
     REG_L = 'L'
-};
+}RegType;
 
 typedef struct {
     int current; // 当前值

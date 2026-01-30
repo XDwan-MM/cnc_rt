@@ -10,7 +10,7 @@
 /// @return 
 GNC_RES event_queue_init(EVENT_QUEUE* queue){
     if(queue == NULL) return GNC_DATA_NULL;
-    EVENT_DATA* event_data = (EVENT_DATA*)malloc(EVENT_QUEUE_SIZE * sizeof(EVENT_DATA));
+    PMC_EVENT* event_data = (PMC_EVENT*)malloc(EVENT_QUEUE_SIZE * sizeof(PMC_EVENT));
     if(event_data == NULL) return GNC_DATA_NULL;
     queue->event_data = event_data;
     queue->head = 0;
@@ -28,10 +28,10 @@ GNC_RES event_queue_reset(EVENT_QUEUE* queue){
     return GNC_OPERATOR_SUCCESS;
 }
 
-GNC_RES event_queue_push(EVENT_QUEUE* queue, EVENT_DATA* event_data){
+GNC_RES event_queue_push(EVENT_QUEUE* queue, PMC_EVENT* event_data){
     if(queue == NULL || queue->event_data == NULL || event_data == NULL) return GNC_DATA_NULL;
     if(queue->size >= EVENT_QUEUE_SIZE) return GNC_DATA_FULL;
-    memcpy(&(queue->event_data[queue->tail]), event_data, sizeof(EVENT_DATA));
+    memcpy(&(queue->event_data[queue->tail]), event_data, sizeof(PMC_EVENT));
     queue->tail = (queue->tail + 1) % EVENT_QUEUE_SIZE;
     pthread_mutex_lock(&queue->mutex);
     queue->size++;
@@ -39,10 +39,10 @@ GNC_RES event_queue_push(EVENT_QUEUE* queue, EVENT_DATA* event_data){
     return GNC_OPERATOR_SUCCESS;
 }
 
-GNC_RES event_queue_pop(EVENT_QUEUE* queue, EVENT_DATA* event_data){
+GNC_RES event_queue_pop(EVENT_QUEUE* queue, PMC_EVENT* event_data){
     if(queue == NULL || queue->event_data == NULL || event_data == NULL) return GNC_DATA_FULL;
     if(queue->size <= 0) return GNC_DATA_NULL;
-    memcpy(event_data, &(queue->event_data[queue->head]), sizeof(EVENT_DATA));
+    memcpy(event_data, &(queue->event_data[queue->head]), sizeof(PMC_EVENT));
     queue->head = (queue->head + 1) % EVENT_QUEUE_SIZE;
     pthread_mutex_lock(&queue->mutex);
     queue->size--;
