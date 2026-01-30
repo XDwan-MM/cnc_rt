@@ -1,100 +1,147 @@
 #include "jog.h"
 #include "jog_control.h"
-#include "hal_driver.h"
 #include <math.h>
 
+// 静态局部变量，保存各轴 JOG 状态
+static JOG_CTRL x_jog_ctrl = {JOG_STATE_IDLE, 0.001};
+static JOG_CTRL y_jog_ctrl = {JOG_STATE_IDLE, 0.001};
+static JOG_CTRL z_jog_ctrl = {JOG_STATE_IDLE, 0.001};
+
+// 内部逻辑函数
+static void jog_set_state();
+static void jog_execute();
+static bool jog_is_all_idle();
+
+/**
+ * @brief JOG 任务主入口
+ */
 void handle_jog_cmd() {
-    // 急停不归我管,触发了就置真.
-    //　急停状态，立即停止
+    // 1. 处理急停 (E-Stop 是最高优先级，强制状态重置)
     if (var_chan[0].is_estop) {
         stop_jog_cont(&var_axis[AXIS_X], 0.001, true);
         stop_jog_cont(&var_axis[AXIS_Y], 0.001, true);
         stop_jog_cont(&var_axis[AXIS_Z], 0.001, true);
+
+        x_jog_ctrl.state = JOG_STATE_IDLE;
+        y_jog_ctrl.state = JOG_STATE_IDLE;
+        z_jog_ctrl.state = JOG_STATE_IDLE;
     }
-    // 获取当前位置值
+
+    // 2. 更新位置信息 (同步当前位置到 TP)
     var_axis[AXIS_X].jog_tp.curr_pos = var_axis[AXIS_X].cmd_pos;
     var_axis[AXIS_Y].jog_tp.curr_pos = var_axis[AXIS_Y].cmd_pos;
     var_axis[AXIS_Z].jog_tp.curr_pos = var_axis[AXIS_Z].cmd_pos;
 
-    //    printf("jog_tp.curr_pos: %f %f %f\n", var_axis[AXIS_X].jog_tp.curr_pos, var_axis[AXIS_Y].jog_tp.curr_pos, var_axis[AXIS_Y].jog_tp.curr_pos);
+    // 3. 根据事件设置状态
+    jog_set_state();
 
-    switch (sys->nc_event) {
-        case SYS_EVENT_NONE:
-            break;
-        case SYS_EVENT_RESET:
-            stop_jog_cont(&var_axis[AXIS_X], 0.001, false);
-            stop_jog_cont(&var_axis[AXIS_Y], 0.001, false);
-            stop_jog_cont(&var_axis[AXIS_Z], 0.001, false);
-            break;
+    // 4. 执行状态对应的动作 (start/stop)
+    jog_execute();
 
-        case SYS_EVENT_X_POS_PRESS:
-            if (sys->is_switching_mode) break; // 换挡过程中，不允许操作
-            start_jog_cont(&var_axis[AXIS_X], &par_axis[AXIS_X], JOG_DIR_POSITIVE, 0.001, var_chan[0].feed_override);
-            break;
-        case SYS_EVENT_X_POS_RELEASE:
-            stop_jog_cont(&var_axis[AXIS_X], 0.001, false);
-            break;
-        case SYS_EVENT_X_NEG_PRESS:
-            if (sys->is_switching_mode) break; // 换挡过程中，不允许操作
-            start_jog_cont(&var_axis[AXIS_X], &par_axis[AXIS_X], JOG_DIR_NEGATIVE, 0.001, var_chan[0].feed_override);
-            break;
-        case SYS_EVENT_X_NEG_RELEASE:
-            stop_jog_cont(&var_axis[AXIS_X], 0.001, false);
-            break;
-
-        case SYS_EVENT_Y_POS_PRESS:
-            if (sys->is_switching_mode) break; // 换挡过程中，不允许操作
-            start_jog_cont(&var_axis[AXIS_Y], &par_axis[AXIS_Y], JOG_DIR_POSITIVE, 0.001, var_chan[0].feed_override);
-            break;
-        case SYS_EVENT_Y_POS_RELEASE:
-            stop_jog_cont(&var_axis[AXIS_Y], 0.001, false);
-            break;
-        case SYS_EVENT_Y_NEG_PRESS:
-            if (sys->is_switching_mode) break; // 换挡过程中，不允许操作
-            start_jog_cont(&var_axis[AXIS_Y], &par_axis[AXIS_Y], JOG_DIR_NEGATIVE, 0.001, var_chan[0].feed_override);
-            break;
-        case SYS_EVENT_Y_NEG_RELEASE:
-            stop_jog_cont(&var_axis[AXIS_Y], 0.001, false);
-            break;
-
-        case SYS_EVENT_Z_POS_PRESS:
-            if (sys->is_switching_mode) break; // 换挡过程中，不允许操作
-            start_jog_cont(&var_axis[AXIS_Z], &par_axis[AXIS_Z], JOG_DIR_POSITIVE, 0.001, var_chan[0].feed_override);
-            break;
-        case SYS_EVENT_Z_POS_RELEASE:
-            stop_jog_cont(&var_axis[AXIS_Z], 0.001, false);
-            break;
-        case SYS_EVENT_Z_NEG_PRESS:
-            if (sys->is_switching_mode) break; // 换挡过程中，不允许操作
-            start_jog_cont(&var_axis[AXIS_Z], &par_axis[AXIS_Z], JOG_DIR_NEGATIVE, 0.001, var_chan[0].feed_override);
-            break;
-        case SYS_EVENT_Z_NEG_RELEASE:
-            stop_jog_cont(&var_axis[AXIS_Z], 0.001, false);
-            break;
-        default:
-            break;
-    }
-    if (fabs(var_axis[AXIS_X].jog_tp.curr_vel - 0.0) < 1e-7 && fabs(var_axis[AXIS_Y].jog_tp.curr_vel - 0.0) < 1e-7 && fabs(var_axis[AXIS_Z].jog_tp.curr_vel - 0.0) < 1e-7
-        && spindle.mode == DRV_MODE_DISABLED) {
-        sys->nc_event = SYS_EVENT_NONE;
-        // 三个轴速度为0时, 轴移动完成.
-        var_chan[0].is_moving = false;
-    } else {
-        // 三个轴速度不为0时, 轴正在移动.
-        var_chan[0].is_moving = true;
-    }
-
-    // 输出当前位置,供人机交互显示
+    // 5. 将计算后的指令位置写回全局变量
     var_axis[AXIS_X].cmd_pos = var_axis[AXIS_X].jog_tp.curr_pos;
     var_axis[AXIS_Y].cmd_pos = var_axis[AXIS_Y].jog_tp.curr_pos;
     var_axis[AXIS_Z].cmd_pos = var_axis[AXIS_Z].jog_tp.curr_pos;
 
-    // 输出当前速度值,供人机交互显示
-    var_axis[AXIS_X].cmd_vel = var_axis[AXIS_X].jog_tp.curr_vel;
-    var_axis[AXIS_Y].cmd_vel = var_axis[AXIS_Y].jog_tp.curr_vel;
-    var_axis[AXIS_Z].cmd_vel = var_axis[AXIS_Z].jog_tp.curr_vel;
-
-    //    printf("var_axis[AXIS_X].cmd_pos: %f %f %f\n", var_axis[AXIS_X].jog_tp.curr_pos, var_axis[AXIS_Y].jog_tp.curr_pos, var_axis[AXIS_Y].jog_tp.curr_pos);
+    // 6. 如果所有轴都静止了，清除事件（参考 homing 完成逻辑）
+    if (jog_is_all_idle()) {
+        sys->nc_event = SYS_EVENT_NONE;
+    }
 }
 
+/**
+ * @brief 根据系统事件切换各轴状态机
+ */
+static void jog_set_state() {
+    switch (sys->nc_event) {
+    case SYS_EVENT_NONE:
+        break;
 
+    case SYS_EVENT_RESET:
+        x_jog_ctrl.state = JOG_STATE_STOPPING;
+        y_jog_ctrl.state = JOG_STATE_STOPPING;
+        z_jog_ctrl.state = JOG_STATE_STOPPING;
+        break;
+
+        // X 轴事件
+    case SYS_EVENT_X_POS_PRESS:
+        if (!sys->is_switching_mode) x_jog_ctrl.state = JOG_STATE_RUNNING;
+        // 内部通过方向区分，这里简单标记为运行
+        break;
+    case SYS_EVENT_X_NEG_PRESS:
+        if (!sys->is_switching_mode) x_jog_ctrl.state = JOG_STATE_RUNNING;
+        break;
+    case SYS_EVENT_X_POS_RELEASE:
+    case SYS_EVENT_X_NEG_RELEASE:
+        x_jog_ctrl.state = JOG_STATE_STOPPING;
+        break;
+
+        // Y 轴事件
+    case SYS_EVENT_Y_POS_PRESS:
+        if (!sys->is_switching_mode) y_jog_ctrl.state = JOG_STATE_RUNNING;
+        break;
+    case SYS_EVENT_Y_NEG_PRESS:
+        if (!sys->is_switching_mode) y_jog_ctrl.state = JOG_STATE_RUNNING;
+        break;
+    case SYS_EVENT_Y_POS_RELEASE:
+    case SYS_EVENT_Y_NEG_RELEASE:
+        y_jog_ctrl.state = JOG_STATE_STOPPING;
+        break;
+
+        // Z 轴事件
+    case SYS_EVENT_Z_POS_PRESS:
+        if (!sys->is_switching_mode) z_jog_ctrl.state = JOG_STATE_RUNNING;
+        break;
+    case SYS_EVENT_Z_NEG_PRESS:
+        if (!sys->is_switching_mode) z_jog_ctrl.state = JOG_STATE_RUNNING;
+        break;
+    case SYS_EVENT_Z_POS_RELEASE:
+    case SYS_EVENT_Z_NEG_RELEASE:
+        z_jog_ctrl.state = JOG_STATE_STOPPING;
+        break;
+
+    default:
+        break;
+    }
+}
+
+/**
+ * @brief 执行具体运动指令
+ */
+static void jog_execute() {
+    // 处理 X 轴
+    if (x_jog_ctrl.state == JOG_STATE_RUNNING) {
+        int dir = (sys->nc_event == SYS_EVENT_X_POS_PRESS) ? JOG_DIR_POSITIVE : JOG_DIR_NEGATIVE;
+        start_jog_cont(&var_axis[AXIS_X], &par_axis[AXIS_X], dir, 0.001, var_chan[0].feed_override);
+    } else if (x_jog_ctrl.state == JOG_STATE_STOPPING) {
+        stop_jog_cont(&var_axis[AXIS_X], 0.001, false);
+        if (fabs(var_axis[AXIS_X].jog_tp.curr_vel - 0.0) < 1e-7) x_jog_ctrl.state = JOG_STATE_IDLE;
+    }
+
+    // 处理 Y 轴
+    if (y_jog_ctrl.state == JOG_STATE_RUNNING) {
+        int dir = (sys->nc_event == SYS_EVENT_Y_POS_PRESS) ? JOG_DIR_POSITIVE : JOG_DIR_NEGATIVE;
+        start_jog_cont(&var_axis[AXIS_Y], &par_axis[AXIS_Y], dir, 0.001, var_chan[0].feed_override);
+    } else if (y_jog_ctrl.state == JOG_STATE_STOPPING) {
+        stop_jog_cont(&var_axis[AXIS_Y], 0.001, false);
+        if (fabs(var_axis[AXIS_Y].jog_tp.curr_vel - 0.0) < 1e-7) y_jog_ctrl.state = JOG_STATE_IDLE;
+    }
+
+    // 处理 Z 轴
+    if (z_jog_ctrl.state == JOG_STATE_RUNNING) {
+        int dir = (sys->nc_event == SYS_EVENT_Z_POS_PRESS) ? JOG_DIR_POSITIVE : JOG_DIR_NEGATIVE;
+        start_jog_cont(&var_axis[AXIS_Z], &par_axis[AXIS_Z], dir, 0.001, var_chan[0].feed_override);
+    } else if (z_jog_ctrl.state == JOG_STATE_STOPPING) {
+        stop_jog_cont(&var_axis[AXIS_Z], 0.001, false);
+        if (fabs(var_axis[AXIS_Z].jog_tp.curr_vel - 0.0)) z_jog_ctrl.state = JOG_STATE_IDLE;
+    }
+}
+
+/**
+ * @brief 检查所有轴是否处于空闲状态
+ */
+static bool jog_is_all_idle() {
+    return (x_jog_ctrl.state == JOG_STATE_IDLE &&
+            y_jog_ctrl.state == JOG_STATE_IDLE &&
+            z_jog_ctrl.state == JOG_STATE_IDLE);
+}
