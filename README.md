@@ -1,26 +1,45 @@
-重构实时进程版本
 
 
-编译命令:
-使用 CONFIG+=debug_mode 启用调试模式编译
-使用 CONFIG+=release 或不加参数使用实时模式编译
-调试模式编译: cd build/debug && qmake ../../RT_CNC.pro CONFIG+=debug_mode && make -j$(nproc)
-实时模式编译: cd build/release && qmake ../../RT_CNC.pro && make -j$(nproc)
-使用编译脚本可直接编译两个版本: sudo ./build.sh，有问题可以使用 ./build.sh help 查看帮助
+### 使用方法
 
-权限问题不能调试：
-1. sudo visudo
-2. 行末添加：[用户名] ALL=(ALL) NOPASSWD: ALL
-   注意需要修改为自己的用户名，例子： gree ALL=(ALL) NOPASSWD: ALL
+1、编译
 
-运行命令：
-1. 进入 bin 文件夹内
-2. 输入命令: sudo LD_LIBRARY_PATH=../lib/cncshm/bin/:../lib/log/bin/ ./rt_cnc
+清理编译（可选）sudo ./build.sh clean
 
-生成compile_commands.json命令：
-1. 修改 build.sh 中的make -j$(nproc) 。改为 bear -- make -j$(nproc)
-2. 执行 sudo rm -rf build && sudo ./build.sh
+sudo ./build.sh
 
+
+２、编译并运行
+
+启动人机界面 sudo ./cnc_hmi_v3
+
+编译并运行实时　sudo ./build.sh run
+
+
+3、运行实时
+
+cd bin
+sudo ./rt_cnc
+
+
+4、调试模式
+
+cd bin
+sudo ./rt_cnc_d
+
+
+
+
+### 常见问题解决
+
+１、编译失败
+
+先尝试sudo ./build.sh clean
+
+
+２、库版本/编译器版本等问题，重新编译
+
+sudo ./build.sh
 
 
 
@@ -55,28 +74,6 @@
 [急停: 否][复位: 否][运行: 否][回零: 否][移动: 否]
 [事件数量: 0]
 [===========================================================]
-
-
-
-
-
-### 使用方法
-
-1、编译
-
-sudo ./build.sh
-
-
-2、运行实时
-
-cd bin
-sudo ./rt_cnc
-
-
-3、调试模式
-
-cd bin
-sudo ./rt_cnc_d
 
 
 
@@ -148,4 +145,33 @@ sudo ./rt_cnc_d
 
 
 
+
+重构实时进程版本
+
+
+编译命令:
+使用 CONFIG+=debug_mode 启用调试模式编译
+使用 CONFIG+=release 或不加参数使用实时模式编译
+调试模式编译: cd build/debug && qmake ../../RT_CNC.pro CONFIG+=debug_mode && make -j$(nproc)
+实时模式编译: cd build/release && qmake ../../RT_CNC.pro && make -j$(nproc)
+使用编译脚本可直接编译两个版本: sudo ./build.sh，有问题可以使用 ./build.sh help 查看帮助
+
+权限问题不能调试：
+1. sudo visudo
+2. 行末添加：[用户名] ALL=(ALL) NOPASSWD: ALL
+   注意需要修改为自己的用户名，例子： gree ALL=(ALL) NOPASSWD: ALL
+
+运行命令：
+1. 进入 bin 文件夹内
+2. 输入命令: sudo LD_LIBRARY_PATH=../lib/cncshm/bin/:../lib/log/bin/ ./rt_cnc
+
+生成compile_commands.json命令：
+1. 修改 build.sh 中的make -j$(nproc) 。改为 bear -- make -j$(nproc)
+2. 执行 sudo rm -rf build && sudo ./build.sh
+
+编译失败：
+先尝试sudo ./build.sh clean
+
+sudo ./build.sh 
+cd bin && ./rt_cnc
 

@@ -88,6 +88,8 @@ void* hal_task()
     static bool ret=false;//指令数据获取成功标志位，拷贝1_time
 //     qDebug()<<"****梯图信息,指令数据测试****"<<getLadDataPtr()->instrs[19].opcode;
 
+    if(getLadDataPtr()->instrs[0].opcode == 0) printf("ERROR: plc hal task error");
+
     getLadDataPtr()->info.isRunning=1;
     if(getLadDataPtr()->info.isRunning!=0&&!ret)
     {

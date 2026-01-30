@@ -200,9 +200,9 @@ op_flag = 1;
 
     }
 
-    return ;
+    return 1;
 err_close:
     printf("pdo线程不正常退出");
     exit_flag = 1;
-    return ;
+    return -1;
 }

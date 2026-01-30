@@ -1,6 +1,7 @@
 #include "task.h"
 #include "eventdef.h"
 #include <stdlib.h>
+#include "spindle.h"
 
 static PMC_EVENT event_data;
 static GNC_RES task_handle_pmc_event(PMC_EVENT* event_data);
@@ -16,11 +17,13 @@ GNC_RES task_mq_proc()
 {
     if(event_queue_is_empty(event_queue)) return GNC_DATA_EMPTY;
     if(event_queue_is_full(event_queue)) return GNC_OPERATOR_ERROR; // error!
-    if(sys->nc_event != SYS_EVENT_NONE) return GNC_OPERATOR_WARNING;
+    // if(sys->nc_event != SYS_EVENT_NONE) return GNC_OPERATOR_WARNING;
     event_queue_pop(event_queue, &event_data);
     task_handle_pmc_event(&event_data);
     return GNC_OPERATOR_SUCCESS;
 }
+
+const char* mode[] = {"编辑", "记忆", "MDI", "JOG", "手轮", "回零", "DNC"};
 
 static GNC_RES task_handle_pmc_event(PMC_EVENT* event_data){
     switch(event_data->id){
@@ -32,30 +35,44 @@ static GNC_RES task_handle_pmc_event(PMC_EVENT* event_data){
             if(event_data->mode_payload.mode == 0)
             {
                 sys->target_mode = MODE_EDIT;
+                printf("mode :%s\n", mode[event_data->mode_payload.mode]);
+                // printf("mode :%d\n", event_data->mode_payload.mode);
             }
             if(event_data->mode_payload.mode == 1)
             {
                 sys->target_mode = MODE_MEM;
+                printf("mode :%s\n", mode[event_data->mode_payload.mode]);
+                // printf("mode :%d\n", event_data->mode_payload.mode);
             }
             if(event_data->mode_payload.mode == 2)
             {
                 sys->target_mode = MODE_MDI;
+                printf("mode :%s\n", mode[event_data->mode_payload.mode]);
+                // printf("mode :%d\n", event_data->mode_payload.mode);
             }
             if(event_data->mode_payload.mode == 3)
             {
                 sys->target_mode = MODE_JOG;
+                printf("mode :%s\n", mode[event_data->mode_payload.mode]);
+                // printf("mode :%d\n", event_data->mode_payload.mode);
             }
             if(event_data->mode_payload.mode == 4)
             {
                 sys->target_mode = MODE_MPG;
+                printf("mode :%s\n", mode[event_data->mode_payload.mode]);
+                // printf("mode :%d\n", event_data->mode_payload.mode);
             }
             if(event_data->mode_payload.mode == 5)
             {
                 sys->target_mode = MODE_HOMING;
+                printf("mode :%s\n", mode[event_data->mode_payload.mode]);
+                // printf("mode :%d\n", event_data->mode_payload.mode);
             }
             if(event_data->mode_payload.mode == 6)
             {
                 sys->target_mode = MODE_DNC;
+                printf("mode :%s\n", mode[event_data->mode_payload.mode]);
+                // printf("mode :%d\n", event_data->mode_payload.mode);
             }
             if(event_data->mode_payload.mode == 7)
             {
@@ -123,15 +140,20 @@ static GNC_RES task_handle_pmc_event(PMC_EVENT* event_data){
         {
             if(event_data->spindle_payload.direction == 1)
             {
-                // 主轴正转
+                spindle.mode = DRV_MODE_CSV;
+                sp_sign = 1;
+                printf("主轴正转\n");
             }
             if(event_data->spindle_payload.direction == -1)
             {
-                // 主轴反转
+                spindle.mode = DRV_MODE_CSV;
+                sp_sign = 2;
+                printf("主轴反转\n");
             }
             if(event_data->spindle_payload.direction == 0)
             {
-                // 主轴停止
+                sp_sign = 0;
+                printf("主轴停止\n");
             }
             break;
         }

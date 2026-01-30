@@ -4,7 +4,7 @@
 
 set -e
 
-# export PATH=$PATH:/opt/Qt5.15.16/5.15.16/gcc_64/bin/
+export PATH=$PATH:/opt/Qt5.15.16/5.15.16/gcc_64/bin/
 
 SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
 LIB_DIR="$SCRIPT_DIR/lib"
@@ -147,6 +147,12 @@ build_all() {
     fi
 }
 
+run() {
+    build_release
+    cd $BIN_DIR
+    sudo ./rt_cnc
+}
+
 clean_build() {
     echo -e "${YELLOW}清理构建文件...${NC}"
 
@@ -216,6 +222,9 @@ case "${1:-all}" in
         ;;
     clean)
         clean_build
+        ;;
+    run)
+        run
         ;;
     help|--help|-h)
         print_help

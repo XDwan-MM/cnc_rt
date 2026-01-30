@@ -3,6 +3,15 @@ CONFIG += c++17 cmdline
 
 DEFINES += PROJECT_DIR=\\\"$$PWD\\\"
 
+QMAKE_CFLAGS += -fno-pie
+QMAKE_CXXFLAGS += -fno-pie
+QMAKE_LFLAGS += -no-pie
+
+QMAKE_CXXFLAGS += -fsanitize=address -fno-omit-frame-pointer -g
+QMAKE_CFLAGS   += -fsanitize=address -fno-omit-frame-pointer -g
+QMAKE_LFLAGS   += -fsanitize=address
+
+
 # ============ 编译模式配置 ============
 debug_mode {
     message("========== 编译调试模式 ==========")
@@ -14,10 +23,10 @@ debug_mode {
     TARGET = rt_cnc_d
 } else {
     message("========== 编译实时模式 ==========")
-    CONFIG += release
+    CONFIG += debug
     DEFINES += MASTER_RUN_ON
-    QMAKE_CXXFLAGS += -O2
-    QMAKE_CFLAGS += -O2
+    QMAKE_CXXFLAGS += -O0
+    QMAKE_CFLAGS += -O0
     TARGET = rt_cnc
 }
 

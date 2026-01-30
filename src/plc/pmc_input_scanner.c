@@ -2,6 +2,7 @@
 #include "regapi.h"       /**< 寄存器访问 API */
 #include "signal_utils.h"  /**< 边沿检测宏定义 */
 #include <string.h>
+#include "global.h"
 
 
 /* ==========================================================================
@@ -25,23 +26,13 @@ static void process_mode_selection(unsigned char g43);
  * ========================================================================== */
 
 static G_INPUT_MAP last_g;             /**< 上一周期快照（是指任务控制器线程，上一周期的快照） */
-static EVENT_QUEUE *p_target_queue = NULL; /**< 绑定的事件队列指针 */
-
-/**
- * @brief 初始化输入扫描器
- * @param queue 绑定任务控制器分配的事件队列
- */
-void pmc_input_init(EVENT_QUEUE* queue) {
-    memset(&last_g, 0, sizeof(G_INPUT_MAP));
-    p_target_queue = queue; /* 记录队列地址，供后续推送使用 */
-}
 
 /**
  * @brief 周期性扫描任务
  * 建议 1ms 周期调用。内部完成：拉取寄存器 -> 逻辑判断 -> 推送队列
  */
 void pmc_input_scan_cycle(void) {
-    if (p_target_queue == NULL) return;
+    if (event_queue == NULL) return;
 
     G_INPUT_MAP curr_g;
     /* 1. 抓取寄存器快照 */
@@ -164,7 +155,7 @@ static int pmc_input_fetch_snapshot(G_INPUT_MAP *local_snap) {
     ret |= getRegValue8(REG_G, 8,   &local_snap->G0008); // 获取共享内存G8变量的值
     ret |= getRegValue8(REG_G, 12,  &local_snap->G0012); // 获取共享内存G12变量的值
     ret |= getRegValue8(REG_G, 14,  &local_snap->G0014); // 获取共享内存G14变量的值
-    ret |= getRegValue8(REG_G, 29,  &local_snap->G0030); // 获取共享内存G29变量的值
+    ret |= getRegValue8(REG_G, 29,  &local_snap->G0029); // 获取共享内存G29变量的值
     ret |= getRegValue8(REG_G, 30,  &local_snap->G0030); // 获取共享内存G30变量的值
     ret |= getRegValue8(REG_G, 43,  &local_snap->G0043); // 获取共享内存G43变量的值
     ret |= getRegValue8(REG_G, 70,  &local_snap->G0070); // 获取共享内存G70变量的值
@@ -187,6 +178,7 @@ static void pmc_dispatch_event(PMC_EVENT_ID id, int p1, int p2)
     {
         event.id = id;
         event.mode_payload.mode = p1;
+        printf("pmc scan mode:%d\n", p1);
         break;
     }
     case EV_MSG_JOG:
@@ -194,12 +186,14 @@ static void pmc_dispatch_event(PMC_EVENT_ID id, int p1, int p2)
         event.id = id;
         event.jog_payload.axis_num = p1;
         event.jog_payload.direction = p2;
+        printf("pmc scan jog:%d, axis: %d, direction: %d\n", event.id, p1, p2);
         break;
     }
     case EV_MSG_SPINDLE:
     {
         event.id = id;
         event.spindle_payload.direction = p1;
+        printf("pmc scan sp:%d, direction: %d\n", event.id, p1);
         break;
     }
     case EV_MSG_OVERRIDE:
@@ -207,25 +201,28 @@ static void pmc_dispatch_event(PMC_EVENT_ID id, int p1, int p2)
         event.id = id;
         event.override_payload.override_type = p1;
         event.override_payload.val = p2;
+        printf("pmc scan sp:%d, type: %d, val: %d\n", event.id, p1, p2);
         break;
     }
     case EV_MSG_AUTO_RUN:
     {
         event.id = id;
         event.run_payload.run_state = p1;
+        printf("pmc scan run:%d, state: %d\n", event.id, p1);
         break;
     }
     case EV_MSG_RESET:
     {
         event.id = id;
         event.reset_payload.reset_state = p1;
+        printf("pmc scan run:%d, state: %d\n", event.id, p1);
         break;
     }
     default:
         break;
     }
      /* 推送 PMC_EVENT 到线程安全的队列 */
-    event_queue_push(p_target_queue, &event);
+    event_queue_push(event_queue, &event);
 }
 
 
@@ -240,13 +237,14 @@ static void process_mode_selection(unsigned char g43) {
     if (GET_BIT(g43, 7)) {
         target_mode = CNC_MODE_ZRN;  // ZRN 置位进入回零模式
     } else if (GET_BIT(g43, 5)) {
-        target_mode = CNC_MODE_EDIT;  // DNCI 置位  暂时进入：编辑模式（EDIT），后续需要优化。
+        target_mode = CNC_MODE_DNC;  // DNCI 置位 
     } else {
         // 2. 判定MD4, MD2, MD1组合 (取低3位)
         unsigned char md_bits = g43 & 0x07;
         switch (md_bits) {
-        case 0x00: target_mode = CNC_MODE_MDI;  break; // 000
+        case 0x02: target_mode = CNC_MODE_MDI;  break; // 010
         case 0x01: target_mode = CNC_MODE_MEM;  break; // 001
+        case 0x03: target_mode = CNC_MODE_EDIT; break; // 011
         case 0x04: target_mode = CNC_MODE_MPG;  break; // 100
         case 0x05: target_mode = CNC_MODE_JOG;  break; // 101
         default:   target_mode = CNC_MODE_INVALID; break;

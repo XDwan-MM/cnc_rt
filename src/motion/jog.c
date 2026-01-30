@@ -133,7 +133,7 @@ static void jog_execute() {
         start_jog_cont(&var_axis[AXIS_Z], &par_axis[AXIS_Z], dir, 0.001, var_chan[0].feed_override);
     } else if (z_jog_ctrl.state == JOG_STATE_STOPPING) {
         stop_jog_cont(&var_axis[AXIS_Z], 0.001, false);
-        if (fabs(var_axis[AXIS_Z].jog_tp.curr_vel - 0.0)) z_jog_ctrl.state = JOG_STATE_IDLE;
+        if (fabs(var_axis[AXIS_Z].jog_tp.curr_vel - 0.0) < 1e-7) z_jog_ctrl.state = JOG_STATE_IDLE;
     }
 }
 
