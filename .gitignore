@@ -1,6 +1,6 @@
 *~
 *.autosave
-*.a
+# *.a
 *.core
 *.moc
 *.o
@@ -80,7 +80,11 @@ build*/
 # cache
 .cache/
 
-bin/
+bin/rt_cnc
+bin/rt_cnc_d
+
+lib/cncshm/bin/
+lib/log/bin/
 
 # data
 data/

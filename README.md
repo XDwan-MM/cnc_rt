@@ -8,6 +8,11 @@
 实时模式编译: cd build/release && qmake ../../RT_CNC.pro && make -j$(nproc)
 使用编译脚本可直接编译两个版本: sudo ./build.sh，有问题可以使用 ./build.sh help 查看帮助
 
+权限问题不能调试：
+1. sudo visudo
+2. 行末添加：[用户名] ALL=(ALL) NOPASSWD: ALL
+   注意需要修改为自己的用户名，例子： gree ALL=(ALL) NOPASSWD: ALL
+
 运行命令：
 1. 进入 bin 文件夹内
 2. 输入命令: sudo LD_LIBRARY_PATH=../lib/cncshm/bin/:../lib/log/bin/ ./rt_cnc
