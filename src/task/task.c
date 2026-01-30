@@ -1,6 +1,7 @@
 #include "task.h"
 #include "eventdef.h"
 #include <stdlib.h>
+#include "spindle.h"
 
 static PMC_EVENT event_data;
 static GNC_RES task_handle_pmc_event(PMC_EVENT* event_data);
@@ -132,15 +133,20 @@ static GNC_RES task_handle_pmc_event(PMC_EVENT* event_data){
         {
             if(event_data->spindle_payload.direction == 1)
             {
-                // 主轴正转
+                spindle.mode = DRV_MODE_CSV;
+                sp_sign = 1;
+                printf("主轴正转\n");
             }
             if(event_data->spindle_payload.direction == -1)
             {
-                // 主轴反转
+                spindle.mode = DRV_MODE_CSV;
+                sp_sign = 2;
+                printf("主轴反转\n");
             }
             if(event_data->spindle_payload.direction == 0)
             {
-                // 主轴停止
+                sp_sign = 0;
+                printf("主轴停止\n");
             }
             break;
         }

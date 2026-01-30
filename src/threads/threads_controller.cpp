@@ -82,7 +82,7 @@ void* motion_controller_thread_func(void*) {
                 RESET = false;
             }
         }
-        // emcmotTrajPlan();
+        emcmotTrajPlan();
         Hal_Driver_Update_All(false, true);
         #ifndef DEBUG_MODE_ENABLED
         pmc_output_feedback();
