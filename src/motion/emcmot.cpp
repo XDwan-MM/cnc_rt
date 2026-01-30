@@ -259,6 +259,7 @@ static void get_cmd_pos() {
             break;
 
         case MODE_MPG: // 手轮
+            printf("enter mpg\n");
             handle_mpg_cmd();
             break;
 
