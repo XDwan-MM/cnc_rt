@@ -38,9 +38,6 @@ void Master_Run_Simulated(void) {
     printf("提示: 此模式下可进行断点调试\n");
     printf("==================================\n\n");
 
-    // 模拟初始化延时
-    usleep(100000);  // 100ms
-
     // 设置 op_flag 表示已进入操作状态
     op_flag = 1;
 
@@ -65,7 +62,7 @@ void Master_Run_Simulated(void) {
 
         // 每1000个周期打印一次状态（约1秒）
         if (sim_cycle_count % 1000 == 0) {
-            DEBUG_PRINT("模拟主站运行中... 周期数: %d", sim_cycle_count);
+            // DEBUG_PRINT("模拟主站运行中... 周期数: %d", sim_cycle_count);
         }
     }
 

@@ -705,7 +705,7 @@ union IO_OUT1_REG
 
 typedef struct
 {
-          pd_PlcData   pd_data;               //面板状态给软PLC
+    pd_PlcData   pd_data;               //面板状态给软PLC
     union IO_IN1_REG   IO_In1Reg;             //IO板1输入信号
 //    union IO_IN2_REG   IO_In2Reg;             //IO板2输入信号
 } MT_PLC_IN;

@@ -9,6 +9,9 @@
 #include "threads_controller.h"
 #include "debug_mode.h"
 #include "global.h"
+#ifdef DEBUG_MODE_ENABLED
+#include "keyboard.h"
+#endif
 
 
 // Ctrl + C 终止程序触发
@@ -65,6 +68,12 @@ int main() {
         printf("\n[严重错误] EtherCAT 主站启动失败！程序将终止。\n");
         printf("原因: 可能是 DMA 驱动未加载 (/dev/Gree_DMA0...) 或 XML 路径错误。\n");
         return -1; // 直接退出，不再启动线程
+    }
+#else
+    // 初始化键盘
+    if (init_keyboard() < 0) {
+        fprintf(stderr, "键盘初始化失败\n");
+        return -1;
     }
 #endif
 

@@ -71,6 +71,8 @@ INCLUDEPATH += /opt/GreeMaster/include/libGREEMASTER/
 debug_mode {
     HEADERS += src/master/master_sim.h
     SOURCES += src/master/master_sim.c
+    HEADERS += src/monitor/keyboard.h
+    SOURCES += src/monitor/keyboard.c
 }
 
 # 实时模式使用真实主站
@@ -113,12 +115,12 @@ HEADERS += \
     src/plc/mt_data.h \
     src/plc/nc_data.h \
     src/plc/plcdatatype.h \
+    src/plc/pmc_input_scanner.h \
+    src/plc/pmc_io_map.h \
+    src/plc/pmc_output_handler.h \
+    src/plc/signal_utils.h \
     src/spindle/spindle.h \
     src/spindle/spindlestatus.h \
-    src/task/pmc_input_scanner.h \
-    src/task/pmc_io_map.h \
-    src/task/pmc_output_handler.h \
-    src/task/signal_utils.h \
     src/task/task.h \
     src/threads/threads_api.h \
     src/threads/thread_manager.h \
@@ -155,9 +157,9 @@ SOURCES += \
     src/motion/stored_stroke_check.c \
     src/plc/hal_task.cpp \
     src/plc/cyclescanning.cpp \
+    src/plc/pmc_input_scanner.c \
+    src/plc/pmc_output_handler.c \
     src/spindle/spindle.c \
-    src/task/pmc_input_scanner.c \
-    src/task/pmc_output_handler.c \
     src/task/task.c \
     src/threads/thread_manager.cpp \
     src/threads/threads.cpp \
@@ -172,6 +174,7 @@ INCLUDEPATH += \
     src/hal \
     src/master \
     src/motion \
+    src/monitor \
     src/plc \
     src/task \
     src/spindle \
