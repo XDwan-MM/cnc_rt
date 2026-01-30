@@ -5,15 +5,15 @@
 #include "hal_driver.h"
 #include "master.h"
 #include "task.h"
-#include "hal_driver.h"
-#include "master.h"
-#include "task.h"
-#include "hal_task.h"
 #include "emcmot.h"
 #include "spindle.h"
+#include "hal_task.h"
+#include "pmc_input_scanner.h"
+#include "pmc_output_handler.h"
 #include <stdio.h>
 #ifdef DEBUG_MODE_ENABLED
 #include "master_sim.h"
+#include "keyboard.h"
 #endif
 
 #ifdef DEBUG_MODE_ENABLED
@@ -37,12 +37,28 @@ thread_config_t path_plan_config = {.core_id = 2, .policy = SCHED_RR, .priority 
 // todo：修改此处写法
 bool RESET = false;
 
+// 任务控制器线程的具体实现
+void* task_controller_thread_func(void*) {
+    while (!exit_flag) {
+        // todo：修改此处写法
+        usleep(5000);
+        printf("task_controller_thread_func\n");
+        task_mq_proc();
+    }
+    return NULL;
+}
+
 // 软PLC线程的具体实现
 void* soft_plc_thread_func(void*) {
     while (!exit_flag) {
         sem_wait(&plc_sem);
         printf("soft_plc_thread_func\n");
-        // hal_task();
+        #ifdef DEBUG_MODE_ENABLED
+        hal_keyboard_minitor();
+        #else
+        hal_task();
+        pmc_input_scan_cycle();
+        #endif
     }
     return NULL;
 }
@@ -68,25 +84,21 @@ void* motion_controller_thread_func(void*) {
         }
         // emcmotTrajPlan();
         Hal_Driver_Update_All(false, true);
+        #ifndef DEBUG_MODE_ENABLED
+        pmc_output_feedback();
+        #endif
         sem_post(&moton_sem_exec_done);
     }
     return NULL;
 }
 
-// 任务控制器线程的具体实现
-void* task_controller_thread_func(void*) {
-    // todo：修改此处写法
-    usleep(5000);
-    printf("task_controller_thread_func\n");
-    emcmotTask();
-    return NULL;
-}
-
 // 路径规划线程的具体实现
 void* path_plan_thread_func(void*) {
-    sem_wait(&path_plan_sem);
-    printf("path_plan_thread_func\n");
-    // emcmotPathPlan();
+    while (!exit_flag) {
+        sem_wait(&path_plan_sem);
+        printf("path_plan_thread_func\n");
+        // emcmotPathPlan();
+    }
     return NULL;
 }
 

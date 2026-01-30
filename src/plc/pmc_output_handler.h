@@ -17,7 +17,7 @@ extern "C" {
  * @param has_alarm  当前系统是否存在待处理的报警。
  * * @note 此函数应在任务控制器的输出阶段调用，利用 setRegValue8 接口写入 F 寄存器。
  */
-void pmc_output_feedback(int is_running, int has_alarm);
+void pmc_output_feedback();
 
 #ifdef __cplusplus
 }

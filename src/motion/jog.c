@@ -96,3 +96,5 @@ void handle_jog_cmd() {
 
     //    printf("var_axis[AXIS_X].cmd_pos: %f %f %f\n", var_axis[AXIS_X].jog_tp.curr_pos, var_axis[AXIS_Y].jog_tp.curr_pos, var_axis[AXIS_Y].jog_tp.curr_pos);
 }
+
+
