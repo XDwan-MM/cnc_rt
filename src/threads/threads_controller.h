@@ -19,6 +19,5 @@ void* motion_controller_thread_func(void* arg);
 void* task_controller_thread_func(void* arg);
 void* path_plan_thread_func(void* arg);
 void* pdo_thread_func(void*);
-void* test_keyboard_cnc_thread_func(void*);
 
 #endif // THREADS_CONTROLLER_H

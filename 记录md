@@ -1,0 +1,107 @@
+
+
+
+### 2026.01.30
+
+1、问题：主站报错
+
+error 未清零，ethcat 报 -2000
+errno 需要清零;
+
+
+```SHELL
+================ 申请主站资源:GM_Resource_Allocation ==================
+================ 获取主站版本号:GM_Get_Version ==================
+==137222==AddressSanitizer: WARNING: unexpected format specifier in printf interceptor: %
+ (reported once per process)
+主站版本号：1.1.%
+================ 申请报错回调函数:Err_Fun_Register ==================
+==================== 主站初始化:GM_Master_Init ========================
+===================== 主站开始:GM_Master_Start ========================
+slave num is 5
+=================获取EEPROM:GM_EEPROM_Get=================
+slave 1 : Vender ID is 0x7cc, ProductCode is 0x100f0002
+slave 2 : Vender ID is 0x5b5, ProductCode is 0x402
+slave 3 : Vender ID is 0x5b5, ProductCode is 0x402
+slave 4 : Vender ID is 0x5b5, ProductCode is 0x402
+slave 5 : Vender ID is 0x5b5, ProductCode is 0x402
+==================== 解析ENI文件:GM_ENI_Parse =========================
+=============== 计算PDO映射:GM_Calculate_Config_Info ==================
+=============== 设置主站通讯周期:GM_Master_Set_Cycle ==================
+=============== 使能DC信号:GM_DC_Enable ==================
+========== 配置信息下发并激活:GM_Config_Download_And_Active ============
+[ERROR] [gm_basic_comm.c:318] [write_buffer_bypass] error: Invalid address format: 0x0000
+
+配置信息下发失败, rc = -2000
+=================== 释放从站信息链表:GM_Free_PDO_Map ==================
+===================== 主站关闭:GM_Master_Close =======================
+================== 主站资源释放:GM_Resource_Release ===================
+EtherCAT 启动失败！
+
+[严重错误] EtherCAT 主站启动失败！程序将终止。
+原因: 可能是 DMA 驱动未加载 (/dev/Gree_DMA0...) 或 XML 路径错误。
+```
+
+```SHELL
+================ 申请主站资源:GM_Resource_Allocation ==================
+================ 获取主站版本号:GM_Get_Version ==================
+主站版本号：1.1.%
+================ 申请报错回调函数:Err_Fun_Register ==================
+==================== 主站初始化:GM_Master_Init ========================
+===================== 主站开始:GM_Master_Start ========================
+slave num is 5
+=================获取EEPROM:GM_EEPROM_Get=================
+slave 1 : Vender ID is 0x7cc, ProductCode is 0x100f0002
+slave 2 : Vender ID is 0x5b5, ProductCode is 0x402
+slave 3 : Vender ID is 0x5b5, ProductCode is 0x402
+slave 4 : Vender ID is 0x5b5, ProductCode is 0x402
+slave 5 : Vender ID is 0x5b5, ProductCode is 0x402
+==================== 解析ENI文件:GM_ENI_Parse =========================
+=============== 计算PDO映射:GM_Calculate_Config_Info ==================
+=============== 设置主站通讯周期:GM_Master_Set_Cycle ==================
+=============== 使能DC信号:GM_DC_Enable ==================
+========== 配置信息下发并激活:GM_Config_Download_And_Active ============
+[ERROR] [gm_basic_comm.c:318] [write_buffer_bypass] error: Invalid address format: 0x0000
+
+配置信息下发失败, rc = -2000
+=================== 释放从站信息链表:GM_Free_PDO_Map ==================
+===================== 主站关闭:GM_Master_Close =======================
+================== 主站资源释放:GM_Resource_Release ===================
+EtherCAT 启动失败！
+系统可用CPU核心数: 4
+```
+
+
+
+2、 release　下可能由于 O2 优化报段错误
+
+
+３、多线程退出异常，无法中断程序
+
+
+4、事件
+
+```
+pmc scan mode:7
+pmc scan mode:1
+mode :记忆
+pmc scan mode:7
+pmc scan mode:1
+mode :记忆
+pmc scan mode:2
+mode :MDI
+pmc scan mode:1
+mode :记忆
+pmc scan mode:7
+pmc scan mode:0
+mode :编辑
+pmc scan mode:1
+mode :记忆
+pmc scan mode:2
+mode :MDI
+pmc scan mode:4
+mode :手轮
+pmc scan mode:3
+mode :回零
+```
+

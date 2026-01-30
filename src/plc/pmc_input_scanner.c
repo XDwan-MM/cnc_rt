@@ -2,6 +2,7 @@
 #include "regapi.h"       /**< 寄存器访问 API */
 #include "signal_utils.h"  /**< 边沿检测宏定义 */
 #include <string.h>
+#include "global.h"
 
 
 /* ==========================================================================
@@ -25,23 +26,13 @@ static void process_mode_selection(unsigned char g43);
  * ========================================================================== */
 
 static G_INPUT_MAP last_g;             /**< 上一周期快照（是指任务控制器线程，上一周期的快照） */
-static EVENT_QUEUE *p_target_queue = NULL; /**< 绑定的事件队列指针 */
-
-/**
- * @brief 初始化输入扫描器
- * @param queue 绑定任务控制器分配的事件队列
- */
-void pmc_input_init(EVENT_QUEUE* queue) {
-    memset(&last_g, 0, sizeof(G_INPUT_MAP));
-    p_target_queue = queue; /* 记录队列地址，供后续推送使用 */
-}
 
 /**
  * @brief 周期性扫描任务
  * 建议 1ms 周期调用。内部完成：拉取寄存器 -> 逻辑判断 -> 推送队列
  */
 void pmc_input_scan_cycle(void) {
-    if (p_target_queue == NULL) return;
+    if (event_queue == NULL) return;
 
     G_INPUT_MAP curr_g;
     /* 1. 抓取寄存器快照 */
@@ -187,6 +178,7 @@ static void pmc_dispatch_event(PMC_EVENT_ID id, int p1, int p2)
     {
         event.id = id;
         event.mode_payload.mode = p1;
+        printf("pmc scan mode:%d\n", p1);
         break;
     }
     case EV_MSG_JOG:
@@ -194,12 +186,14 @@ static void pmc_dispatch_event(PMC_EVENT_ID id, int p1, int p2)
         event.id = id;
         event.jog_payload.axis_num = p1;
         event.jog_payload.direction = p2;
+        printf("pmc scan jog:%d, axis: %d, direction: %d\n", event.id, p1, p2);
         break;
     }
     case EV_MSG_SPINDLE:
     {
         event.id = id;
         event.spindle_payload.direction = p1;
+        printf("pmc scan sp:%d, direction: %d\n", event.id, p1);
         break;
     }
     case EV_MSG_OVERRIDE:
@@ -213,19 +207,21 @@ static void pmc_dispatch_event(PMC_EVENT_ID id, int p1, int p2)
     {
         event.id = id;
         event.run_payload.run_state = p1;
+        printf("pmc scan run:%d, state: %d\n", event.id, p1);
         break;
     }
     case EV_MSG_RESET:
     {
         event.id = id;
         event.reset_payload.reset_state = p1;
+        printf("pmc scan run:%d, state: %d\n", event.id, p1);
         break;
     }
     default:
         break;
     }
      /* 推送 PMC_EVENT 到线程安全的队列 */
-    event_queue_push(p_target_queue, &event);
+    event_queue_push(event_queue, &event);
 }
 
 

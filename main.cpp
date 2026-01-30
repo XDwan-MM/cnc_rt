@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <cstdio>
+#include <cerrno>
 #include "hal_driver.h"
 #include "hal_io.h"
 #include "main_demo.h"
@@ -50,12 +51,16 @@ int main() {
     if(!shmInit()) {
         printf("共享内存初始化失败\n");
         return -1;
+    } else  {
+        errno = 0;
     }
+
     // 初始化实时全局变量
     if(rt_global_init() != GNC_OPERATOR_SUCCESS){
         printf("全局变量初始化失败\n");
         return -1;
     };
+    printf("全局变量初始化sucess\n");
     // 初始化硬件抽象层
     Hal_Driver_Manager_Init();
     Hal_Driver_Array_Init();
