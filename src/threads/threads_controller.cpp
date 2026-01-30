@@ -94,11 +94,9 @@ void* motion_controller_thread_func(void*) {
 
 // 路径规划线程的具体实现
 void* path_plan_thread_func(void*) {
-    while (!exit_flag) {
-        sem_wait(&path_plan_sem);
-        // printf("path_plan_thread_func\n");
-        // emcmotPathPlan();
-    }
+    sem_wait(&path_plan_sem);
+    // printf("path_plan_thread_func\n");
+    emcmotPathPlan();
     return NULL;
 }
 

@@ -16,6 +16,7 @@
 #include "mem.h"
 #include "spindle.h"
 #include "stored_stroke_check.h"
+#include "parser.h"
 #include <math.h>
 
 static void check_for_fault();
@@ -86,6 +87,7 @@ void emcmotPathPlan() {
     for (int i = 0; i < var_sys.chan_num; i++) {
         // 解释器译码
         // dcd_produce_blk();
+        parser_run_mode();
 
         // 预处理，添加block
         chan_add_block();
