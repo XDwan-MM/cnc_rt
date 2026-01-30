@@ -108,7 +108,7 @@ static void set_operating_mode() {
         sys->is_switching_mode = false;
         return;
     }
-    printf("set_operating_modesys->current_mode == sys->target_mode %d %d \n", sys->current_mode, sys->target_mode);
+    // printf("set_operating_modesys->current_mode == sys->target_mode %d %d \n", sys->current_mode, sys->target_mode);
     // 根据切换的加工模式和当前加工模式，判断是否可以切换
     switch (sys->current_mode) {
         case MODE_IDLE:
@@ -206,20 +206,21 @@ static void handle_system_event(){
 
 // 主轴控制
 static void spindle_control(){
-    switch (sys->current_mode){
-        case MODE_JOG:
-        case MODE_MPG:
-        case MODE_EDIT:
-            emcSpindleControl();
-            break;
-        case MODE_MEM:
-        case MODE_MDI:
-        case MODE_DNC:
-            emcmcodedeal();
-            break;
-        default:
-            break;
-    }
+    // switch (sys->current_mode){
+    //     case MODE_JOG:
+    //     case MODE_MPG:
+    //     case MODE_EDIT:
+    //         emcSpindleControl();
+    //         break;
+    //     case MODE_MEM:
+    //     case MODE_MDI:
+    //     case MODE_DNC:
+    //         emcmcodedeal();
+    //         break;
+    //     default:
+    //         break;
+    // }
+    emcSpindleControl();
 }
 
 // 不同加工模式的运动控制

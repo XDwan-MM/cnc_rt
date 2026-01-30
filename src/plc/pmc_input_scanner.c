@@ -155,7 +155,7 @@ static int pmc_input_fetch_snapshot(G_INPUT_MAP *local_snap) {
     ret |= getRegValue8(REG_G, 8,   &local_snap->G0008); // 获取共享内存G8变量的值
     ret |= getRegValue8(REG_G, 12,  &local_snap->G0012); // 获取共享内存G12变量的值
     ret |= getRegValue8(REG_G, 14,  &local_snap->G0014); // 获取共享内存G14变量的值
-    ret |= getRegValue8(REG_G, 29,  &local_snap->G0030); // 获取共享内存G29变量的值
+    ret |= getRegValue8(REG_G, 29,  &local_snap->G0029); // 获取共享内存G29变量的值
     ret |= getRegValue8(REG_G, 30,  &local_snap->G0030); // 获取共享内存G30变量的值
     ret |= getRegValue8(REG_G, 43,  &local_snap->G0043); // 获取共享内存G43变量的值
     ret |= getRegValue8(REG_G, 70,  &local_snap->G0070); // 获取共享内存G70变量的值
@@ -201,6 +201,7 @@ static void pmc_dispatch_event(PMC_EVENT_ID id, int p1, int p2)
         event.id = id;
         event.override_payload.override_type = p1;
         event.override_payload.val = p2;
+        printf("pmc scan sp:%d, type: %d, val: %d\n", event.id, p1, p2);
         break;
     }
     case EV_MSG_AUTO_RUN:
@@ -236,13 +237,14 @@ static void process_mode_selection(unsigned char g43) {
     if (GET_BIT(g43, 7)) {
         target_mode = CNC_MODE_ZRN;  // ZRN 置位进入回零模式
     } else if (GET_BIT(g43, 5)) {
-        target_mode = CNC_MODE_EDIT;  // DNCI 置位  暂时进入：编辑模式（EDIT），后续需要优化。
+        target_mode = CNC_MODE_DNC;  // DNCI 置位 
     } else {
         // 2. 判定MD4, MD2, MD1组合 (取低3位)
         unsigned char md_bits = g43 & 0x07;
         switch (md_bits) {
-        case 0x00: target_mode = CNC_MODE_MDI;  break; // 000
+        case 0x02: target_mode = CNC_MODE_MDI;  break; // 010
         case 0x01: target_mode = CNC_MODE_MEM;  break; // 001
+        case 0x03: target_mode = CNC_MODE_EDIT; break; // 011
         case 0x04: target_mode = CNC_MODE_MPG;  break; // 100
         case 0x05: target_mode = CNC_MODE_JOG;  break; // 101
         default:   target_mode = CNC_MODE_INVALID; break;
