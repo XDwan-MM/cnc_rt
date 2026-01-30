@@ -10,6 +10,7 @@
 #include "debug_mode.h"
 #include "global.h"
 
+
 // Ctrl + C 终止程序触发
 void sigint_handler([[maybe_unused]] int sig) {
     exit_flag = 1;
@@ -17,7 +18,8 @@ void sigint_handler([[maybe_unused]] int sig) {
 
 #ifndef DEBUG_MODE_ENABLED
 int Master_Start() {
-    const char * eni_path = "./ENI/gugao.xml";
+    char eni_path[512];
+    snprintf(eni_path, sizeof(eni_path), "%s/%s", PROJECT_DIR, "config/ENI/gugao.xml");
     if (ethercat_init(eni_path) < 0) {
         printf("EtherCAT 启动失败！\n");
         return -1;

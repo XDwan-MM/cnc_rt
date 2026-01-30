@@ -1,6 +1,8 @@
 QT += core
 CONFIG += c++17 cmdline
 
+DEFINES += PROJECT_DIR=\\\"$$PWD\\\"
+
 # ============ 编译模式配置 ============
 debug_mode {
     message("========== 编译调试模式 ==========")
