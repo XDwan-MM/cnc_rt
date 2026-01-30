@@ -80,35 +80,38 @@ static int read_key(void) {
 static void print_help(void) {
     printf("\033[2J\033[H");  // 清屏并移动光标到左上角
     printf("╔══════════════════════════════════════════════════════════════════╗\n");
-    printf("║                     \033[1;36mCNC 键盘控制监控\033[0m                            ║\n");
+    printf("║                     \033[1;36mCNC 键盘控制监控\033[0m                             ║\n");
     printf("╠══════════════════════════════════════════════════════════════════╣\n");
-    printf("║                          \033[1;33m按键说明\033[0m                              ║\n");
+    printf("║                          \033[1;33m按键说明\033[0m                                ║\n");
     printf("╠══════════════════════════════════════════════════════════════════╣\n");
     printf("║ [模式] 1:JOG  2:快速  3:手轮  4:回零  5:编辑  6:自动  7:MDI      ║\n");
-    printf("║ [倍率] Q/A:进给+/-10%%  W/S:快速+/-10%%  E/D:主轴+/-10%%          ║\n");
-    printf("║ [点动] U/J:+X/-X  I/K:+Y/-Y  O/L:+Z/-Z                         ║\n");
+    printf("║ [倍率] Q/A:进给+/-10%%  W/S:快速+/-10%%  E/D:主轴+/-10%%            ║\n");
+    printf("║ [点动] U/J:+X/-X  I/K:+Y/-Y  O/L:+Z/-Z                           ║\n");
     printf("║ [主轴] Z:正转  X:停止  C:反转                                    ║\n");
-    printf("║ [运行] Enter:运行  Space:暂停  R:复位  Esc:急停                ║\n");
-    printf("║ [帮助] F1:按键点位  F2:系统信息                                ║\n");
-    printf("╚═══════════════════════════════════════════════════════════════════╝\n");
+    printf("║ [运行] Enter:运行  Space:暂停  R:复位  Esc:急停                  ║\n");
+    printf("║ [帮助] h/H:按键点位  p/P:系统信息                                ║\n");
+    printf("╚══════════════════════════════════════════════════════════════════╝\n");
 }
     
 // 打印当前状态
 static void print_status(void) {
     printf("\r\033[K");  // 清除当前行
+    printf("[============== CNC HMI ===================================\033[0m]\n");
     printf("[状态: \033[1;32m%s\033[0m] ",
            (var_chan[0].mode < 10) ? mode_char[var_chan[0].mode] : "未知");
     printf("[进给: \033[1;33m%3d%%\033[0m] ", g_feed_override);
     printf("[快速: \033[1;33m%3d%%\033[0m] ", g_rapid_override);
     printf("[主轴: \033[1;33m%3d%%\033[0m]\n", g_spindle_override);
-    printf("[译码行: \033[1;33m%3d%%\033[0m]", var_chan[0].dcd_row);
-    printf("[运行行: \033[1;33m%3d%%\033[0m]", var_chan[0].run_row);
+    printf("[译码行: \033[1;33m%3d\033[0m]", var_chan[0].dcd_row);
+    printf("[运行行: \033[1;33m%3d\033[0m]", var_chan[0].run_row);
     printf("[程序完成: %s\033[0m]\n", var_chan[0].is_progend ? "\033[1;32m是" : "\033[1;37m否");
     printf("[急停: %s\033[0m]", var_chan[0].is_estop ? "\033[1;31m是" : "\033[1;32m否");
     printf("[复位: %s\033[0m]", var_chan[0].is_resetting ? "\033[1;32m是" : "\033[1;37m否");
     printf("[运行: %s\033[0m]", var_chan[0].is_running ? "\033[1;32m是" : "\033[1;37m否");
     printf("[回零: %s\033[0m]", var_chan[0].is_homing ? "\033[1;32m是" : "\033[1;37m否");
-    printf("[移动: %s\033[0m]", var_chan[0].is_moving ? "\033[1;32m是" : "\033[1;37m否");
+    printf("[移动: %s\033[0m]\n", var_chan[0].is_moving ? "\033[1;32m是" : "\033[1;37m否");
+    printf("[事件数量: %d\033[0m]\n", event_queue_get_size(event_queue));
+    printf("[===========================================================\033[0m]\n");
     fflush(stdout);
 }
 
@@ -116,8 +119,8 @@ static void print_status(void) {
 static void process_key(int key) {
     switch (key) {
         // 帮助与状态
-        case 'F1': print_help(); break;
-        case 'F2': print_status(); break;
+        case 'h': case 'H': print_help(); break;
+        case 'p': case 'P': print_status(); break;
         // 模式切换 1-7
         case '1': scan_key_to_event(KEY_EV_JOG);    break;  // JOG
         case '2': scan_key_to_event(KEY_EV_RAPID);  break;  // 快速

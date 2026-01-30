@@ -62,7 +62,7 @@ void Master_Run_Simulated(void) {
 
         // 每1000个周期打印一次状态（约1秒）
         if (sim_cycle_count % 1000 == 0) {
-            DEBUG_PRINT("模拟主站运行中... 周期数: %d", sim_cycle_count);
+            // DEBUG_PRINT("模拟主站运行中... 周期数: %d", sim_cycle_count);
         }
     }
 
