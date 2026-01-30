@@ -699,19 +699,19 @@ static void row_run(int n) {
 static void DealEndPNBufJumpCall() {
     int i, j;
     typePNEdge p;
-    int jump_num, call_num;
-    struct {
-        long No;
-        long Jump;
-        long Label;
-    } JumpBuf[50]; //*****50个跳转指令********
-    struct {
-        long parm[4];
-        long Call;
-        long sp;
-    } CallBuf[50];                       //******50个子程序调用指令****
+    // int jump_num, call_num;
+    // struct {
+    //     long No;
+    //     long Jump;
+    //     long Label;
+    // } JumpBuf[50]; //*****50个跳转指令********
+    // struct {
+    //     long parm[4];
+    //     long Call;
+    //     long sp;
+    // } CallBuf[50];                       //******50个子程序调用指令****
     init_end = plc1_end = plc2_end = -1; //********默认值********
-    jump_num = call_num = 0;             //********默认值************
+    // jump_num = call_num = 0;             //********默认值************
     plcRunNum = getLadDataPtr()->info.instrCount;
     for (i = 0; i < plcRunNum; i++) {
         switch (PLCRun[i].opcode) {
@@ -815,9 +815,9 @@ static void plc_run_init() {
     array[OP_MPS] = MPS_run;
     array[OP_MRD] = MRD_run;
     array[OP_MPP] = MPP_run;
-    array[OP_IEND] = MPP_run;
-    array[OP_1END] = MPP_run;
-    array[OP_2END] = MPP_run;
+    array[OP_IEND] = IEND_run;
+    array[OP_1END] = END1_run;
+    array[OP_2END] = END2_run;
     array[OP_SP]   = SP_run;
     array[OP_SPE]  = SPE_run;
     array[OP_ADD] = ADD_run;
@@ -909,31 +909,31 @@ void CycleScanning() {
     }
 }
 
-static void test1()
-{
+// static void test1()
+// {
 
 
 
-}
+// }
 
-static void test2()
-{
-
-
-
-}
-
-static void test3()
-{
+// static void test2()
+// {
 
 
 
-}
+// }
 
-static void test4()
-{
+// static void test3()
+// {
 
 
 
-}
+// }
+
+// static void test4()
+// {
+
+
+
+// }
 
