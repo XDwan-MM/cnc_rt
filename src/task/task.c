@@ -35,43 +35,43 @@ static GNC_RES task_handle_pmc_event(PMC_EVENT* event_data){
             if(event_data->mode_payload.mode == 0)
             {
                 sys->target_mode = MODE_EDIT;
-                printf("mode :%s\n", mode[event_data->mode_payload.mode]);
+                printf("task mode :%s\n", mode[event_data->mode_payload.mode]);
                 // printf("mode :%d\n", event_data->mode_payload.mode);
             }
             if(event_data->mode_payload.mode == 1)
             {
                 sys->target_mode = MODE_MEM;
-                printf("mode :%s\n", mode[event_data->mode_payload.mode]);
+                printf("task mode :%s\n", mode[event_data->mode_payload.mode]);
                 // printf("mode :%d\n", event_data->mode_payload.mode);
             }
             if(event_data->mode_payload.mode == 2)
             {
                 sys->target_mode = MODE_MDI;
-                printf("mode :%s\n", mode[event_data->mode_payload.mode]);
+                printf("task mode :%s\n", mode[event_data->mode_payload.mode]);
                 // printf("mode :%d\n", event_data->mode_payload.mode);
             }
             if(event_data->mode_payload.mode == 3)
             {
                 sys->target_mode = MODE_JOG;
-                printf("mode :%s\n", mode[event_data->mode_payload.mode]);
+                printf("task mode :%s\n", mode[event_data->mode_payload.mode]);
                 // printf("mode :%d\n", event_data->mode_payload.mode);
             }
             if(event_data->mode_payload.mode == 4)
             {
                 sys->target_mode = MODE_MPG;
-                printf("mode :%s\n", mode[event_data->mode_payload.mode]);
+                printf("task mode :%s\n", mode[event_data->mode_payload.mode]);
                 // printf("mode :%d\n", event_data->mode_payload.mode);
             }
             if(event_data->mode_payload.mode == 5)
             {
                 sys->target_mode = MODE_HOMING;
-                printf("mode :%s\n", mode[event_data->mode_payload.mode]);
+                printf("task mode :%s\n", mode[event_data->mode_payload.mode]);
                 // printf("mode :%d\n", event_data->mode_payload.mode);
             }
             if(event_data->mode_payload.mode == 6)
             {
                 sys->target_mode = MODE_DNC;
-                printf("mode :%s\n", mode[event_data->mode_payload.mode]);
+                printf("task mode :%s\n", mode[event_data->mode_payload.mode]);
                 // printf("mode :%d\n", event_data->mode_payload.mode);
             }
             if(event_data->mode_payload.mode == 7)
@@ -89,15 +89,18 @@ static GNC_RES task_handle_pmc_event(PMC_EVENT* event_data){
                 if(event_data->jog_payload.direction == 1)// 正向运动
                 {
                     sys->nc_event = SYS_EVENT_X_POS_PRESS;
+                    printf("task event : x+ press\n");
                 }
                 else if(event_data->jog_payload.direction == -1)// 负向运动
                 {
                     sys->nc_event = SYS_EVENT_X_NEG_PRESS;
+                    printf("task event : x- press\n");
                 }
                 else if(event_data->jog_payload.direction == 0) //停止运动
                 {
                     sys->nc_event = SYS_EVENT_X_POS_RELEASE;
                     sys->nc_event = SYS_EVENT_X_NEG_RELEASE;
+                    printf("task event : x release\n");
                 }
             }
             // 2.Y轴点动事件
@@ -106,15 +109,18 @@ static GNC_RES task_handle_pmc_event(PMC_EVENT* event_data){
                 if(event_data->jog_payload.direction == 1)// 正向运动
                 {
                     sys->nc_event = SYS_EVENT_Y_POS_PRESS;
+                    printf("task event : y+ press\n");
                 }
                 else if(event_data->jog_payload.direction == -1)// 负向运动
                 {
                     sys->nc_event = SYS_EVENT_Y_NEG_PRESS;
+                    printf("task event : y- press\n");
                 }
                 else if(event_data->jog_payload.direction == 0) //停止运动
                 {
                     sys->nc_event = SYS_EVENT_Y_POS_RELEASE;
                     sys->nc_event = SYS_EVENT_Y_NEG_RELEASE;
+                    printf("task event : y release\n");
                 }
             }
             // 3.Z轴点动事件
@@ -123,15 +129,18 @@ static GNC_RES task_handle_pmc_event(PMC_EVENT* event_data){
                 if(event_data->jog_payload.direction == 1)// 正向运动
                 {
                     sys->nc_event = SYS_EVENT_Z_POS_PRESS;
+                    printf("task event : z+ press\n");
                 }
                 else if(event_data->jog_payload.direction == -1)// 负向运动
                 {
                     sys->nc_event = SYS_EVENT_Z_NEG_PRESS;
+                    printf("task event : z- press\n");
                 }
                 else if(event_data->jog_payload.direction == 0) //停止运动
                 {
                     sys->nc_event = SYS_EVENT_Z_POS_RELEASE;
                     sys->nc_event = SYS_EVENT_Z_NEG_RELEASE;
+                    printf("task event : z release\n");
                 }
             }
             break;
@@ -140,20 +149,22 @@ static GNC_RES task_handle_pmc_event(PMC_EVENT* event_data){
         {
             if(event_data->spindle_payload.direction == 1)
             {
+                spindle.state = DRV_STATE_OPERATION_ENABLED;
                 spindle.mode = DRV_MODE_CSV;
                 sp_sign = 1;
-                printf("主轴正转\n");
+                printf("task event : 主轴正转\n");
             }
             if(event_data->spindle_payload.direction == -1)
             {
+                spindle.state = DRV_STATE_OPERATION_ENABLED;
                 spindle.mode = DRV_MODE_CSV;
                 sp_sign = 2;
-                printf("主轴反转\n");
+                printf("task event : 主轴反转\n");
             }
             if(event_data->spindle_payload.direction == 0)
             {
                 sp_sign = 0;
-                printf("主轴停止\n");
+                printf("task event : 主轴停止\n");
             }
             break;
         }
@@ -182,11 +193,14 @@ static GNC_RES task_handle_pmc_event(PMC_EVENT* event_data){
             {
                 // 循环启动
                 sys->nc_event = SYS_EVENT_RERUN;
+                printf("task event : rerun\n");
+                
             }
             if(event_data->run_payload.run_state == 0)
             {
                 // 进给保持
                 sys->nc_event = SYS_EVENT_PAUSE;
+                printf("task event : hold\n");
             }
             break;
         }
@@ -195,6 +209,7 @@ static GNC_RES task_handle_pmc_event(PMC_EVENT* event_data){
             if(event_data->run_payload.run_state == 1)
             {
                 sys->nc_event = SYS_EVENT_RESET;
+                printf("task event : reset\n");
             }
             break;
         }

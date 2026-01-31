@@ -43,8 +43,7 @@ void* task_controller_thread_func(void*) {
         // todo：修改此处写法
         usleep(5000);
         // printf("task_controller_thread_func\n");
-        task_mq_proc();
-        pmc_output_feedback();
+        // task_mq_proc();
     }
     return NULL;
 }
@@ -71,6 +70,7 @@ void* motion_controller_thread_func(void*) {
         sem_wait(&motion_sem);
         if (exit_flag) break;
         // printf("motion_controller_thread_func\n");
+        task_mq_proc();
         Hal_Driver_Update_All(true, false);
         // todo：修改此处写法
         if (sys->nc_event == SYS_EVENT_RESET || RESET || sys->nc_event == SYS_EVENT_PAUSE) {
@@ -86,7 +86,7 @@ void* motion_controller_thread_func(void*) {
         emcmotTrajPlan();
         Hal_Driver_Update_All(false, true);
         #ifndef DEBUG_MODE_ENABLED
-        // pmc_output_feedback();
+        pmc_output_feedback();
         #endif
         sem_post(&moton_sem_exec_done);
     }

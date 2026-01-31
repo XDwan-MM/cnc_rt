@@ -149,6 +149,7 @@ GNC_RES parser_reading(){
             parser_data->interp_list_index = i;
             res = parser_handle_recieve(&motion_data);
             CHECK_RES(parser_check_res(res));
+            printf("reading");
         }
     }
     if (ItpIsOver()) return GNC_PARSER_OVER;

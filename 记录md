@@ -72,14 +72,13 @@ EtherCAT 启动失败！
 ```
 
 
-
-2、 release　下可能由于 O2 优化报段错误
+2、 release 下可能由于 O2 优化报段错误
 
 
 ３、多线程退出异常，无法中断程序
 
 
-4、事件
+4、事件不匹配
 
 ```
 pmc scan mode:7
@@ -105,3 +104,29 @@ pmc scan mode:3
 mode :回零
 ```
 
+PLC梯形图错误:
+1、EDIT错误
+2、DNC按下后会跳转到1
+
+
+
+5、F变量不匹配
+编辑、记忆、手动输入、连线、手轮、回零 F 变量未对应
+
+
+
+6、只有寸动模式下产生 X Y Z 事件，回零模式无法接收到 X Y Z 事件
+
+
+
+7、进入寸动模式后切换不了其他模式
+
+减小判断逻辑
+
+if (fabs(var_axis[AXIS_X].jog_tp.curr_vel - 0.0) < 1e-3 && fabs(var_axis[AXIS_Y].jog_tp.curr_vel - 0.0) < 1e-3 && fabs(var_axis[AXIS_Z].jog_tp.curr_vel - 0.0) < 1e-3) 
+
+
+８、主轴正反转可进入函数，但主轴电机不动
+
+
+９、

@@ -10,6 +10,7 @@
 #include "threads_controller.h"
 #include "debug_mode.h"
 #include "global.h"
+#include "parser.h"
 #ifdef DEBUG_MODE_ENABLED
 #include "keyboard.h"
 #endif
@@ -60,6 +61,8 @@ int main() {
         printf("全局变量初始化失败\n");
         return -1;
     };
+    // 初始化译码器
+    parser_new();
     printf("全局变量初始化sucess\n");
     // 初始化硬件抽象层
     Hal_Driver_Manager_Init();
