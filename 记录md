@@ -29,7 +29,7 @@ event_data->run_payload.run_state == 0 为0非1
 
 6、报警模式下无进给轴按键事件
 
-臣发pmc扫描做了对jog和home模式筛选的处理
+pmc_input_scan对jog和home模式做了筛选的处理
 
 
 ７、按一种模式后，再按复位后，再按该模式，指示灯不亮，切换其他模式后再切换该模式则正常
@@ -53,7 +53,7 @@ event_data->run_payload.run_state == 0 为0非1
 13、实时全局数据部分未加锁，存在安全隐患
 
 
-14、act_pos每个周期读取驱动器位置进行更新，cmd_pos才是理论坐标，使用act_pos导致暂停卡嗒声，回零模式下啸叫也是这个原因
+14、act_pos每个周期读取驱动器位置进行更新，cmd_pos才是理论坐标，使用act_pos导致自自动模式按暂停卡嗒声，回零模式下啸叫也是这个原因
 
 
 
