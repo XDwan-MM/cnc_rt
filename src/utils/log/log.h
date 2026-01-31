@@ -74,6 +74,7 @@ typedef enum{
             struct tm* tm_info = localtime(&t); \
             char time_buf[20]; \
             strftime(time_buf, 20, "%Y-%m-%d %H:%M:%S", tm_info); \
+            printf("%s[%s][%s] %s: " fmt LOG_COLOR_RESET "\n", LOG_LEVEL_COLOR(lvl), time_buf, LOG_LEVEL_STR(lvl), __func__, ##__VA_ARGS__); \
             if(gnc_log_file) { \
                 fprintf(gnc_log_file, "[%s][%s] %s: " fmt "\n", time_buf, LOG_LEVEL_STR(lvl), __func__, ##__VA_ARGS__); \
                 fflush(gnc_log_file); \

@@ -26,6 +26,7 @@ GNC_RES chan_add_block(){
         gcode_block = gcode_queue_peak(gcode_queue);
         if(gcode_block == NULL) return GNC_DATA_NULL;
         pretreat_queue->pre_pos = gcode_block->pos;
+        gcode_queue_pop(gcode_queue);
         // printf("if(sys->is_first_run)%f\n",pretreat_queue->pre_pos.x);
         // LOG_OUTPUT(INFO, "pretreat_queue->pre_pos: %f %f %f", pretreat_queue->pre_pos.x, pretreat_queue->pre_pos.y, pretreat_queue->pre_pos.z); 
         sys->is_first_run = false;
@@ -135,7 +136,7 @@ GNC_RES chan_look_ahead(double vs){
 static void block_cal_lookahead_vel(PLAN_BLOCK* current_block, INTERP_TYPE pre_type, double next_start_vel){
     switch(current_block->type){
         case RAPID:
-            current_block->max_vel = current_block->max_vel * var_chan[0].rapid_override;
+            current_block->max_vel = current_block->feed_vel * var_chan[0].rapid_override;
             current_block->start_vel = 0;
             current_block->end_vel = 0;
             break;
@@ -185,7 +186,8 @@ static void block_cal_pos(GCODE_BLOCK* gcode_block, PLAN_BLOCK* current_block, P
 static void block_cal_vel(PLAN_BLOCK* current_block){
     switch(current_block->type){
         case RAPID:
-            current_block->max_vel = MIN3(par_axis[0].rapid_vel, par_axis[1].rapid_vel, par_axis[2].rapid_vel);  // G00最大速度为设置的快速进给速度
+            current_block->feed_vel = MIN3(par_axis[0].rapid_vel, par_axis[1].rapid_vel, par_axis[2].rapid_vel);  // G00最大速度为设置的快速进给速度
+            current_block->max_vel = current_block->feed_vel;
             current_block->max_acc = MIN3(par_axis[0].rapid_acc, par_axis[1].rapid_acc, par_axis[2].rapid_acc);
             current_block->max_jerk = MIN3(par_axis[0].rapid_jerk, par_axis[1].rapid_jerk, par_axis[2].rapid_jerk);
             break;

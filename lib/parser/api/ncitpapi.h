@@ -24,6 +24,8 @@ extern int ItpError();
 
 extern void ItpReset();
 
+extern int ItpGetDataPacket(NcItpDataPacket *packet);
+
 extern int ItpGetMotionData(NcItpData *data);
 
 extern int ItpGetLineNumber(int *num);

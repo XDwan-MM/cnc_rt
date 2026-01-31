@@ -93,7 +93,7 @@ static GNC_RES rt_var_init(){
         var_chan[i].act_feedrate = 0;            // 通道实际合成速度
         var_chan[i].feed_override = 1.0;         // 进给倍率
         var_chan[i].rapid_override = 1.0;        // 快速进给倍率
-        var_chan[i].spdl_override = 1.0;
+        var_chan[i].spdl_override = 1.0;         // 主轴倍率
         var_chan[i].is_homing = false;           // 回零中
         var_chan[i].is_running = false;          // 运行中
         var_chan[i].is_progend = false;          // 程序结束
