@@ -6,6 +6,7 @@
 #include <varapi.h>
 #include <pardata.h>
 #include <parapi.h>
+#include "task.h"
 
 // ==============全局变量定义===============
 sem_t exit_sem;                         // 退出信号
@@ -257,10 +258,10 @@ static GNC_RES shm_par_init(){
     par_axis[AXIS_X].pm_pulse = par_union.value.val_int;             // X轴电子齿轮比分母 (HMI unit: 脉冲 | default:100000)
     getParData(PARAMAN_FILE_AXIS, 0, PAR_AX_ENC_OFF, &par_union);
     par_axis[AXIS_X].enc_off = par_union.value.val_real;              // X轴编码器反馈偏置量 (HMI unit: mm | default:)
-    // par_axis[AXIS_X].enc_off = -1.619520;
     printf("par_axis[AXIS_X].enc_off%f\n",par_axis[AXIS_X].enc_off);
     getParData(PARAMAN_FILE_AXIS, 0, PAR_AX_IS_SET_HOME_OFFSET, &par_union);
     par_axis[AXIS_X].is_set_home_offset = par_union.value.val_bool;   // X轴设置编码器偏置使能 (HMI | default: 0)
+    printf("par_axis[AXIS_X].is_set_home_offset %d\n", par_axis[AXIS_X].is_set_home_offset);
     getParData(PARAMAN_FILE_AXIS, 0, PAR_AX_JOG_LOWSPD, &par_union);
     par_axis[AXIS_X].jog_lowspd = par_union.value.val_real;           // X轴慢速点动速度 (HMI unit: mm/min | default:18000mm/min)
     getParData(PARAMAN_FILE_AXIS, 0, PAR_AX_JOG_FASTSPD, &par_union);
@@ -314,10 +315,10 @@ static GNC_RES shm_par_init(){
     par_axis[AXIS_Y].pm_pulse = par_union.value.val_int;             // Y轴电子齿轮比分母 (HMI unit: 脉冲 | default:100000)
     getParData(PARAMAN_FILE_AXIS, 1, PAR_AX_ENC_OFF, &par_union);
     par_axis[AXIS_Y].enc_off = par_union.value.val_real;              // Y轴编码器反馈偏置量 (HMI unit: mm | default:)
-    // par_axis[AXIS_Y].enc_off = -4.45216;
     printf("par_axis[AXIS_Y].enc_off%f\n",par_axis[AXIS_Y].enc_off);
     getParData(PARAMAN_FILE_AXIS, 1, PAR_AX_IS_SET_HOME_OFFSET, &par_union);
     par_axis[AXIS_Y].is_set_home_offset = par_union.value.val_bool;   // Y轴设置编码器偏置使能 (HMI | default: 0)
+    printf("par_axis[AXIS_Y].is_set_home_offset %d\n", par_axis[AXIS_Y].is_set_home_offset);
     getParData(PARAMAN_FILE_AXIS, 1, PAR_AX_JOG_LOWSPD, &par_union);
     par_axis[AXIS_Y].jog_lowspd = par_union.value.val_real;           // Y轴慢速点动速度 (HMI unit: mm/min | default:18000mm/min)
     getParData(PARAMAN_FILE_AXIS, 1, PAR_AX_JOG_FASTSPD, &par_union);
@@ -352,7 +353,6 @@ static GNC_RES shm_par_init(){
     par_axis[AXIS_Z].feed_acc = par_union.value.val_real;              // Z轴进给加速度
     getParData(PARAMAN_FILE_AXIS, 2, PAR_AX_FEED_JK, &par_union);
     par_axis[AXIS_Z].feed_jerk = par_union.value.val_real;            // Z轴进给捷度
-
     getParData(PARAMAN_FILE_AXIS, 2, PAR_AX_ATEETH, &par_union);
     par_axis[AXIS_Z].ateeth = par_union.value.val_uint;
     getParData(PARAMAN_FILE_AXIS, 2, PAR_AX_MTEETH, &par_union);
@@ -372,10 +372,10 @@ static GNC_RES shm_par_init(){
     par_axis[AXIS_Z].pm_pulse = par_union.value.val_int;             // Z轴电子齿轮比分母 (HMI unit: 脉冲 | default:100000)
     getParData(PARAMAN_FILE_AXIS, 2, PAR_AX_ENC_OFF, &par_union);
     par_axis[AXIS_Z].enc_off = par_union.value.val_real;              // Z轴编码器反馈偏置量 (HMI unit: mm | default:)
-    // par_axis[AXIS_Z].enc_off = 4.169440;
-    printf("par_axis[AXIS_Y].enc_off%f\n",par_axis[AXIS_Z].enc_off);
+    printf("par_axis[AXIS_Z].enc_off%f\n",par_axis[AXIS_Z].enc_off);
     getParData(PARAMAN_FILE_AXIS, 2, PAR_AX_IS_SET_HOME_OFFSET, &par_union);
     par_axis[AXIS_Z].is_set_home_offset = par_union.value.val_bool;   // Z轴设置编码器偏置使能 (HMI | default: 0)
+    printf("par_axis[AXIS_Z].is_set_home_offset %d\n", par_axis[AXIS_Z].is_set_home_offset);
     getParData(PARAMAN_FILE_AXIS, 2, PAR_AX_JOG_LOWSPD, &par_union);
     par_axis[AXIS_Z].jog_lowspd = par_union.value.val_real;           // Z轴慢速点动速度 (HMI unit: mm/min | default:18000mm/min)
     getParData(PARAMAN_FILE_AXIS, 2, PAR_AX_JOG_FASTSPD, &par_union);
@@ -399,104 +399,149 @@ static GNC_RES shm_par_init(){
     //---------------------补偿轴 X轴------------------------//
     getParData(PARAMAN_FILE_ACMP, 0, PAR_CMP_PITCH_TYPE, &par_union);
     par_acmp[AXIS_X].pitch_comp_type = par_union.value.val_int; //螺距误差补偿类型
-    getParData(PARAMAN_FILE_ACMP, 0, PAR_CMP_PITCH_TYPE, &par_union);
-    par_acmp[AXIS_X].pitch_comp_type = par_union.value.val_real; //螺距误差补偿起点坐标
-    getParData(PARAMAN_FILE_ACMP, 0, PAR_CMP_PITCH_TYPE, &par_union);
-    par_acmp[AXIS_X].pitch_comp_type = par_union.value.val_int; //螺距误差补偿点数
-    getParData(PARAMAN_FILE_ACMP, 0, PAR_CMP_PITCH_TYPE, &par_union);
-    par_acmp[AXIS_X].pitch_comp_type = par_union.value.val_real; //螺距误差补偿点间距
-    getParData(PARAMAN_FILE_ACMP, 0, PAR_CMP_PITCH_TYPE, &par_union);
-    par_acmp[AXIS_X].pitch_comp_type = par_union.value.val_bool; //螺距误差取模补偿使能
-    getParData(PARAMAN_FILE_ACMP, 0, PAR_CMP_PITCH_TYPE, &par_union);
-    par_acmp[AXIS_X].pitch_comp_type = par_union.value.val_real; //螺距误差补偿倍率
-    getParData(PARAMAN_FILE_ACMP, 0, PAR_CMP_PITCH_TYPE, &par_union);
-    par_acmp[AXIS_X].pitch_comp_type = par_union.value.val_int; //螺距误差补偿表起始参数号
+    // printf("par_acmp[AXIS_X].pitch_comp_type %d\n", par_acmp[AXIS_X].pitch_comp_type);
+    getParData(PARAMAN_FILE_ACMP, 0, PAR_CMP_PITCH_START, &par_union);
+    par_acmp[AXIS_X].pitch_comp_start_pos = par_union.value.val_real; //螺距误差补偿起点坐标
+    // printf("par_acmp[AXIS_X].pitch_comp_start_pos %f\n", par_acmp[AXIS_X].pitch_comp_start_pos);
+    getParData(PARAMAN_FILE_ACMP, 0, PAR_CMP_PITCH_NUM, &par_union);
+    par_acmp[AXIS_X].pitch_comp_num = par_union.value.val_int; //螺距误差补偿点数
+    // printf("par_acmp[AXIS_X].pitch_comp_num %d\n", par_acmp[AXIS_X].pitch_comp_num);
+    getParData(PARAMAN_FILE_ACMP, 0, PAR_CMP_PITCH_STEP, &par_union);
+    par_acmp[AXIS_X].pitch_comp_step = par_union.value.val_real; //螺距误差补偿点间距
+    // printf("par_acmp[AXIS_X].pitch_comp_step %f\n", par_acmp[AXIS_X].pitch_comp_step);
+    getParData(PARAMAN_FILE_ACMP, 0, PAR_CMP_PITCH_MODULO, &par_union);
+    par_acmp[AXIS_X].pitch_comp_modulo = par_union.value.val_bool; //螺距误差取模补偿使能
+    // printf("par_acmp[AXIS_X].pitch_comp_modulo %d\n", par_acmp[AXIS_X].pitch_comp_modulo);
+    getParData(PARAMAN_FILE_ACMP, 0, PAR_CMP_PITCH_FACTOR, &par_union);
+    par_acmp[AXIS_X].pitch_comp_factor = par_union.value.val_real; //螺距误差补偿倍率
+    // printf("par_acmp[AXIS_X].pitch_comp_factor %f\n", par_acmp[AXIS_X].pitch_comp_factor);
+    getParData(PARAMAN_FILE_ACMP, 0, PAR_CMP_PITCH_TABLE, &par_union);
+    par_acmp[AXIS_X].pitch_comp_table = par_union.value.val_int; //螺距误差补偿表起始参数号
+    // printf("par_acmp[AXIS_X].pitch_comp_table %d\n", par_acmp[AXIS_X].pitch_comp_table);
 
-    getParData(PARAMAN_FILE_ACMP, 0, PAR_CMP_PITCH_TYPE, &par_union);
-    par_acmp[AXIS_X].pitch_comp_type = par_union.value.val_bool; //第1项垂直度补偿使能
-    getParData(PARAMAN_FILE_ACMP, 0, PAR_CMP_PITCH_TYPE, &par_union);
-    par_acmp[AXIS_X].pitch_comp_type = par_union.value.val_int; //第1项垂直度补偿基准轴号
-    getParData(PARAMAN_FILE_ACMP, 0, PAR_CMP_PITCH_TYPE, &par_union);
-    par_acmp[AXIS_X].pitch_comp_type = par_union.value.val_real; //第1项垂直度补偿参考点坐标 (单位：mm)
-    getParData(PARAMAN_FILE_ACMP, 0, PAR_CMP_PITCH_TYPE, &par_union);
-    par_acmp[AXIS_X].pitch_comp_type = par_union.value.val_real; //第1项垂直度补偿角度 (单位：um/m)
+    getParData(PARAMAN_FILE_ACMP, 0, PAR_CMP_SQU1_ENABLE, &par_union);
+    par_acmp[AXIS_X].perp1_comp_enable = par_union.value.val_bool; //第1项垂直度补偿使能
+    // printf("par_acmp[AXIS_X].perp1_comp_enable %d\n", par_acmp[AXIS_X].perp1_comp_enable);
+    getParData(PARAMAN_FILE_ACMP, 0, PAR_CMP_SQU1_INPUT_AX, &par_union);
+    par_acmp[AXIS_X].perp1_comp_input_ax = par_union.value.val_int; //第1项垂直度补偿基准轴号
+    // printf("par_acmp[AXIS_X].perp1_comp_input_ax %d\n", par_acmp[AXIS_X].perp1_comp_input_ax);
+    getParData(PARAMAN_FILE_ACMP, 0, PAR_CMP_SQU1_REFN, &par_union);
+    par_acmp[AXIS_X].perp1_comp_refn = par_union.value.val_real; //第1项垂直度补偿参考点坐标 (单位：mm)
+    // printf("par_acmp[AXIS_X].perp1_comp_refn %f\n", par_acmp[AXIS_X].perp1_comp_refn);
+    getParData(PARAMAN_FILE_ACMP, 0, PAR_CMP_SQU1_ANG, &par_union);
+    par_acmp[AXIS_X].perp1_comp_ang = par_union.value.val_real; //第1项垂直度补偿角度 (单位：um/m)
+    // printf("par_acmp[AXIS_X].perp1_comp_ang %f\n", par_acmp[AXIS_X].perp1_comp_ang);
 
-    getParData(PARAMAN_FILE_ACMP, 0, PAR_CMP_PITCH_TYPE, &par_union);
-    par_acmp[AXIS_X].pitch_comp_type = par_union.value.val_bool; //第2项垂直度补偿使能
-    getParData(PARAMAN_FILE_ACMP, 0, PAR_CMP_PITCH_TYPE, &par_union);
-    par_acmp[AXIS_X].pitch_comp_type = par_union.value.val_int; //第2项垂直度补偿基准轴号
-    getParData(PARAMAN_FILE_ACMP, 0, PAR_CMP_PITCH_TYPE, &par_union);
-    par_acmp[AXIS_X].pitch_comp_type = par_union.value.val_real; //第2项垂直度补偿参考点坐标 (单位：mm)
-    getParData(PARAMAN_FILE_ACMP, 0, PAR_CMP_PITCH_TYPE, &par_union);
-    par_acmp[AXIS_X].pitch_comp_type = par_union.value.val_real; //第2项垂直度补偿角度 (单位：um/m)
+    getParData(PARAMAN_FILE_ACMP, 0, PAR_CMP_SQU2_ENABLE, &par_union);
+    par_acmp[AXIS_X].perp2_comp_enable = par_union.value.val_bool; //第2项垂直度补偿使能
+    // printf("par_acmp[AXIS_X].perp2_comp_enable %d\n", par_acmp[AXIS_X].perp2_comp_enable);
+    getParData(PARAMAN_FILE_ACMP, 0, PAR_CMP_SQU2_INPUT_AX, &par_union);
+    par_acmp[AXIS_X].perp2_comp_input_ax = par_union.value.val_int; //第2项垂直度补偿基准轴号
+    // printf("par_acmp[AXIS_X].perp2_comp_input_ax %d\n", par_acmp[AXIS_X].perp2_comp_input_ax);
+    getParData(PARAMAN_FILE_ACMP, 0, PAR_CMP_SQU2_REFN, &par_union);
+    par_acmp[AXIS_X].perp2_comp_refn = par_union.value.val_real; //第2项垂直度补偿参考点坐标 (单位：mm)
+    // printf("par_acmp[AXIS_X].perp2_comp_refn %f\n", par_acmp[AXIS_X].perp2_comp_refn);
+    getParData(PARAMAN_FILE_ACMP, 0, PAR_CMP_SQU2_ANG, &par_union);
+    par_acmp[AXIS_X].perp2_comp_ang = par_union.value.val_real; //第2项垂直度补偿角度 (单位：um/m)
+    // printf("par_acmp[AXIS_X].perp2_comp_ang %f\n", par_acmp[AXIS_X].perp2_comp_ang);
 
     //---------------------补偿轴 Y轴------------------------//
     getParData(PARAMAN_FILE_ACMP, 1, PAR_CMP_PITCH_TYPE, &par_union);
     par_acmp[AXIS_Y].pitch_comp_type = par_union.value.val_int; //螺距误差补偿类型
-    getParData(PARAMAN_FILE_ACMP, 1, PAR_CMP_PITCH_TYPE, &par_union);
-    par_acmp[AXIS_Y].pitch_comp_type = par_union.value.val_real; //螺距误差补偿起点坐标
-    getParData(PARAMAN_FILE_ACMP, 1, PAR_CMP_PITCH_TYPE, &par_union);
-    par_acmp[AXIS_Y].pitch_comp_type = par_union.value.val_int; //螺距误差补偿点数
-    getParData(PARAMAN_FILE_ACMP, 1, PAR_CMP_PITCH_TYPE, &par_union);
-    par_acmp[AXIS_Y].pitch_comp_type = par_union.value.val_real; //螺距误差补偿点间距
-    getParData(PARAMAN_FILE_ACMP, 1, PAR_CMP_PITCH_TYPE, &par_union);
-    par_acmp[AXIS_Y].pitch_comp_type = par_union.value.val_bool; //螺距误差取模补偿使能
-    getParData(PARAMAN_FILE_ACMP, 1, PAR_CMP_PITCH_TYPE, &par_union);
-    par_acmp[AXIS_Y].pitch_comp_type = par_union.value.val_real; //螺距误差补偿倍率
-    getParData(PARAMAN_FILE_ACMP, 1, PAR_CMP_PITCH_TYPE, &par_union);
-    par_acmp[AXIS_Y].pitch_comp_type = par_union.value.val_int; //螺距误差补偿表起始参数号
+    // printf("par_acmp[AXIS_Y].pitch_comp_type %d\n", par_acmp[AXIS_Y].pitch_comp_type);
+    getParData(PARAMAN_FILE_ACMP, 1, PAR_CMP_PITCH_START, &par_union);
+    par_acmp[AXIS_Y].pitch_comp_start_pos = par_union.value.val_real; //螺距误差补偿起点坐标
+    // printf("par_acmp[AXIS_Y].pitch_comp_start_pos %f\n", par_acmp[AXIS_Y].pitch_comp_start_pos);
+    getParData(PARAMAN_FILE_ACMP, 1, PAR_CMP_PITCH_NUM, &par_union);
+    par_acmp[AXIS_Y].pitch_comp_num = par_union.value.val_int; //螺距误差补偿点数
+    // printf("par_acmp[AXIS_Y].pitch_comp_num %d\n", par_acmp[AXIS_Y].pitch_comp_num);
+    getParData(PARAMAN_FILE_ACMP, 1, PAR_CMP_PITCH_STEP, &par_union);
+    par_acmp[AXIS_Y].pitch_comp_step = par_union.value.val_real; //螺距误差补偿点间距
+    // printf("par_acmp[AXIS_Y].pitch_comp_step %f\n", par_acmp[AXIS_Y].pitch_comp_step);
+    getParData(PARAMAN_FILE_ACMP, 1, PAR_CMP_PITCH_MODULO, &par_union);
+    par_acmp[AXIS_Y].pitch_comp_modulo = par_union.value.val_bool; //螺距误差取模补偿使能
+    // printf("par_acmp[AXIS_Y].pitch_comp_modulo %d\n", par_acmp[AXIS_Y].pitch_comp_modulo);
+    getParData(PARAMAN_FILE_ACMP, 1, PAR_CMP_PITCH_FACTOR, &par_union);
+    par_acmp[AXIS_Y].pitch_comp_factor = par_union.value.val_real; //螺距误差补偿倍率
+    // printf("par_acmp[AXIS_Y].pitch_comp_factor %f\n", par_acmp[AXIS_Y].pitch_comp_factor);
+    getParData(PARAMAN_FILE_ACMP, 1, PAR_CMP_PITCH_TABLE, &par_union);
+    par_acmp[AXIS_Y].pitch_comp_table = par_union.value.val_int; //螺距误差补偿表起始参数号
+    // printf("par_acmp[AXIS_Y].pitch_comp_table %d\n", par_acmp[AXIS_Y].pitch_comp_table);
 
-    getParData(PARAMAN_FILE_ACMP, 1, PAR_CMP_PITCH_TYPE, &par_union);
-    par_acmp[AXIS_Y].pitch_comp_type = par_union.value.val_bool; //第1项垂直度补偿使能
-    getParData(PARAMAN_FILE_ACMP, 1, PAR_CMP_PITCH_TYPE, &par_union);
-    par_acmp[AXIS_Y].pitch_comp_type = par_union.value.val_int; //第1项垂直度补偿基准轴号
-    getParData(PARAMAN_FILE_ACMP, 1, PAR_CMP_PITCH_TYPE, &par_union);
-    par_acmp[AXIS_Y].pitch_comp_type = par_union.value.val_real; //第1项垂直度补偿参考点坐标 (单位：mm)
-    getParData(PARAMAN_FILE_ACMP, 1, PAR_CMP_PITCH_TYPE, &par_union);
-    par_acmp[AXIS_Y].pitch_comp_type = par_union.value.val_real; //第1项垂直度补偿角度 (单位：um/m)
+    getParData(PARAMAN_FILE_ACMP, 1, PAR_CMP_SQU1_ENABLE, &par_union);
+    par_acmp[AXIS_Y].perp1_comp_enable = par_union.value.val_bool; //第1项垂直度补偿使能
+    // printf("par_acmp[AXIS_Y].perp1_comp_enable %d\n", par_acmp[AXIS_Y].perp1_comp_enable);
+    getParData(PARAMAN_FILE_ACMP, 1, PAR_CMP_SQU1_INPUT_AX, &par_union);
+    par_acmp[AXIS_Y].perp1_comp_input_ax = par_union.value.val_int; //第1项垂直度补偿基准轴号
+    // printf("par_acmp[AXIS_Y].perp1_comp_input_ax %d\n", par_acmp[AXIS_Y].perp1_comp_input_ax);
+    getParData(PARAMAN_FILE_ACMP, 1, PAR_CMP_SQU1_REFN, &par_union);
+    par_acmp[AXIS_Y].perp1_comp_refn = par_union.value.val_real; //第1项垂直度补偿参考点坐标 (单位：mm)
+    // printf("par_acmp[AXIS_Y].perp1_comp_refn %f\n", par_acmp[AXIS_Y].perp1_comp_refn);
+    getParData(PARAMAN_FILE_ACMP, 1, PAR_CMP_SQU1_ANG, &par_union);
+    par_acmp[AXIS_Y].perp1_comp_ang = par_union.value.val_real; //第1项垂直度补偿角度 (单位：um/m)
+    // printf("par_acmp[AXIS_Y].perp1_comp_ang %f\n", par_acmp[AXIS_Y].perp1_comp_ang);
 
-    getParData(PARAMAN_FILE_ACMP, 1, PAR_CMP_PITCH_TYPE, &par_union);
-    par_acmp[AXIS_Y].pitch_comp_type = par_union.value.val_bool; //第2项垂直度补偿使能
-    getParData(PARAMAN_FILE_ACMP, 1, PAR_CMP_PITCH_TYPE, &par_union);
-    par_acmp[AXIS_Y].pitch_comp_type = par_union.value.val_int; //第2项垂直度补偿基准轴号
-    getParData(PARAMAN_FILE_ACMP, 1, PAR_CMP_PITCH_TYPE, &par_union);
-    par_acmp[AXIS_Y].pitch_comp_type = par_union.value.val_real; //第2项垂直度补偿参考点坐标 (单位：mm)
-    getParData(PARAMAN_FILE_ACMP, 1, PAR_CMP_PITCH_TYPE, &par_union);
-    par_acmp[AXIS_Y].pitch_comp_type = par_union.value.val_real; //第2项垂直度补偿角度 (单位：um/m)
+    getParData(PARAMAN_FILE_ACMP, 1, PAR_CMP_SQU2_ENABLE, &par_union);
+    par_acmp[AXIS_Y].perp2_comp_enable = par_union.value.val_bool; //第2项垂直度补偿使能
+    // printf("par_acmp[AXIS_Y].perp2_comp_enable %d\n", par_acmp[AXIS_Y].perp2_comp_enable);
+    getParData(PARAMAN_FILE_ACMP, 1, PAR_CMP_SQU2_INPUT_AX, &par_union);
+    par_acmp[AXIS_Y].perp2_comp_input_ax = par_union.value.val_int; //第2项垂直度补偿基准轴号
+    // printf("par_acmp[AXIS_Y].perp2_comp_input_ax %d\n", par_acmp[AXIS_Y].perp2_comp_input_ax);
+    getParData(PARAMAN_FILE_ACMP, 1, PAR_CMP_SQU2_REFN, &par_union);
+    par_acmp[AXIS_Y].perp2_comp_refn = par_union.value.val_real; //第2项垂直度补偿参考点坐标 (单位：mm)
+    // printf("par_acmp[AXIS_Y].perp2_comp_refn %f\n", par_acmp[AXIS_Y].perp2_comp_refn);
+    getParData(PARAMAN_FILE_ACMP, 1, PAR_CMP_SQU2_ANG, &par_union);
+    par_acmp[AXIS_Y].perp2_comp_ang = par_union.value.val_real; //第2项垂直度补偿角度 (单位：um/m)
+    // printf("par_acmp[AXIS_Y].perp2_comp_ang %f\n", par_acmp[AXIS_Y].perp2_comp_ang);
 
     //---------------------补偿轴 Z轴------------------------//
     getParData(PARAMAN_FILE_ACMP, 2, PAR_CMP_PITCH_TYPE, &par_union);
     par_acmp[AXIS_Z].pitch_comp_type = par_union.value.val_int; //螺距误差补偿类型
-    getParData(PARAMAN_FILE_ACMP, 2, PAR_CMP_PITCH_TYPE, &par_union);
-    par_acmp[AXIS_Z].pitch_comp_type = par_union.value.val_real; //螺距误差补偿起点坐标
-    getParData(PARAMAN_FILE_ACMP, 2, PAR_CMP_PITCH_TYPE, &par_union);
-    par_acmp[AXIS_Z].pitch_comp_type = par_union.value.val_int; //螺距误差补偿点数
-    getParData(PARAMAN_FILE_ACMP, 2, PAR_CMP_PITCH_TYPE, &par_union);
-    par_acmp[AXIS_Z].pitch_comp_type = par_union.value.val_real; //螺距误差补偿点间距
-    getParData(PARAMAN_FILE_ACMP, 2, PAR_CMP_PITCH_TYPE, &par_union);
-    par_acmp[AXIS_Z].pitch_comp_type = par_union.value.val_bool; //螺距误差取模补偿使能
-    getParData(PARAMAN_FILE_ACMP, 2, PAR_CMP_PITCH_TYPE, &par_union);
-    par_acmp[AXIS_Z].pitch_comp_type = par_union.value.val_real; //螺距误差补偿倍率
-    getParData(PARAMAN_FILE_ACMP, 2, PAR_CMP_PITCH_TYPE, &par_union);
-    par_acmp[AXIS_Z].pitch_comp_type = par_union.value.val_int; //螺距误差补偿表起始参数号
+    // printf("par_acmp[AXIS_Z].pitch_comp_type %d\n", par_acmp[AXIS_Z].pitch_comp_type);
+    getParData(PARAMAN_FILE_ACMP, 2, PAR_CMP_PITCH_START, &par_union);
+    par_acmp[AXIS_Z].pitch_comp_start_pos = par_union.value.val_real; //螺距误差补偿起点坐标
+    // printf("par_acmp[AXIS_Z].pitch_comp_start_pos %f\n", par_acmp[AXIS_Z].pitch_comp_start_pos);
+    getParData(PARAMAN_FILE_ACMP, 2, PAR_CMP_PITCH_NUM, &par_union);
+    par_acmp[AXIS_Z].pitch_comp_num = par_union.value.val_int; //螺距误差补偿点数
+    // printf("par_acmp[AXIS_Z].pitch_comp_num %d\n", par_acmp[AXIS_Z].pitch_comp_num);
+    getParData(PARAMAN_FILE_ACMP, 2, PAR_CMP_PITCH_STEP, &par_union);
+    par_acmp[AXIS_Z].pitch_comp_step = par_union.value.val_real; //螺距误差补偿点间距
+    // printf("par_acmp[AXIS_Z].pitch_comp_step %f\n", par_acmp[AXIS_Z].pitch_comp_step);
+    getParData(PARAMAN_FILE_ACMP, 2, PAR_CMP_PITCH_MODULO, &par_union);
+    par_acmp[AXIS_Z].pitch_comp_modulo = par_union.value.val_bool; //螺距误差取模补偿使能
+    // printf("par_acmp[AXIS_Z].pitch_comp_modulo %d\n", par_acmp[AXIS_Z].pitch_comp_modulo);
+    getParData(PARAMAN_FILE_ACMP, 2, PAR_CMP_PITCH_FACTOR, &par_union);
+    par_acmp[AXIS_Z].pitch_comp_factor = par_union.value.val_real; //螺距误差补偿倍率
+    // printf("par_acmp[AXIS_Z].pitch_comp_factor %f\n", par_acmp[AXIS_Z].pitch_comp_factor);
+    getParData(PARAMAN_FILE_ACMP, 2, PAR_CMP_PITCH_TABLE, &par_union);
+    par_acmp[AXIS_Z].pitch_comp_table = par_union.value.val_int; //螺距误差补偿表起始参数号
+    // printf("par_acmp[AXIS_Z].pitch_comp_table %d\n", par_acmp[AXIS_Z].pitch_comp_table);
 
-    getParData(PARAMAN_FILE_ACMP, 2, PAR_CMP_PITCH_TYPE, &par_union);
-    par_acmp[AXIS_Z].pitch_comp_type = par_union.value.val_bool; //第1项垂直度补偿使能
-    getParData(PARAMAN_FILE_ACMP, 2, PAR_CMP_PITCH_TYPE, &par_union);
-    par_acmp[AXIS_Z].pitch_comp_type = par_union.value.val_int; //第1项垂直度补偿基准轴号
-    getParData(PARAMAN_FILE_ACMP, 2, PAR_CMP_PITCH_TYPE, &par_union);
-    par_acmp[AXIS_Z].pitch_comp_type = par_union.value.val_real; //第1项垂直度补偿参考点坐标 (单位：mm)
-    getParData(PARAMAN_FILE_ACMP, 2, PAR_CMP_PITCH_TYPE, &par_union);
-    par_acmp[AXIS_Z].pitch_comp_type = par_union.value.val_real; //第1项垂直度补偿角度 (单位：um/m)
+    getParData(PARAMAN_FILE_ACMP, 2, PAR_CMP_SQU1_ENABLE, &par_union);
+    par_acmp[AXIS_Z].perp1_comp_enable = par_union.value.val_bool; //第1项垂直度补偿使能
+    // printf("par_acmp[AXIS_Z].perp1_comp_enable %d\n", par_acmp[AXIS_Z].perp1_comp_enable);
+    getParData(PARAMAN_FILE_ACMP, 2, PAR_CMP_SQU1_INPUT_AX, &par_union);
+    par_acmp[AXIS_Z].perp1_comp_input_ax = par_union.value.val_int; //第1项垂直度补偿基准轴号
+    // printf("par_acmp[AXIS_Z].perp1_comp_input_ax %d\n", par_acmp[AXIS_Z].perp1_comp_input_ax);
+    getParData(PARAMAN_FILE_ACMP, 2, PAR_CMP_SQU1_REFN, &par_union);
+    par_acmp[AXIS_Z].perp1_comp_refn = par_union.value.val_real; //第1项垂直度补偿参考点坐标 (单位：mm)
+    // printf("par_acmp[AXIS_Z].perp1_comp_refn %f\n", par_acmp[AXIS_Z].perp1_comp_refn);
+    getParData(PARAMAN_FILE_ACMP, 2, PAR_CMP_SQU1_ANG, &par_union);
+    par_acmp[AXIS_Z].perp1_comp_ang = par_union.value.val_real; //第1项垂直度补偿角度 (单位：um/m)
+    // printf("par_acmp[AXIS_Z].perp1_comp_ang %f\n", par_acmp[AXIS_Z].perp1_comp_ang);
 
-    getParData(PARAMAN_FILE_ACMP, 2, PAR_CMP_PITCH_TYPE, &par_union);
-    par_acmp[AXIS_Z].pitch_comp_type = par_union.value.val_bool; //第2项垂直度补偿使能
-    getParData(PARAMAN_FILE_ACMP, 2, PAR_CMP_PITCH_TYPE, &par_union);
-    par_acmp[AXIS_Z].pitch_comp_type = par_union.value.val_int; //第2项垂直度补偿基准轴号
-    getParData(PARAMAN_FILE_ACMP, 2, PAR_CMP_PITCH_TYPE, &par_union);
-    par_acmp[AXIS_Z].pitch_comp_type = par_union.value.val_real; //第2项垂直度补偿参考点坐标 (单位：mm)
-    getParData(PARAMAN_FILE_ACMP, 2, PAR_CMP_PITCH_TYPE, &par_union);
-    par_acmp[AXIS_Z].pitch_comp_type = par_union.value.val_real; //第2项垂直度补偿角度 (单位：um/m)
+    getParData(PARAMAN_FILE_ACMP, 2, PAR_CMP_SQU2_ENABLE, &par_union);
+    par_acmp[AXIS_Z].perp2_comp_enable = par_union.value.val_bool; //第2项垂直度补偿使能
+    // printf("par_acmp[AXIS_Z].perp2_comp_enable %d\n", par_acmp[AXIS_Z].perp2_comp_enable);
+    getParData(PARAMAN_FILE_ACMP, 2, PAR_CMP_SQU2_INPUT_AX, &par_union);
+    par_acmp[AXIS_Z].perp2_comp_input_ax = par_union.value.val_int; //第2项垂直度补偿基准轴号
+    // printf("par_acmp[AXIS_Z].perp2_comp_input_ax %d\n", par_acmp[AXIS_Z].perp2_comp_input_ax);
+    getParData(PARAMAN_FILE_ACMP, 2, PAR_CMP_SQU2_REFN, &par_union);
+    par_acmp[AXIS_Z].perp2_comp_refn = par_union.value.val_real; //第2项垂直度补偿参考点坐标 (单位：mm)
+    // printf("par_acmp[AXIS_Z].perp2_comp_refn %f\n", par_acmp[AXIS_Z].perp2_comp_refn);
+    getParData(PARAMAN_FILE_ACMP, 2, PAR_CMP_SQU2_ANG, &par_union);
+    par_acmp[AXIS_Z].perp2_comp_ang = par_union.value.val_real; //第2项垂直度补偿角度 (单位：um/m)
+    // printf("par_acmp[AXIS_Z].perp2_comp_ang %f\n", par_acmp[AXIS_Z].perp2_comp_ang);
 
     return GNC_OPERATOR_SUCCESS;
 }

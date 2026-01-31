@@ -348,7 +348,7 @@ STATIC void compute_screw_comp() {
     double pitch_comp_val_x, pitch_comp_val_y, pitch_comp_val_z;
     double perp_comp_val_x, perp_comp_val_y, perp_comp_val_z;
 
-    // 螺距误差补偿值计算 (计算出来的补偿值 单位为:um)
+    // 螺距误差补偿值计算 (计算出来的补偿值 单位为:mm)
     pitch_comp_val_x = 0;
     pitch_comp_val_y = 0;
     pitch_comp_val_z = 0;

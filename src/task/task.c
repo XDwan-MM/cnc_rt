@@ -26,122 +26,83 @@ GNC_RES task_mq_proc()
 const char* mode[] = {"编辑", "记忆", "MDI", "JOG", "手轮", "回零", "DNC"};
 
 static GNC_RES task_handle_pmc_event(PMC_EVENT* event_data){
+    if (!event_data || !sys) return GNC_OPERATOR_ERROR;
+
     switch(event_data->id){
         case EV_MSG_NONE:
             sys->nc_event = SYS_EVENT_NONE;
             break;
-        case EV_MSG_MODE: /**< 模式切换 (参数1: 模式索引) */
+        /* 1. 模式切换：更新目标模式 */
+        case EV_MSG_MODE:
         {
-            if(event_data->mode_payload.mode == 0)
-            {
-                sys->target_mode = MODE_EDIT;
-                printf("task mode :%s\n", mode[event_data->mode_payload.mode]);
-                // printf("mode :%d\n", event_data->mode_payload.mode);
+            // 使用 switch 结构替代多个 if，提高效率
+            switch (event_data->mode_payload.mode) {
+            case 0: sys->target_mode = MODE_EDIT;   break; // EDIT
+            case 1: sys->target_mode = MODE_MEM;    break; // MEM
+            case 2: sys->target_mode = MODE_MDI;    break; // MDI
+            case 3: sys->target_mode = MODE_JOG;    break; // JOG
+            case 4: sys->target_mode = MODE_MPG;    break; // 手轮
+            case 5: sys->target_mode = MODE_HOMING; break; // 回零 (ZRN)
+            case 6: sys->target_mode = MODE_DNC;    break; // DNC (DNCI)
+            default: sys->target_mode = MODE_IDLE;  break; // wcf: 我不太确定
             }
-            if(event_data->mode_payload.mode == 1)
-            {
-                sys->target_mode = MODE_MEM;
-                printf("task mode :%s\n", mode[event_data->mode_payload.mode]);
-                // printf("mode :%d\n", event_data->mode_payload.mode);
-            }
-            if(event_data->mode_payload.mode == 2)
-            {
-                sys->target_mode = MODE_MDI;
-                printf("task mode :%s\n", mode[event_data->mode_payload.mode]);
-                // printf("mode :%d\n", event_data->mode_payload.mode);
-            }
-            if(event_data->mode_payload.mode == 3)
-            {
-                sys->target_mode = MODE_JOG;
-                printf("task mode :%s\n", mode[event_data->mode_payload.mode]);
-                // printf("mode :%d\n", event_data->mode_payload.mode);
-            }
-            if(event_data->mode_payload.mode == 4)
-            {
-                sys->target_mode = MODE_MPG;
-                printf("task mode :%s\n", mode[event_data->mode_payload.mode]);
-                // printf("mode :%d\n", event_data->mode_payload.mode);
-            }
-            if(event_data->mode_payload.mode == 5)
-            {
-                sys->target_mode = MODE_HOMING;
-                printf("task mode :%s\n", mode[event_data->mode_payload.mode]);
-                // printf("mode :%d\n", event_data->mode_payload.mode);
-            }
-            if(event_data->mode_payload.mode == 6)
-            {
-                sys->target_mode = MODE_DNC;
-                printf("task mode :%s\n", mode[event_data->mode_payload.mode]);
-                // printf("mode :%d\n", event_data->mode_payload.mode);
-            }
-            if(event_data->mode_payload.mode == 7)
-            {
-                // 下面我不确定
-                sys->target_mode = MODE_IDLE;
-            }
+            printf("task target_mode changed to: %d\n", sys->target_mode);
             break;
         }
-        case EV_MSG_JOG: /**< 手动点动 (参数1: 轴号, 参数2: 方向) */
+        /* 2. 进给轴按键处理：根据当前模式分发内部系统事件 */
+        case EV_MSG_FEEDAXIS_KEY:
         {
-            // 1.X轴点动事件
-            if(event_data->jog_payload.axis_num == AXIS_X)
+            int axis = event_data->feedaxis_key_payload.axis_num;   // 0:X, 1:Y, 2:Z
+            int direction = event_data->feedaxis_key_payload.direction; // 1:正按, -1:负按, 0:松开
+
+            // 基于当前系统模式进行逻辑分发
+            if (sys->current_mode == MODE_JOG || sys->current_mode == MODE_HOMING)
             {
-                if(event_data->jog_payload.direction == 1)// 正向运动
-                {
-                    sys->nc_event = SYS_EVENT_X_POS_PRESS;
-                    printf("task event : x+ press\n");
+                // axis为轴号
+                if (axis == AXIS_X) {
+                    if (direction == 1)
+                    {
+                        sys->nc_event = SYS_EVENT_X_POS_PRESS;
+                    }
+                    else if (direction == -1)
+                    {
+                        sys->nc_event = SYS_EVENT_X_NEG_PRESS;
+                    }
+                    else {
+                        // 松开时，为了保险，可以根据 record_nc_event 或直接触发 Release
+                        sys->nc_event = (sys->nc_event == SYS_EVENT_X_POS_PRESS) ?
+                                            SYS_EVENT_X_POS_RELEASE : SYS_EVENT_X_NEG_RELEASE;
+                    }
                 }
-                else if(event_data->jog_payload.direction == -1)// 负向运动
-                {
-                    sys->nc_event = SYS_EVENT_X_NEG_PRESS;
-                    printf("task event : x- press\n");
+                else if (axis == AXIS_Y) {
+                    if (direction == 1)
+                    {
+                        sys->nc_event = SYS_EVENT_Y_POS_PRESS;
+                    }
+                    else if (direction == -1)
+                    {
+                        sys->nc_event = SYS_EVENT_Y_NEG_PRESS;
+                    }
+                    else {
+                        sys->nc_event = (sys->nc_event == SYS_EVENT_Y_POS_PRESS) ?
+                                            SYS_EVENT_Y_POS_RELEASE : SYS_EVENT_Y_NEG_RELEASE;
+                    }
                 }
-                else if(event_data->jog_payload.direction == 0) //停止运动
-                {
-                    sys->nc_event = SYS_EVENT_X_POS_RELEASE;
-                    sys->nc_event = SYS_EVENT_X_NEG_RELEASE;
-                    printf("task event : x release\n");
+                else if (axis == AXIS_Z) {
+                    if (direction == 1)
+                    {
+                        sys->nc_event = SYS_EVENT_Z_POS_PRESS;
+                    }
+                    else if (direction == -1)
+                    {
+                        sys->nc_event = SYS_EVENT_Z_NEG_PRESS;
+                    }
+                    else {
+                        sys->nc_event = (sys->nc_event == SYS_EVENT_Z_POS_PRESS) ?
+                                            SYS_EVENT_Z_POS_RELEASE : SYS_EVENT_Z_NEG_RELEASE;
+                    }
                 }
-            }
-            // 2.Y轴点动事件
-            if(event_data->jog_payload.axis_num == AXIS_Y)
-            {
-                if(event_data->jog_payload.direction == 1)// 正向运动
-                {
-                    sys->nc_event = SYS_EVENT_Y_POS_PRESS;
-                    printf("task event : y+ press\n");
-                }
-                else if(event_data->jog_payload.direction == -1)// 负向运动
-                {
-                    sys->nc_event = SYS_EVENT_Y_NEG_PRESS;
-                    printf("task event : y- press\n");
-                }
-                else if(event_data->jog_payload.direction == 0) //停止运动
-                {
-                    sys->nc_event = SYS_EVENT_Y_POS_RELEASE;
-                    sys->nc_event = SYS_EVENT_Y_NEG_RELEASE;
-                    printf("task event : y release\n");
-                }
-            }
-            // 3.Z轴点动事件
-            if(event_data->jog_payload.axis_num == AXIS_Z)
-            {
-                if(event_data->jog_payload.direction == 1)// 正向运动
-                {
-                    sys->nc_event = SYS_EVENT_Z_POS_PRESS;
-                    printf("task event : z+ press\n");
-                }
-                else if(event_data->jog_payload.direction == -1)// 负向运动
-                {
-                    sys->nc_event = SYS_EVENT_Z_NEG_PRESS;
-                    printf("task event : z- press\n");
-                }
-                else if(event_data->jog_payload.direction == 0) //停止运动
-                {
-                    sys->nc_event = SYS_EVENT_Z_POS_RELEASE;
-                    sys->nc_event = SYS_EVENT_Z_NEG_RELEASE;
-                    printf("task event : z release\n");
-                }
+                printf("Axis %d action %d under mode %d\n", axis, direction, sys->current_mode);
             }
             break;
         }
