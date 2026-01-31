@@ -3,29 +3,31 @@
 #include "log.h"
 
 STATIC void parser_macro_init();
-STATIC GNC_RES parser_handle_recieve(pmc_data* motion_data);
-STATIC GNC_RES parser_handle_gcode(pmc_data* motion_data);
-STATIC GNC_RES parser_handle_mcode(pmc_data* motion_data);
-STATIC GNC_RES parser_handle_tcode(pmc_data* motion_data);
-STATIC GNC_RES parser_handle_scode(pmc_data* motion_data);
+STATIC GNC_RES parser_handle_recieve(pmc_data* motion_data, NcItpState *itp_state, int *line_no);
+STATIC GNC_RES parser_handle_mcode(pmc_data* motion_data, NcItpState *itp_state, int *line_no);
+STATIC GNC_RES parser_handle_tcode(pmc_data* motion_data, NcItpState *itp_state, int *line_no);
+STATIC GNC_RES parser_handle_scode(pmc_data* motion_data, NcItpState *itp_state, int *line_no);
+STATIC GNC_RES parser_handle_gcode(pmc_data* motion_data, NcItpState *itp_state, int *line_no);
 STATIC bool parser_check_res(GNC_RES res);
 
 PARSER_DATA* parser_data;
 
 STATIC void parser_macro_init()
 {
-    for (int i = 0; i < 30000; ++i)
-    {
-        parser_data->cmv[i].varDouble = 0.0;
+    for (int i = 0; i < 30000; ++i) {
+        parser_data->cmv[i].varDouble = 0;
+        parser_data->cmv[i].valid = false;
+        parser_data->cmv[i].read = 6;
+        parser_data->cmv[i].write = 6;
     }
-    parser_data->cmv[10004].varDouble= 10.0;     // 设置半径值超差
-    parser_data->cmv[11600].varDouble= 0.0;      // 设置坐标旋转1轴运动计算方式
-    parser_data->cmv[5410].varDouble= -90.0;     // 设置坐标旋转默认角度
-    parser_data->cmv[17028].varDouble= 1.0;      // 默认米制单位
-    parser_data->cmv[8132].varDouble= 1.0;       // 激活比例缩放功能G51
-    parser_data->cmv[8077].varDouble= 10.0;      // 设置渐开线插补误差最大值
-    parser_data->cmv[5114].varDouble= 0.5;       // G73钻深孔,D默认值
-    parser_data->cmv[5115].varDouble= 1.0;       // G83深孔加工循环,D默认值
+    parser_data->cmv[18004].varDouble = 10.0; // 设置半径值超差
+    parser_data->cmv[17031].varDouble = 0.0;  // 设置坐标旋转1轴运动计算方式
+    parser_data->cmv[5410].varDouble = -90.0; // 设置坐标旋转默认角度
+    parser_data->cmv[17028].varDouble = 1.0;  // 默认米制单位
+    parser_data->cmv[8132].varDouble = 1.0;   // 激活比例缩放功能G51
+    parser_data->cmv[8077].varDouble = 10.0;  // 设置渐开线插补误差最大值
+    parser_data->cmv[5114].varDouble = 0.5;   // G73钻深孔,D默认值
+    parser_data->cmv[5115].varDouble = 1.0;   // G83深孔加工循环,D默认值
 }
 
 void parser_new(){
@@ -53,16 +55,16 @@ GNC_RES parser_init(const char* parser_file_path)
     return GNC_OPERATOR_SUCCESS;
 }
 
-STATIC GNC_RES parser_handle_recieve(pmc_data* motion_data){
+STATIC GNC_RES parser_handle_recieve(pmc_data* motion_data, NcItpState *itp_state, int *line_no){
     GNC_RES res = GNC_OPERATOR_SUCCESS;
     // 模态
     switch(motion_data->mode){
         case PMC_MODE_EXACT_STOP:
         case PMC_MODE_CHOP: // 切削模式
-            res = parser_handle_gcode(motion_data);
+            res = parser_handle_gcode(motion_data, itp_state, line_no);
             break; 
         case PMC_MODE_M_CMD: // M指令
-            res = parser_handle_mcode(motion_data);
+            res = parser_handle_mcode(motion_data, itp_state, line_no);
             break;
         // 更新：其他模态
         default:
@@ -72,7 +74,7 @@ STATIC GNC_RES parser_handle_recieve(pmc_data* motion_data){
     return res;
 }
 
-STATIC GNC_RES parser_handle_gcode(pmc_data* motion_data)
+STATIC GNC_RES parser_handle_gcode(pmc_data* motion_data, NcItpState *itp_state, int *line_no)
 {
     GCODE_BLOCK gcode_block;
     // 插补类型
@@ -110,9 +112,13 @@ STATIC GNC_RES parser_handle_gcode(pmc_data* motion_data)
     gcode_block.pos.x = motion_data->position.x;
     gcode_block.pos.y = motion_data->position.y;
     gcode_block.pos.z = motion_data->position.z;
+    // 模态
+    gcode_block.state = *itp_state;
+    // 行号
+    gcode_block.line_number = *line_no;
     // 加入队列
     if(gcode_queue_is_full(gcode_queue)){
-        LOG_OUTPUT(INFO, "gcode queue full");
+        // LOG_OUTPUT(INFO, "gcode queue full");
         return GNC_DATA_FULL;
     }
     gcode_queue_push(gcode_queue, &gcode_block);
@@ -120,7 +126,7 @@ STATIC GNC_RES parser_handle_gcode(pmc_data* motion_data)
     return GNC_OPERATOR_SUCCESS;
 }
 
-STATIC GNC_RES parser_handle_mcode(pmc_data* motion_data){
+STATIC GNC_RES parser_handle_mcode(pmc_data* motion_data, NcItpState *itp_state, int *line_no){
     // 更新：完成对M代码的处理
     return GNC_OPERATOR_SUCCESS;
 }
@@ -134,6 +140,7 @@ GNC_RES parser_reading(){
     int error_no = ItpError();
     if (error_no >= 0)
     {
+        printf("interpreter error: %d", error_no);
         LOG_OUTPUT(ERROR, "interpreter error: %d", error_no);   // 报警
         return GNC_CAL_ERROR;
     }
@@ -147,12 +154,15 @@ GNC_RES parser_reading(){
         {
             pmc_data motion_data = parser_data->itp_datas.datas[i];
             parser_data->interp_list_index = i;
-            res = parser_handle_recieve(&motion_data);
+            res = parser_handle_recieve(&motion_data, &parser_data->itp_state, &parser_data->itp_line_no);
             CHECK_RES(parser_check_res(res));
-            printf("reading");
         }
     }
-    if (ItpIsOver()) return GNC_PARSER_OVER;
+    if (ItpIsOver())
+    {
+        var_chan[0].is_parsering = false;
+        return GNC_PARSER_OVER;
+    } 
     ItpNextLine();
     return res;
 }
@@ -164,7 +174,7 @@ GNC_RES parser_waiting_for_buf(){
     for(int i = start_index; i < parser_data->itp_datas.count; i++){
         pmc_data motion_data = parser_data->itp_datas.datas[i];
         parser_data->interp_list_index = i;
-        res = parser_handle_recieve(&motion_data);
+        res = parser_handle_recieve(&motion_data, &parser_data->itp_state, &parser_data->itp_line_no);
         CHECK_RES(parser_check_res(res));
     }
     return res;
@@ -205,6 +215,13 @@ STATIC bool parser_check_res(GNC_RES res){
 }
 
 void parser_run_mode(){
+    if (var_chan[0].parser_reset == true)
+    {
+        parser_reset();
+        gcode_queue_reset(gcode_queue);
+        var_chan[0].parser_reset = false;
+    }
+
     GNC_RES res = GNC_OPERATOR_SUCCESS;
     switch(parser_data->parser_state){
         case PARSER_IDLE:

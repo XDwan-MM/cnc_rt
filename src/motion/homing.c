@@ -35,7 +35,7 @@ void handle_homing_cmd() {
 
 static void abs_homing_do_home(AXIS_TYPE axis_type) {
     var_axis[axis_type].cmd_pos = var_axis[axis_type].act_pos + abs_homing_tp_pinc(axis_type);
-    // printf("axis_type:%d, act_pos:%f, cmd_pos:%f\n", axis_type, var_axis[axis_type].act_pos, var_axis[axis_type].cmd_pos);
+    printf("axis_type:%d, act_pos:%f, cmd_pos:%f\n", axis_type, var_axis[axis_type].act_pos, var_axis[axis_type].cmd_pos);
 }
 
 static void homing_is_all_homed() {

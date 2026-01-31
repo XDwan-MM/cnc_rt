@@ -13,13 +13,6 @@ typedef struct {
 } NcItpData;
 
 typedef struct {
-    NcItpData ncItpData;
-    int lineCount;          // 译码总行数
-    int lineNumber;         // 译码当前行号
-//    int dataIndex;          // 实包个数
-} NcItpDataPacket;
-
-typedef struct {
     int value;
     bool valid;
 } IntV;
@@ -38,6 +31,13 @@ typedef struct {
     IntV h;
     IntV d;
 } NcItpState;
+
+/*!  译码组包 */
+typedef struct {
+    NcItpData ncItpData;    // 译码数据
+    int lineNo;             // 译码当前行号
+    NcItpState ncItpState;  // 译码模态
+} NcItpDataPacket;
 
 #ifdef __cplusplus
 }

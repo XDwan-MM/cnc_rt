@@ -16,6 +16,7 @@ extern "C" {
 
 #include "datatype.h"
 #include "motiondata.h"
+#include "ncitpdatadef.h"
 
 #include <pthread.h>
 
@@ -25,6 +26,7 @@ extern "C" {
 typedef struct gcode_block{
     INTERP_TYPE type;   // 插补类型
     pmc_mode mode;      // 模组
+    NcItpState state;   // 模态
     int line_number;    // 运行行号
     double feed_vel;    // 进给速度
     POS pos;   

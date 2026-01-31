@@ -86,8 +86,11 @@ void emcmotPathPlan() {
     if (sys->is_parse_running){
         HmiSysData hmiSysData;
         getHmiSysDataPtr(&hmiSysData);
-        printf("hmiSysData.ncFilePath: %s\n", hmiSysData.ncFilePath);
+        // char ncFilePath[512];
+        // snprintf(ncFilePath, sizeof(ncFilePath), "%s/%s", PROJECT_DIR, "config/NC/2-D12J.nc");
+        // printf("hmiSysData.ncFilePath: %s\n", ncFilePath);
         parser_init(hmiSysData.ncFilePath);
+        sys->is_first_run = true;   // 通知预处理第一次获取pre_pos
         sys->is_parse_running = false;
     }
     // 遍历多个通道
@@ -319,9 +322,9 @@ static void read_to_hal() {
     var_axis[AXIS_Z].motor_act_pos = pulses_to_position(z_target_pos, &par_axis[AXIS_Z]);
 
     // 人机交互显示的位置值，要减去误差补偿值.
-    var_axis[AXIS_X].act_pos = var_axis[AXIS_X].motor_act_pos - (var_axis[AXIS_X].pitch_comp_val + var_axis[AXIS_X].perp_comp_val);
-    var_axis[AXIS_Y].act_pos = var_axis[AXIS_Y].motor_act_pos - (var_axis[AXIS_Y].pitch_comp_val + var_axis[AXIS_Y].perp_comp_val);
-    var_axis[AXIS_Z].act_pos = var_axis[AXIS_Z].motor_act_pos - (var_axis[AXIS_Z].pitch_comp_val + var_axis[AXIS_Z].perp_comp_val);
+    var_axis[AXIS_X].act_pos = var_axis[AXIS_X].motor_act_pos - 0;
+    var_axis[AXIS_Y].act_pos = var_axis[AXIS_Y].motor_act_pos - 0;
+    var_axis[AXIS_Z].act_pos = var_axis[AXIS_Z].motor_act_pos - 0;
 
     // 第一次运行，初始化位置
     if (!preop_flag) {
@@ -381,6 +384,10 @@ static void check_for_soft_limit() {
     var_axis[AXIS_Y].runtime.active_levels = Check_Axis_Limit_Violation(var_axis[AXIS_Y].runtime);
     var_axis[AXIS_Z].runtime.active_levels = Check_Axis_Limit_Violation(var_axis[AXIS_Z].runtime);
     // printf("x_limits%d y_limits%d z_limits%d \n",x_limits,y_limits,z_limits);
+    // if(var_axis[AXIS_X].runtime.active_levels || var_axis[AXIS_Y].runtime.active_levels || var_axis[AXIS_Z].runtime.active_levels){
+    //     var_chan[0].is_estop = true;
+    //     printf("超限位\n");
+    // }
 }
 
 // 更新运动状态数据
@@ -390,7 +397,7 @@ static void update_status() {
     var_chan[0].act_jerk = var_chan[0].cmd_jerk;
     var_chan[0].act_spdl_speed = var_chan[0].act_spdl_speed;
     for (int i = 0; i < SYS_AXES_NUM; i++) {
-        var_axis[i].act_pos = var_axis[i].cmd_pos;
+        // var_axis[i].act_pos = var_axis[i].cmd_pos;
         var_axis[i].act_vel = var_axis[i].cmd_vel;
     }
     shm_var_update();

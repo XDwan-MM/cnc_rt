@@ -93,6 +93,7 @@ static GNC_RES rt_var_init(){
         var_chan[i].act_feedrate = 0;            // 通道实际合成速度
         var_chan[i].feed_override = 1.0;         // 进给倍率
         var_chan[i].rapid_override = 1.0;        // 快速进给倍率
+        var_chan[i].spdl_override = 1.0;         // 主轴倍率
         var_chan[i].is_homing = false;           // 回零中
         var_chan[i].is_running = false;          // 运行中
         var_chan[i].is_progend = false;          // 程序结束
@@ -563,10 +564,8 @@ GNC_RES rt_par_reset(){
 static GNC_RES sys_init(){
     sys = (SYS_DATA*)malloc(sizeof(SYS_DATA));
     if(sys == NULL) return GNC_DATA_NULL;
-    // sys->target_mode = MODE_IDLE;
-    // sys->current_mode = MODE_IDLE;
-    sys->target_mode = MODE_MPG;
-    sys->current_mode = MODE_MPG;
+    sys->target_mode = MODE_IDLE;
+    sys->current_mode = MODE_IDLE;
     sys->nc_event = SYS_EVENT_NONE;
     sys->is_switching_mode = false;
     sys->is_parse_running = false;

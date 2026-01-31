@@ -89,6 +89,8 @@ static void mem_set_state(){
                 setVarChanInt(0, VAR_CHAN_RUN_ROW, 0, 0);
                 LOG_OUTPUT(INFO, "reset program");
             }
+            // 通知译码复位
+            var_chan[0].parser_reset = true;
             break;
         
         case SYS_EVENT_RERUN:
@@ -98,7 +100,10 @@ static void mem_set_state(){
             // LOG_OUTPUT(INFO, "vplan_mode: %d", par_chan[0].vplan_mode);
             // 上一个状态为空闲或复位
             if(mem_exec_state == EXEC_IDLE && queue_is_empty(plan_queue)){
+                //　通知译码运行，初始化译码器
                 sys->is_parse_running = true;
+                // 译码正在运行，译码结束译码器将其置false
+                var_chan[0].is_parsering = true;
                 printf("sys is parser running");
                 mem_exec_state = EXEC_WAITING;
             }
@@ -115,7 +120,7 @@ static void mem_set_state(){
             if(mem_exec_state == EXEC_RUNNING){
                 mem_exec_state = EXEC_PAUSING;
                 printf("pause line number:%d\n", cycle_tp->plan_block->line_number);
-                LOG_OUTPUT(ERROR, "pause line number: %d res%d", cycle_tp->plan_block->line_number,res);
+                LOG_OUTPUT(INFO, "pause line number: %d res%d", cycle_tp->plan_block->line_number, res);
                 res = cycle_tp_get_first();
                 CHECK_RES(mem_check_res(res));
                 res = pausing_tp_init(par_chan[0].vplan_mode, var_chan[0].act_feedrate);
@@ -269,7 +274,7 @@ static bool mem_check_res(GNC_RES res){
 }
 
 static bool mem_check_running(){
-    if(sys->is_parse_running) return true;
+    if(var_chan[0].is_parsering) return true;
     return (!queue_is_empty(plan_queue) || !queue_is_empty(pretreat_queue) || !gcode_queue_is_empty(gcode_queue));
 }
 
@@ -279,7 +284,7 @@ static GNC_RES cycle_tp_get_first(){
     if(chan_look_ahead(var_chan[0].act_feedrate) == GNC_DATA_EMPTY) return GNC_DATA_EMPTY;
     if(cycle_tp_init(par_chan[0].vplan_mode, var_chan[0].act_feedrate) == GNC_CAL_ERROR) return GNC_CAL_ERROR;
     shm_var_update_prog();
-    LOG_OUTPUT(ERROR, "cycle line number: %d", cycle_tp->plan_block->line_number);
+    // LOG_OUTPUT(ERROR, "cycle line number: %d", cycle_tp->plan_block->line_number);
     return GNC_CAL_SUCCESS;
 }
 
@@ -290,7 +295,7 @@ static GNC_RES cycle_tp_get_next(){
     if(chan_look_ahead(var_chan[0].act_feedrate) == GNC_DATA_EMPTY) return GNC_DATA_EMPTY;
     if(cycle_tp_init(par_chan[0].vplan_mode, var_chan[0].act_feedrate) == GNC_CAL_ERROR) return GNC_CAL_ERROR;
     shm_var_update_prog();
-    LOG_OUTPUT(ERROR, "cycle line number: %d", cycle_tp->plan_block->line_number);
+    // LOG_OUTPUT(ERROR, "cycle line number: %d", cycle_tp->plan_block->line_number);
     return GNC_CAL_SUCCESS;
 }
 
@@ -316,12 +321,13 @@ static GNC_RES cycle_tp_init(VELPLAN_TYPE velplan_type, double vs){
     GNC_RES res = GNC_CAL_SUCCESS;
     cycle_tp->plan_block = queue_peak(plan_queue); // 获取首段
     cycle_tp->interp_cycle = 1;
-    cycle_tp->accum_distance = 0;  
+    cycle_tp->accum_distance =
+     0;  
     cycle_tp->remain_distance = cycle_tp->plan_block->length;
     cycle_tp->current_distance = 0;
     cycle_tp->target_distance = 0;
+    printf("length:%f, max_vel:%f, feed_vel:%f\n", cycle_tp->plan_block->length, cycle_tp->plan_block->max_vel, cycle_tp->plan_block->feed_vel);
     res = vp_cal_vel_profile(velplan_type, cycle_tp->plan_block, cycle_tp->vel_profile, par_ncu.cycle); // 计算速度曲线
-
     if(res != GNC_CAL_SUCCESS) LOG_ERROR("vp cal vel profile fail%d\n",res);
     return res;
 }

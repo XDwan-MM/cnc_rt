@@ -167,7 +167,7 @@ static GNC_RES task_handle_pmc_event(PMC_EVENT* event_data){
         }
         case EV_MSG_RESET:
         {
-            if(event_data->run_payload.run_state == 1)
+            if(event_data->run_payload.run_state == 0)
             {
                 sys->nc_event = SYS_EVENT_RESET;
                 printf("task event : reset\n");

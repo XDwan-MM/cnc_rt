@@ -153,6 +153,12 @@ run() {
     sudo ./rt_cnc
 }
 
+run_debug() {
+    build_debug
+    cd $BIN_DIR
+    sudo ./rt_cnc_d
+}
+
 clean_build() {
     echo -e "${YELLOW}清理构建文件...${NC}"
 
@@ -225,6 +231,9 @@ case "${1:-all}" in
         ;;
     run)
         run
+        ;;
+    run_debug)
+        run_debug
         ;;
     help|--help|-h)
         print_help
