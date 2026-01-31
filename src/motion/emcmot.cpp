@@ -121,7 +121,10 @@ static void set_operating_mode() {
         case MODE_JOG:
             // 当前点动速度为零,才能切模式成功
             printf("jog vel: %f\n", var_axis[AXIS_X].jog_tp.curr_vel);
-            if (fabs(var_axis[AXIS_X].jog_tp.curr_vel - 0.0) < 1e-3 && fabs(var_axis[AXIS_Y].jog_tp.curr_vel - 0.0) < 1e-3 && fabs(var_axis[AXIS_Z].jog_tp.curr_vel - 0.0) < 1e-3) {
+            if (fabs(var_axis[AXIS_X].jog_tp.curr_vel - 0.0) < SPEED_THRESHOLD 
+            && fabs(var_axis[AXIS_Y].jog_tp.curr_vel - 0.0) < SPEED_THRESHOLD 
+            && fabs(var_axis[AXIS_Z].jog_tp.curr_vel - 0.0) < SPEED_THRESHOLD) 
+            {
                 sys->current_mode = sys->target_mode;
                 sys->is_switching_mode = false;
                 var_chan[var_sys.active_chan].mode = sys->current_mode;
@@ -139,7 +142,10 @@ static void set_operating_mode() {
             break;
         case MODE_RAPID_JOG:
             // 当前快速点动速度为零,才能切模式成功
-            if (fabs(var_axis[AXIS_X].jog_tp.curr_vel - 0.0) < 1e-7 && fabs(var_axis[AXIS_Y].jog_tp.curr_vel - 0.0) < 1e-7 && fabs(var_axis[AXIS_Z].jog_tp.curr_vel - 0.0) < 1e-7) {
+            if (fabs(var_axis[AXIS_X].jog_tp.curr_vel - 0.0) < SPEED_THRESHOLD 
+            && fabs(var_axis[AXIS_Y].jog_tp.curr_vel - 0.0) < SPEED_THRESHOLD 
+            && fabs(var_axis[AXIS_Z].jog_tp.curr_vel - 0.0) < SPEED_THRESHOLD) 
+            {
                 sys->current_mode = sys->target_mode;
                 sys->is_switching_mode = false;
                 var_chan[var_sys.active_chan].mode = sys->current_mode;

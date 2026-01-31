@@ -1,7 +1,10 @@
 #ifndef __JOG_H__
 #define __JOG_H__
 
+#define SPEED_THRESHOLD (1.0e-5)
+
 #include <global.h>
+
 
 #ifdef __cplusplus
 extern "C" {

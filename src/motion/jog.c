@@ -2,6 +2,7 @@
 #include "jog_control.h"
 #include <math.h>
 
+
 // 静态局部变量，保存各轴 JOG 状态
 static JOG_CTRL x_jog_ctrl = {JOG_STATE_IDLE, 0.001};
 static JOG_CTRL y_jog_ctrl = {JOG_STATE_IDLE, 0.001};
@@ -65,11 +66,25 @@ static void jog_set_state() {
 
         // X 轴事件
     case SYS_EVENT_X_POS_PRESS:
-        if (!sys->is_switching_mode) x_jog_ctrl.state = JOG_STATE_RUNNING;
+        if (!sys->is_switching_mode) 
+        {
+            x_jog_ctrl.state = JOG_STATE_RUNNING;
+        }
+        else
+        {
+            x_jog_ctrl.state = JOG_STATE_STOPPING;
+        }
         // 内部通过方向区分，这里简单标记为运行
         break;
     case SYS_EVENT_X_NEG_PRESS:
-        if (!sys->is_switching_mode) x_jog_ctrl.state = JOG_STATE_RUNNING;
+        if (!sys->is_switching_mode) 
+        {
+            x_jog_ctrl.state = JOG_STATE_RUNNING;
+        } 
+        else
+        {
+            x_jog_ctrl.state = JOG_STATE_STOPPING;
+        }
         break;
     case SYS_EVENT_X_POS_RELEASE:
     case SYS_EVENT_X_NEG_RELEASE:
@@ -78,10 +93,25 @@ static void jog_set_state() {
 
         // Y 轴事件
     case SYS_EVENT_Y_POS_PRESS:
-        if (!sys->is_switching_mode) y_jog_ctrl.state = JOG_STATE_RUNNING;
+        if (!sys->is_switching_mode) 
+        {
+            y_jog_ctrl.state = JOG_STATE_RUNNING;
+        }
+        else
+        {
+            y_jog_ctrl.state = JOG_STATE_STOPPING;
+        }
         break;
     case SYS_EVENT_Y_NEG_PRESS:
-        if (!sys->is_switching_mode) y_jog_ctrl.state = JOG_STATE_RUNNING;
+        if (!sys->is_switching_mode) 
+        {
+            y_jog_ctrl.state = JOG_STATE_RUNNING;
+        }
+        else
+        {
+            y_jog_ctrl.state = JOG_STATE_STOPPING;
+        }
+        
         break;
     case SYS_EVENT_Y_POS_RELEASE:
     case SYS_EVENT_Y_NEG_RELEASE:
@@ -90,10 +120,24 @@ static void jog_set_state() {
 
         // Z 轴事件
     case SYS_EVENT_Z_POS_PRESS:
-        if (!sys->is_switching_mode) z_jog_ctrl.state = JOG_STATE_RUNNING;
+        if (!sys->is_switching_mode) 
+        {
+            z_jog_ctrl.state = JOG_STATE_RUNNING;
+        }
+        else
+        {
+            z_jog_ctrl.state = JOG_STATE_STOPPING;
+        }
         break;
     case SYS_EVENT_Z_NEG_PRESS:
-        if (!sys->is_switching_mode) z_jog_ctrl.state = JOG_STATE_RUNNING;
+        if (!sys->is_switching_mode) 
+        {
+            z_jog_ctrl.state = JOG_STATE_RUNNING;
+        }
+        else
+        {
+            z_jog_ctrl.state = JOG_STATE_STOPPING;
+        }
         break;
     case SYS_EVENT_Z_POS_RELEASE:
     case SYS_EVENT_Z_NEG_RELEASE:
@@ -110,30 +154,72 @@ static void jog_set_state() {
  */
 static void jog_execute() {
     // 处理 X 轴
-    if (x_jog_ctrl.state == JOG_STATE_RUNNING) {
-        int dir = (sys->nc_event == SYS_EVENT_X_POS_PRESS) ? JOG_DIR_POSITIVE : JOG_DIR_NEGATIVE;
+    if (x_jog_ctrl.state == JOG_STATE_RUNNING) 
+    {
+        int dir = 0;
+        if (sys->nc_event == SYS_EVENT_X_POS_PRESS)
+        {
+            dir = JOG_DIR_POSITIVE;
+        }
+        else if (sys->nc_event == SYS_EVENT_X_NEG_PRESS)
+        {
+            dir = JOG_DIR_NEGATIVE;
+        }
         start_jog_cont(&var_axis[AXIS_X], &par_axis[AXIS_X], dir, 0.001, var_chan[0].feed_override);
-    } else if (x_jog_ctrl.state == JOG_STATE_STOPPING) {
+    } 
+    else if (x_jog_ctrl.state == JOG_STATE_STOPPING) 
+    {
         stop_jog_cont(&var_axis[AXIS_X], 0.001, false);
-        if (fabs(var_axis[AXIS_X].jog_tp.curr_vel - 0.0) < 1e-7) x_jog_ctrl.state = JOG_STATE_IDLE;
+        if (fabs(var_axis[AXIS_X].jog_tp.curr_vel - 0.0) < SPEED_THRESHOLD) 
+        {
+            x_jog_ctrl.state = JOG_STATE_IDLE;
+        }
     }
 
     // 处理 Y 轴
-    if (y_jog_ctrl.state == JOG_STATE_RUNNING) {
-        int dir = (sys->nc_event == SYS_EVENT_Y_POS_PRESS) ? JOG_DIR_POSITIVE : JOG_DIR_NEGATIVE;
+    if (y_jog_ctrl.state == JOG_STATE_RUNNING) 
+    {
+        int dir = 0;
+        if (sys->nc_event == SYS_EVENT_Y_POS_PRESS)
+        {
+            dir = JOG_DIR_POSITIVE;
+        }
+        else if (sys->nc_event == SYS_EVENT_Y_NEG_PRESS)
+        {
+            dir = JOG_DIR_NEGATIVE;
+        }
         start_jog_cont(&var_axis[AXIS_Y], &par_axis[AXIS_Y], dir, 0.001, var_chan[0].feed_override);
-    } else if (y_jog_ctrl.state == JOG_STATE_STOPPING) {
+    } 
+    else if (y_jog_ctrl.state == JOG_STATE_STOPPING) 
+    {
         stop_jog_cont(&var_axis[AXIS_Y], 0.001, false);
-        if (fabs(var_axis[AXIS_Y].jog_tp.curr_vel - 0.0) < 1e-7) y_jog_ctrl.state = JOG_STATE_IDLE;
+        if (fabs(var_axis[AXIS_Y].jog_tp.curr_vel - 0.0) < SPEED_THRESHOLD) 
+        {
+            y_jog_ctrl.state = JOG_STATE_IDLE;
+        }
     }
 
     // 处理 Z 轴
-    if (z_jog_ctrl.state == JOG_STATE_RUNNING) {
-        int dir = (sys->nc_event == SYS_EVENT_Z_POS_PRESS) ? JOG_DIR_POSITIVE : JOG_DIR_NEGATIVE;
+    if (z_jog_ctrl.state == JOG_STATE_RUNNING) 
+    {
+        int dir = 0;
+        if (sys->nc_event == SYS_EVENT_Z_POS_PRESS)
+        {
+            dir = JOG_DIR_POSITIVE;
+        }
+        else if (sys->nc_event == SYS_EVENT_Z_NEG_PRESS)
+        {
+            dir = JOG_DIR_NEGATIVE;
+        }
         start_jog_cont(&var_axis[AXIS_Z], &par_axis[AXIS_Z], dir, 0.001, var_chan[0].feed_override);
-    } else if (z_jog_ctrl.state == JOG_STATE_STOPPING) {
+    } 
+    else if (z_jog_ctrl.state == JOG_STATE_STOPPING)
+    {
         stop_jog_cont(&var_axis[AXIS_Z], 0.001, false);
-        if (fabs(var_axis[AXIS_Z].jog_tp.curr_vel - 0.0) < 1e-7) z_jog_ctrl.state = JOG_STATE_IDLE;
+        if (fabs(var_axis[AXIS_Z].jog_tp.curr_vel - 0.0) < SPEED_THRESHOLD) 
+        {
+            z_jog_ctrl.state = JOG_STATE_IDLE;
+        }
     }
 }
 
