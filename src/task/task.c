@@ -1,7 +1,9 @@
 #include "task.h"
 #include "eventdef.h"
-#include <stdlib.h>
 #include "spindle.h"
+#include "logapi.h"
+#include <alarmapi.h>
+#include <stdlib.h>
 
 static PMC_EVENT event_data;
 static GNC_RES task_handle_pmc_event(PMC_EVENT* event_data);
@@ -16,7 +18,10 @@ GNC_RES task_mq_init(){
 GNC_RES task_mq_proc()
 {
     if(event_queue_is_empty(event_queue)) return GNC_DATA_EMPTY;
-    if(event_queue_is_full(event_queue)) return GNC_OPERATOR_ERROR; // error!
+    if(event_queue_is_full(event_queue)){
+        setAlarm(ALARM_CH, ALARM_ERROR, 3);
+        return GNC_OPERATOR_ERROR; // error!
+    }
     // if(sys->nc_event != SYS_EVENT_NONE) return GNC_OPERATOR_WARNING;
     event_queue_pop(event_queue, &event_data);
     task_handle_pmc_event(&event_data);

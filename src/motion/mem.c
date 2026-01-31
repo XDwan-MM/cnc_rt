@@ -48,8 +48,6 @@ void handle_run_cmd(){
     interp_pinc = mem_cal_pinc();
     // end = clock();
     // sys->cpu_time_used = ((double) (end - start));
-    // 更新：【插补功能】张哲
-    // 根据插补类型计算插补点：快速G00、直线G01、圆弧G02|03……
     mem_cal_pos(interp_pinc);
     // interpolationExec(interp_pinc);
     // 更新速度参数
@@ -267,8 +265,7 @@ static bool mem_check_res(GNC_RES res){
         var_chan[0].is_moving = false;
         LOG_ERROR("alarm: %d", res);
         LOG_OUTPUT(ERROR, "current_mode: ESTOP !!!");
-        setAlarm(ALARM_CH,ALARM_ERROR,1);
-
+        setAlarm(ALARM_CH, ALARM_ERROR, 1);
         return false;
     }
 }

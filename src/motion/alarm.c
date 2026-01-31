@@ -1,4 +1,5 @@
 #include "alarm.h"
+#include <alarmapi.h>
 
 // 报警状态逻辑
 void handle_alarm_cmd(){
@@ -8,10 +9,11 @@ void handle_alarm_cmd(){
 
         case SYS_EVENT_RESET:
             // 如果急停未重置
-            if(var_chan[0].is_estop){
-                // LOG_OUTPUT(INFO, "please reset estop at first.");
-                break;
-            }
+            // if(var_chan[0].is_estop){
+            //     // LOG_OUTPUT(INFO, "please reset estop at first.");
+            //     break;
+            // }
+            cleanAllAlarm(ALARM_TYPE_ALL, ALARM_LEVEL_ALL);
             // 状态复位、数据重置
             tp_reset();
             // 切换到IDLE模式

@@ -1,6 +1,7 @@
 #include "parser.h"
 #include "global.h"
 #include "log.h"
+#include <alarmapi.h>
 
 STATIC void parser_macro_init();
 STATIC GNC_RES parser_handle_recieve(pmc_data* motion_data, NcItpState *itp_state, int *line_no);
@@ -142,6 +143,7 @@ GNC_RES parser_reading(){
     {
         printf("interpreter error: %d", error_no);
         LOG_OUTPUT(ERROR, "interpreter error: %d", error_no);   // 报警
+        setAlarm(ALARM_CH, ALARM_ERROR, 2);
         return GNC_CAL_ERROR;
     }
     if (parser_data->itp_datas.count <= 0)

@@ -1,7 +1,6 @@
 #include "emcmot.h"
 #include "global.h"
 #include "log.h"
-#include "alarmapi.h"
 #include "egear_ratio.h"
 #include "mcode_queue.h"
 #include "ferror_control.h"
@@ -18,6 +17,7 @@
 #include "stored_stroke_check.h"
 #include "parser.h"
 #include "hmisysapi.h"
+#include <alarmapi.h>
 #include <math.h>
 
 static void check_for_fault();
@@ -107,7 +107,6 @@ static void set_operating_mode() {
     if (var_chan[0].is_estop) {
         sys->current_mode = MODE_ALARM;
         var_chan[var_sys.active_chan].mode = sys->current_mode;
-        //        LOG_OUTPUT(ERROR, "ESTOP!!!");
         return;
     }
     // 如果没有切换，不进行操作
@@ -279,6 +278,11 @@ static void get_cmd_pos() {
 }
 
 static void check_for_fault() {
+    //　检查系统报警
+    int alarm_count = 0;
+    getAlarmCount(ALARM_TYPE_ALL, ALARM_LEVEL_ALL, &alarm_count);
+    if( alarm_count > 0) var_chan[0].is_estop;
+    // 检查跟随误差
     check_ferror_fault();
 }
 

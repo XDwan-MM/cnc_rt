@@ -155,7 +155,7 @@ static bool homing_check_res(GNC_RES res) {
             var_chan[0].is_homing = false;
             LOG_OUTPUT(ERROR, "alarm: %d", res);
             LOG_OUTPUT(ERROR, "current_mode: ESTOP !!!");
-            setAlarm(ALARM_CH,ALARM_ERROR,0);
+            setAlarm(ALARM_CH, ALARM_ERROR, 0);
             return false;
     }
 }
