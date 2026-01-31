@@ -79,488 +79,6 @@ static GNC_RES sys_init();
 static GNC_RES tp_init();
 static GNC_RES traj_data_init();
 
-static GNC_RES rt_var_init(){
-    var_data = (RT_VAR*)malloc(sizeof(RT_VAR));
-    if(var_data == NULL) return GNC_DATA_NULL;
-    var_axis = var_data->var_axis;
-    var_chan = var_data->var_channel;
-    var_sys = var_data->var_system;
-    // 初始化数据
-    var_sys.chan_num = 1;                        
-    // 通道数据
-    for(int i = 0; i < SYS_CHAN_NUM; i++){
-        var_chan[i].cmd_feedrate = 0;            // 通道合成指令速度
-        var_chan[i].act_feedrate = 0;            // 通道实际合成速度
-        var_chan[i].feed_override = 1.0;         // 进给倍率
-        var_chan[i].rapid_override = 1.0;        // 快速进给倍率
-        var_chan[i].spdl_override = 1.0;         // 主轴倍率
-        var_chan[i].is_homing = false;           // 回零中
-        var_chan[i].is_running = false;          // 运行中
-        var_chan[i].is_progend = false;          // 程序结束
-        var_chan[i].is_estop = false;            // 急停
-        var_chan[i].is_resetting = false;        // 复位中
-        var_chan[i].is_moving = false;           // 轴移动中
-    }
-    // 坐标轴数据
-    for(int i = 0; i < SYS_AXES_NUM; i++){
-        var_axis[i].cmd_vel = 0;            // X轴指令速度
-        var_axis[i].act_vel = 0;            // X轴实际速度
-        var_axis[i].cmd_pos = 0;            
-        var_axis[i].act_pos = 0;            
-    }
-    return GNC_OPERATOR_SUCCESS;
-}
-
-static GNC_RES shm_var_init(){
-    setVarSysDouble(VAR_SYS_CHAN_NUM, 1, 0);
-    setVarChanDouble(0, VAR_CHAN_CMD_FEEDRATE, 0, 0);
-    setVarChanDouble(0, VAR_CHAN_ACT_FEEDRATE, 0, 0);
-    setVarChanDouble(0, VAR_CHAN_FEED_OVERRIDE, 1.0, 0);
-    setVarChanDouble(0, VAR_CHAN_RAPID_OVERRIDE, 1.0, 0);
-    setVarChanInt(0, VAR_CHAN_IS_HOMING, 0, 0);
-    setVarChanInt(0, VAR_CHAN_IS_RUNNING, 0, 0);
-    setVarChanInt(0, VAR_CHAN_IS_PROGEND, 0, 0);
-    setVarChanInt(0, VAR_CHAN_IS_ESTOP, 0, 0);
-    setVarChanInt(0, VAR_CHAN_IS_RESETTING, 0, 0);
-    setVarChanInt(0, VAR_CHAN_IS_MOVING, 0, 0);
-    for(int i = 0; i < SYS_AXES_NUM; i++){
-        setVarAxisDouble(i, VAR_AXIS_CMD_VEL, 0, 0);
-        setVarAxisDouble(i, VAR_AXIS_ACT_VEL, 0, 0);
-        setVarAxisDouble(i, VAR_AXIS_CMD_POS, 0, 0);
-        setVarAxisDouble(i, VAR_AXIS_ACT_POS_EX, 0, 0);
-    }
-    return GNC_OPERATOR_SUCCESS;
-}
-
-GNC_RES shm_var_update(){
-    // 当前进给速度
-    setVarChanDouble(0, VAR_CHAN_ACT_FEEDRATE, var_chan[0].act_feedrate * TIME_MINUS_2_S, 0);
-    // 各轴位置
-    for(int i = 0; i < SYS_AXES_NUM; i++){
-        setVarAxisDouble(i, VAR_AXIS_ACT_POS_EX, var_axis[i].act_pos, 0);
-        setVarAxisDouble(i, VAR_AXIS_ACT_POS_WCS_EX, var_axis[i].act_pos_wcs, 0);
-        setVarAxisDouble(i, VAR_AXIS_LEFT_TOGO, var_axis[i].left_togo, 0);
-    }
-    //主轴转速
-    setVarChanDouble(0, VAR_CHAN_ACT_SPDL_SPEED, var_chan[0].act_spdl_speed, 0);
-    setVarChanDouble(0, VAR_CHAN_CMD_SPDL_SPEED, var_chan[0].cmd_spdl_speed, 0);
-    setVarChanDouble(0, VAR_CHAN_S_CODE, var_chan[0].cmd_spdl_speed, 0);
-    for(int i = 0; i < SYS_CHAN_NUM; i++){
-        // 当前模式
-        setVarChanInt(i, VAR_CHAN_MODE, var_chan[i].mode, 0);
-        // printf("var_chan[i].mode%d %d \n",var_chan[i].mode,i);
-        // 进给倍率
-        setVarChanDouble(i, VAR_CHAN_FEED_OVERRIDE, var_chan[i].feed_override * 100, 0);
-        // 快速倍率
-        setVarChanDouble(i, VAR_CHAN_RAPID_OVERRIDE, var_chan[i].rapid_override * 100, 0);
-        // 主轴倍率
-        setVarChanDouble(i, VAR_CHAN_SPDL_OVERRIDE, var_chan[i].spdl_override * 100, 0);
-        // 复位
-        setVarChanInt(i, VAR_CHAN_IS_RESETTING, var_chan[i].is_resetting, 0);
-        // 急停
-        setVarChanInt(i, VAR_CHAN_IS_ESTOP, var_chan[i].is_estop, 0);
-        // 回零
-        setVarChanInt(i, VAR_CHAN_IS_HOMING, var_chan[i].is_homing, 0);
-        // 运行中
-        setVarChanInt(i, VAR_CHAN_IS_RUNNING, var_chan[i].is_running == 0, 0);
-        // 移动中
-        setVarChanInt(i, VAR_CHAN_IS_MOVING, var_chan[i].is_moving, 0);
-    }
-}
-
-// 更新 var 程序相关变量
-GNC_RES shm_var_update_prog(){
-    // 运行模组
-    VarUnion set_modal;
-    set_modal.type = 0;
-    set_modal.value.i = cycle_tp->plan_block->mode;
-    setVarChanValue(0, VAR_CHAN_MODAL, 0, &set_modal, 0);
-    // 运行行号
-    setVarChanInt(0, VAR_CHAN_RUN_ROW, cycle_tp->plan_block->line_number, 0);
-    return GNC_OPERATOR_SUCCESS;
-}
-
-static GNC_RES rt_par_init(){
-    par_data = (PAR*)malloc(sizeof(PAR));
-    if(par_data == NULL) return GNC_DATA_NULL;
-    par_ncu = par_data->par_ncu;            // NC 参数
-    par_mac = par_data->par_mac;            // 机床用户参数
-    par_cfg = par_data->par_cfg;            // 设备接口参数
-    par_table = par_data->par_table;        //（刀具和刀库）数据表参数
-    par_chan = par_data->par_chan;          // 通道参数
-    par_axis = par_data->par_axis;          // 坐标轴参数
-    par_acmp = par_data->par_acmp;          // 误差补偿参数
-    return GNC_OPERATOR_SUCCESS;
-}
-
-static GNC_RES shm_par_init(){
-    ParamUnit par_union = {};
-    // NC参数
-    getParData(PARAMAN_FILE_NCU, 0, PAR_NCU_CYCLE, &par_union);
-    // 插补周期1ms
-    par_ncu.cycle = (double)par_union.value.val_uint / TIME_US_2_S;
-    printf("par_ncu.cycle%f\n",par_ncu.cycle);
-    // 通道参数
-    for(int i = 0; i < SYS_CHAN_NUM; i++){
-        getParData(PARAMAN_FILE_CHAN, i, PAR_CH_DEFAULT_F, &par_union);
-        par_chan[i].default_feed = par_union.value.val_real / TIME_MINUS_2_S;            // 通道缺省进给速度
-        getParData(PARAMAN_FILE_CHAN, i, PAR_CH_DRYRUN_SPD, &par_union);
-        par_chan[i].dryrun_spd = par_union.value.val_real / TIME_MINUS_2_S;              // 空运行进给速度
-        getParData(PARAMAN_FILE_CHAN, i, PAR_CH_VPLAN_MODE, &par_union);
-        par_chan[i].vplan_mode = par_union.value.val_uint;              // 速度规划模式 0:T_SHAPE
-        printf("par_chan[i].vplan_mode%d\n",par_chan[i].vplan_mode);
-
-        getParData(PARAMAN_FILE_CHAN, i, PAR_CH_MAX_ECEN_ACC, &par_union);
-        par_chan[i].max_tang_acc = par_union.value.val_real;            // 最大向心加速度
-        getParData(PARAMAN_FILE_CHAN, i, PAR_CH_LOOKAHEAD_NUM, &par_union);
-        par_chan[i].lookahead_num = par_union.value.val_uint;           // 速度规划前瞻段数
-    }
-    // 坐标轴参数
-    par_axis[AXIS_X].name[0] = 'X';               // 轴名
-    getParData(PARAMAN_FILE_AXIS, 0, PAR_AX_PLMT, &par_union);
-    par_axis[AXIS_X].plmt = par_union.value.val_real;  // X轴正软极限
-    getParData(PARAMAN_FILE_AXIS, 0, PAR_AX_NLMT, &par_union);
-    par_axis[AXIS_X].nlmt = par_union.value.val_real;  // X轴负软极限
-    getParData(PARAMAN_FILE_AXIS, 0, PAR_AX_HOME_WAY, &par_union);
-    par_axis[AXIS_X].home_way = par_union.value.val_uint;             // X轴回参考点方式(0:绝对式 1:相对式)
-    getParData(PARAMAN_FILE_AXIS, 0, PAR_AX_HOME_DIR, &par_union);
-    par_axis[AXIS_X].home_crds = par_union.value.val_real;            // X轴零点位置
-    getParData(PARAMAN_FILE_AXIS, 0, PAR_AX_HOME_CRDS, &par_union);
-    par_axis[AXIS_X].home_dir = par_union.value.val_uint;             // X轴回参考点方向(0:正向 1:负向)
-    getParData(PARAMAN_FILE_AXIS, 0, PAR_AX_RAPID_SPD, &par_union);
-    par_axis[AXIS_X].rapid_vel = par_union.value.val_real / TIME_MINUS_2_S;            // X轴快移速度 unit:mm/s
-    getParData(PARAMAN_FILE_AXIS, 0, PAR_AX_RAPID_ACC, &par_union);
-    par_axis[AXIS_X].rapid_acc = par_union.value.val_real;            // X轴快移加速度
-    getParData(PARAMAN_FILE_AXIS, 0, PAR_AX_RAPID_JK, &par_union);
-    par_axis[AXIS_X].rapid_jerk = par_union.value.val_real;           // X轴快移捷度
-    getParData(PARAMAN_FILE_AXIS, 0, PAR_AX_FEED_SPD, &par_union);
-    par_axis[AXIS_X].feed_vel = par_union.value.val_real / TIME_MINUS_2_S;             // X轴最高进给速度
-    getParData(PARAMAN_FILE_AXIS, 0, PAR_AX_FEED_ACC, &par_union);
-    par_axis[AXIS_X].feed_acc = par_union.value.val_real;             // X轴进给加速度
-    printf("par_axis[AXIS_X].feed_acc%f feed_vel%f\n",par_axis[AXIS_X].feed_acc,par_axis[AXIS_X].feed_vel);
-    getParData(PARAMAN_FILE_AXIS, 0, PAR_AX_FEED_JK, &par_union);
-    par_axis[AXIS_X].feed_jerk = par_union.value.val_real;            // X轴进给捷度
-    getParData(PARAMAN_FILE_AXIS, 0, PAR_AX_ATEETH, &par_union);
-    par_axis[AXIS_X].ateeth = par_union.value.val_uint;
-    getParData(PARAMAN_FILE_AXIS, 0, PAR_AX_MTEETH, &par_union);
-    par_axis[AXIS_X].mteeth = par_union.value.val_uint;
-    getParData(PARAMAN_FILE_AXIS, 0, PAR_AX_PITCH, &par_union);
-    par_axis[AXIS_X].pitch = par_union.value.val_uint;
-    getParData(PARAMAN_FILE_AXIS, 0, PAR_AX_MT_PPR, &par_union);
-    par_axis[AXIS_X].mt_ppr = par_union.value.val_uint;
-    getParData(PARAMAN_FILE_AXIS, 0, PAR_AX_MPG_SPD, &par_union);
-    par_axis[AXIS_X].mpg_spd = par_union.value.val_real;
-    par_axis[AXIS_X].pos_tol = 0.01;              // X轴定位允差
-
-    //　以下 wcf maintain 2026.1.21
-    getParData(PARAMAN_FILE_AXIS, 0, PAR_AX_PM_MUNIT, &par_union);
-    par_axis[AXIS_X].pm_munit = par_union.value.val_int;             // X轴电子齿轮比分子 (HMI unit: um | default:16000um)
-    getParData(PARAMAN_FILE_AXIS, 0, PAR_AX_PM_PULSE, &par_union);
-    par_axis[AXIS_X].pm_pulse = par_union.value.val_int;             // X轴电子齿轮比分母 (HMI unit: 脉冲 | default:100000)
-    getParData(PARAMAN_FILE_AXIS, 0, PAR_AX_ENC_OFF, &par_union);
-    par_axis[AXIS_X].enc_off = par_union.value.val_real;              // X轴编码器反馈偏置量 (HMI unit: mm | default:)
-    printf("par_axis[AXIS_X].enc_off%f\n",par_axis[AXIS_X].enc_off);
-    getParData(PARAMAN_FILE_AXIS, 0, PAR_AX_IS_SET_HOME_OFFSET, &par_union);
-    par_axis[AXIS_X].is_set_home_offset = par_union.value.val_bool;   // X轴设置编码器偏置使能 (HMI | default: 0)
-    printf("par_axis[AXIS_X].is_set_home_offset %d\n", par_axis[AXIS_X].is_set_home_offset);
-    getParData(PARAMAN_FILE_AXIS, 0, PAR_AX_JOG_LOWSPD, &par_union);
-    par_axis[AXIS_X].jog_lowspd = par_union.value.val_real;           // X轴慢速点动速度 (HMI unit: mm/min | default:18000mm/min)
-    getParData(PARAMAN_FILE_AXIS, 0, PAR_AX_JOG_FASTSPD, &par_union);
-    par_axis[AXIS_X].jog_fastspd = par_union.value.val_real;          // X轴快速点动速度 (HMI unit: mm/min | default:36000mm/min)
-    getParData(PARAMAN_FILE_AXIS, 0, PAR_AX_VEL_LIMIT, &par_union);
-    par_axis[AXIS_X].vel_limit = par_union.value.val_real;            // X轴最大速度上限 (HMI unit: mm/min | default:48000mm/min)
-    getParData(PARAMAN_FILE_AXIS, 0, PAR_AX_MAX_FERROR, &par_union);
-    par_axis[AXIS_X].max_ferror = par_union.value.val_real;           // X轴最大跟随误差 (HMI unit: mm | default:0.01mm)
-    getParData(PARAMAN_FILE_AXIS, 0, PAR_AX_MIN_FERROR, &par_union);
-    par_axis[AXIS_X].min_ferror = par_union.value.val_real;           // X轴最小跟随误差 (HMI unit: mm | default:0.005mm)
-    //------------------------------------------------------//
-    par_axis[AXIS_Y].name[0] = 'Y';               // 轴名
-    getParData(PARAMAN_FILE_AXIS, 1, PAR_AX_PLMT, &par_union);
-    par_axis[AXIS_Y].plmt = par_union.value.val_real;                // Y轴正软极限
-    getParData(PARAMAN_FILE_AXIS, 1, PAR_AX_NLMT, &par_union);
-    par_axis[AXIS_Y].nlmt = par_union.value.val_real;               // Y轴负软极限
-    getParData(PARAMAN_FILE_AXIS, 1, PAR_AX_HOME_WAY, &par_union);
-    par_axis[AXIS_Y].home_way = par_union.value.val_uint;                // Y轴回参考点方式(0:绝对式 1:相对式)
-    getParData(PARAMAN_FILE_AXIS, 1, PAR_AX_HOME_DIR, &par_union);
-    par_axis[AXIS_Y].home_crds = par_union.value.val_real;             // Y轴零点位置
-    getParData(PARAMAN_FILE_AXIS, 1, PAR_AX_HOME_CRDS, &par_union);
-    par_axis[AXIS_Y].home_dir = par_union.value.val_uint;                // Y轴回参考点方向(0:正向 1:负向)
-    getParData(PARAMAN_FILE_AXIS, 1, PAR_AX_RAPID_SPD, &par_union);
-    par_axis[AXIS_Y].rapid_vel = par_union.value.val_real / TIME_MINUS_2_S;            // Y轴快移速度 unit:mm/s
-    getParData(PARAMAN_FILE_AXIS, 1, PAR_AX_RAPID_ACC, &par_union);
-    par_axis[AXIS_Y].rapid_acc = par_union.value.val_real;            // Y轴快移加速度
-    getParData(PARAMAN_FILE_AXIS, 1, PAR_AX_RAPID_JK, &par_union);
-    par_axis[AXIS_Y].rapid_jerk = par_union.value.val_real;          // Y轴快移捷度
-    getParData(PARAMAN_FILE_AXIS, 1, PAR_AX_FEED_SPD, &par_union);
-    par_axis[AXIS_Y].feed_vel = par_union.value.val_real / TIME_MINUS_2_S;              // Y轴最高进给速度
-    getParData(PARAMAN_FILE_AXIS, 1, PAR_AX_FEED_ACC, &par_union);
-    par_axis[AXIS_Y].feed_acc = par_union.value.val_real;              // Y轴进给加速度
-    getParData(PARAMAN_FILE_AXIS, 1, PAR_AX_FEED_JK, &par_union);
-    par_axis[AXIS_Y].feed_jerk = par_union.value.val_real;            // Y轴进给捷度
-    getParData(PARAMAN_FILE_AXIS, 1, PAR_AX_ATEETH, &par_union);
-    par_axis[AXIS_Y].ateeth = par_union.value.val_uint;
-    getParData(PARAMAN_FILE_AXIS, 1, PAR_AX_MTEETH, &par_union);
-    par_axis[AXIS_Y].mteeth = par_union.value.val_uint;
-    getParData(PARAMAN_FILE_AXIS, 1, PAR_AX_PITCH, &par_union);
-    par_axis[AXIS_Y].pitch = par_union.value.val_uint;
-    getParData(PARAMAN_FILE_AXIS, 1, PAR_AX_MT_PPR, &par_union);
-    par_axis[AXIS_Y].mt_ppr = par_union.value.val_uint;
-    getParData(PARAMAN_FILE_AXIS, 1, PAR_AX_MPG_SPD, &par_union);
-    par_axis[AXIS_Y].mpg_spd = par_union.value.val_real;
-    par_axis[AXIS_Y].pos_tol = 0.01;              // Y轴定位允差
-
-    //　以下 wcf maintain 2026.1.21
-    getParData(PARAMAN_FILE_AXIS, 1, PAR_AX_PM_MUNIT, &par_union);
-    par_axis[AXIS_Y].pm_munit = par_union.value.val_int;             // Y轴电子齿轮比分子 (HMI unit: um | default:16000um)
-    getParData(PARAMAN_FILE_AXIS, 1, PAR_AX_PM_PULSE, &par_union);
-    par_axis[AXIS_Y].pm_pulse = par_union.value.val_int;             // Y轴电子齿轮比分母 (HMI unit: 脉冲 | default:100000)
-    getParData(PARAMAN_FILE_AXIS, 1, PAR_AX_ENC_OFF, &par_union);
-    par_axis[AXIS_Y].enc_off = par_union.value.val_real;              // Y轴编码器反馈偏置量 (HMI unit: mm | default:)
-    printf("par_axis[AXIS_Y].enc_off%f\n",par_axis[AXIS_Y].enc_off);
-    getParData(PARAMAN_FILE_AXIS, 1, PAR_AX_IS_SET_HOME_OFFSET, &par_union);
-    par_axis[AXIS_Y].is_set_home_offset = par_union.value.val_bool;   // Y轴设置编码器偏置使能 (HMI | default: 0)
-    printf("par_axis[AXIS_Y].is_set_home_offset %d\n", par_axis[AXIS_Y].is_set_home_offset);
-    getParData(PARAMAN_FILE_AXIS, 1, PAR_AX_JOG_LOWSPD, &par_union);
-    par_axis[AXIS_Y].jog_lowspd = par_union.value.val_real;           // Y轴慢速点动速度 (HMI unit: mm/min | default:18000mm/min)
-    getParData(PARAMAN_FILE_AXIS, 1, PAR_AX_JOG_FASTSPD, &par_union);
-    par_axis[AXIS_Y].jog_fastspd = par_union.value.val_real;          // Y轴快速点动速度 (HMI unit: mm/min | default:36000mm/min)
-    getParData(PARAMAN_FILE_AXIS, 1, PAR_AX_VEL_LIMIT, &par_union);
-    par_axis[AXIS_Y].vel_limit = par_union.value.val_real;            // Y轴最大速度上限 (HMI unit: mm/min | default:48000mm/min)
-    getParData(PARAMAN_FILE_AXIS, 1, PAR_AX_MAX_FERROR, &par_union);
-    par_axis[AXIS_Y].max_ferror = par_union.value.val_real;           // Y轴最大跟随误差 (HMI unit: mm | default:0.01mm)
-    getParData(PARAMAN_FILE_AXIS, 1, PAR_AX_MIN_FERROR, &par_union);
-    par_axis[AXIS_Y].min_ferror = par_union.value.val_real;           // Y轴最小跟随误差 (HMI unit: mm | default:0.005mm)
-    //------------------------------------------------------//
-    par_axis[AXIS_Z].name[0] = 'Z';               // 轴名
-    getParData(PARAMAN_FILE_AXIS, 2, PAR_AX_PLMT, &par_union);
-    par_axis[AXIS_Z].plmt = par_union.value.val_real;                // Z轴正软极限
-    getParData(PARAMAN_FILE_AXIS, 2, PAR_AX_NLMT, &par_union);
-    par_axis[AXIS_Z].nlmt = par_union.value.val_real;               // Z轴负软极限
-    getParData(PARAMAN_FILE_AXIS, 2, PAR_AX_HOME_WAY, &par_union);
-    par_axis[AXIS_Z].home_way = par_union.value.val_uint;                // Z轴回参考点方式(0:绝对式 1:相对式)
-    getParData(PARAMAN_FILE_AXIS, 2, PAR_AX_HOME_DIR, &par_union);
-    par_axis[AXIS_Z].home_crds = par_union.value.val_real;             // Z轴零点位置
-    getParData(PARAMAN_FILE_AXIS, 2, PAR_AX_HOME_CRDS, &par_union);
-    par_axis[AXIS_Z].home_dir = par_union.value.val_uint;                // Z轴回参考点方向(0:正向 1:负向)
-    getParData(PARAMAN_FILE_AXIS, 2, PAR_AX_RAPID_SPD, &par_union);
-    par_axis[AXIS_Z].rapid_vel = par_union.value.val_real / TIME_MINUS_2_S;            // Z轴快移速度 unit:mm/s
-    getParData(PARAMAN_FILE_AXIS, 2, PAR_AX_RAPID_ACC, &par_union);
-    par_axis[AXIS_Z].rapid_acc = par_union.value.val_real;            // Z轴快移加速度
-    getParData(PARAMAN_FILE_AXIS, 2, PAR_AX_RAPID_JK, &par_union);
-    par_axis[AXIS_Z].rapid_jerk = par_union.value.val_real;          // Z轴快移捷度
-    getParData(PARAMAN_FILE_AXIS, 2, PAR_AX_FEED_SPD, &par_union);
-    par_axis[AXIS_Z].feed_vel = par_union.value.val_real / TIME_MINUS_2_S;              // Z轴最高进给速度
-    getParData(PARAMAN_FILE_AXIS, 2, PAR_AX_FEED_ACC, &par_union);
-    par_axis[AXIS_Z].feed_acc = par_union.value.val_real;              // Z轴进给加速度
-    getParData(PARAMAN_FILE_AXIS, 2, PAR_AX_FEED_JK, &par_union);
-    par_axis[AXIS_Z].feed_jerk = par_union.value.val_real;            // Z轴进给捷度
-    getParData(PARAMAN_FILE_AXIS, 2, PAR_AX_ATEETH, &par_union);
-    par_axis[AXIS_Z].ateeth = par_union.value.val_uint;
-    getParData(PARAMAN_FILE_AXIS, 2, PAR_AX_MTEETH, &par_union);
-    par_axis[AXIS_Z].mteeth = par_union.value.val_uint;
-    getParData(PARAMAN_FILE_AXIS, 2, PAR_AX_PITCH, &par_union);
-    par_axis[AXIS_Z].pitch = par_union.value.val_uint;
-    getParData(PARAMAN_FILE_AXIS, 2, PAR_AX_MT_PPR, &par_union);
-    par_axis[AXIS_Z].mt_ppr = par_union.value.val_uint;
-    getParData(PARAMAN_FILE_AXIS, 2, PAR_AX_MPG_SPD, &par_union);
-    par_axis[AXIS_Z].mpg_spd = par_union.value.val_real;
-    par_axis[AXIS_Z].pos_tol = 0.01;              // Z轴定位允差
-
-    //　以下 wcf maintain 2026.1.21
-    getParData(PARAMAN_FILE_AXIS, 2, PAR_AX_PM_MUNIT, &par_union);
-    par_axis[AXIS_Z].pm_munit = par_union.value.val_int;             // Z轴电子齿轮比分子 (HMI unit: um | default:16000um)
-    getParData(PARAMAN_FILE_AXIS, 2, PAR_AX_PM_PULSE, &par_union);
-    par_axis[AXIS_Z].pm_pulse = par_union.value.val_int;             // Z轴电子齿轮比分母 (HMI unit: 脉冲 | default:100000)
-    getParData(PARAMAN_FILE_AXIS, 2, PAR_AX_ENC_OFF, &par_union);
-    par_axis[AXIS_Z].enc_off = par_union.value.val_real;              // Z轴编码器反馈偏置量 (HMI unit: mm | default:)
-    printf("par_axis[AXIS_Z].enc_off%f\n",par_axis[AXIS_Z].enc_off);
-    getParData(PARAMAN_FILE_AXIS, 2, PAR_AX_IS_SET_HOME_OFFSET, &par_union);
-    par_axis[AXIS_Z].is_set_home_offset = par_union.value.val_bool;   // Z轴设置编码器偏置使能 (HMI | default: 0)
-    printf("par_axis[AXIS_Z].is_set_home_offset %d\n", par_axis[AXIS_Z].is_set_home_offset);
-    getParData(PARAMAN_FILE_AXIS, 2, PAR_AX_JOG_LOWSPD, &par_union);
-    par_axis[AXIS_Z].jog_lowspd = par_union.value.val_real;           // Z轴慢速点动速度 (HMI unit: mm/min | default:18000mm/min)
-    getParData(PARAMAN_FILE_AXIS, 2, PAR_AX_JOG_FASTSPD, &par_union);
-    par_axis[AXIS_Z].jog_fastspd = par_union.value.val_real;          // Z轴快速点动速度 (HMI unit: mm/min | default:36000mm/min)
-    getParData(PARAMAN_FILE_AXIS, 2, PAR_AX_VEL_LIMIT, &par_union);
-    par_axis[AXIS_Z].vel_limit = par_union.value.val_real;            // Z轴最大速度上限 (HMI unit: mm/min | default: 48000mm/min)
-    getParData(PARAMAN_FILE_AXIS, 2, PAR_AX_MAX_FERROR, &par_union);
-    par_axis[AXIS_Z].max_ferror = par_union.value.val_real;           // Z轴最大跟随误差 (HMI unit: mm | default:0.01mm)
-    getParData(PARAMAN_FILE_AXIS, 2, PAR_AX_MIN_FERROR, &par_union);
-    par_axis[AXIS_Z].min_ferror = par_union.value.val_real;           // Z轴最小跟随误差 (HMI unit: mm | default:0.005mm)
-    //------------------------------------------------------//
-    par_axis[AXIS_SP].name[0] = 'SP';               // 轴名
-    getParData(PARAMAN_FILE_AXIS, 3, PAR_AX_DEFAULT_S, &par_union);
-    par_axis[AXIS_SP].default_s = par_union.value.val_real;                // sp缺省速度
-    getParData(PARAMAN_FILE_AXIS, 3, PAR_AX_FEED_ACC, &par_union);
-    par_axis[AXIS_SP].feed_acc = par_union.value.val_real;
-    getParData(PARAMAN_FILE_AXIS, 3, PAR_SPDL_MAX_SPEED, &par_union);
-    par_axis[AXIS_SP].spdl_max_speed = par_union.value.val_real;
-
-    // 误差补偿轴参数
-    //---------------------补偿轴 X轴------------------------//
-    getParData(PARAMAN_FILE_ACMP, 0, PAR_CMP_PITCH_TYPE, &par_union);
-    par_acmp[AXIS_X].pitch_comp_type = par_union.value.val_int; //螺距误差补偿类型
-    // printf("par_acmp[AXIS_X].pitch_comp_type %d\n", par_acmp[AXIS_X].pitch_comp_type);
-    getParData(PARAMAN_FILE_ACMP, 0, PAR_CMP_PITCH_START, &par_union);
-    par_acmp[AXIS_X].pitch_comp_start_pos = par_union.value.val_real; //螺距误差补偿起点坐标
-    // printf("par_acmp[AXIS_X].pitch_comp_start_pos %f\n", par_acmp[AXIS_X].pitch_comp_start_pos);
-    getParData(PARAMAN_FILE_ACMP, 0, PAR_CMP_PITCH_NUM, &par_union);
-    par_acmp[AXIS_X].pitch_comp_num = par_union.value.val_int; //螺距误差补偿点数
-    // printf("par_acmp[AXIS_X].pitch_comp_num %d\n", par_acmp[AXIS_X].pitch_comp_num);
-    getParData(PARAMAN_FILE_ACMP, 0, PAR_CMP_PITCH_STEP, &par_union);
-    par_acmp[AXIS_X].pitch_comp_step = par_union.value.val_real; //螺距误差补偿点间距
-    // printf("par_acmp[AXIS_X].pitch_comp_step %f\n", par_acmp[AXIS_X].pitch_comp_step);
-    getParData(PARAMAN_FILE_ACMP, 0, PAR_CMP_PITCH_MODULO, &par_union);
-    par_acmp[AXIS_X].pitch_comp_modulo = par_union.value.val_bool; //螺距误差取模补偿使能
-    // printf("par_acmp[AXIS_X].pitch_comp_modulo %d\n", par_acmp[AXIS_X].pitch_comp_modulo);
-    getParData(PARAMAN_FILE_ACMP, 0, PAR_CMP_PITCH_FACTOR, &par_union);
-    par_acmp[AXIS_X].pitch_comp_factor = par_union.value.val_real; //螺距误差补偿倍率
-    // printf("par_acmp[AXIS_X].pitch_comp_factor %f\n", par_acmp[AXIS_X].pitch_comp_factor);
-    getParData(PARAMAN_FILE_ACMP, 0, PAR_CMP_PITCH_TABLE, &par_union);
-    par_acmp[AXIS_X].pitch_comp_table = par_union.value.val_int; //螺距误差补偿表起始参数号
-    // printf("par_acmp[AXIS_X].pitch_comp_table %d\n", par_acmp[AXIS_X].pitch_comp_table);
-
-    getParData(PARAMAN_FILE_ACMP, 0, PAR_CMP_SQU1_ENABLE, &par_union);
-    par_acmp[AXIS_X].perp1_comp_enable = par_union.value.val_bool; //第1项垂直度补偿使能
-    // printf("par_acmp[AXIS_X].perp1_comp_enable %d\n", par_acmp[AXIS_X].perp1_comp_enable);
-    getParData(PARAMAN_FILE_ACMP, 0, PAR_CMP_SQU1_INPUT_AX, &par_union);
-    par_acmp[AXIS_X].perp1_comp_input_ax = par_union.value.val_int; //第1项垂直度补偿基准轴号
-    // printf("par_acmp[AXIS_X].perp1_comp_input_ax %d\n", par_acmp[AXIS_X].perp1_comp_input_ax);
-    getParData(PARAMAN_FILE_ACMP, 0, PAR_CMP_SQU1_REFN, &par_union);
-    par_acmp[AXIS_X].perp1_comp_refn = par_union.value.val_real; //第1项垂直度补偿参考点坐标 (单位：mm)
-    // printf("par_acmp[AXIS_X].perp1_comp_refn %f\n", par_acmp[AXIS_X].perp1_comp_refn);
-    getParData(PARAMAN_FILE_ACMP, 0, PAR_CMP_SQU1_ANG, &par_union);
-    par_acmp[AXIS_X].perp1_comp_ang = par_union.value.val_real; //第1项垂直度补偿角度 (单位：um/m)
-    // printf("par_acmp[AXIS_X].perp1_comp_ang %f\n", par_acmp[AXIS_X].perp1_comp_ang);
-
-    getParData(PARAMAN_FILE_ACMP, 0, PAR_CMP_SQU2_ENABLE, &par_union);
-    par_acmp[AXIS_X].perp2_comp_enable = par_union.value.val_bool; //第2项垂直度补偿使能
-    // printf("par_acmp[AXIS_X].perp2_comp_enable %d\n", par_acmp[AXIS_X].perp2_comp_enable);
-    getParData(PARAMAN_FILE_ACMP, 0, PAR_CMP_SQU2_INPUT_AX, &par_union);
-    par_acmp[AXIS_X].perp2_comp_input_ax = par_union.value.val_int; //第2项垂直度补偿基准轴号
-    // printf("par_acmp[AXIS_X].perp2_comp_input_ax %d\n", par_acmp[AXIS_X].perp2_comp_input_ax);
-    getParData(PARAMAN_FILE_ACMP, 0, PAR_CMP_SQU2_REFN, &par_union);
-    par_acmp[AXIS_X].perp2_comp_refn = par_union.value.val_real; //第2项垂直度补偿参考点坐标 (单位：mm)
-    // printf("par_acmp[AXIS_X].perp2_comp_refn %f\n", par_acmp[AXIS_X].perp2_comp_refn);
-    getParData(PARAMAN_FILE_ACMP, 0, PAR_CMP_SQU2_ANG, &par_union);
-    par_acmp[AXIS_X].perp2_comp_ang = par_union.value.val_real; //第2项垂直度补偿角度 (单位：um/m)
-    // printf("par_acmp[AXIS_X].perp2_comp_ang %f\n", par_acmp[AXIS_X].perp2_comp_ang);
-
-    //---------------------补偿轴 Y轴------------------------//
-    getParData(PARAMAN_FILE_ACMP, 1, PAR_CMP_PITCH_TYPE, &par_union);
-    par_acmp[AXIS_Y].pitch_comp_type = par_union.value.val_int; //螺距误差补偿类型
-    // printf("par_acmp[AXIS_Y].pitch_comp_type %d\n", par_acmp[AXIS_Y].pitch_comp_type);
-    getParData(PARAMAN_FILE_ACMP, 1, PAR_CMP_PITCH_START, &par_union);
-    par_acmp[AXIS_Y].pitch_comp_start_pos = par_union.value.val_real; //螺距误差补偿起点坐标
-    // printf("par_acmp[AXIS_Y].pitch_comp_start_pos %f\n", par_acmp[AXIS_Y].pitch_comp_start_pos);
-    getParData(PARAMAN_FILE_ACMP, 1, PAR_CMP_PITCH_NUM, &par_union);
-    par_acmp[AXIS_Y].pitch_comp_num = par_union.value.val_int; //螺距误差补偿点数
-    // printf("par_acmp[AXIS_Y].pitch_comp_num %d\n", par_acmp[AXIS_Y].pitch_comp_num);
-    getParData(PARAMAN_FILE_ACMP, 1, PAR_CMP_PITCH_STEP, &par_union);
-    par_acmp[AXIS_Y].pitch_comp_step = par_union.value.val_real; //螺距误差补偿点间距
-    // printf("par_acmp[AXIS_Y].pitch_comp_step %f\n", par_acmp[AXIS_Y].pitch_comp_step);
-    getParData(PARAMAN_FILE_ACMP, 1, PAR_CMP_PITCH_MODULO, &par_union);
-    par_acmp[AXIS_Y].pitch_comp_modulo = par_union.value.val_bool; //螺距误差取模补偿使能
-    // printf("par_acmp[AXIS_Y].pitch_comp_modulo %d\n", par_acmp[AXIS_Y].pitch_comp_modulo);
-    getParData(PARAMAN_FILE_ACMP, 1, PAR_CMP_PITCH_FACTOR, &par_union);
-    par_acmp[AXIS_Y].pitch_comp_factor = par_union.value.val_real; //螺距误差补偿倍率
-    // printf("par_acmp[AXIS_Y].pitch_comp_factor %f\n", par_acmp[AXIS_Y].pitch_comp_factor);
-    getParData(PARAMAN_FILE_ACMP, 1, PAR_CMP_PITCH_TABLE, &par_union);
-    par_acmp[AXIS_Y].pitch_comp_table = par_union.value.val_int; //螺距误差补偿表起始参数号
-    // printf("par_acmp[AXIS_Y].pitch_comp_table %d\n", par_acmp[AXIS_Y].pitch_comp_table);
-
-    getParData(PARAMAN_FILE_ACMP, 1, PAR_CMP_SQU1_ENABLE, &par_union);
-    par_acmp[AXIS_Y].perp1_comp_enable = par_union.value.val_bool; //第1项垂直度补偿使能
-    // printf("par_acmp[AXIS_Y].perp1_comp_enable %d\n", par_acmp[AXIS_Y].perp1_comp_enable);
-    getParData(PARAMAN_FILE_ACMP, 1, PAR_CMP_SQU1_INPUT_AX, &par_union);
-    par_acmp[AXIS_Y].perp1_comp_input_ax = par_union.value.val_int; //第1项垂直度补偿基准轴号
-    // printf("par_acmp[AXIS_Y].perp1_comp_input_ax %d\n", par_acmp[AXIS_Y].perp1_comp_input_ax);
-    getParData(PARAMAN_FILE_ACMP, 1, PAR_CMP_SQU1_REFN, &par_union);
-    par_acmp[AXIS_Y].perp1_comp_refn = par_union.value.val_real; //第1项垂直度补偿参考点坐标 (单位：mm)
-    // printf("par_acmp[AXIS_Y].perp1_comp_refn %f\n", par_acmp[AXIS_Y].perp1_comp_refn);
-    getParData(PARAMAN_FILE_ACMP, 1, PAR_CMP_SQU1_ANG, &par_union);
-    par_acmp[AXIS_Y].perp1_comp_ang = par_union.value.val_real; //第1项垂直度补偿角度 (单位：um/m)
-    // printf("par_acmp[AXIS_Y].perp1_comp_ang %f\n", par_acmp[AXIS_Y].perp1_comp_ang);
-
-    getParData(PARAMAN_FILE_ACMP, 1, PAR_CMP_SQU2_ENABLE, &par_union);
-    par_acmp[AXIS_Y].perp2_comp_enable = par_union.value.val_bool; //第2项垂直度补偿使能
-    // printf("par_acmp[AXIS_Y].perp2_comp_enable %d\n", par_acmp[AXIS_Y].perp2_comp_enable);
-    getParData(PARAMAN_FILE_ACMP, 1, PAR_CMP_SQU2_INPUT_AX, &par_union);
-    par_acmp[AXIS_Y].perp2_comp_input_ax = par_union.value.val_int; //第2项垂直度补偿基准轴号
-    // printf("par_acmp[AXIS_Y].perp2_comp_input_ax %d\n", par_acmp[AXIS_Y].perp2_comp_input_ax);
-    getParData(PARAMAN_FILE_ACMP, 1, PAR_CMP_SQU2_REFN, &par_union);
-    par_acmp[AXIS_Y].perp2_comp_refn = par_union.value.val_real; //第2项垂直度补偿参考点坐标 (单位：mm)
-    // printf("par_acmp[AXIS_Y].perp2_comp_refn %f\n", par_acmp[AXIS_Y].perp2_comp_refn);
-    getParData(PARAMAN_FILE_ACMP, 1, PAR_CMP_SQU2_ANG, &par_union);
-    par_acmp[AXIS_Y].perp2_comp_ang = par_union.value.val_real; //第2项垂直度补偿角度 (单位：um/m)
-    // printf("par_acmp[AXIS_Y].perp2_comp_ang %f\n", par_acmp[AXIS_Y].perp2_comp_ang);
-
-    //---------------------补偿轴 Z轴------------------------//
-    getParData(PARAMAN_FILE_ACMP, 2, PAR_CMP_PITCH_TYPE, &par_union);
-    par_acmp[AXIS_Z].pitch_comp_type = par_union.value.val_int; //螺距误差补偿类型
-    // printf("par_acmp[AXIS_Z].pitch_comp_type %d\n", par_acmp[AXIS_Z].pitch_comp_type);
-    getParData(PARAMAN_FILE_ACMP, 2, PAR_CMP_PITCH_START, &par_union);
-    par_acmp[AXIS_Z].pitch_comp_start_pos = par_union.value.val_real; //螺距误差补偿起点坐标
-    // printf("par_acmp[AXIS_Z].pitch_comp_start_pos %f\n", par_acmp[AXIS_Z].pitch_comp_start_pos);
-    getParData(PARAMAN_FILE_ACMP, 2, PAR_CMP_PITCH_NUM, &par_union);
-    par_acmp[AXIS_Z].pitch_comp_num = par_union.value.val_int; //螺距误差补偿点数
-    // printf("par_acmp[AXIS_Z].pitch_comp_num %d\n", par_acmp[AXIS_Z].pitch_comp_num);
-    getParData(PARAMAN_FILE_ACMP, 2, PAR_CMP_PITCH_STEP, &par_union);
-    par_acmp[AXIS_Z].pitch_comp_step = par_union.value.val_real; //螺距误差补偿点间距
-    // printf("par_acmp[AXIS_Z].pitch_comp_step %f\n", par_acmp[AXIS_Z].pitch_comp_step);
-    getParData(PARAMAN_FILE_ACMP, 2, PAR_CMP_PITCH_MODULO, &par_union);
-    par_acmp[AXIS_Z].pitch_comp_modulo = par_union.value.val_bool; //螺距误差取模补偿使能
-    // printf("par_acmp[AXIS_Z].pitch_comp_modulo %d\n", par_acmp[AXIS_Z].pitch_comp_modulo);
-    getParData(PARAMAN_FILE_ACMP, 2, PAR_CMP_PITCH_FACTOR, &par_union);
-    par_acmp[AXIS_Z].pitch_comp_factor = par_union.value.val_real; //螺距误差补偿倍率
-    // printf("par_acmp[AXIS_Z].pitch_comp_factor %f\n", par_acmp[AXIS_Z].pitch_comp_factor);
-    getParData(PARAMAN_FILE_ACMP, 2, PAR_CMP_PITCH_TABLE, &par_union);
-    par_acmp[AXIS_Z].pitch_comp_table = par_union.value.val_int; //螺距误差补偿表起始参数号
-    // printf("par_acmp[AXIS_Z].pitch_comp_table %d\n", par_acmp[AXIS_Z].pitch_comp_table);
-
-    getParData(PARAMAN_FILE_ACMP, 2, PAR_CMP_SQU1_ENABLE, &par_union);
-    par_acmp[AXIS_Z].perp1_comp_enable = par_union.value.val_bool; //第1项垂直度补偿使能
-    // printf("par_acmp[AXIS_Z].perp1_comp_enable %d\n", par_acmp[AXIS_Z].perp1_comp_enable);
-    getParData(PARAMAN_FILE_ACMP, 2, PAR_CMP_SQU1_INPUT_AX, &par_union);
-    par_acmp[AXIS_Z].perp1_comp_input_ax = par_union.value.val_int; //第1项垂直度补偿基准轴号
-    // printf("par_acmp[AXIS_Z].perp1_comp_input_ax %d\n", par_acmp[AXIS_Z].perp1_comp_input_ax);
-    getParData(PARAMAN_FILE_ACMP, 2, PAR_CMP_SQU1_REFN, &par_union);
-    par_acmp[AXIS_Z].perp1_comp_refn = par_union.value.val_real; //第1项垂直度补偿参考点坐标 (单位：mm)
-    // printf("par_acmp[AXIS_Z].perp1_comp_refn %f\n", par_acmp[AXIS_Z].perp1_comp_refn);
-    getParData(PARAMAN_FILE_ACMP, 2, PAR_CMP_SQU1_ANG, &par_union);
-    par_acmp[AXIS_Z].perp1_comp_ang = par_union.value.val_real; //第1项垂直度补偿角度 (单位：um/m)
-    // printf("par_acmp[AXIS_Z].perp1_comp_ang %f\n", par_acmp[AXIS_Z].perp1_comp_ang);
-
-    getParData(PARAMAN_FILE_ACMP, 2, PAR_CMP_SQU2_ENABLE, &par_union);
-    par_acmp[AXIS_Z].perp2_comp_enable = par_union.value.val_bool; //第2项垂直度补偿使能
-    // printf("par_acmp[AXIS_Z].perp2_comp_enable %d\n", par_acmp[AXIS_Z].perp2_comp_enable);
-    getParData(PARAMAN_FILE_ACMP, 2, PAR_CMP_SQU2_INPUT_AX, &par_union);
-    par_acmp[AXIS_Z].perp2_comp_input_ax = par_union.value.val_int; //第2项垂直度补偿基准轴号
-    // printf("par_acmp[AXIS_Z].perp2_comp_input_ax %d\n", par_acmp[AXIS_Z].perp2_comp_input_ax);
-    getParData(PARAMAN_FILE_ACMP, 2, PAR_CMP_SQU2_REFN, &par_union);
-    par_acmp[AXIS_Z].perp2_comp_refn = par_union.value.val_real; //第2项垂直度补偿参考点坐标 (单位：mm)
-    // printf("par_acmp[AXIS_Z].perp2_comp_refn %f\n", par_acmp[AXIS_Z].perp2_comp_refn);
-    getParData(PARAMAN_FILE_ACMP, 2, PAR_CMP_SQU2_ANG, &par_union);
-    par_acmp[AXIS_Z].perp2_comp_ang = par_union.value.val_real; //第2项垂直度补偿角度 (单位：um/m)
-    // printf("par_acmp[AXIS_Z].perp2_comp_ang %f\n", par_acmp[AXIS_Z].perp2_comp_ang);
-
-    return GNC_OPERATOR_SUCCESS;
-}
-
-// 每个插补周期都会更新的par数据
-GNC_RES rt_par_update(){
-
-}
-
-// 按下复位后更新的par数据
-GNC_RES rt_par_reset(){
-    ParamUnit par_union = {};
-    for(int i = 0; i < SYS_CHAN_NUM; i++){
-        getParData(PARAMAN_FILE_CHAN, i, PAR_CH_VPLAN_MODE, &par_union);
-        par_chan[i].vplan_mode = par_union.value.val_uint;              // 速度规划模式 0:T_SHAPE
-    }
-}
-
 static GNC_RES sys_init(){
     sys = (SYS_DATA*)malloc(sizeof(SYS_DATA));
     if(sys == NULL) return GNC_DATA_NULL;
@@ -647,3 +165,417 @@ GNC_RES rt_global_init(){
     if(res != GNC_OPERATOR_SUCCESS) return res;
     return GNC_OPERATOR_SUCCESS;
 }
+
+static GNC_RES rt_var_init(){
+    var_data = (RT_VAR*)malloc(sizeof(RT_VAR));
+    if(var_data == NULL) return GNC_DATA_NULL;
+    var_axis = var_data->var_axis;
+    var_chan = var_data->var_channel;
+    var_sys = var_data->var_system;
+    // 初始化数据
+    var_sys.chan_num = 1;                        
+    // 通道数据
+    for(int i = 0; i < SYS_CHAN_NUM; i++){
+        var_chan[i].cmd_feedrate = 0;            // 通道合成指令速度
+        var_chan[i].act_feedrate = 0;            // 通道实际合成速度
+        var_chan[i].feed_override = 1.0;         // 进给倍率
+        var_chan[i].rapid_override = 1.0;        // 快速进给倍率
+        var_chan[i].spdl_override = 1.0;         // 主轴倍率
+        var_chan[i].is_homing = false;           // 回零中
+        var_chan[i].is_running = false;          // 运行中
+        var_chan[i].is_progend = false;          // 程序结束
+        var_chan[i].is_estop = false;            // 急停
+        var_chan[i].is_resetting = false;        // 复位中
+        var_chan[i].is_moving = false;           // 轴移动中
+    }
+    // 坐标轴数据
+    for(int i = 0; i < SYS_AXES_NUM; i++){
+        var_axis[i].cmd_vel = 0;            // X轴指令速度
+        var_axis[i].act_vel = 0;            // X轴实际速度
+        var_axis[i].cmd_pos = 0;            
+        var_axis[i].act_pos = 0;            
+    }
+    return GNC_OPERATOR_SUCCESS;
+}
+
+static GNC_RES shm_var_init(){
+    setVarSysDouble(VAR_SYS_CHAN_NUM, 1, 0);
+    setVarChanDouble(0, VAR_CHAN_CMD_FEEDRATE, 0, 0);
+    setVarChanDouble(0, VAR_CHAN_ACT_FEEDRATE, 0, 0);
+    setVarChanDouble(0, VAR_CHAN_FEED_OVERRIDE, 1.0, 0);
+    setVarChanDouble(0, VAR_CHAN_RAPID_OVERRIDE, 1.0, 0);
+    setVarChanInt(0, VAR_CHAN_IS_HOMING, 0, 0);
+    setVarChanInt(0, VAR_CHAN_IS_RUNNING, 0, 0);
+    setVarChanInt(0, VAR_CHAN_IS_PROGEND, 0, 0);
+    setVarChanInt(0, VAR_CHAN_IS_ESTOP, 0, 0);
+    setVarChanInt(0, VAR_CHAN_IS_RESETTING, 0, 0);
+    setVarChanInt(0, VAR_CHAN_IS_MOVING, 0, 0);
+    for(int i = 0; i < SYS_AXES_NUM; i++){
+        setVarAxisDouble(i, VAR_AXIS_CMD_VEL, 0, 0);
+        setVarAxisDouble(i, VAR_AXIS_ACT_VEL, 0, 0);
+        setVarAxisDouble(i, VAR_AXIS_CMD_POS, 0, 0);
+        setVarAxisDouble(i, VAR_AXIS_ACT_POS_EX, 0, 0);
+    }
+    return GNC_OPERATOR_SUCCESS;
+}
+
+GNC_RES shm_var_update(){
+    // 当前进给速度
+    setVarChanDouble(0, VAR_CHAN_ACT_FEEDRATE, var_chan[0].act_feedrate * TIME_MINUS_2_S, 0);
+    // 各轴位置
+    for(int i = 0; i < SYS_AXES_NUM; i++){
+        setVarAxisDouble(i, VAR_AXIS_ACT_POS_EX, var_axis[i].act_pos, 0);
+        setVarAxisDouble(i, VAR_AXIS_ACT_POS_WCS_EX, var_axis[i].act_pos_wcs, 0);
+        setVarAxisDouble(i, VAR_AXIS_LEFT_TOGO, var_axis[i].left_togo, 0);
+    }
+    //主轴转速
+    setVarChanDouble(0, VAR_CHAN_ACT_SPDL_SPEED, var_chan[0].act_spdl_speed, 0);
+    setVarChanDouble(0, VAR_CHAN_CMD_SPDL_SPEED, var_chan[0].cmd_spdl_speed, 0);
+    setVarChanDouble(0, VAR_CHAN_S_CODE, var_chan[0].cmd_spdl_speed, 0);
+    for(int i = 0; i < SYS_CHAN_NUM; i++){
+        // 当前模式
+        setVarChanInt(i, VAR_CHAN_MODE, var_chan[i].mode, 0);
+        // 进给倍率
+        setVarChanDouble(i, VAR_CHAN_FEED_OVERRIDE, var_chan[i].feed_override * 100, 0);
+        // 快速倍率
+        setVarChanDouble(i, VAR_CHAN_RAPID_OVERRIDE, var_chan[i].rapid_override * 100, 0);
+        // 主轴倍率
+        setVarChanDouble(i, VAR_CHAN_SPDL_OVERRIDE, var_chan[i].spdl_override * 100, 0);
+        // 复位
+        setVarChanInt(i, VAR_CHAN_IS_RESETTING, var_chan[i].is_resetting, 0);
+        // 急停
+        setVarChanInt(i, VAR_CHAN_IS_ESTOP, var_chan[i].is_estop, 0);
+        // 回零
+        setVarChanInt(i, VAR_CHAN_IS_HOMING, var_chan[i].is_homing, 0);
+        // 运行中
+        setVarChanInt(i, VAR_CHAN_IS_RUNNING, var_chan[i].is_running == 0, 0);
+        // 移动中
+        setVarChanInt(i, VAR_CHAN_IS_MOVING, var_chan[i].is_moving, 0);
+    }
+}
+
+// 更新 var 程序相关变量
+GNC_RES shm_var_update_prog(){
+    // 运行模组
+    VarUnion set_modal;
+    set_modal.type = 0;
+    set_modal.value.i = cycle_tp->plan_block->mode;
+    setVarChanValue(0, VAR_CHAN_MODAL, 0, &set_modal, 0);
+    // 运行行号
+    setVarChanInt(0, VAR_CHAN_RUN_ROW, cycle_tp->plan_block->line_number, 0);
+    return GNC_OPERATOR_SUCCESS;
+}
+
+static GNC_RES rt_par_init(){
+    par_data = (PAR*)malloc(sizeof(PAR));
+    if(par_data == NULL) return GNC_DATA_NULL;
+    par_ncu = par_data->par_ncu;            // NC 参数
+    par_mac = par_data->par_mac;            // 机床用户参数
+    par_cfg = par_data->par_cfg;            // 设备接口参数
+    par_table = par_data->par_table;        //（刀具和刀库）数据表参数
+    par_chan = par_data->par_chan;          // 通道参数
+    par_axis = par_data->par_axis;          // 坐标轴参数
+    par_acmp = par_data->par_acmp;          // 误差补偿参数
+    return GNC_OPERATOR_SUCCESS;
+}
+
+// 每个插补周期都会更新的par数据
+GNC_RES rt_par_update(){
+    shm_par_init();
+}
+
+// 按下复位后更新的par数据
+GNC_RES rt_par_reset(){
+    ParamUnit par_union = {};
+    for(int i = 0; i < SYS_CHAN_NUM; i++){
+        getParData(PARAMAN_FILE_CHAN, i, PAR_CH_VPLAN_MODE, &par_union);
+        par_chan[i].vplan_mode = par_union.value.val_uint;              // 速度规划模式 0:T_SHAPE
+    }
+}
+
+static GNC_RES shm_par_init(){
+    ParamUnit par_union = {};
+    // NC参数
+    getParData(PARAMAN_FILE_NCU, 0, PAR_NCU_CYCLE, &par_union);
+    // 插补周期1ms
+    par_ncu.cycle = (double)par_union.value.val_uint / TIME_US_2_S;
+    // 通道参数
+    for(int i = 0; i < SYS_CHAN_NUM; i++){
+        getParData(PARAMAN_FILE_CHAN, i, PAR_CH_DEFAULT_F, &par_union);
+        par_chan[i].default_feed = par_union.value.val_real / TIME_MINUS_2_S;            // 通道缺省进给速度
+        getParData(PARAMAN_FILE_CHAN, i, PAR_CH_DRYRUN_SPD, &par_union);
+        par_chan[i].dryrun_spd = par_union.value.val_real / TIME_MINUS_2_S;              // 空运行进给速度
+        getParData(PARAMAN_FILE_CHAN, i, PAR_CH_VPLAN_MODE, &par_union);
+        par_chan[i].vplan_mode = par_union.value.val_uint;              // 速度规划模式 0:T_SHAPE
+        getParData(PARAMAN_FILE_CHAN, i, PAR_CH_MAX_ECEN_ACC, &par_union);
+        par_chan[i].max_tang_acc = par_union.value.val_real;            // 最大向心加速度
+        getParData(PARAMAN_FILE_CHAN, i, PAR_CH_LOOKAHEAD_NUM, &par_union);
+        par_chan[i].lookahead_num = par_union.value.val_uint;           // 速度规划前瞻段数
+    }
+    // 坐标轴参数
+    par_axis[AXIS_X].name[0] = 'X';               // 轴名
+    getParData(PARAMAN_FILE_AXIS, 0, PAR_AX_PLMT, &par_union);
+    par_axis[AXIS_X].plmt = par_union.value.val_real;  // X轴正软极限
+    getParData(PARAMAN_FILE_AXIS, 0, PAR_AX_NLMT, &par_union);
+    par_axis[AXIS_X].nlmt = par_union.value.val_real;  // X轴负软极限
+    getParData(PARAMAN_FILE_AXIS, 0, PAR_AX_HOME_WAY, &par_union);
+    par_axis[AXIS_X].home_way = par_union.value.val_uint;             // X轴回参考点方式(0:绝对式 1:相对式)
+    getParData(PARAMAN_FILE_AXIS, 0, PAR_AX_HOME_DIR, &par_union);
+    par_axis[AXIS_X].home_crds = par_union.value.val_real;            // X轴零点位置
+    getParData(PARAMAN_FILE_AXIS, 0, PAR_AX_HOME_CRDS, &par_union);
+    par_axis[AXIS_X].home_dir = par_union.value.val_uint;             // X轴回参考点方向(0:正向 1:负向)
+    getParData(PARAMAN_FILE_AXIS, 0, PAR_AX_RAPID_SPD, &par_union);
+    par_axis[AXIS_X].rapid_vel = par_union.value.val_real / TIME_MINUS_2_S;            // X轴快移速度 unit:mm/s
+    getParData(PARAMAN_FILE_AXIS, 0, PAR_AX_RAPID_ACC, &par_union);
+    par_axis[AXIS_X].rapid_acc = par_union.value.val_real;            // X轴快移加速度
+    getParData(PARAMAN_FILE_AXIS, 0, PAR_AX_RAPID_JK, &par_union);
+    par_axis[AXIS_X].rapid_jerk = par_union.value.val_real;           // X轴快移捷度
+    getParData(PARAMAN_FILE_AXIS, 0, PAR_AX_FEED_SPD, &par_union);
+    par_axis[AXIS_X].feed_vel = par_union.value.val_real / TIME_MINUS_2_S;             // X轴最高进给速度
+    getParData(PARAMAN_FILE_AXIS, 0, PAR_AX_FEED_ACC, &par_union);
+    par_axis[AXIS_X].feed_acc = par_union.value.val_real;             // X轴进给加速度
+    getParData(PARAMAN_FILE_AXIS, 0, PAR_AX_FEED_JK, &par_union);
+    par_axis[AXIS_X].feed_jerk = par_union.value.val_real;            // X轴进给捷度
+    getParData(PARAMAN_FILE_AXIS, 0, PAR_AX_ATEETH, &par_union);
+    par_axis[AXIS_X].ateeth = par_union.value.val_uint;
+    getParData(PARAMAN_FILE_AXIS, 0, PAR_AX_MTEETH, &par_union);
+    par_axis[AXIS_X].mteeth = par_union.value.val_uint;
+    getParData(PARAMAN_FILE_AXIS, 0, PAR_AX_PITCH, &par_union);
+    par_axis[AXIS_X].pitch = par_union.value.val_uint;
+    getParData(PARAMAN_FILE_AXIS, 0, PAR_AX_MT_PPR, &par_union);
+    par_axis[AXIS_X].mt_ppr = par_union.value.val_uint;
+    getParData(PARAMAN_FILE_AXIS, 0, PAR_AX_MPG_SPD, &par_union);
+    par_axis[AXIS_X].mpg_spd = par_union.value.val_real;
+    par_axis[AXIS_X].pos_tol = 0.01;              // X轴定位允差
+    //　以下 wcf maintain 2026.1.21
+    getParData(PARAMAN_FILE_AXIS, 0, PAR_AX_PM_MUNIT, &par_union);
+    par_axis[AXIS_X].pm_munit = par_union.value.val_int;             // X轴电子齿轮比分子 (HMI unit: um | default:16000um)
+    getParData(PARAMAN_FILE_AXIS, 0, PAR_AX_PM_PULSE, &par_union);
+    par_axis[AXIS_X].pm_pulse = par_union.value.val_int;             // X轴电子齿轮比分母 (HMI unit: 脉冲 | default:100000)
+    getParData(PARAMAN_FILE_AXIS, 0, PAR_AX_ENC_OFF, &par_union);
+    par_axis[AXIS_X].enc_off = par_union.value.val_real;              // X轴编码器反馈偏置量 (HMI unit: mm | default:)
+    getParData(PARAMAN_FILE_AXIS, 0, PAR_AX_IS_SET_HOME_OFFSET, &par_union);
+    par_axis[AXIS_X].is_set_home_offset = par_union.value.val_bool;   // X轴设置编码器偏置使能 (HMI | default: 0)
+    getParData(PARAMAN_FILE_AXIS, 0, PAR_AX_JOG_LOWSPD, &par_union);
+    par_axis[AXIS_X].jog_lowspd = par_union.value.val_real;           // X轴慢速点动速度 (HMI unit: mm/min | default:18000mm/min)
+    getParData(PARAMAN_FILE_AXIS, 0, PAR_AX_JOG_FASTSPD, &par_union);
+    par_axis[AXIS_X].jog_fastspd = par_union.value.val_real;          // X轴快速点动速度 (HMI unit: mm/min | default:36000mm/min)
+    getParData(PARAMAN_FILE_AXIS, 0, PAR_AX_VEL_LIMIT, &par_union);
+    par_axis[AXIS_X].vel_limit = par_union.value.val_real;            // X轴最大速度上限 (HMI unit: mm/min | default:48000mm/min)
+    getParData(PARAMAN_FILE_AXIS, 0, PAR_AX_MAX_FERROR, &par_union);
+    par_axis[AXIS_X].max_ferror = par_union.value.val_real;           // X轴最大跟随误差 (HMI unit: mm | default:0.01mm)
+    getParData(PARAMAN_FILE_AXIS, 0, PAR_AX_MIN_FERROR, &par_union);
+    par_axis[AXIS_X].min_ferror = par_union.value.val_real;           // X轴最小跟随误差 (HMI unit: mm | default:0.005mm)
+    //------------------------------------------------------//
+    par_axis[AXIS_Y].name[0] = 'Y';               // 轴名
+    getParData(PARAMAN_FILE_AXIS, 1, PAR_AX_PLMT, &par_union);
+    par_axis[AXIS_Y].plmt = par_union.value.val_real;                // Y轴正软极限
+    getParData(PARAMAN_FILE_AXIS, 1, PAR_AX_NLMT, &par_union);
+    par_axis[AXIS_Y].nlmt = par_union.value.val_real;               // Y轴负软极限
+    getParData(PARAMAN_FILE_AXIS, 1, PAR_AX_HOME_WAY, &par_union);
+    par_axis[AXIS_Y].home_way = par_union.value.val_uint;                // Y轴回参考点方式(0:绝对式 1:相对式)
+    getParData(PARAMAN_FILE_AXIS, 1, PAR_AX_HOME_DIR, &par_union);
+    par_axis[AXIS_Y].home_crds = par_union.value.val_real;             // Y轴零点位置
+    getParData(PARAMAN_FILE_AXIS, 1, PAR_AX_HOME_CRDS, &par_union);
+    par_axis[AXIS_Y].home_dir = par_union.value.val_uint;                // Y轴回参考点方向(0:正向 1:负向)
+    getParData(PARAMAN_FILE_AXIS, 1, PAR_AX_RAPID_SPD, &par_union);
+    par_axis[AXIS_Y].rapid_vel = par_union.value.val_real / TIME_MINUS_2_S;            // Y轴快移速度 unit:mm/s
+    getParData(PARAMAN_FILE_AXIS, 1, PAR_AX_RAPID_ACC, &par_union);
+    par_axis[AXIS_Y].rapid_acc = par_union.value.val_real;            // Y轴快移加速度
+    getParData(PARAMAN_FILE_AXIS, 1, PAR_AX_RAPID_JK, &par_union);
+    par_axis[AXIS_Y].rapid_jerk = par_union.value.val_real;          // Y轴快移捷度
+    getParData(PARAMAN_FILE_AXIS, 1, PAR_AX_FEED_SPD, &par_union);
+    par_axis[AXIS_Y].feed_vel = par_union.value.val_real / TIME_MINUS_2_S;              // Y轴最高进给速度
+    getParData(PARAMAN_FILE_AXIS, 1, PAR_AX_FEED_ACC, &par_union);
+    par_axis[AXIS_Y].feed_acc = par_union.value.val_real;              // Y轴进给加速度
+    getParData(PARAMAN_FILE_AXIS, 1, PAR_AX_FEED_JK, &par_union);
+    par_axis[AXIS_Y].feed_jerk = par_union.value.val_real;            // Y轴进给捷度
+    getParData(PARAMAN_FILE_AXIS, 1, PAR_AX_ATEETH, &par_union);
+    par_axis[AXIS_Y].ateeth = par_union.value.val_uint;
+    getParData(PARAMAN_FILE_AXIS, 1, PAR_AX_MTEETH, &par_union);
+    par_axis[AXIS_Y].mteeth = par_union.value.val_uint;
+    getParData(PARAMAN_FILE_AXIS, 1, PAR_AX_PITCH, &par_union);
+    par_axis[AXIS_Y].pitch = par_union.value.val_uint;
+    getParData(PARAMAN_FILE_AXIS, 1, PAR_AX_MT_PPR, &par_union);
+    par_axis[AXIS_Y].mt_ppr = par_union.value.val_uint;
+    getParData(PARAMAN_FILE_AXIS, 1, PAR_AX_MPG_SPD, &par_union);
+    par_axis[AXIS_Y].mpg_spd = par_union.value.val_real;
+    par_axis[AXIS_Y].pos_tol = 0.01;              // Y轴定位允差
+    //　以下 wcf maintain 2026.1.21
+    getParData(PARAMAN_FILE_AXIS, 1, PAR_AX_PM_MUNIT, &par_union);
+    par_axis[AXIS_Y].pm_munit = par_union.value.val_int;             // Y轴电子齿轮比分子 (HMI unit: um | default:16000um)
+    getParData(PARAMAN_FILE_AXIS, 1, PAR_AX_PM_PULSE, &par_union);
+    par_axis[AXIS_Y].pm_pulse = par_union.value.val_int;             // Y轴电子齿轮比分母 (HMI unit: 脉冲 | default:100000)
+    getParData(PARAMAN_FILE_AXIS, 1, PAR_AX_ENC_OFF, &par_union);
+    par_axis[AXIS_Y].enc_off = par_union.value.val_real;              // Y轴编码器反馈偏置量 (HMI unit: mm | default:)
+    getParData(PARAMAN_FILE_AXIS, 1, PAR_AX_IS_SET_HOME_OFFSET, &par_union);
+    par_axis[AXIS_Y].is_set_home_offset = par_union.value.val_bool;   // Y轴设置编码器偏置使能 (HMI | default: 0)
+    getParData(PARAMAN_FILE_AXIS, 1, PAR_AX_JOG_LOWSPD, &par_union);
+    par_axis[AXIS_Y].jog_lowspd = par_union.value.val_real;           // Y轴慢速点动速度 (HMI unit: mm/min | default:18000mm/min)
+    getParData(PARAMAN_FILE_AXIS, 1, PAR_AX_JOG_FASTSPD, &par_union);
+    par_axis[AXIS_Y].jog_fastspd = par_union.value.val_real;          // Y轴快速点动速度 (HMI unit: mm/min | default:36000mm/min)
+    getParData(PARAMAN_FILE_AXIS, 1, PAR_AX_VEL_LIMIT, &par_union);
+    par_axis[AXIS_Y].vel_limit = par_union.value.val_real;            // Y轴最大速度上限 (HMI unit: mm/min | default:48000mm/min)
+    getParData(PARAMAN_FILE_AXIS, 1, PAR_AX_MAX_FERROR, &par_union);
+    par_axis[AXIS_Y].max_ferror = par_union.value.val_real;           // Y轴最大跟随误差 (HMI unit: mm | default:0.01mm)
+    getParData(PARAMAN_FILE_AXIS, 1, PAR_AX_MIN_FERROR, &par_union);
+    par_axis[AXIS_Y].min_ferror = par_union.value.val_real;           // Y轴最小跟随误差 (HMI unit: mm | default:0.005mm)
+    //------------------------------------------------------//
+    par_axis[AXIS_Z].name[0] = 'Z';               // 轴名
+    getParData(PARAMAN_FILE_AXIS, 2, PAR_AX_PLMT, &par_union);
+    par_axis[AXIS_Z].plmt = par_union.value.val_real;                // Z轴正软极限
+    getParData(PARAMAN_FILE_AXIS, 2, PAR_AX_NLMT, &par_union);
+    par_axis[AXIS_Z].nlmt = par_union.value.val_real;               // Z轴负软极限
+    getParData(PARAMAN_FILE_AXIS, 2, PAR_AX_HOME_WAY, &par_union);
+    par_axis[AXIS_Z].home_way = par_union.value.val_uint;                // Z轴回参考点方式(0:绝对式 1:相对式)
+    getParData(PARAMAN_FILE_AXIS, 2, PAR_AX_HOME_DIR, &par_union);
+    par_axis[AXIS_Z].home_crds = par_union.value.val_real;             // Z轴零点位置
+    getParData(PARAMAN_FILE_AXIS, 2, PAR_AX_HOME_CRDS, &par_union);
+    par_axis[AXIS_Z].home_dir = par_union.value.val_uint;                // Z轴回参考点方向(0:正向 1:负向)
+    getParData(PARAMAN_FILE_AXIS, 2, PAR_AX_RAPID_SPD, &par_union);
+    par_axis[AXIS_Z].rapid_vel = par_union.value.val_real / TIME_MINUS_2_S;            // Z轴快移速度 unit:mm/s
+    getParData(PARAMAN_FILE_AXIS, 2, PAR_AX_RAPID_ACC, &par_union);
+    par_axis[AXIS_Z].rapid_acc = par_union.value.val_real;            // Z轴快移加速度
+    getParData(PARAMAN_FILE_AXIS, 2, PAR_AX_RAPID_JK, &par_union);
+    par_axis[AXIS_Z].rapid_jerk = par_union.value.val_real;          // Z轴快移捷度
+    getParData(PARAMAN_FILE_AXIS, 2, PAR_AX_FEED_SPD, &par_union);
+    par_axis[AXIS_Z].feed_vel = par_union.value.val_real / TIME_MINUS_2_S;              // Z轴最高进给速度
+    getParData(PARAMAN_FILE_AXIS, 2, PAR_AX_FEED_ACC, &par_union);
+    par_axis[AXIS_Z].feed_acc = par_union.value.val_real;              // Z轴进给加速度
+    getParData(PARAMAN_FILE_AXIS, 2, PAR_AX_FEED_JK, &par_union);
+    par_axis[AXIS_Z].feed_jerk = par_union.value.val_real;            // Z轴进给捷度
+    getParData(PARAMAN_FILE_AXIS, 2, PAR_AX_ATEETH, &par_union);
+    par_axis[AXIS_Z].ateeth = par_union.value.val_uint;
+    getParData(PARAMAN_FILE_AXIS, 2, PAR_AX_MTEETH, &par_union);
+    par_axis[AXIS_Z].mteeth = par_union.value.val_uint;
+    getParData(PARAMAN_FILE_AXIS, 2, PAR_AX_PITCH, &par_union);
+    par_axis[AXIS_Z].pitch = par_union.value.val_uint;
+    getParData(PARAMAN_FILE_AXIS, 2, PAR_AX_MT_PPR, &par_union);
+    par_axis[AXIS_Z].mt_ppr = par_union.value.val_uint;
+    getParData(PARAMAN_FILE_AXIS, 2, PAR_AX_MPG_SPD, &par_union);
+    par_axis[AXIS_Z].mpg_spd = par_union.value.val_real;
+    par_axis[AXIS_Z].pos_tol = 0.01;              // Z轴定位允差
+    //　以下 wcf maintain 2026.1.21
+    getParData(PARAMAN_FILE_AXIS, 2, PAR_AX_PM_MUNIT, &par_union);
+    par_axis[AXIS_Z].pm_munit = par_union.value.val_int;             // Z轴电子齿轮比分子 (HMI unit: um | default:16000um)
+    getParData(PARAMAN_FILE_AXIS, 2, PAR_AX_PM_PULSE, &par_union);
+    par_axis[AXIS_Z].pm_pulse = par_union.value.val_int;             // Z轴电子齿轮比分母 (HMI unit: 脉冲 | default:100000)
+    getParData(PARAMAN_FILE_AXIS, 2, PAR_AX_ENC_OFF, &par_union);
+    par_axis[AXIS_Z].enc_off = par_union.value.val_real;              // Z轴编码器反馈偏置量 (HMI unit: mm | default:)
+    getParData(PARAMAN_FILE_AXIS, 2, PAR_AX_IS_SET_HOME_OFFSET, &par_union);
+    par_axis[AXIS_Z].is_set_home_offset = par_union.value.val_bool;   // Z轴设置编码器偏置使能 (HMI | default: 0)
+    getParData(PARAMAN_FILE_AXIS, 2, PAR_AX_JOG_LOWSPD, &par_union);
+    par_axis[AXIS_Z].jog_lowspd = par_union.value.val_real;           // Z轴慢速点动速度 (HMI unit: mm/min | default:18000mm/min)
+    getParData(PARAMAN_FILE_AXIS, 2, PAR_AX_JOG_FASTSPD, &par_union);
+    par_axis[AXIS_Z].jog_fastspd = par_union.value.val_real;          // Z轴快速点动速度 (HMI unit: mm/min | default:36000mm/min)
+    getParData(PARAMAN_FILE_AXIS, 2, PAR_AX_VEL_LIMIT, &par_union);
+    par_axis[AXIS_Z].vel_limit = par_union.value.val_real;            // Z轴最大速度上限 (HMI unit: mm/min | default: 48000mm/min)
+    getParData(PARAMAN_FILE_AXIS, 2, PAR_AX_MAX_FERROR, &par_union);
+    par_axis[AXIS_Z].max_ferror = par_union.value.val_real;           // Z轴最大跟随误差 (HMI unit: mm | default:0.01mm)
+    getParData(PARAMAN_FILE_AXIS, 2, PAR_AX_MIN_FERROR, &par_union);
+    par_axis[AXIS_Z].min_ferror = par_union.value.val_real;           // Z轴最小跟随误差 (HMI unit: mm | default:0.005mm)
+    //------------------------------------------------------//
+    par_axis[AXIS_SP].name[0] = 'SP';               // 轴名
+    getParData(PARAMAN_FILE_AXIS, 3, PAR_AX_DEFAULT_S, &par_union);
+    par_axis[AXIS_SP].default_s = par_union.value.val_real;                // sp缺省速度
+    getParData(PARAMAN_FILE_AXIS, 3, PAR_AX_FEED_ACC, &par_union);
+    par_axis[AXIS_SP].feed_acc = par_union.value.val_real;
+    getParData(PARAMAN_FILE_AXIS, 3, PAR_SPDL_MAX_SPEED, &par_union);
+    par_axis[AXIS_SP].spdl_max_speed = par_union.value.val_real;
+    // 误差补偿轴参数
+    //---------------------补偿轴 X轴------------------------//
+    getParData(PARAMAN_FILE_ACMP, 0, PAR_CMP_PITCH_TYPE, &par_union);
+    par_acmp[AXIS_X].pitch_comp_type = par_union.value.val_int; //螺距误差补偿类型
+    getParData(PARAMAN_FILE_ACMP, 0, PAR_CMP_PITCH_START, &par_union);
+    par_acmp[AXIS_X].pitch_comp_start_pos = par_union.value.val_real; //螺距误差补偿起点坐标
+    getParData(PARAMAN_FILE_ACMP, 0, PAR_CMP_PITCH_NUM, &par_union);
+    par_acmp[AXIS_X].pitch_comp_num = par_union.value.val_int; //螺距误差补偿点数
+    getParData(PARAMAN_FILE_ACMP, 0, PAR_CMP_PITCH_STEP, &par_union);
+    par_acmp[AXIS_X].pitch_comp_step = par_union.value.val_real; //螺距误差补偿点间距
+    getParData(PARAMAN_FILE_ACMP, 0, PAR_CMP_PITCH_MODULO, &par_union);
+    par_acmp[AXIS_X].pitch_comp_modulo = par_union.value.val_bool; //螺距误差取模补偿使能
+    getParData(PARAMAN_FILE_ACMP, 0, PAR_CMP_PITCH_FACTOR, &par_union);
+    par_acmp[AXIS_X].pitch_comp_factor = par_union.value.val_real; //螺距误差补偿倍率
+    getParData(PARAMAN_FILE_ACMP, 0, PAR_CMP_PITCH_TABLE, &par_union);
+    par_acmp[AXIS_X].pitch_comp_table = par_union.value.val_int; //螺距误差补偿表起始参数号
+    getParData(PARAMAN_FILE_ACMP, 0, PAR_CMP_SQU1_ENABLE, &par_union);
+    par_acmp[AXIS_X].perp1_comp_enable = par_union.value.val_bool; //第1项垂直度补偿使能
+    getParData(PARAMAN_FILE_ACMP, 0, PAR_CMP_SQU1_INPUT_AX, &par_union);
+    par_acmp[AXIS_X].perp1_comp_input_ax = par_union.value.val_int; //第1项垂直度补偿基准轴号
+    getParData(PARAMAN_FILE_ACMP, 0, PAR_CMP_SQU1_REFN, &par_union);
+    par_acmp[AXIS_X].perp1_comp_refn = par_union.value.val_real; //第1项垂直度补偿参考点坐标 (单位：mm)
+    getParData(PARAMAN_FILE_ACMP, 0, PAR_CMP_SQU1_ANG, &par_union);
+    par_acmp[AXIS_X].perp1_comp_ang = par_union.value.val_real; //第1项垂直度补偿角度 (单位：um/m)
+    getParData(PARAMAN_FILE_ACMP, 0, PAR_CMP_SQU2_ENABLE, &par_union);
+    par_acmp[AXIS_X].perp2_comp_enable = par_union.value.val_bool; //第2项垂直度补偿使能
+    getParData(PARAMAN_FILE_ACMP, 0, PAR_CMP_SQU2_INPUT_AX, &par_union);
+    par_acmp[AXIS_X].perp2_comp_input_ax = par_union.value.val_int; //第2项垂直度补偿基准轴号
+    getParData(PARAMAN_FILE_ACMP, 0, PAR_CMP_SQU2_REFN, &par_union);
+    par_acmp[AXIS_X].perp2_comp_refn = par_union.value.val_real; //第2项垂直度补偿参考点坐标 (单位：mm)
+    getParData(PARAMAN_FILE_ACMP, 0, PAR_CMP_SQU2_ANG, &par_union);
+    par_acmp[AXIS_X].perp2_comp_ang = par_union.value.val_real; //第2项垂直度补偿角度 (单位：um/m)
+    //---------------------补偿轴 Y轴------------------------//
+    getParData(PARAMAN_FILE_ACMP, 1, PAR_CMP_PITCH_TYPE, &par_union);
+    par_acmp[AXIS_Y].pitch_comp_type = par_union.value.val_int; //螺距误差补偿类型
+    getParData(PARAMAN_FILE_ACMP, 1, PAR_CMP_PITCH_START, &par_union);
+    par_acmp[AXIS_Y].pitch_comp_start_pos = par_union.value.val_real; //螺距误差补偿起点坐标
+    getParData(PARAMAN_FILE_ACMP, 1, PAR_CMP_PITCH_NUM, &par_union);
+    par_acmp[AXIS_Y].pitch_comp_num = par_union.value.val_int; //螺距误差补偿点数
+    getParData(PARAMAN_FILE_ACMP, 1, PAR_CMP_PITCH_STEP, &par_union);
+    par_acmp[AXIS_Y].pitch_comp_step = par_union.value.val_real; //螺距误差补偿点间距
+    getParData(PARAMAN_FILE_ACMP, 1, PAR_CMP_PITCH_MODULO, &par_union);
+    par_acmp[AXIS_Y].pitch_comp_modulo = par_union.value.val_bool; //螺距误差取模补偿使能
+    getParData(PARAMAN_FILE_ACMP, 1, PAR_CMP_PITCH_FACTOR, &par_union);
+    par_acmp[AXIS_Y].pitch_comp_factor = par_union.value.val_real; //螺距误差补偿倍率
+    getParData(PARAMAN_FILE_ACMP, 1, PAR_CMP_PITCH_TABLE, &par_union);
+    par_acmp[AXIS_Y].pitch_comp_table = par_union.value.val_int; //螺距误差补偿表起始参数号
+    getParData(PARAMAN_FILE_ACMP, 1, PAR_CMP_SQU1_ENABLE, &par_union);
+    par_acmp[AXIS_Y].perp1_comp_enable = par_union.value.val_bool; //第1项垂直度补偿使能
+    getParData(PARAMAN_FILE_ACMP, 1, PAR_CMP_SQU1_INPUT_AX, &par_union);
+    par_acmp[AXIS_Y].perp1_comp_input_ax = par_union.value.val_int; //第1项垂直度补偿基准轴号
+    getParData(PARAMAN_FILE_ACMP, 1, PAR_CMP_SQU1_REFN, &par_union);
+    par_acmp[AXIS_Y].perp1_comp_refn = par_union.value.val_real; //第1项垂直度补偿参考点坐标 (单位：mm)
+    getParData(PARAMAN_FILE_ACMP, 1, PAR_CMP_SQU1_ANG, &par_union);
+    par_acmp[AXIS_Y].perp1_comp_ang = par_union.value.val_real; //第1项垂直度补偿角度 (单位：um/m)
+    getParData(PARAMAN_FILE_ACMP, 1, PAR_CMP_SQU2_ENABLE, &par_union);
+    par_acmp[AXIS_Y].perp2_comp_enable = par_union.value.val_bool; //第2项垂直度补偿使能
+    getParData(PARAMAN_FILE_ACMP, 1, PAR_CMP_SQU2_INPUT_AX, &par_union);
+    par_acmp[AXIS_Y].perp2_comp_input_ax = par_union.value.val_int; //第2项垂直度补偿基准轴号
+    getParData(PARAMAN_FILE_ACMP, 1, PAR_CMP_SQU2_REFN, &par_union);
+    par_acmp[AXIS_Y].perp2_comp_refn = par_union.value.val_real; //第2项垂直度补偿参考点坐标 (单位：mm)
+    getParData(PARAMAN_FILE_ACMP, 1, PAR_CMP_SQU2_ANG, &par_union);
+    par_acmp[AXIS_Y].perp2_comp_ang = par_union.value.val_real; //第2项垂直度补偿角度 (单位：um/m)
+    //---------------------补偿轴 Z轴------------------------//
+    getParData(PARAMAN_FILE_ACMP, 2, PAR_CMP_PITCH_TYPE, &par_union);
+    par_acmp[AXIS_Z].pitch_comp_type = par_union.value.val_int; //螺距误差补偿类型
+    getParData(PARAMAN_FILE_ACMP, 2, PAR_CMP_PITCH_START, &par_union);
+    par_acmp[AXIS_Z].pitch_comp_start_pos = par_union.value.val_real; //螺距误差补偿起点坐标
+    getParData(PARAMAN_FILE_ACMP, 2, PAR_CMP_PITCH_NUM, &par_union);
+    par_acmp[AXIS_Z].pitch_comp_num = par_union.value.val_int; //螺距误差补偿点数
+    getParData(PARAMAN_FILE_ACMP, 2, PAR_CMP_PITCH_STEP, &par_union);
+    par_acmp[AXIS_Z].pitch_comp_step = par_union.value.val_real; //螺距误差补偿点间距
+    getParData(PARAMAN_FILE_ACMP, 2, PAR_CMP_PITCH_MODULO, &par_union);
+    par_acmp[AXIS_Z].pitch_comp_modulo = par_union.value.val_bool; //螺距误差取模补偿使能
+    getParData(PARAMAN_FILE_ACMP, 2, PAR_CMP_PITCH_FACTOR, &par_union);
+    par_acmp[AXIS_Z].pitch_comp_factor = par_union.value.val_real; //螺距误差补偿倍率
+    getParData(PARAMAN_FILE_ACMP, 2, PAR_CMP_PITCH_TABLE, &par_union);
+    par_acmp[AXIS_Z].pitch_comp_table = par_union.value.val_int; //螺距误差补偿表起始参数号
+    getParData(PARAMAN_FILE_ACMP, 2, PAR_CMP_SQU1_ENABLE, &par_union);
+    par_acmp[AXIS_Z].perp1_comp_enable = par_union.value.val_bool; //第1项垂直度补偿使能
+    getParData(PARAMAN_FILE_ACMP, 2, PAR_CMP_SQU1_INPUT_AX, &par_union);
+    par_acmp[AXIS_Z].perp1_comp_input_ax = par_union.value.val_int; //第1项垂直度补偿基准轴号
+    getParData(PARAMAN_FILE_ACMP, 2, PAR_CMP_SQU1_REFN, &par_union);
+    par_acmp[AXIS_Z].perp1_comp_refn = par_union.value.val_real; //第1项垂直度补偿参考点坐标 (单位：mm)
+    getParData(PARAMAN_FILE_ACMP, 2, PAR_CMP_SQU1_ANG, &par_union);
+    par_acmp[AXIS_Z].perp1_comp_ang = par_union.value.val_real; //第1项垂直度补偿角度 (单位：um/m)
+    getParData(PARAMAN_FILE_ACMP, 2, PAR_CMP_SQU2_ENABLE, &par_union);
+    par_acmp[AXIS_Z].perp2_comp_enable = par_union.value.val_bool; //第2项垂直度补偿使能
+    getParData(PARAMAN_FILE_ACMP, 2, PAR_CMP_SQU2_INPUT_AX, &par_union);
+    par_acmp[AXIS_Z].perp2_comp_input_ax = par_union.value.val_int; //第2项垂直度补偿基准轴号
+    getParData(PARAMAN_FILE_ACMP, 2, PAR_CMP_SQU2_REFN, &par_union);
+    par_acmp[AXIS_Z].perp2_comp_refn = par_union.value.val_real; //第2项垂直度补偿参考点坐标 (单位：mm)
+    getParData(PARAMAN_FILE_ACMP, 2, PAR_CMP_SQU2_ANG, &par_union);
+    par_acmp[AXIS_Z].perp2_comp_ang = par_union.value.val_real; //第2项垂直度补偿角度 (单位：um/m)
+    return GNC_OPERATOR_SUCCESS;
+}
+

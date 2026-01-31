@@ -113,7 +113,7 @@ hal_io_retcode_t Hal_Io_Update_All(bool read, bool write)
         }
         else
         {
-            printf("--- io no find ----\n");
+            printf("[start] --- io no find ----\n");
         }
     }
     return result;

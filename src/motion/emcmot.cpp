@@ -17,6 +17,7 @@
 #include "stored_stroke_check.h"
 #include "parser.h"
 #include "hmisysapi.h"
+#include "logapi.h"
 #include <alarmapi.h>
 #include <math.h>
 
@@ -85,11 +86,14 @@ void emcmotTrajPlan() {
 void emcmotPathPlan() {
     if (sys->is_parse_running){
         HmiSysData hmiSysData;
+        #ifdef DEBUG_MODE_ENABLED
+        char ncFilePath[512];
+        snprintf(ncFilePath, sizeof(ncFilePath), "%s/%s", PROJECT_DIR, "config/NC/2-D12J.nc");
+        parser_init(ncFilePath);
+        #else
         getHmiSysDataPtr(&hmiSysData);
-        // char ncFilePath[512];
-        // snprintf(ncFilePath, sizeof(ncFilePath), "%s/%s", PROJECT_DIR, "config/NC/2-D12J.nc");
-        // printf("hmiSysData.ncFilePath: %s\n", ncFilePath);
         parser_init(hmiSysData.ncFilePath);
+        #endif
         sys->is_first_run = true;   // 通知预处理第一次获取pre_pos
         sys->is_parse_running = false;
     }
@@ -103,15 +107,16 @@ void emcmotPathPlan() {
 }
 
 static void set_operating_mode() {
-    // 检查是否急停
-    if (var_chan[0].is_estop) {
-        sys->current_mode = MODE_ALARM;
-        var_chan[var_sys.active_chan].mode = sys->current_mode;
-        return;
-    }
     // 如果没有切换，不进行操作
     if (sys->current_mode == sys->target_mode) {
         sys->is_switching_mode = false;
+        return;
+    }
+    // 检查是否急停
+    if (var_chan[0].is_estop) {
+        sys->current_mode  = sys->target_mode = MODE_ALARM;
+        var_chan[var_sys.active_chan].mode = sys->current_mode;
+        LOG_OUTPUT(ERROR, "报警下无法切换模式，请复位清除报警后再试");
         return;
     }
     // 根据切换的加工模式和当前加工模式，判断是否可以切换
@@ -122,7 +127,6 @@ static void set_operating_mode() {
             break;
         case MODE_JOG:
             // 当前点动速度为零,才能切模式成功
-            printf("jog vel: %f\n", var_axis[AXIS_X].jog_tp.curr_vel);
             if (fabs(var_axis[AXIS_X].jog_tp.curr_vel - 0.0) < SPEED_THRESHOLD 
             && fabs(var_axis[AXIS_Y].jog_tp.curr_vel - 0.0) < SPEED_THRESHOLD 
             && fabs(var_axis[AXIS_Z].jog_tp.curr_vel - 0.0) < SPEED_THRESHOLD) 
@@ -130,7 +134,8 @@ static void set_operating_mode() {
                 sys->current_mode = sys->target_mode;
                 sys->is_switching_mode = false;
                 var_chan[var_sys.active_chan].mode = sys->current_mode;
-                printf("change sys->current_mode%s\n", mode_names[sys->current_mode]);
+                // log_system("[emcmot] 系统模式切换为(%s)", mode_names[sys->current_mode]);
+                LOG_OUTPUT(INFO, "系统模式切换为 %s", mode_names[sys->current_mode]);
                 break;
             }
             sys->nc_event = SYS_EVENT_RESET;
@@ -140,7 +145,8 @@ static void set_operating_mode() {
         case MODE_MPG:
             sys->current_mode = sys->target_mode;
             var_chan[var_sys.active_chan].mode = sys->current_mode;
-            printf("change sys->current_mode%s\n", mode_names[sys->current_mode]);
+            // log_system("[emcmot] 系统模式切换为(%s)", mode_names[sys->current_mode]);
+            LOG_OUTPUT(INFO, "系统模式切换为 %s", mode_names[sys->current_mode]);
             break;
         case MODE_RAPID_JOG:
             // 当前快速点动速度为零,才能切模式成功
@@ -151,7 +157,8 @@ static void set_operating_mode() {
                 sys->current_mode = sys->target_mode;
                 sys->is_switching_mode = false;
                 var_chan[var_sys.active_chan].mode = sys->current_mode;
-                printf("change sys->current_mode%s\n", mode_names[sys->current_mode]);
+                // log_system("[emcmot] 系统模式切换为(%s)", mode_names[sys->current_mode]);
+                LOG_OUTPUT(INFO, "系统模式切换为 %s", mode_names[sys->current_mode]);
                 break;
             }
             sys->nc_event = SYS_EVENT_RESET;
@@ -161,14 +168,16 @@ static void set_operating_mode() {
         case MODE_ALARM:
             sys->current_mode = sys->target_mode;
             var_chan[var_sys.active_chan].mode = sys->current_mode;
-            printf("change sys->current_mode%s\n", mode_names[sys->current_mode]);
+            // log_system("[emcmot] 系统模式切换为(%s)", mode_names[sys->current_mode]);
+            LOG_OUTPUT(INFO, "系统模式切换为 %s", mode_names[sys->current_mode]);
             break;
         case MODE_HOMING:
             if (!var_chan[0].is_homing) {
                 sys->current_mode = sys->target_mode;
                 sys->is_switching_mode = false;
                 var_chan[var_sys.active_chan].mode = sys->current_mode;
-                printf("change sys->current_mode%s\n", mode_names[sys->current_mode]);
+                // log_system("[emcmot] 系统模式切换为(%s)", mode_names[sys->current_mode]);
+                LOG_OUTPUT(INFO, "系统模式切换为 %s", mode_names[sys->current_mode]);
                 break;
             }
             sys->nc_event = SYS_EVENT_RESET;
@@ -182,22 +191,18 @@ static void set_operating_mode() {
                 sys->current_mode = sys->target_mode;
                 sys->is_switching_mode = false;
                 var_chan[var_sys.active_chan].mode = sys->current_mode;
-                printf("change sys->current_mode%s\n", mode_names[sys->current_mode]);
-                LOG_OUTPUT(INFO, "sys mode: %d", sys->current_mode);
+                // log_system("[emcmot] 系统模式切换为(%s)", mode_names[sys->current_mode]);
+                LOG_OUTPUT(INFO, "系统模式切换为 %s", mode_names[sys->current_mode]);
                 break;
             } else if (mem_exec_state == EXEC_RUNNING) {
                 // 自动加工过程中不能切换模式，应先暂停
-                LOG_OUTPUT(INFO, "mode change fail: please press feed hold at first!\n");
-                printf("mode change fail: please press feed hold at first!\n");
-                // sys->target_mode = sys->current_mode;
-                // printf("changesys->current_mode%s\n",mode_names[sys->current_mode]);
-
+                // log_system("[emcmot] 自动加工下不能切换模式，请先按进给保持后切换");
+                LOG_OUTPUT(INFO, "自动加工下不能切换模式，请先按进给保持后切换");
                 break;
             }
             sys->nc_event = SYS_EVENT_RESET;
             sys->is_switching_mode = true;
             break;
-
         default:
             break;
     }
@@ -230,6 +235,7 @@ static void spindle_control(){
     //     default:
     //         break;
     // }
+    if(var_chan[0].is_estop) return;
     emcSpindleControl();
 }
 
@@ -237,41 +243,30 @@ static void spindle_control(){
 static void get_cmd_pos() {
     switch (sys->current_mode) {
         case MODE_IDLE: // 空闲状态
-            // LOG_DEBUG("current mode: IDLE.\n");
             break;
-
         case MODE_EDIT: // 编辑
             break;
-
         case MODE_ALARM: // 系统报错
-            // LOG_DEBUG("current mode: ALARM.\n");
             handle_alarm_cmd();
             break;
-
         case MODE_HOMING: // 回零
-            // LOG_DEBUG("current mode: HOMING.\n");
-            handle_homing_cmd();
+            // todo：回零点击啸叫
+            // handle_homing_cmd();
             break;
-
         case MODE_MDI: // MDI
         case MODE_MEM: // 自动
         case MODE_DNC:
             handle_run_cmd();
             break;
-
         case MODE_JOG: // 点动
             handle_jog_cmd();
             break;
-
         case MODE_RAPID_JOG: // 快速点动
-            // DPRINTF("current mode: RAPID.\n");
             handle_jog_rapid_cmd();
             break;
-
         case MODE_MPG: // 手轮
             handle_mpg_cmd();
             break;
-
         default: // error
             break;
     }
@@ -281,7 +276,9 @@ static void check_for_fault() {
     //　检查系统报警
     int alarm_count = 0;
     getAlarmCount(ALARM_TYPE_ALL, ALARM_LEVEL_ALL, &alarm_count);
-    if( alarm_count > 0) var_chan[0].is_estop;
+    if( alarm_count > 0){
+        var_chan[0].is_estop = true;
+    }
     // 检查跟随误差
     check_ferror_fault();
 }
@@ -306,13 +303,19 @@ static void check_ferror_fault() {
     updata_axis_ferror(&var_axis[AXIS_Z].ferror_control, &par_axis[AXIS_Z], pos_cmd_z, pos_fb_z, vel_cmd_z);
 
     if (var_axis[AXIS_X].ferror_control.error_flag) {
-        //  printf("X axis ferror_fault\n");
+        // setAlarm(ALARM_CH, ALARM_ERROR, 4);
+        // log_system("[ferror] Ｘ轴跟随误差报警");
+        // LOG_OUTPUT(ERROR, "Ｘ轴跟随误差报警");
     }
     if (var_axis[AXIS_Y].ferror_control.error_flag) {
-        //  printf("Y axis ferror_fault\n");
+        // setAlarm(ALARM_CH, ALARM_ERROR, 5);
+        // log_system("[ferror] Ｙ轴跟随误差报警");
+        // LOG_OUTPUT(ERROR, "Ｙ轴跟随误差报警");
     }
     if (var_axis[AXIS_Z].ferror_control.error_flag) {
-        //  printf("Z axis ferror_fault\n");
+        // setAlarm(ALARM_CH, ALARM_ERROR, 6);
+        // log_system("[ferror] Ｚ轴跟随误差报警");
+        // LOG_OUTPUT(ERROR, "Ｚ轴跟随误差报警");
     }
 }
 
@@ -387,11 +390,11 @@ static void check_for_soft_limit() {
     var_axis[AXIS_X].runtime.active_levels = Check_Axis_Limit_Violation(var_axis[AXIS_X].runtime);
     var_axis[AXIS_Y].runtime.active_levels = Check_Axis_Limit_Violation(var_axis[AXIS_Y].runtime);
     var_axis[AXIS_Z].runtime.active_levels = Check_Axis_Limit_Violation(var_axis[AXIS_Z].runtime);
-    // printf("x_limits%d y_limits%d z_limits%d \n",x_limits,y_limits,z_limits);
-    // if(var_axis[AXIS_X].runtime.active_levels || var_axis[AXIS_Y].runtime.active_levels || var_axis[AXIS_Z].runtime.active_levels){
-    //     var_chan[0].is_estop = true;
-    //     printf("超限位\n");
-    // }
+    if(var_axis[AXIS_X].runtime.active_levels || var_axis[AXIS_Y].runtime.active_levels || var_axis[AXIS_Z].runtime.active_levels){
+        // setAlarm(ALARM_CH, ALARM_ERROR, 7);
+        // log_system("[limit] 软限位超差");
+        // LOG_OUTPUT(ERROR, "软限位超差");
+    }
 }
 
 // 更新运动状态数据

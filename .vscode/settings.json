@@ -1,5 +1,10 @@
 {
     "cmake.cmakePath": "/usr/bin/cmake",
     "cmake.generator": "Ninja",
-    "cmake.ignoreCMakeListsMissing": true
+    "cmake.ignoreCMakeListsMissing": true,
+    "files.associations": {
+        "log.h": "c",
+        "thread": "c",
+        "logapi.h": "c"
+    }
 }

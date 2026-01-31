@@ -614,9 +614,6 @@ static void G_signal() {
         uint8* value = &GG[i];
         setRegValue8(REG_G, i, *value);
     }
-//    char value1;
-//    getRegValue8(REG_G, 14, &value1);
-//    printf("****G14******%d**\n", value1);
 }
 
 static void I_map() {
@@ -642,17 +639,6 @@ static void I_map() {
 
     //    CurrentRegData.regX[22]=plc_in.pd_data.keyboardIn9.all;
     //    CurrentRegData.regX[23]=plc_in.pd_data.keyboardIn9.all>>8;
-
-    //    printf("****6******%d**\n",plc_in.pd_data.keyboardIn6.all);
-//        printf("****7******%d**\n",plc_in.pd_data.keyboardIn7.all);
-    //    printf("****8******%d**\n",plc_in.pd_data.keyboardIn8.all);
-//        printf("****x10.0******%d**\n",plc_in.pd_data.keyboardIn4.bit.X60);
-
-
-//        printf("****5******%d**\n",plc_in.pd_data.keyboardIn5.all);
-    //    printf("****3******%d**\n",plc_in.pd_data.keyboardIn3.all);
-    //    printf("****2******%d**\n",plc_in.pd_data.keyboardIn2.all);
-    //    printf("****1******%d**\n",plc_in.pd_data.keyboardIn1.all);
     for (int j = 0; j < 8; ++j) {
         XX[j]      = abs(CurrentRegData.regX[j]);
         XX[8 + j]  = abs(CurrentRegData.regX[8 + j]);
@@ -660,7 +646,6 @@ static void I_map() {
         XX[24 + j] = abs(CurrentRegData.regX[24 + j]);
     }
     F_signal();
-//    printf("****X12******%d**\n",XX[12]);
 }
 
 static void O_map() {
@@ -681,13 +666,6 @@ static void O_map() {
     plc_out.panel_show.keyboardOut7.all = abs(CurrentRegData.regY[16])| (abs(CurrentRegData.regY[17]) << 8);
     plc_out.panel_show.keyboardOut8.all = abs(CurrentRegData.regY[18])| (abs(CurrentRegData.regY[19]) << 8);
     G_signal();
-    //        printf("****Y1******%d**\n",plc_out.panel_show.keyboardOut1.all);
-    //        printf("****Y2******%d**\n",plc_out.panel_show.keyboardOut2.all);
-//            printf("****Y8******%d**\n",plc_out.panel_show.keyboardOut3.all);
-    //        printf("****Y4******%d**\n",plc_out.panel_show.keyboardOut4.all);
-    //        printf("****G14******%d**\n",abs(GG[14]));
-    //        printf("****Y6******%d**\n",plc_out.panel_show.keyboardOut6.all);
-    //        printf("****Y7******%d**\n",plc_out.panel_show.keyboardOut7.all);
 }
 
 static void row_run(int n) {
@@ -776,7 +754,6 @@ static void DealEndPNBufJumpCall() {
             case OP_SP:
                 break;
             default:
-                //    printf("=>Induction fault\n");
                 break;
         }
     }
@@ -840,7 +817,6 @@ static void plc_run_init() {
 //    array[OP_LBL] = LBL_run;
 //    array[OP_CALL] = CALL_run;
 //    array[OP_TOTAL] = TOTAL_run;
-    //    qDebug()<<"****梯图信息,指令数据测试19****";
 }
 
 //************记录上周期数据及更新当前周期数据（LDP、LDF等）******************

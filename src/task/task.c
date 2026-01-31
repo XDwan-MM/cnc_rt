@@ -2,6 +2,7 @@
 #include "eventdef.h"
 #include "spindle.h"
 #include "logapi.h"
+#include "log.h"
 #include <alarmapi.h>
 #include <stdlib.h>
 
@@ -19,8 +20,10 @@ GNC_RES task_mq_proc()
 {
     if(event_queue_is_empty(event_queue)) return GNC_DATA_EMPTY;
     if(event_queue_is_full(event_queue)){
+        // log_system("[task] 事件队列已满");
+        LOG_OUTPUT(ERROR, "事件队列已满");
         setAlarm(ALARM_CH, ALARM_ERROR, 3);
-        return GNC_OPERATOR_ERROR; // error!
+        return GNC_OPERATOR_ERROR;
     }
     // if(sys->nc_event != SYS_EVENT_NONE) return GNC_OPERATOR_WARNING;
     event_queue_pop(event_queue, &event_data);
@@ -51,7 +54,8 @@ static GNC_RES task_handle_pmc_event(PMC_EVENT* event_data){
             case 6: sys->target_mode = MODE_DNC;    break; // DNC (DNCI)
             default: sys->target_mode = MODE_IDLE;  break; // wcf: 我不太确定
             }
-            printf("task target_mode changed to: %d\n", sys->target_mode);
+            // log_system("[task]] 处理模式切换事件(%d)", sys->target_mode);
+            LOG_OUTPUT(INFO, "处理模式切换事件 %d", sys->target_mode);
             break;
         }
         /* 2. 进给轴按键处理：根据当前模式分发内部系统事件 */
@@ -61,53 +65,63 @@ static GNC_RES task_handle_pmc_event(PMC_EVENT* event_data){
             int direction = event_data->feedaxis_key_payload.direction; // 1:正按, -1:负按, 0:松开
 
             // 基于当前系统模式进行逻辑分发
-            if (sys->current_mode == MODE_JOG || sys->current_mode == MODE_HOMING)
+            if (sys->current_mode == MODE_JOG || sys->current_mode == MODE_HOMING || sys->current_mode == MODE_ALARM)
             {
                 // axis为轴号
                 if (axis == AXIS_X) {
                     if (direction == 1)
                     {
                         sys->nc_event = SYS_EVENT_X_POS_PRESS;
+                        LOG_OUTPUT(INFO, "处理X+按下事件");
                     }
                     else if (direction == -1)
                     {
                         sys->nc_event = SYS_EVENT_X_NEG_PRESS;
+                        LOG_OUTPUT(INFO, "处理X-按下事件");
                     }
                     else {
                         // 松开时，为了保险，可以根据 record_nc_event 或直接触发 Release
                         sys->nc_event = (sys->nc_event == SYS_EVENT_X_POS_PRESS) ?
                                             SYS_EVENT_X_POS_RELEASE : SYS_EVENT_X_NEG_RELEASE;
+                        LOG_OUTPUT(INFO, "处理Ｘ释放事件");
                     }
                 }
                 else if (axis == AXIS_Y) {
                     if (direction == 1)
                     {
                         sys->nc_event = SYS_EVENT_Y_POS_PRESS;
+                        LOG_OUTPUT(INFO, "处理Ｙ+按下事件");
                     }
                     else if (direction == -1)
                     {
                         sys->nc_event = SYS_EVENT_Y_NEG_PRESS;
+                        LOG_OUTPUT(INFO, "处理Ｙ-按下事件");
                     }
                     else {
                         sys->nc_event = (sys->nc_event == SYS_EVENT_Y_POS_PRESS) ?
                                             SYS_EVENT_Y_POS_RELEASE : SYS_EVENT_Y_NEG_RELEASE;
+                        LOG_OUTPUT(INFO, "处理Ｙ释放事件");
                     }
                 }
                 else if (axis == AXIS_Z) {
                     if (direction == 1)
                     {
                         sys->nc_event = SYS_EVENT_Z_POS_PRESS;
+                        LOG_OUTPUT(INFO, "处理Z+按下事件");
                     }
                     else if (direction == -1)
                     {
                         sys->nc_event = SYS_EVENT_Z_NEG_PRESS;
+                        LOG_OUTPUT(INFO, "处理Z-按下事件");
                     }
                     else {
                         sys->nc_event = (sys->nc_event == SYS_EVENT_Z_POS_PRESS) ?
                                             SYS_EVENT_Z_POS_RELEASE : SYS_EVENT_Z_NEG_RELEASE;
+                        LOG_OUTPUT(INFO, "处理Z释放事件");
                     }
                 }
-                printf("Axis %d action %d under mode %d\n", axis, direction, sys->current_mode);
+                // log_system("[task]] 处理进给轴按键事件 Axis %d action %d under mode %d", axis, direction, sys->current_mode);
+                LOG_OUTPUT(INFO, "处理进给轴按键事件 Axis %d action %d under mode %d", axis, direction, sys->current_mode);
             }
             break;
         }
@@ -118,19 +132,22 @@ static GNC_RES task_handle_pmc_event(PMC_EVENT* event_data){
                 spindle.state = DRV_STATE_OPERATION_ENABLED;
                 spindle.mode = DRV_MODE_CSV;
                 sp_sign = 1;
-                printf("task event : 主轴正转\n");
+                // log_system("[task]] 处理主轴正转事件");
+                LOG_OUTPUT(INFO, "处理主轴正转事件");
             }
             if(event_data->spindle_payload.direction == -1)
             {
                 spindle.state = DRV_STATE_OPERATION_ENABLED;
                 spindle.mode = DRV_MODE_CSV;
                 sp_sign = 2;
-                printf("task event : 主轴反转\n");
+                // log_system("[task]] 处理主轴反转事件");
+                LOG_OUTPUT(INFO, "处理主轴反转事件");
             }
             if(event_data->spindle_payload.direction == 0)
             {
                 sp_sign = 0;
-                printf("task event : 主轴停止\n");
+                // log_system("[task]] 处理主轴停止事件");
+                LOG_OUTPUT(INFO, "处理主轴停止事件");
             }
             break;
         }
@@ -159,14 +176,16 @@ static GNC_RES task_handle_pmc_event(PMC_EVENT* event_data){
             {
                 // 循环启动
                 sys->nc_event = SYS_EVENT_RERUN;
-                printf("task event : rerun\n");
+                // log_system("[task]] 处理循环启动事件");
+                LOG_OUTPUT(INFO, "处理循环启动事件");
                 
             }
             if(event_data->run_payload.run_state == 0)
             {
                 // 进给保持
                 sys->nc_event = SYS_EVENT_PAUSE;
-                printf("task event : hold\n");
+                // log_system("[task]] 处理进给保持事件");
+                LOG_OUTPUT(INFO, "处理进给保持事件");
             }
             break;
         }
@@ -175,7 +194,8 @@ static GNC_RES task_handle_pmc_event(PMC_EVENT* event_data){
             if(event_data->run_payload.run_state == 0)
             {
                 sys->nc_event = SYS_EVENT_RESET;
-                printf("task event : reset\n");
+                // log_system("[task]] 处理复位事件");
+                LOG_OUTPUT(INFO, "处理复位事件");
             }
             break;
         }

@@ -3,6 +3,8 @@
 #include "signal_utils.h"  /**< 边沿检测宏定义 */
 #include <string.h>
 #include "global.h"
+#include "logapi.h"
+#include "log.h"
 
 
 /* ==========================================================================
@@ -170,30 +172,25 @@ static void pmc_dispatch_event(PMC_EVENT_ID id, int p1, int p2)
     {
         event.id = id;
         event.mode_payload.mode = p1; // 目标模式
-        printf("pmc scan mode:%d\n", p1);
+        // log_system("[plc] 扫描到模式切换(%d)", id);
+        LOG_OUTPUT(INFO, "扫描到模式切换 %d", id);
         break;
     }
-    // case EV_MSG_JOG:
-    // {
-    //     event.id = id;
-    //     event.jog_payload.axis_num = p1;
-    //     event.jog_payload.direction = p2;
-    //     printf("pmc scan jog:%d, axis: %d, direction: %d\n", event.id, p1, p2);
-    //     break;
-    // }
     case EV_MSG_FEEDAXIS_KEY:
     {
         event.id = id;
         event.feedaxis_key_payload.axis_num = p1;
         event.feedaxis_key_payload.direction = p2;
-        printf("pmc scan feedaxis_key: %d, axis: %d, action: %d\n", event.id, p1, p2);
+        // log_system("[plc] 扫描到手动 feedaxis_key: %d, axis: %d, action: %d ", event.id, p1, p2);
+        LOG_OUTPUT(INFO, "扫描到手动 feedaxis_key: %d, axis: %d, action: %d", event.id, p1, p2);
         break;
     }
     case EV_MSG_SPINDLE:
     {
         event.id = id;
         event.spindle_payload.direction = p1;
-        printf("pmc scan sp:%d, direction: %d\n", event.id, p1);
+        // log_system("[plc] 扫描到主轴切换 sp:%d, direction: %d", event.id, p1);
+        LOG_OUTPUT(INFO, "扫描到主轴切换 sp:%d, direction: %d", event.id, p1);
         break;
     }
     case EV_MSG_OVERRIDE:
@@ -201,21 +198,24 @@ static void pmc_dispatch_event(PMC_EVENT_ID id, int p1, int p2)
         event.id = id;
         event.override_payload.override_type = p1;
         event.override_payload.val = p2;
-        printf("pmc scan sp:%d, type: %d, val: %d\n", event.id, p1, p2);
+        // log_system("[plc] 扫描到倍率切换 type: %d, override_type: %d, val: %d ", event.id, p1, p2);
+        LOG_OUTPUT(INFO, "扫描到倍率切换 type: %d, override_type: %d, val: %d", event.id, p1, p2);
         break;
     }
     case EV_MSG_AUTO_RUN:
     {
         event.id = id;
         event.run_payload.run_state = p1;
-        printf("pmc scan run:%d, state: %d\n", event.id, p1);
+        // log_system("[plc] 扫描到运行状态切换 run:%d, state: %d", event.id, p1);
+        LOG_OUTPUT(INFO, "扫描到运行状态切换 run:%d, state: %d", event.id, p1);
         break;
     }
     case EV_MSG_RESET:
     {
         event.id = id;
         event.reset_payload.reset_state = p1;
-        printf("pmc scan run:%d, state: %d\n", event.id, p1);
+        // log_system("[plc] 扫描到复位: %d, reset_state: %d", event.id, p1);
+        LOG_OUTPUT(INFO, "扫描到复位: %d, reset_state: %d", event.id, p1);
         break;
     }
     default:

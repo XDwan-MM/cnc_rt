@@ -1,6 +1,7 @@
 #include "parser.h"
 #include "global.h"
 #include "log.h"
+#include <logapi.h>
 #include <alarmapi.h>
 
 STATIC void parser_macro_init();
@@ -41,7 +42,9 @@ void parser_new(){
 GNC_RES parser_init(const char* parser_file_path)
 {   
     if(parser_file_path == NULL) {
-        LOG_OUTPUT(ERROR, "parser file path not exist");
+        // log_system("[parser] 译码文件路径不存在");
+        LOG_OUTPUT(ERROR, "译码文件路径不存在");
+        setAlarm(ALARM_CH, ALARM_ERROR, 8);
         return GNC_OPERATOR_ERROR;
     }
     ItpReset();
@@ -119,7 +122,6 @@ STATIC GNC_RES parser_handle_gcode(pmc_data* motion_data, NcItpState *itp_state,
     gcode_block.line_number = *line_no;
     // 加入队列
     if(gcode_queue_is_full(gcode_queue)){
-        // LOG_OUTPUT(INFO, "gcode queue full");
         return GNC_DATA_FULL;
     }
     gcode_queue_push(gcode_queue, &gcode_block);
@@ -141,14 +143,14 @@ GNC_RES parser_reading(){
     int error_no = ItpError();
     if (error_no >= 0)
     {
-        printf("interpreter error: %d", error_no);
-        LOG_OUTPUT(ERROR, "interpreter error: %d", error_no);   // 报警
-        setAlarm(ALARM_CH, ALARM_ERROR, 2);
+        // log_system("[parser] 译码错误(%d)", error_no);
+        LOG_OUTPUT(ERROR, "译码错误 %d", error_no);
         return GNC_CAL_ERROR;
     }
     if (parser_data->itp_datas.count <= 0)
     {
-        LOG_OUTPUT(WARN, "interpreter res is empty"); // 空包
+        // log_system("[parser] 译码为空");
+        LOG_OUTPUT(WARN, "译码为空"); // 空包
     }
     else
     {
@@ -185,7 +187,8 @@ GNC_RES parser_waiting_for_buf(){
 STATIC bool parser_check_res(GNC_RES res){
     switch(res){
         case GNC_PARSER_OVER:
-            LOG_OUTPUT(INFO, "parser end");
+            // log_system("[parser] 译码结束");
+            LOG_OUTPUT(INFO, "译码结束");
             parser_data->parser_state = PARSER_IDLE;
             sys->is_parse_running = false;
             parser_reset();
@@ -194,23 +197,22 @@ STATIC bool parser_check_res(GNC_RES res){
         case GNC_OPERATOR_SUCCESS:
             if(parser_data->parser_state == PARSER_WAITING_FOR_BUF){
                 parser_data->parser_state = PARSER_READING;
-                // return false;
             }     
             return true;
         case GNC_DATA_FULL:
-            // LOG_OUTPUT(INFO, "parser waiting for buf");
             if(parser_data->parser_state == PARSER_READING){
                 parser_data->parser_state = PARSER_WAITING_FOR_BUF;
                 return false;
             }
             return true;
         default:
-            LOG_OUTPUT(ERROR, "parser error: %d", res);
             parser_data->parser_state = PARSER_IDLE;
             // todo：译码出错让运动暂停后报警，而不是直接进入报警
             var_chan[0].is_estop = true;
             sys->current_mode = sys->target_mode = MODE_ALARM;
-            LOG_OUTPUT(ERROR, "current_mode: ESTOP !!!");
+            // log_system("[parser] 译码报警(%d)", res);
+            LOG_OUTPUT(ERROR, "译码报警 %d", res);
+            setAlarm(ALARM_CH, ALARM_ERROR, 2);
             parser_reset();
             return false;
     }

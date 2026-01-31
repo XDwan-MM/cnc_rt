@@ -27,8 +27,6 @@ GNC_RES chan_add_block(){
         if(gcode_block == NULL) return GNC_DATA_NULL;
         pretreat_queue->pre_pos = gcode_block->pos;
         gcode_queue_pop(gcode_queue);
-        // printf("if(sys->is_first_run)%f\n",pretreat_queue->pre_pos.x);
-        // LOG_OUTPUT(INFO, "pretreat_queue->pre_pos: %f %f %f", pretreat_queue->pre_pos.x, pretreat_queue->pre_pos.y, pretreat_queue->pre_pos.z); 
         sys->is_first_run = false;
     }
 
@@ -52,9 +50,7 @@ GNC_RES chan_add_block(){
         pretreat_block->type = gcode_block->type;
         pretreat_block->feed_vel = gcode_block->feed_vel;
         block_cal_pos(gcode_block, pretreat_block, &pretreat_queue->pre_pos);
-        // LOG_OUTPUT(INFO, "pretreat_block->pos: (%f %f %f), (%f %f %f)", pretreat_block->start_pos.x, pretreat_block->start_pos.y, pretreat_block->start_pos.z,
-        //     pretreat_block->end_pos.x, pretreat_block->end_pos.y, pretreat_block->end_pos.z);
-
+        
         // 计算速度
         block_cal_vel(pretreat_block);
 
@@ -120,14 +116,11 @@ GNC_RES chan_look_ahead(double vs){
     // 修正首段速度
     cur_block = queue_peak(plan_queue);
     block_cal_lookahead_vel(cur_block, plan_queue->pre_head_type, plan_queue->next_vel);
-    // LOG_OUTPUT(INFO, "1 %f %f", cur_block->length, cur_block->feed_vel);
     cur_block->start_vel = vs;
     // 判断是否大于最大速度
     if(cur_block->start_vel > cur_block->max_vel) cur_block->max_vel = cur_block->start_vel;
     /*******************************************/
     vp_cal_bid_lookahead(par_chan[0].vplan_mode, plan_queue, par_ncu.cycle);
-    // LOG_OUTPUT(INFO, "2 %f %f", cur_block->length, cur_block->feed_vel);
-
     return GNC_CAL_SUCCESS;
 }
 

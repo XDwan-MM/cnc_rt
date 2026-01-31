@@ -42,7 +42,6 @@ void* task_controller_thread_func(void*) {
     while (!exit_flag) {
         // todo：修改此处写法
         usleep(5000);
-        // printf("task_controller_thread_func\n");
         task_mq_proc();
     }
     return NULL;
@@ -52,7 +51,6 @@ void* task_controller_thread_func(void*) {
 void* soft_plc_thread_func(void*) {
     while (!exit_flag) {
         sem_wait(&plc_sem);
-        // printf("soft_plc_thread_func\n");
         #ifdef DEBUG_MODE_ENABLED
         hal_keyboard_minitor();
         #else
@@ -69,7 +67,6 @@ void* motion_controller_thread_func(void*) {
     {
         sem_wait(&motion_sem);
         if (exit_flag) break;
-        // printf("motion_controller_thread_func\n");
         Hal_Driver_Update_All(true, false);
         // todo：修改此处写法
         if (sys->nc_event == SYS_EVENT_RESET || RESET || sys->nc_event == SYS_EVENT_PAUSE) {
@@ -97,7 +94,6 @@ void* path_plan_thread_func(void*) {
     while (!exit_flag)
     {
         sem_wait(&path_plan_sem);
-        // printf("path_plan_thread_func\n");
         emcmotPathPlan();
     }
     return NULL;

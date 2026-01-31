@@ -2,6 +2,7 @@
 #include "datatype.h"
 #include "global.h"
 #include "log.h"
+#include "logapi.h"
 #include <alarmapi.h>
 
 static void homing_set_state();
@@ -34,8 +35,8 @@ void handle_homing_cmd() {
 }
 
 static void abs_homing_do_home(AXIS_TYPE axis_type) {
-    var_axis[axis_type].cmd_pos = var_axis[axis_type].act_pos + abs_homing_tp_pinc(axis_type);
-    printf("axis_type:%d, act_pos:%f, cmd_pos:%f\n", axis_type, var_axis[axis_type].act_pos, var_axis[axis_type].cmd_pos);
+    var_axis[axis_type].cmd_pos = var_axis[axis_type].cmd_pos + abs_homing_tp_pinc(axis_type);
+    // printf("axis_type:%d, act_pos:%f, cmd_pos:%f\n", axis_type, var_axis[axis_type].act_pos, var_axis[axis_type].cmd_pos);
 }
 
 static void homing_is_all_homed() {
@@ -59,9 +60,10 @@ static void homing_set_state() {
             break;
 
         case SYS_EVENT_RESET:
+            // log_system("[home] 回零处理复位");
+            LOG_OUTPUT(INFO, "回零处理复位");
             for (int i = 0; i < SYS_AXES_NUM; i++) {
                 if (homing_tp[i].homing_state == ABS_EXEC_HOMING) {
-                    LOG_OUTPUT(INFO, "click reset");
                     if (abs_homing_is_axis_homed(i)) {
                         homing_tp[i].homing_state = ABS_EXEC_IDLE;
                         break;
@@ -76,8 +78,9 @@ static void homing_set_state() {
             break;
 
         case SYS_EVENT_X_POS_PRESS:
+            // log_system("[home] 回零处理X按下");
+            LOG_OUTPUT(INFO, "回零处理X按下");
             // todo：复位暂停的过程是否可以再次按下X重新进行回零
-            LOG_OUTPUT(INFO, "click x+");
             if (sys->is_switching_mode) break; // 换挡模式下，不允许操作
             if (homing_tp[AXIS_X].homing_state == ABS_EXEC_IDLE) {
                 if (abs_homing_is_axis_homed(AXIS_X)) {
@@ -94,7 +97,8 @@ static void homing_set_state() {
             break;
 
         case SYS_EVENT_Y_POS_PRESS:
-            LOG_OUTPUT(INFO, "click y+");
+            // log_system("[home] 回零处理Y按下");
+            LOG_OUTPUT(INFO, "回零处理Y按下");
             if (sys->is_switching_mode) break;
             if (homing_tp[AXIS_Y].homing_state == ABS_EXEC_IDLE) {
                 if (abs_homing_is_axis_homed(AXIS_Y)) {
@@ -110,7 +114,8 @@ static void homing_set_state() {
             break;
 
         case SYS_EVENT_Z_POS_PRESS:
-            LOG_OUTPUT(INFO, "click z+");
+            // log_system("[home] 回零处理Z按下");
+            LOG_OUTPUT(INFO, "回零处理Z按下");
             if (sys->is_switching_mode) break;
             if (homing_tp[AXIS_Z].homing_state == ABS_EXEC_IDLE) {
                 if (abs_homing_is_axis_homed(AXIS_Z)) {
@@ -127,11 +132,9 @@ static void homing_set_state() {
 
         case SYS_EVENT_RERUN:
         case SYS_EVENT_PAUSE:
-            LOG_OUTPUT(INFO, "home mode is not support this operation\n");
-            break;
-
         default:
-            LOG_OUTPUT(INFO, "home mode is not support this operation\n");
+            // log_system("[home] 回零不支持次操作(%d)", sys->nc_event);
+            LOG_OUTPUT(WARN, "回零不支持次操作 %d", sys->nc_event);
             break;
     }
     sys->nc_event = SYS_EVENT_NONE;
@@ -142,7 +145,6 @@ static bool homing_check_res(GNC_RES res) {
         case GNC_CAL_SUCCESS:
         case GNC_OPERATOR_SUCCESS:
             return true;
-
         case GNC_DATA_NULL:
         case GNC_PARAM_UNVALID:
         case GNC_CAL_ERROR:
@@ -153,8 +155,8 @@ static bool homing_check_res(GNC_RES res) {
             var_chan[0].is_resetting = false;
             var_chan[0].is_moving = false;
             var_chan[0].is_homing = false;
-            LOG_OUTPUT(ERROR, "alarm: %d", res);
-            LOG_OUTPUT(ERROR, "current_mode: ESTOP !!!");
+            // log_system("[home] 回零错误(%d)", res);
+            LOG_OUTPUT(ERROR, "回零错误 %d", res);
             setAlarm(ALARM_CH, ALARM_ERROR, 0);
             return false;
     }
@@ -212,7 +214,10 @@ static GNC_RES abs_homing_tp_init(AXIS_TYPE axis_type) {
     else
         homing_tp[axis_type].homing_direction = AXIS_HOMING_NEGATIVE;
     var_chan[0].is_homing = true;
-    if (res != GNC_CAL_SUCCESS) LOG_OUTPUT(ERROR, "vp cal vel profile fail");
+    if (res != GNC_CAL_SUCCESS){
+        // log_system("[home] 速度计算错误(%d)", res);
+        LOG_OUTPUT(ERROR, "速度计算错误 %d", res);
+    }
     return res;
 }
 
@@ -231,7 +236,10 @@ static GNC_RES abs_cancel_tp_init(AXIS_TYPE axis_type) {
         homing_tp[axis_type].homing_direction = AXIS_HOMING_POSITIVE; // 回零移动方向
     else
         homing_tp[axis_type].homing_direction = AXIS_HOMING_NEGATIVE;
-    if (res != GNC_CAL_SUCCESS) LOG_OUTPUT(ERROR, "vp cal vel profile fail");
+    if (res != GNC_CAL_SUCCESS){
+        // log_system("[home] 速度计算错误(%d)", res);
+        LOG_OUTPUT(ERROR, "速度计算错误 %d", res);
+    }
     return res;
 }
 
@@ -252,7 +260,7 @@ static bool abs_homing_is_axis_homed(AXIS_TYPE axis_type) {
 
 // 检查轴是否都已取消回零
 static bool abs_homing_is_axis_canceled(AXIS_TYPE axis_type) {
-    if (fabs(homing_tp[axis_type].remain_distance) < HOME_TOL || homing_tp[axis_type].interp_cycle > homing_tp[axis_type].homing_profile->t_cycle) return true;
+    if (homing_tp[axis_type].interp_cycle > homing_tp[axis_type].homing_profile->t_cycle) return true;
     return false;
 }
 

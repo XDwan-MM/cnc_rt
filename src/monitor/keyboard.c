@@ -253,34 +253,34 @@ static void scan_key_to_event(int key) {
             event.spindle_payload.direction = -1;
             break;
         case KEY_EV_X_POS_PRESS:
-            event.id = EV_MSG_JOG;
-            event.jog_payload.axis_num = 0;
-            event.jog_payload.direction = 1;
+            event.id = EV_MSG_FEEDAXIS_KEY;
+            event.feedaxis_key_payload.axis_num = 0;
+            event.feedaxis_key_payload.direction = 1;
             break;
         case KEY_EV_X_NEG_PRESS:
-            event.id = EV_MSG_JOG;
-            event.jog_payload.axis_num = 0;
-            event.jog_payload.direction = -1;
+            event.id = EV_MSG_FEEDAXIS_KEY;
+            event.feedaxis_key_payload.axis_num = 0;
+            event.feedaxis_key_payload.direction = -1;
             break;
         case KEY_EV_Y_POS_PRESS:
-            event.id = EV_MSG_JOG;
-            event.jog_payload.axis_num = 1;
-            event.jog_payload.direction = 1;
+            event.id = EV_MSG_FEEDAXIS_KEY;
+            event.feedaxis_key_payload.axis_num = 1;
+            event.feedaxis_key_payload.direction = 1;
             break;
         case KEY_EV_Y_NEG_PRESS:
-            event.id = EV_MSG_JOG;
-            event.jog_payload.axis_num = 1;
-            event.jog_payload.direction = -1;
+            event.id = EV_MSG_FEEDAXIS_KEY;
+            event.feedaxis_key_payload.axis_num = 1;
+            event.feedaxis_key_payload.direction = -1;
             break;
         case KEY_EV_Z_POS_PRESS:
-            event.id = EV_MSG_JOG;
-            event.jog_payload.axis_num = 2;
-            event.jog_payload.direction = 1;
+            event.id = EV_MSG_FEEDAXIS_KEY;
+            event.feedaxis_key_payload.axis_num = 2;
+            event.feedaxis_key_payload.direction = 1;
             break;
         case KEY_EV_Z_NEG_PRESS:
-            event.id = EV_MSG_JOG;
-            event.jog_payload.axis_num = 2;
-            event.jog_payload.direction = -1;
+            event.id = EV_MSG_FEEDAXIS_KEY;
+            event.feedaxis_key_payload.axis_num = 2;
+            event.feedaxis_key_payload.direction = -1;
             break;
         default:
             return;

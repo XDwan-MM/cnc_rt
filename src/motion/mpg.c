@@ -66,15 +66,12 @@ void handle_mpg_cmd() {
         switch (axis) {
             case 0:
                 var_axis[AXIS_X].cmd_pos = simple_tp[0].joint.pos_cmd;
-                printf("simple_tp[0].joint.pos_cmd:%f\n", simple_tp[0].joint.pos_cmd);
                 break;
             case 1:
                 var_axis[AXIS_Y].cmd_pos = simple_tp[1].joint.pos_cmd;
-                printf("simple_tp[1].joint.pos_cmd:%f %f\n", simple_tp[1].joint.pos_cmd, var_axis[AXIS_Y].cmd_pos);
                 break;
             case 2:
                 var_axis[AXIS_Z].cmd_pos = simple_tp[2].joint.pos_cmd;
-                printf("simple_tp[2].joint.pos_cmd:%f\n", simple_tp[2].joint.pos_cmd);
                 break;
         }
     }

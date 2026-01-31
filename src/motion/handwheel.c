@@ -1,4 +1,5 @@
 ﻿#include "handwheel.h"
+#include "log.h"
 #include <math.h>
 
 simple_tp_t_handwheel simple_tp[5];
@@ -45,14 +46,13 @@ void Handlewheels_Motion(simple_tp_t_handwheel *tp)
     delta = new_hw_counts - tp->joint.old_counts;
     if (abs(delta) > 1000000)
     {
-        printf("脉冲数超过限制\n");
+        LOG_OUTPUT(WARN, "脉冲数超过限制");
     }
     /* 保存值供下次使用 */
     tp->joint.old_counts = new_hw_counts;
     /* 初始化完成 */
     if (tp->first_pass)
     {
-        printf("runhere\n");
         tp->first_pass = 0;
         return;
     }
@@ -81,8 +81,6 @@ void Handlewheels_Motion(simple_tp_t_handwheel *tp)
     tp->pos_cmd = pos;
     tp->max_vel = tp->joint.vel_limit;
     tp->max_acc = jaccel_limit;
-    //printf("tp->pos_cmd：%f tp->joint.pos_cmd：%f\n",tp->pos_cmd,tp->joint.pos_cmd);
-
 }
 
 void Simple_Tp_Update(simple_tp_t_handwheel *tp)
@@ -129,5 +127,4 @@ void Simple_Tp_Update(simple_tp_t_handwheel *tp)
     }
     /* 对速度积分以获得新位置 */
     tp->curr_pos += tp->curr_vel * par_ncu.cycle;
-    printf("tp->curr_pos:%f vel_req:%f  max_dv:%f  tp->curr_vel:%f \n",tp->curr_pos,vel_req,max_dv,tp->curr_vel);
 }

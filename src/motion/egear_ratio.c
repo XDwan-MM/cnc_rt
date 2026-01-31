@@ -38,7 +38,6 @@ double pulses_to_position(int32_t pulses_fb, const PAR_AXIS *axis)
     {
         pos = convert_pulses_to_position_with_offset(pulses_fb, axis);
     }
-//    printf("pos: %f\n", pos);
     return pos;
 }
 
@@ -63,7 +62,6 @@ int32_t position_to_pulses(double postion, const PAR_AXIS *axis)
     {
         pulses = convert_position_to_pulses_with_offset(postion, axis);
     }
-//    printf("pulses: %f\n", pulses);
     return pulses;
 }
 
@@ -94,8 +92,6 @@ static double convert_pulses_to_position_with_offset(int32_t feedback_pulses, co
 
     // 2.转换为机械位置（先转double避免溢出）
     pos_convert = ((double)feedback_pulses) * mm_per_pulse;
-
-    // printf("bbbbb: %f %f %f\n", offset, pos_convert, pos_convert - offset);
 
     // 3.应用编码器反馈偏置（零点偏移）
     return (pos_convert - offset);

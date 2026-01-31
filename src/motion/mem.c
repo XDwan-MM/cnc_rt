@@ -7,6 +7,7 @@
 #include "datatype.h"
 #include "pathplan.h"
 #include "log.h"
+#include "logapi.h"
 #include "varapi.h"
 #include <alarmapi.h>
 
@@ -64,8 +65,8 @@ static void mem_set_state(){
             break;
 
         case SYS_EVENT_RESET:
-            printf("mem: click reset\n");
-            LOG_OUTPUT(INFO, "click reset");
+            // log_system("[mem] 记忆模式处理复位");
+            LOG_OUTPUT(INFO, "记忆模式处理复位");
             if(mem_exec_state == EXEC_RUNNING || mem_exec_state == EXEC_PAUSING){
                 mem_exec_state = EXEC_CANCELING;
                 res = cycle_tp_get_first();
@@ -73,7 +74,6 @@ static void mem_set_state(){
                 res = pausing_tp_init(par_chan[0].vplan_mode, var_chan[0].act_feedrate);
                 CHECK_RES(mem_check_res(res));
                 var_chan[0].is_resetting = true;
-                LOG_OUTPUT(ERROR, "reset line number: %d", cycle_tp->plan_block->line_number);
             }else if(mem_exec_state == EXEC_WAITING || mem_exec_state == EXEC_IDLE){
                 mem_exec_state = EXEC_IDLE;
                 sys->is_parse_running = false;
@@ -85,24 +85,20 @@ static void mem_set_state(){
                 rt_par_reset();
                 // 重置当前译码行
                 setVarChanInt(0, VAR_CHAN_RUN_ROW, 0, 0);
-                LOG_OUTPUT(INFO, "reset program");
             }
             // 通知译码复位
             var_chan[0].parser_reset = true;
             break;
         
         case SYS_EVENT_RERUN:
-            printf("mem: click run\n");
-            printf("mem_exec_state : %d, queue_is_empty: %d", mem_exec_state, queue_is_empty(plan_queue));
-            // LOG_OUTPUT(INFO, "click run");
-            // LOG_OUTPUT(INFO, "vplan_mode: %d", par_chan[0].vplan_mode);
+            // log_system("[mem] 记忆模式处理自动运行");
+            LOG_OUTPUT(INFO, "记忆模式处理自动运行");
             // 上一个状态为空闲或复位
             if(mem_exec_state == EXEC_IDLE && queue_is_empty(plan_queue)){
                 //　通知译码运行，初始化译码器
                 sys->is_parse_running = true;
                 // 译码正在运行，译码结束译码器将其置false
                 var_chan[0].is_parsering = true;
-                printf("sys is parser running");
                 mem_exec_state = EXEC_WAITING;
             }
             // 上一个状态或当前状态为暂停
@@ -113,12 +109,12 @@ static void mem_set_state(){
             break;
         
         case SYS_EVENT_PAUSE:
-            printf("mem: click pause\n");
-            LOG_OUTPUT(INFO, "click pause");
+            // log_system("[mem] 记忆模式处理暂停");
+            LOG_OUTPUT(INFO, "记忆模式处理暂停");
             if(mem_exec_state == EXEC_RUNNING){
                 mem_exec_state = EXEC_PAUSING;
-                printf("pause line number:%d\n", cycle_tp->plan_block->line_number);
-                LOG_OUTPUT(INFO, "pause line number: %d res%d", cycle_tp->plan_block->line_number, res);
+                // log_system("[mem] 进给保持运行行号(%d)", cycle_tp->plan_block->line_number);
+                LOG_OUTPUT(WARN, "进给保持运行行号 %d", cycle_tp->plan_block->line_number);
                 res = cycle_tp_get_first();
                 CHECK_RES(mem_check_res(res));
                 res = pausing_tp_init(par_chan[0].vplan_mode, var_chan[0].act_feedrate);
@@ -132,11 +128,9 @@ static void mem_set_state(){
         case SYS_EVENT_X_POS_PRESS:
         case SYS_EVENT_Y_POS_PRESS:
         case SYS_EVENT_Z_POS_PRESS:
-            LOG_OUTPUT(INFO, "mem mode is not support this operation");
-            break;
-
         default:
-            LOG_OUTPUT(INFO, "mem mode is not support this operation");
+            // log_system("[mem] 记忆模式不支持该操作");
+            LOG_OUTPUT(INFO, "记忆模式不支持该操作");
             break;
     }
     sys->nc_event = SYS_EVENT_NONE;
@@ -230,12 +224,12 @@ static bool mem_check_res(GNC_RES res){
             mem_exec_state = EXEC_RUNNING;
             var_chan[0].is_moving = true;
             var_chan[0].is_running = true;
-            LOG_OUTPUT(INFO, "program run");
+            // log_system("[mem] 程序开始运行");
+            LOG_OUTPUT(INFO, "程序开始运行");
         }
         return true;
 
     case GNC_DATA_EMPTY:
-        LOG_OUTPUT(INFO, "waiting for data");
         // 等待中无数据，则继续等待
         if(mem_check_running() && mem_exec_state == EXEC_WAITING) return true;   
         // 运行中无数据，则进入等待 
@@ -250,7 +244,8 @@ static bool mem_check_res(GNC_RES res){
         var_chan[0].is_moving = false;
         var_chan[0].is_progend = true;
         tp_reset();
-        LOG_OUTPUT(INFO, "program end");
+        // log_system("[mem] 程序运行结束");
+        LOG_OUTPUT(INFO, "程序运行结束");
         return false;
 
     case GNC_DATA_NULL:
@@ -263,8 +258,8 @@ static bool mem_check_res(GNC_RES res){
         var_chan[0].is_resetting = false;
         var_chan[0].is_running = false;
         var_chan[0].is_moving = false;
-        LOG_ERROR("alarm: %d", res);
-        LOG_OUTPUT(ERROR, "current_mode: ESTOP !!!");
+        // log_system("[mem] 记忆模式报警(%d)", res);
+        LOG_OUTPUT(ERROR, "记忆模式报警 %d", res);
         setAlarm(ALARM_CH, ALARM_ERROR, 1);
         return false;
     }
@@ -276,23 +271,20 @@ static bool mem_check_running(){
 }
 
 static GNC_RES cycle_tp_get_first(){
-    POS current_pos = {.x = var_axis[AXIS_X].act_pos, .y = var_axis[AXIS_Y].act_pos, .z = var_axis[AXIS_Z].act_pos};
+    POS current_pos = {.x = var_axis[AXIS_X].cmd_pos, .y = var_axis[AXIS_Y].cmd_pos, .z = var_axis[AXIS_Z].cmd_pos};
     cycle_tp_block_update(cycle_tp->plan_block, current_pos, var_chan[0].act_feedrate);
     if(chan_look_ahead(var_chan[0].act_feedrate) == GNC_DATA_EMPTY) return GNC_DATA_EMPTY;
     if(cycle_tp_init(par_chan[0].vplan_mode, var_chan[0].act_feedrate) == GNC_CAL_ERROR) return GNC_CAL_ERROR;
     shm_var_update_prog();
-    // LOG_OUTPUT(ERROR, "cycle line number: %d", cycle_tp->plan_block->line_number);
     return GNC_CAL_SUCCESS;
 }
 
 static GNC_RES cycle_tp_get_next(){
     // 1、弹出首段 2、前瞻 3、初始化
-    // LOG_OUTPUT(INFO, "plan_queue size: %d", queue_get_size(plan_queue));
     if(queue_pop(plan_queue) != GNC_OPERATOR_SUCCESS) return GNC_DATA_EMPTY;
     if(chan_look_ahead(var_chan[0].act_feedrate) == GNC_DATA_EMPTY) return GNC_DATA_EMPTY;
     if(cycle_tp_init(par_chan[0].vplan_mode, var_chan[0].act_feedrate) == GNC_CAL_ERROR) return GNC_CAL_ERROR;
     shm_var_update_prog();
-    // LOG_OUTPUT(ERROR, "cycle line number: %d", cycle_tp->plan_block->line_number);
     return GNC_CAL_SUCCESS;
 }
 
@@ -310,7 +302,7 @@ static GNC_RES cycle_tp_block_update(PLAN_BLOCK* current_block, POS current_pos,
 
 // 检查是否到目标点
 static bool tp_is_arrived(COORD_TP *tp){
-    if(fabs(tp->remain_distance) <= END_TOL || (tp->interp_cycle > tp->vel_profile->t_cycle)) return true;
+    if(tp->interp_cycle > tp->vel_profile->t_cycle) return true;
     return false;
 }
 
@@ -318,12 +310,10 @@ static GNC_RES cycle_tp_init(VELPLAN_TYPE velplan_type, double vs){
     GNC_RES res = GNC_CAL_SUCCESS;
     cycle_tp->plan_block = queue_peak(plan_queue); // 获取首段
     cycle_tp->interp_cycle = 1;
-    cycle_tp->accum_distance =
-     0;  
+    cycle_tp->accum_distance = 0;  
     cycle_tp->remain_distance = cycle_tp->plan_block->length;
     cycle_tp->current_distance = 0;
     cycle_tp->target_distance = 0;
-    printf("length:%f, max_vel:%f, feed_vel:%f\n", cycle_tp->plan_block->length, cycle_tp->plan_block->max_vel, cycle_tp->plan_block->feed_vel);
     res = vp_cal_vel_profile(velplan_type, cycle_tp->plan_block, cycle_tp->vel_profile, par_ncu.cycle); // 计算速度曲线
     if(res != GNC_CAL_SUCCESS) LOG_ERROR("vp cal vel profile fail%d\n",res);
     return res;
@@ -340,7 +330,7 @@ static GNC_RES pausing_tp_init(VELPLAN_TYPE velplan_type, double vs){
 
     // 计算减速距离
     double decline_s = vp_cal_decel_dist(velplan_type, vs, 0, amax, jmax);
-    if(decline_s < 0){
+    if(IsLessThan(decline_s, 0)){
         LOG_ERROR("decline_s < 0");
         return GNC_CAL_ERROR;
     }
@@ -379,8 +369,8 @@ static GNC_RES tp_params_update(VELPLAN_TYPE velplan_type, double cycle_time, CO
     tp->accum_distance = traj_data->s;
     tp->remain_distance = tp->plan_block->length - tp->accum_distance;
     tp->interp_cycle += 1;
-    if(tp->target_distance <= 0){
-        LOG_ERROR("tp->target_distance <= 0");
+    if(IsLessThan(tp->target_distance, 0)){
+        LOG_ERROR("tp->target_distance < 0");
         return GNC_CAL_ERROR;
     }
     return GNC_CAL_SUCCESS;

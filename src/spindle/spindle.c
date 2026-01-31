@@ -97,7 +97,6 @@ void emcSpindleControl()
     //control logic
     if(sp_sign == 2 && spindle.state == DRV_STATE_OPERATION_ENABLED)
     {
-        // printf("emc: 主轴正转\n");
         emot_speed = -1.0 * par_axis[AXIS_SP].default_s ;
         vel = Spindle_Ccw() ;
         sp_stop_sem = false;
@@ -107,7 +106,6 @@ void emcSpindleControl()
     }
     else if(sp_sign == 1 && spindle.state == DRV_STATE_OPERATION_ENABLED)
     {
-        // printf("emc: 主轴反转\n");
         emot_speed = 1.0 * par_axis[AXIS_SP].default_s ;
         vel = Spindle_Cw() ;
         sp_stop_sem = false;
@@ -121,11 +119,9 @@ void emcSpindleControl()
     }
     if(sp_sign == 0 && !sp_stop_sem)
     {
-        // printf("emc: 主轴停止\n");
         Spindle_Stop();
     }
     var_chan[0].cmd_spdl_speed = vel;
-//    printf("-=-==-=-=%f %f  \n",par_axis[AXIS_SP].default_s,var_chan[0].spdl_override);
 }
 
 
@@ -138,7 +134,6 @@ void emcmcodedeal()
             printf("Error: mcode_queue_pop returned NULL!\n");
             return; // 或其他错误处理
         }
-        printf("runhere --- %d %d\n",mcode_block->m_code,mcode_block->spindle.speed);
         if(mcode_block->m_code == M03)
         {
             spindle.mode = DRV_MODE_CSV;
@@ -162,7 +157,6 @@ void emcmcodedeal()
         if(sp_sign == 2)
         {
             vel = Spindle_Ccw() ;
-            printf("Spindle_Ccw : %d \n",vel);
             sp_stop_sem = false;
             stop_current_state = false;
             stop_last_state = false;
@@ -171,7 +165,6 @@ void emcmcodedeal()
         else if(sp_sign == 1)
         {
             vel = Spindle_Cw();
-            //  printf("Spindle_Cw : %d \n",vel);
             sp_stop_sem = false;
             stop_current_state = false;
             stop_last_state = false;

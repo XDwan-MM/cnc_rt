@@ -11,6 +11,8 @@
 #include "debug_mode.h"
 #include "global.h"
 #include "parser.h"
+#include "logapi.h"
+#include "log.h"
 #ifdef DEBUG_MODE_ENABLED
 #include "keyboard.h"
 #endif
@@ -26,7 +28,7 @@ int Master_Start() {
     char eni_path[512];
     snprintf(eni_path, sizeof(eni_path), "%s/%s", PROJECT_DIR, "config/ENI/gugao.xml");
     if (ethercat_init(eni_path) < 0) {
-        printf("EtherCAT 启动失败！\n");
+        printf("[start] EtherCAT 启动失败！\n");
         return -1;
     }
     return 1;
@@ -50,7 +52,7 @@ int main() {
     printMode();
     // 初始化共享内存
     if(!shmInit()) {
-        printf("共享内存初始化失败\n");
+        printf("[start] 共享内存初始化失败\n");
         return -1;
     } else  {
         errno = 0;
@@ -58,12 +60,12 @@ int main() {
 
     // 初始化实时全局变量
     if(rt_global_init() != GNC_OPERATOR_SUCCESS){
-        printf("全局变量初始化失败\n");
+        printf("[start] 全局变量初始化失败\n");
         return -1;
     };
     // 初始化译码器
     parser_new();
-    printf("全局变量初始化sucess\n");
+    printf("[start] 全局变量初始化sucess\n");
     // 初始化硬件抽象层
     Hal_Driver_Manager_Init();
     Hal_Driver_Array_Init();
@@ -88,7 +90,7 @@ int main() {
     init_rt_sem(); //需要放在线程启动（threads_start()函数）前
     // 启动各个线程
     if (threads_start()) {
-        printf("\n线程创建失败，主线程退出。\n");
+        printf("\n[start] 线程创建失败，主线程退出。\n");
         exit(1);
     }
     while (!exit_flag) {
