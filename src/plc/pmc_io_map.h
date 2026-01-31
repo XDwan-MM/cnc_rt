@@ -23,7 +23,7 @@ typedef enum {
 typedef enum {
     EV_MSG_NONE = 0,
     EV_MSG_MODE,        /**< 模式切换 (参数1: 模式索引) */
-    EV_MSG_JOG,         /**< 手动点动 (参数1: 轴号, 参数2: 方向) */
+    EV_MSG_FEEDAXIS_KEY,/**< 进给轴按键事件 (参数1: 轴号, 参数2: 方向) */
     EV_MSG_SPINDLE,     /**< 主轴控制 (参数1: 方向) */
     EV_MSG_OVERRIDE,    /**< 倍率调节 (参数1: 类型, 参数2: 数值) */
     EV_MSG_AUTO_RUN,    /**< 运行控制 (参数1: 启动/中止) */
@@ -40,7 +40,7 @@ typedef struct {
 typedef struct {
     int axis_num;
     int direction;
-} EV_MSG_JOG_PAYLOAD;
+} EV_MSG_FEEDAXIS_KEY_PAYLOAD;
 
 /* 3、*/
 typedef struct {
@@ -71,7 +71,7 @@ typedef struct {
     PMC_EVENT_ID id;    /**< 事件代码 */
     union{
         EV_MSG_MODE_PAYLOAD mode_payload;
-        EV_MSG_JOG_PAYLOAD jog_payload;
+        EV_MSG_FEEDAXIS_KEY_PAYLOAD feedaxis_key_payload;
         EV_MSG_SPINDLE_PAYLOAD spindle_payload;
         EV_MSG_OVERRIDE_PAYLOAD override_payload;
         EV_MSG_AUTO_RUN_PAYLOAD run_payload;

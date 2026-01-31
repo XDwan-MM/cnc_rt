@@ -46,37 +46,33 @@ void pmc_input_scan_cycle(void) {
         process_mode_selection(curr_g.G0043);
     }
 
-    /* 3. JOG 轴选检测 (G100/G102) - 支持多轴同时扫描 */
+    /* 3. 进给轴按键检测 (G100/G102) - 支持多轴同时扫描 */
     for (int i = 0; i < 3; i++) {
-        /* 正向 JOG 触发与停止 */
-        // 检测上升沿
+        /* 正向轴选按键检测 */
+        // 检测按下(上升沿)
         if (SIGNAL_RISING(curr_g.G0100, last_g.G0100, i))
         {
             // i = 0, 1, 2  对应这个G100变量的第0, 1, 2位。SIGNAL_RISING()为真时，发生上升沿，表示对应进给轴按钮被按下。
-            // 第三个参数，表示方向：1正向
-            pmc_dispatch_event(EV_MSG_JOG, i, 1);
+            pmc_dispatch_event(EV_MSG_FEEDAXIS_KEY, i, 1);
         }
-        // 检测下降沿
+        // 检测释放(下降沿)
         if (SIGNAL_FALLING(curr_g.G0100, last_g.G0100, i))
         {
             // i = 0, 1, 2  对应这个G100变量的第0, 1, 2位。SIGNAL_FALLING()为真时，发生下降沿，表示对应进给轴按钮被释放。
-            // 第三个参数，表示方向：0停止
-            pmc_dispatch_event(EV_MSG_JOG, i, 0);
+            pmc_dispatch_event(EV_MSG_FEEDAXIS_KEY, i, 0);
         }
-        /* 负向 JOG 触发与停止 */
-        // 检测上升沿
+        /* 负向轴选按键检测 */
+        // 检测按下(上升沿)
         if (SIGNAL_RISING(curr_g.G0102, last_g.G0102, i))
         {
             // i = 0, 1, 2  对应这个G102变量的第0, 1, 2位。SIGNAL_RISING()为真时，发生上升沿，表示对应进给轴按钮被按下。
-            // 第三个参数，表示方向：-1负向
-            pmc_dispatch_event(EV_MSG_JOG, i, -1);
+            pmc_dispatch_event(EV_MSG_FEEDAXIS_KEY, i, -1);
         }
-        // 检测下降沿
+        // 检测释放(下降沿)
         if (SIGNAL_FALLING(curr_g.G0102, last_g.G0102, i))
         {
             // i = 0, 1, 2  对应这个G102变量的第0, 1, 2位。SIGNAL_FALLING()为真时，发生下降沿，表示对应进给轴按钮被释放。
-            // 第三个参数，表示方向：0停止
-            pmc_dispatch_event(EV_MSG_JOG, i, 0);
+            pmc_dispatch_event(EV_MSG_FEEDAXIS_KEY, i, 0);
         }
     }
 
@@ -167,26 +163,30 @@ static int pmc_input_fetch_snapshot(G_INPUT_MAP *local_snap) {
 /** @brief 将解析出的逻辑打包为 PMC_EVENT 并入队 */
 static void pmc_dispatch_event(PMC_EVENT_ID id, int p1, int p2)
 {
+    if (id == EV_MSG_NONE) return;
     PMC_EVENT event;
     switch (id) {
-    case EV_MSG_NONE:
-    {
-        // 无操作事件，直接返回
-        return;
-    }
     case EV_MSG_MODE:
     {
         event.id = id;
-        event.mode_payload.mode = p1;
+        event.mode_payload.mode = p1; // 目标模式
         printf("pmc scan mode:%d\n", p1);
         break;
     }
-    case EV_MSG_JOG:
+    // case EV_MSG_JOG:
+    // {
+    //     event.id = id;
+    //     event.jog_payload.axis_num = p1;
+    //     event.jog_payload.direction = p2;
+    //     printf("pmc scan jog:%d, axis: %d, direction: %d\n", event.id, p1, p2);
+    //     break;
+    // }
+    case EV_MSG_FEEDAXIS_KEY:
     {
         event.id = id;
-        event.jog_payload.axis_num = p1;
-        event.jog_payload.direction = p2;
-        printf("pmc scan jog:%d, axis: %d, direction: %d\n", event.id, p1, p2);
+        event.feedaxis_key_payload.axis_num = p1;
+        event.feedaxis_key_payload.direction = p2;
+        printf("pmc scan feedaxis_key: %d, axis: %d, action: %d\n", event.id, p1, p2);
         break;
     }
     case EV_MSG_SPINDLE:
@@ -225,7 +225,6 @@ static void pmc_dispatch_event(PMC_EVENT_ID id, int p1, int p2)
     event_queue_push(event_queue, &event);
 }
 
-
 /**
  * @brief 模式解析逻辑实现
  * 涉及 MD1, MD2, MD4 (bit 0,1,2), DNCI (bit 5), ZRN (bit 7)
@@ -242,8 +241,8 @@ static void process_mode_selection(unsigned char g43) {
         // 2. 判定MD4, MD2, MD1组合 (取低3位)
         unsigned char md_bits = g43 & 0x07;
         switch (md_bits) {
-        case 0x02: target_mode = CNC_MODE_MDI;  break; // 010
         case 0x01: target_mode = CNC_MODE_MEM;  break; // 001
+        case 0x02: target_mode = CNC_MODE_MDI;  break; // 010
         case 0x03: target_mode = CNC_MODE_EDIT; break; // 011
         case 0x04: target_mode = CNC_MODE_MPG;  break; // 100
         case 0x05: target_mode = CNC_MODE_JOG;  break; // 101
