@@ -22,6 +22,17 @@ void pmc_output_feedback() {
     setRegValue8(REG_F, 0, is_running); /* REG_F 定义见 regdata.h */
     setRegValue8(REG_F, 1, is_estop);
 
+    if(sys->current_mode == MODE_IDLE || sys->current_mode == MODE_ALARM){
+        clearRegBit(REG_F, 2, 1);
+        clearRegBit(REG_F, 3, 1);
+        clearRegBit(REG_F, 3, 2);
+        clearRegBit(REG_F, 3, 3);
+        clearRegBit(REG_F, 3, 4);
+        clearRegBit(REG_F, 3, 5);
+        clearRegBit(REG_F, 3, 6);
+        clearRegBit(REG_F, 4, 5); 
+    }
+
     if(sys->current_mode == MODE_EDIT) { 
         clearRegBit(REG_F, 2, 1);
         clearRegBit(REG_F, 3, 1);
@@ -84,6 +95,7 @@ void pmc_output_feedback() {
         clearRegBit(REG_F, 3, 4);
         clearRegBit(REG_F, 2, 1);
         clearRegBit(REG_F, 3, 1);
+        clearRegBit(REG_F, 3, 6);
         setRegBit(REG_F, 3, 2);
     } 
 

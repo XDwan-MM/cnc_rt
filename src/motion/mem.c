@@ -40,7 +40,7 @@ void handle_run_cmd(){
         var_axis[AXIS_Y].cmd_pos = block->pos.y;
         var_axis[AXIS_Z].cmd_pos = block->pos.z;
         gcode_queue_pop(gcode_queue);
-        printf("sys->is_mac_lock\n");
+        LOG_OUTPUT(INFO, "开启机床锁住");
         return;
     }
     // double start, end;
