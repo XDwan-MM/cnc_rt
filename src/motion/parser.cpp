@@ -53,7 +53,7 @@ GNC_RES parser_init(const char* parser_file_path)
     // 设置宏定义
     ItpSetMacroVariable(parser_data->cmv);
     // 设置机床起点
-    ItpSetOriginMacPos(var_axis[AXIS_X].act_pos, var_axis[AXIS_Y].act_pos, var_axis[AXIS_Z].act_pos, 0);
+    ItpSetOriginMacPos(var_axis[AXIS_X].cmd_pos, var_axis[AXIS_Y].cmd_pos, var_axis[AXIS_Z].cmd_pos, 0);
     // 选择NC文件（支持中文路径）
     ItpSetFile(parser_file_path);
     return GNC_OPERATOR_SUCCESS;

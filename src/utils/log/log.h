@@ -35,7 +35,7 @@ extern "C" {
 #define LOG_LEVEL_INFO  4
 
 #define LOG_TO_FILE 1  // 设为1开启文件日志
-#define LOG_FILE_NAME "./logs/gnc.log"
+#define LOG_FILE_NAME "logs/gnc.log"
 
 extern FILE* gnc_log_file;
 extern char gnc_log_file_path[256];
@@ -50,7 +50,7 @@ typedef enum{
 // 初始化和关闭日志文件
 #define LOG_INIT() \
     do { \
-        snprintf(gnc_log_file_path, sizeof(gnc_log_file_path), "%s/%s", PROJECT_ROOT_DIR, LOG_FILE_NAME); \
+        snprintf(gnc_log_file_path, sizeof(gnc_log_file_path), "%s/%s", PROJECT_DIR, LOG_FILE_NAME); \
         gnc_log_file = fopen(gnc_log_file_path, "a"); \
     } while(0)
 

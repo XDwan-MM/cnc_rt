@@ -26,7 +26,8 @@ GNC_RES chan_add_block(){
         gcode_block = gcode_queue_peak(gcode_queue);
         if(gcode_block == NULL) return GNC_DATA_NULL;
         pretreat_queue->pre_pos = gcode_block->pos;
-        gcode_queue_pop(gcode_queue);
+        // printf("pretreat_queue->pre_pos: %f, %f, %f", pretreat_queue->pre_pos.x, pretreat_queue->pre_pos.y, pretreat_queue->pre_pos.z);
+        // gcode_queue_pop(gcode_queue);
         sys->is_first_run = false;
     }
 

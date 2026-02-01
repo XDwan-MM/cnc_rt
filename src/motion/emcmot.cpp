@@ -88,7 +88,7 @@ void emcmotPathPlan() {
         HmiSysData hmiSysData;
         #ifdef DEBUG_MODE_ENABLED
         char ncFilePath[512];
-        snprintf(ncFilePath, sizeof(ncFilePath), "%s/%s", PROJECT_DIR, "config/NC/2-D12J.nc");
+        snprintf(ncFilePath, sizeof(ncFilePath), "%s/%s", PROJECT_DIR, "config/NC/b.nc");
         parser_init(ncFilePath);
         #else
         getHmiSysDataPtr(&hmiSysData);
@@ -195,6 +195,8 @@ static void set_operating_mode() {
                 LOG_OUTPUT(INFO, "系统模式切换为 %s", mode_names[sys->current_mode]);
                 break;
             } else if (mem_exec_state == EXEC_RUNNING) {
+                // 加工下切换模式不能生效
+                sys->target_mode = sys->current_mode;
                 // 自动加工过程中不能切换模式，应先暂停
                 // log_system("[emcmot] 自动加工下不能切换模式，请先按进给保持后切换");
                 LOG_OUTPUT(INFO, "自动加工下不能切换模式，请先按进给保持后切换");
