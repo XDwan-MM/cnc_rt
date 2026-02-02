@@ -26,6 +26,11 @@ extern void ItpReset();
 
 extern int ItpGetDataPacket(NcItpDataPacket *packet);
 
+/**
+ * @brief ItpGetMotionData
+ * @param data 参考ncitpdatadef.h
+ * @return
+ */
 extern int ItpGetMotionData(NcItpData *data);
 
 extern int ItpGetLineNumber(int *num);

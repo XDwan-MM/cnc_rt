@@ -51,6 +51,19 @@ sudo ./rt_cnc_d
 sudo ./build.sh
 
 
+3、sudo: ./build.sh：找不到命令
+
+sudo chmod +x ./build.sh
+
+
+４、时间在未来
+
+make: 警告：文件“../shm.pro”的修改时间在未来 18348 秒后
+/opt/Qt5.15.16/5.15.16/gcc_64/bin/qmake -o Makefile ../shm.pro CONFIG+=debug
+
+sudo find ./* -type f -exec touch {} \;
+
+
 
 ### 键盘调试
 
