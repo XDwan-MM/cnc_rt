@@ -26,8 +26,9 @@ void sigint_handler([[maybe_unused]] int sig) {
 int Master_Start() {
     char eni_path[512];
     snprintf(eni_path, sizeof(eni_path), "%s/%s", PROJECT_DIR, "config/ENI/gugao.xml");
-    if (ethercat_init(eni_path) < 0) {
-        printf("[start] EtherCAT 启动失败！\n");
+    int error_code = ethercat_init(eni_path);
+    if ( error_code < 0) {
+        printf("[Warning] EtherCAT 启动失败，错误码为 %d ！\n", error_code);
         return -1;
     }
     return 1;
@@ -105,6 +106,12 @@ int main() {
 
     threads_joint();
     destroy_rt_sem();
+
+    int error_code = ethercat_close();
+    if ( error_code < 0) {
+        printf("[Warning] EtherCAT 关闭失败，错误码为 %d ！\n", error_code);
+        return -1;
+    }
 
     printf("[exit] 程序正常退出\n");
     return 0;
