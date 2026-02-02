@@ -23,6 +23,7 @@ void post_rt_sem_all() {
     sem_post(&path_plan_sem);
     sem_post(&moton_sem_exec_done);
 }
+
 void destroy_rt_sem() {
     sem_destroy(&plc_sem);
     sem_destroy(&motion_sem);

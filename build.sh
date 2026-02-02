@@ -56,6 +56,7 @@ build_shm_lib() {
     make -j$(nproc)
     if [ $? -eq 0 ]; then
         make install
+        sudo ldconfig
         echo -e "${GREEN}[OK] 编译共享内存库成功, 安装到/usr/local/lib${NC}"
         return 0
     else
@@ -71,6 +72,7 @@ build_log_lib() {
     make -j$(nproc)
     if [ $? -eq 0 ]; then
         make install
+        sudo ldconfig
         echo -e "${GREEN}[OK] 编译日志库成功, 安装到/usr/local/lib${NC}"
         return 0
     else

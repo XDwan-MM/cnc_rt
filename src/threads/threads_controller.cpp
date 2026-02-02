@@ -51,6 +51,7 @@ void* task_controller_thread_func(void*) {
 void* soft_plc_thread_func(void*) {
     while (!exit_flag) {
         sem_wait(&plc_sem);
+        if (exit_flag) break;
         #ifdef DEBUG_MODE_ENABLED
         hal_keyboard_minitor();
         #else
@@ -94,6 +95,7 @@ void* path_plan_thread_func(void*) {
     while (!exit_flag)
     {
         sem_wait(&path_plan_sem);
+        if (exit_flag) break;
         emcmotPathPlan();
     }
     return NULL;

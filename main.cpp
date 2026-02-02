@@ -17,7 +17,6 @@
 #include "keyboard.h"
 #endif
 
-
 // Ctrl + C 终止程序触发
 void sigint_handler([[maybe_unused]] int sig) {
     exit_flag = 1;
@@ -96,6 +95,17 @@ int main() {
     while (!exit_flag) {
         sleep(1);
     }
+
+    printf("\n[exit] 收到退出信号，正在关闭线程...\n");
+
+    // 唤醒所有阻塞在信号量上的线程，让它们能够检查 exit_flag 并退出
+    for (int i = 0; i < 3; i++) {
+        post_rt_sem_all();
+    }
+
     threads_joint();
+    destroy_rt_sem();
+
+    printf("[exit] 程序正常退出\n");
     return 0;
 }

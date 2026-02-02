@@ -72,9 +72,6 @@ int create_debug_thread(managed_thread_t* thread) {
     printf("[调试模式] 线程 [%s] 创建成功 (普通线程，可断点调试)\n",
            thread->config.thread_name);
 
-    // 线程分离：创建后自动回收资源
-    pthread_detach(thread->id);
-
     return 0;
 }
 #endif
