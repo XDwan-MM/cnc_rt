@@ -65,6 +65,7 @@ STATIC GNC_RES parser_handle_recieve(pmc_data* motion_data, NcItpState *itp_stat
     switch(motion_data->mode){
         case PMC_MODE_EXACT_STOP:
         case PMC_MODE_CHOP: // 切削模式
+        case PMC_MODE_ARRIVE_CHECK: // 到位检测
             res = parser_handle_gcode(motion_data, itp_state, line_no);
             break; 
         case PMC_MODE_M_CMD: // M指令
