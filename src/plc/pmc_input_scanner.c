@@ -120,16 +120,16 @@ void pmc_input_scan_cycle(void) {
         pmc_dispatch_event(EV_MSG_RESET, 0, 0);
     }
 
-    /* 7. 主轴正反信号检测 (G70.4, G70.5 上升沿触发) */
+    /* 7. 主轴正反信号检测(上升沿)  (G70.4 主轴反转信号, G70.5 主轴正转信号, G29.6 主轴停止信号) */
     if (SIGNAL_RISING(curr_g.G0070, last_g.G0070, 4))
-    {
-        // 产生主轴正转事件 入队
-        pmc_dispatch_event(EV_MSG_SPINDLE, 1, 0);
-    }
-    if (SIGNAL_RISING(curr_g.G0070, last_g.G0070, 5))
     {
         // 产生主轴反转事件 入队
         pmc_dispatch_event(EV_MSG_SPINDLE, -1, 0);
+    }
+    if (SIGNAL_RISING(curr_g.G0070, last_g.G0070, 5))
+    {
+        // 产生主轴正转事件 入队
+        pmc_dispatch_event(EV_MSG_SPINDLE, 1, 0);
     }
     if (SIGNAL_RISING(curr_g.G0029, last_g.G0029, 6))
     {
