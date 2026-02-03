@@ -260,7 +260,7 @@ static bool mem_check_res(GNC_RES res){
         var_chan[0].is_moving = false;
         // log_system("[mem] 记忆模式报警(%d)", res);
         LOG_OUTPUT(ERROR, "记忆模式报警 %d", res);
-        setAlarm(ALARM_CH, ALARM_ERROR, 1);
+        setAlarm(ALARM_CH, ALARM_ERROR, 5000);
         return false;
     }
 }

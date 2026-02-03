@@ -9,6 +9,7 @@ void handle_alarm_cmd(){
         case SYS_EVENT_NONE:
             break;
         case SYS_EVENT_RESET:
+            // 清除报警
             cleanAllAlarm(ALARM_TYPE_ALL, ALARM_LEVEL_ALL);
             // 状态复位、数据重置
             tp_reset();

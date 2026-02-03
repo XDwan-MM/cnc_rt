@@ -31,8 +31,8 @@ extern "C" {
 #define LOG_LEVEL 4  // 设为0关闭所有日志
 #define LOG_LEVEL_ERROR 1
 #define LOG_LEVEL_WARN  2
-#define LOG_LEVEL_DEBUG 3
-#define LOG_LEVEL_INFO  4
+#define LOG_LEVEL_INFO  3
+#define LOG_LEVEL_DEBUG 4
 
 #define LOG_TO_FILE 1  // 设为1开启文件日志
 #define LOG_FILE_NAME "logs/gnc.log"

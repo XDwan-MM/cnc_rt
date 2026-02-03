@@ -23,12 +23,7 @@ GNC_RES chan_add_block(){
 
     // 译码第一段类型为g00，起点为当前机床位置
     if(sys->is_first_run){
-        // gcode_block = gcode_queue_peak(gcode_queue);
-        // if(gcode_block == NULL) return GNC_DATA_NULL;
-        // pretreat_queue->pre_pos = gcode_block->pos;
         pretreat_queue->pre_pos = (POS){.x = var_axis[AXIS_X].cmd_pos, .y = var_axis[AXIS_Y].cmd_pos, .z = var_axis[AXIS_Z].cmd_pos};
-        // printf("pretreat_queue->pre_pos: %f, %f, %f", pretreat_queue->pre_pos.x, pretreat_queue->pre_pos.y, pretreat_queue->pre_pos.z);
-        // gcode_queue_pop(gcode_queue);
         sys->is_first_run = false;
     }
 
