@@ -147,6 +147,23 @@ STATIC GNC_RES parser_handle_gcode(pmc_data* motion_data, NcItpState *itp_state,
 
 STATIC GNC_RES parser_handle_mcode(pmc_data* motion_data, NcItpState *itp_state, int *line_no){
     // 更新：完成对M代码的处理
+    MCODE_BLOCK mcode_block;
+
+    // M码
+    mcode_block.m_code = motion_data->m_code;
+    // 主轴
+    mcode_block.spindle = motion_data->spindle;
+    // 模态
+    mcode_block.state = *itp_state;
+    // 行号
+    mcode_block.line_number = *line_no;
+    
+    if (mcode_queue_is_full(mcode_queue))
+    {
+        return GNC_DATA_FULL;
+    }
+    mcode_queue_push(mcode_queue, &mcode_block);
+
     return GNC_OPERATOR_SUCCESS;
 }
 
