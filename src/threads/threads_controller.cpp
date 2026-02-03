@@ -57,6 +57,7 @@ void* soft_plc_thread_func(void*) {
         #else
         hal_task();
         pmc_input_scan_cycle();
+        pmc_output_feedback();
         #endif
     }
     return NULL;
@@ -82,9 +83,6 @@ void* motion_controller_thread_func(void*) {
         }
         emcmotTrajPlan();
         Hal_Driver_Update_All(false, true);
-        #ifndef DEBUG_MODE_ENABLED
-        pmc_output_feedback();
-        #endif
         sem_post(&moton_sem_exec_done);
     }
     return NULL;
