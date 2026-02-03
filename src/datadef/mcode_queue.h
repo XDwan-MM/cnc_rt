@@ -24,6 +24,8 @@ typedef struct mcode_block{
     pmc_mode mode;
     int m_code;
     pmc_spindle spindle;     //主轴
+    NcItpState state;   // 模态
+    int line_number;    // 运行行号
 }MCODE_BLOCK;
 
 typedef struct
