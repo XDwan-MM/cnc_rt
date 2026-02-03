@@ -3,6 +3,7 @@
 #include "log.h"
 #include <logapi.h>
 #include <alarmapi.h>
+#include <hmisysapi.h>
 
 STATIC void parser_macro_init();
 STATIC GNC_RES parser_handle_recieve(pmc_data* motion_data, NcItpState *itp_state, int *line_no);
@@ -30,6 +31,19 @@ STATIC void parser_macro_init()
     parser_data->cmv[8077].varDouble = 10.0;  // 设置渐开线插补误差最大值
     parser_data->cmv[5114].varDouble = 0.5;   // G73钻深孔,D默认值
     parser_data->cmv[5115].varDouble = 1.0;   // G83深孔加工循环,D默认值
+
+    // 坐标偏置
+    for (int a = 0; a < 3; ++a)
+    {
+        getCrdsValue(CRDS_TYPE_EXT, a, &parser_data->cmv[5201 + a].varDouble);
+    }
+    for (int t = 0; t < 6; ++t)
+    {
+        for (int a = 0; a < 3; ++a)
+        {
+            getCrdsValue(CRDS_TYPE_G5X + t, a, &parser_data->cmv[5221 + t * 20 + a].varDouble);
+        }
+    }
 }
 
 void parser_new(){
@@ -51,6 +65,7 @@ GNC_RES parser_init(const char* parser_file_path)
     memcpy(parser_data->parser_file_path, parser_file_path, sizeof(char) * NCFILEPATH_CHAR_LEN);
     parser_data->parser_state = PARSER_READING;
     // 设置宏定义
+    parser_macro_init();
     ItpSetMacroVariable(parser_data->cmv);
     // 设置机床起点
     ItpSetOriginMacPos(var_axis[AXIS_X].cmd_pos, var_axis[AXIS_Y].cmd_pos, var_axis[AXIS_Z].cmd_pos, 0);
@@ -145,6 +160,7 @@ GNC_RES parser_reading(){
     if (error_no >= 0)
     {
         // log_system("[parser] 译码错误(%d)", error_no);
+        setAlarm(ALARM_PS, ALARM_ERROR, error_no);
         LOG_OUTPUT(ERROR, "译码错误 %d", error_no);
         return GNC_CAL_ERROR;
     }
