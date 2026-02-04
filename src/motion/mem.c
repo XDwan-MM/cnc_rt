@@ -231,10 +231,13 @@ static bool mem_check_res(GNC_RES res){
 
     case GNC_DATA_EMPTY:
         // 等待中无数据，则继续等待
-        if(mem_check_running() && mem_exec_state == EXEC_WAITING) return true;   
+        if(mem_check_running() && mem_exec_state == EXEC_WAITING){
+            return true;
+        }   
         // 运行中无数据，则进入等待 
         if(mem_check_running() && mem_exec_state == EXEC_RUNNING){
             mem_exec_state = EXEC_WAITING;
+            var_chan[0].is_gcode_ending = true;
             return false;
         }
         // 译码已结束后无数据，则程序运行完成
