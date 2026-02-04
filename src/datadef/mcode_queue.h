@@ -11,7 +11,7 @@
 #define __MCODE_QUEUE_H__
 
 #include "datatype.h"
-#include "motiondata.h"
+#include "ncitpdatadef.h"
 #include <pthread.h>
 #ifdef __cplusplus
 extern "C" {

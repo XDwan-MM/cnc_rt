@@ -41,6 +41,7 @@ GNC_RES chan_add_block(){
 
         // 拷贝信息
         pretreat_block->mode = gcode_block->mode;
+        pretreat_block->state = gcode_block->state;
         pretreat_block->line_number = gcode_block->line_number;
 
         // 构造成段
