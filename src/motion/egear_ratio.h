@@ -10,8 +10,7 @@
 #ifndef EGEAR_RATIO_H
 #define EGEAR_RATIO_H
 
-#include <stddef.h>
-#include "datatype.h"
+#include <stdlib.h>
 #include "rt_par.h"
 
 #ifdef __cplusplus

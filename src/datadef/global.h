@@ -23,13 +23,34 @@
 #include "hal_driver.h"
 #include "hal_io.h"
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 #define IRQ_TIMEOUT 5000        // 周期中断超时时间(ms)（主站通讯周期超时，当超过此超时时间还未收到主站信息时，自动判定错误，结束程序）
 #define TIME_MINUS_2_S 60
 #define TIME_US_2_S 1000000
+
+/**
+ * @brief 长度单位转换：微米(um) 转 毫米(mm)
+ */
+#define CONV_UM_TO_MM(um) ((double)(um) / 1000.0)
+/**
+ * @brief 速度单位转换：(mm/min) 转 (mm/s)
+ */
+#define CONV_MM_MIN_TO_MM_S(v_min) ((double)(v_min) / 60.0)
+/**
+ * @brief 加工加减速时间常数(ms) 转换为 加工加速度(mm/s^2)
+ * @param T_MS 加工加减速时间常数，单位：ms
+ * @return 返回加速度值，单位：mm/s^2；若输入 <= 0 则返回 0.0
+ */
+#define CONV_T_MS_TO_ACCEL(T_MS) (((double)(T_MS) > 0.0) ? (50000.0 / (3.0 * (double)(T_MS))) : 0.0)
+/**
+ * @brief 加工加减速捷度时间常数(ms) 转换为 加工捷度(mm/s^3)
+ * @param T_MS 加工加减速捷度时间常数，单位：ms
+ * @return 返回加工捷度，单位：mm/s^3；若输入 <= 0 则返回 0.0
+ */
+#define CONV_T_MS_TO_JERK(T_MS) (((double)(T_MS) > 0.0) ? (1000000.0 / (double)(T_MS)) : 0.0)
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 extern sem_t exit_sem;                         // 退出信号
 extern sem_t op_sem;                           // 已进入op信号，用于线程间通信
