@@ -71,6 +71,9 @@ GNC_RES parser_init(const char* parser_file_path)
     ItpSetOriginMacPos(var_axis[AXIS_X].cmd_pos, var_axis[AXIS_Y].cmd_pos, var_axis[AXIS_Z].cmd_pos, 0);
     // 选择NC文件（支持中文路径）
     ItpSetFile(parser_file_path);
+    // 将GM指令设置为已完成
+    var_chan[0].is_gcode_ending = true;
+    var_chan[0].is_mcode_ending = true;
     return GNC_OPERATOR_SUCCESS;
 }
 
