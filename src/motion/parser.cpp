@@ -13,9 +13,6 @@ STATIC GNC_RES parser_handle_scode(pmc_data* motion_data, NcItpState *itp_state,
 STATIC GNC_RES parser_handle_gcode(pmc_data* motion_data, NcItpState *itp_state, int *line_no);
 STATIC bool parser_check_res(GNC_RES res);
 
-extern bool gcode_ending = true;
-extern bool mcode_ending = true;
-
 PARSER_DATA* parser_data;
 
 STATIC void parser_macro_init()
@@ -144,12 +141,12 @@ STATIC GNC_RES parser_handle_gcode(pmc_data* motion_data, NcItpState *itp_state,
         return GNC_DATA_FULL;
     }
     // 判断M代码是否已处理完成
-    if (!mcode_ending)
+    if (!var_chan[0].is_mcode_ending)
     {
         return GNC_PARSER_WAIT;
     }
     gcode_queue_push(gcode_queue, &gcode_block);
-    gcode_ending = false;
+    var_chan[0].is_gcode_ending = false;
     // printf("type: %d, feed_vel: %.2f, pos:(%.2f, %.2f, %.2f)\n", gcode_block.type, gcode_block.feed_vel, gcode_block.pos.x, gcode_block.pos.y, gcode_block.pos.z);
     return GNC_OPERATOR_SUCCESS;
 }
@@ -170,12 +167,12 @@ STATIC GNC_RES parser_handle_mcode(pmc_data* motion_data, NcItpState *itp_state,
         return GNC_DATA_FULL;
     }
     // 判断G代码是否已处理完成
-    if (!gcode_ending)
+    if (!var_chan[0].is_gcode_ending)
     {
         return GNC_PARSER_WAIT;
     }
     mcode_queue_push(mcode_queue, &mcode_block);
-    mcode_ending = false;
+    var_chan[0].is_mcode_ending = false;
 
     return GNC_OPERATOR_SUCCESS;
 }

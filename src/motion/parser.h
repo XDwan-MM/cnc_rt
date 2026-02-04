@@ -40,9 +40,6 @@ typedef struct{
     PARSER_STATE parser_state;
 }PARSER_DATA;
 
-extern bool gcode_ending;       // g代码已处理结束
-extern bool mcode_ending;       // m代码已处理结束
-
 extern PARSER_DATA* parser_data;
 
 void parser_new();

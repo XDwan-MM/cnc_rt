@@ -128,6 +128,8 @@ typedef struct {
     int is_progend;        /*!< 程序运行完成 {Get(Bit32)} */
     int is_parsering;
     int parser_reset;
+    int is_gcode_ending;    // g代码完全处理结束
+    int is_mcode_ending;    // m代码完全处理结束
     int is_threading;      /*!< 螺纹加工 {Get(Bit32)} */
     int is_rigid;          /*!< 刚性攻丝 {Get(Bit32)} */
     int is_rewinded;       /*!< 重运行复位状态 {Get(Bit32)} */
