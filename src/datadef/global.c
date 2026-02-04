@@ -6,6 +6,7 @@
 #include <varapi.h>
 #include <pardata.h>
 #include <parapi.h>
+#include <hmisysapi.h>
 #include "task.h"
 
 // ==============全局变量定义===============
@@ -222,16 +223,32 @@ static GNC_RES shm_var_init(){
 GNC_RES shm_var_update(){
     // 当前进给速度
     setVarChanDouble(0, VAR_CHAN_ACT_FEEDRATE, var_chan[0].act_feedrate * TIME_MINUS_2_S, 0);
+
     // 各轴位置
+    VarUnion crds_type_var;
+    double crds_oft = 0.0;
+    double cmd_pos = 0.0;
     for(int i = 0; i < SYS_AXES_NUM; i++){
+        // 机械坐标
         setVarAxisDouble(i, VAR_AXIS_ACT_POS_EX, var_axis[i].act_pos, 0);
-        setVarAxisDouble(i, VAR_AXIS_ACT_POS_WCS_EX, var_axis[i].act_pos_wcs, 0);
-        setVarAxisDouble(i, VAR_AXIS_LEFT_TOGO, var_axis[i].left_togo, 0);
+        
+        // 剩余移动量
+        getVarAxisDouble(i, VAR_AXIS_CMD_POS_EX, &cmd_pos, 0);
+        var_axis[i].left_togo_ex = cmd_pos - var_axis[i].act_pos;
+        setVarAxisDouble(i, VAR_AXIS_LEFT_TOGO_EX, var_axis[i].left_togo_ex, 0);
+        
+        // 工件坐标
+        getVarChanValue(0, VAR_CHAN_MODAL, 14, &crds_type_var, 0);
+        getCrdsValue(CRDS_TYPE_G5X + crds_type_var.value.i, i, &crds_oft);
+        var_axis[i].act_pos_wcs_ex = var_axis[i].act_pos - crds_oft;
+        setVarAxisDouble(i, VAR_AXIS_ACT_POS_WCS_EX, var_axis[i].act_pos_wcs_ex, 0);
     }
+
     //主轴转速
     setVarChanDouble(0, VAR_CHAN_ACT_SPDL_SPEED, var_chan[0].act_spdl_speed, 0);
     setVarChanDouble(0, VAR_CHAN_CMD_SPDL_SPEED, var_chan[0].cmd_spdl_speed, 0);
     setVarChanDouble(0, VAR_CHAN_S_CODE, var_chan[0].cmd_spdl_speed, 0);
+
     for(int i = 0; i < SYS_CHAN_NUM; i++){
         // 当前模式
         setVarChanInt(i, VAR_CHAN_MODE, var_chan[i].mode, 0);
@@ -256,11 +273,20 @@ GNC_RES shm_var_update(){
 
 // 更新 var 程序相关变量
 GNC_RES shm_var_update_prog(){
-    // 运行模组
+    // 运行模态
     VarUnion set_modal;
     set_modal.type = 0;
-    set_modal.value.i = cycle_tp->plan_block->mode;
-    setVarChanValue(0, VAR_CHAN_MODAL, 0, &set_modal, 0);
+    for (int i = 0; i < MODAL_GROUP; ++i)
+    {
+        set_modal.value.i = cycle_tp->plan_block->state.modal[i];
+        setVarChanValue(0, VAR_CHAN_MODAL, 0, &set_modal, 0);
+    }
+
+    // 机床指令位置
+    setVarAxisDouble(AXIS_X, VAR_AXIS_CMD_POS_EX, cycle_tp->plan_block->end_pos.x, 0);
+    setVarAxisDouble(AXIS_Y, VAR_AXIS_CMD_POS_EX, cycle_tp->plan_block->end_pos.y, 0);
+    setVarAxisDouble(AXIS_Z, VAR_AXIS_CMD_POS_EX, cycle_tp->plan_block->end_pos.z, 0);
+
     // 运行行号
     setVarChanInt(0, VAR_CHAN_RUN_ROW, cycle_tp->plan_block->line_number, 0);
     return GNC_OPERATOR_SUCCESS;
