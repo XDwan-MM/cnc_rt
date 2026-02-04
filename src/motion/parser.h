@@ -26,10 +26,11 @@ typedef enum{
     PARSER_WAITING_FOR_MOTION,
     PARSER_WAITING_FOR_IO,
     PARSER_WAITING_FOR_BUF,
+    PARSER_WAITING_TO_END,
 }PARSER_STATE;
 
 typedef struct{
-    ItpParam itp_parameter;     // 译码参数 todo:调整译码后删除
+    // ItpParam itp_parameter;     // 译码参数 todo:调整译码后删除
     NcItpData itp_datas;        // 译码结果
     NcItpState itp_state;       // 模态
     int interp_list_index;      // 译码结果索引
