@@ -22,7 +22,7 @@ GNC_RES task_mq_proc()
     if(event_queue_is_full(event_queue)){
         // log_system("[task] 事件队列已满");
         LOG_OUTPUT(ERROR, "事件队列已满");
-        setAlarm(ALARM_CH, ALARM_ERROR, 9000);
+        setAlarm(ALARM_SY, ALARM_ERROR, 0);
         return GNC_OPERATOR_ERROR;
     }
     // if(sys->nc_event != SYS_EVENT_NONE) return GNC_OPERATOR_WARNING;
