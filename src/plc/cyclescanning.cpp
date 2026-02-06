@@ -656,7 +656,7 @@ static void O_map() {
         CurrentRegData.regY[j + 16] = abs(YY[j + 16]);
         CurrentRegData.regY[j + 24] = abs(YY[j + 24]);
     }
-    plc_out.IO_Out1Reg.all = abs(CurrentRegData.regY[0]) | (abs(CurrentRegData.regY[1]) << 8);
+    plc_out.IO_Out1Reg.all = abs(CurrentRegData.regY[0]) | (abs(CurrentRegData.regY[1]) << 8) | abs(CurrentRegData.regY[2]<<16) | abs(CurrentRegData.regY[3]<<24);
     plc_out.panel_show.keyboardOut1.all = abs(CurrentRegData.regY[4]) | (abs(CurrentRegData.regY[5])  << 8);
     plc_out.panel_show.keyboardOut2.all = abs(CurrentRegData.regY[6]) | (abs(CurrentRegData.regY[7])  << 8);
     plc_out.panel_show.keyboardOut3.all = abs(CurrentRegData.regY[8]) | (abs(CurrentRegData.regY[9])  << 8);

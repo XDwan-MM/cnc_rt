@@ -29,6 +29,31 @@ sudo ./rt_cnc_d
 
 
 
+### 不同平台master和ENI文件配置
+
+1、当更换平台时，需使用要更换的测试平台的master.c文件进行替换
+
+2、修改main.cpp中的ENI文件
+
+- 9楼实验室第一台测试平台：speed.xml
+
+- 9楼实验室第一台测试平台：gugao.xml
+
+示例：
+
+```C
+int Master_Start() {
+    char eni_path[512];
+    snprintf(eni_path, sizeof(eni_path), "%s/%s", PROJECT_DIR, "config/ENI/gugao.xml");
+    int error_code = ethercat_init(eni_path);
+    if ( error_code < 0) {
+        printf("[Warning] EtherCAT 启动失败，错误码为 %d ！\n", error_code);
+        return -1;
+    }
+    return 1;
+}
+```
+
 
 ### PLC查看FG变量
 

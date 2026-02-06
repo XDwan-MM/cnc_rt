@@ -3,21 +3,26 @@
 #include "qglobal.h"
 #include <QDebug>
 #include <QCoreApplication>
-#ifdef Q_OS_WIN
-    #include <windows.h>
-#else
-    #include <sys/types.h>
-    #include <signal.h>
-    #include <unistd.h>
-    #include <errno.h>
-#endif
 
+#ifdef Q_OS_WIN
+#include <windows.h>
+#else
+#include <sys/types.h>
+#include <signal.h>
+#include <unistd.h>
+#include <errno.h>
+#endif
 
 ShmManager::ShmManager()
     : _shm("NcData") {
 }
 
 ShmManager::~ShmManager() {
+    if (_isInit) {
+        if (!_shm.detach()) {
+            qWarning() << "无法分离共享内存：" << _shm.errorString();
+        }
+    }
     if (_regManager) {
         delete _regManager;
         _regManager = nullptr;
@@ -75,6 +80,11 @@ bool ShmManager::init() {
             _ncData = (NcData*)_shm.data();
             needReset = true;
         } else {
+            qWarning() << "无法连接共享内存：" << _shm.errorString();
+            qWarning() << "可能原因：上次使用管理员权限(sudo)连接共享内存，但是释放不干净，本次使用非管理员权限执行。";
+            qWarning() << "解决方案1：建议使用管理员权限执行。";
+            qWarning() << "解决方案2：使用管理员权限删除共享内存段ipcs -m（找到目标段）,ipcrm -m [填入内存段id]。然后删除残留文件sudo rm /tmp/qipc_s*";
+            Q_ASSERT(false);
             return false;
         }
     }
@@ -95,7 +105,9 @@ bool ShmManager::init() {
         _ncData->pid2 = myPid;
         qDebug() << "注册 PID2:" << myPid;
     } else {
-        qWarning() << "已经有两个进程连接至共享内存，不允许再连接！";
+        qWarning() << "错误原因：已经有两个进程连接至共享内存，不允许再连接！";
+        qWarning() << "解决方案：1. 使用 ps -ef | awk 'NR==1 || /hmi/' 查看hmi进程id";
+        qWarning() << "         2. 使用 kill -9 [pid] 杀掉进程，如果杀不掉使用 kill -9 [ppid]";
         Q_ASSERT(false);
         return false;
     }
@@ -159,13 +171,17 @@ bool ShmManager::isProcessAlive(int pid) {
 #else
     // Linux/macOS/Unix 实现
     // kill(pid, 0) 用于检测进程是否存在
+    errno = 0;
     if (kill((pid_t)pid, 0) == 0) {
         return true; // 进程存在
     }
     // 如果返回 -1 且 errno == ESRCH，说明进程不存在
     // 如果 errno == EPERM，说明进程存在但无权操作（由于是同一个用户启动的程序，这种情况很少见，但也视为存在）
-    if (errno == EPERM) return true;
-    
+    if (errno == EPERM) {
+        errno = 0;
+        return true;
+    }
+    errno = 0;
     return false;
 #endif
 }

@@ -47,6 +47,8 @@ typedef enum result {
     GNC_DATA_FULL = 201,        // 数据已满
     GNC_DATA_NULL = 202,        // 数据为NULL
     GNC_PARSER_OVER = 301,      // 译码结束
+    GNC_PARSER_WAIT = 302,      // 等待译码
+    GNC_PARSER_OVER_AND_WAIT = 303, // 译码结束且等待
 } GNC_RES;
 
 typedef enum {

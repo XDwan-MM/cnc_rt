@@ -17,6 +17,9 @@ void handle_alarm_cmd(){
             sys_reset();
             // 译码器复位
             var_chan[0].is_estop = false;
+            event_queue_reset(event_queue);
+            // 恢复报错前模式
+            sys->current_mode = sys->target_mode;
             break;
         case SYS_EVENT_RERUN:
         case SYS_EVENT_PAUSE:
@@ -35,7 +38,6 @@ void handle_alarm_cmd(){
         default:
             // log_system("[alarm] 报警下不支持操作，请按复位清除报警");
             LOG_OUTPUT(ERROR, "报警下不支持操作，请按复位清除报警");
-            printf("handle alarm\n");
             break;
     }
     sys->nc_event = SYS_EVENT_NONE;

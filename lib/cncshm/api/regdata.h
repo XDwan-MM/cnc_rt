@@ -35,7 +35,7 @@ typedef enum {
     REG_C = 'C',
     REG_S = 'S',
     REG_L = 'L'
-}RegType;
+} RegType;
 
 typedef struct {
     int current; // 当前值

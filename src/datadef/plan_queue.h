@@ -16,7 +16,7 @@ extern "C" {
 
 #include <pthread.h>
 #include "datatype.h"
-#include "motiondata.h"
+#include "ncitpdatadef.h"
 
 // 循环队列长度
 #define PLAN_QUEUE_SIZE 200
@@ -40,6 +40,7 @@ typedef struct
 {
     INTERP_TYPE type;   // 插补类型
     pmc_mode mode;      // 模组
+    NcItpState state;   // 模态
     int line_number;    // 运行行号
     union{              // 块信息
         CIRCULAR_BLOCK circular_block;

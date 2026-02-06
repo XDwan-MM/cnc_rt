@@ -57,6 +57,7 @@ typedef struct {
     int rear;                                   // 队尾下标（指向队尾元素的下一个位置）
 } AlarmHisDatas;
 
+
 typedef struct {
     AlarmDatas alms;
     AlarmHisDatas hiss;

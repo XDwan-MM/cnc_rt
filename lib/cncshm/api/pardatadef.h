@@ -1,6 +1,8 @@
 #ifndef PARDATADEF_H
 #define PARDATADEF_H
 
+#define _GNC_CV_5080_
+
 #define PARAM_STRING_LEN (64)       /*! string类型长度 */
 #define PARAM_BYTE_LEN (8)          /*! type类型长度 */
 #define PARAM_STR_LEN (8)           /*! str类型长度 */
@@ -25,6 +27,19 @@
 #define PARAMAN_SUB_AXIS_MAX	(6)
 #define PARAMAN_SUB_ACMP_MAX	(6)
 #define PARAMAN_SUB_CFG_MAX     (6)
+
+//#ifdef _GNC_CV_5080_
+
+//#define SYS_CHAN_NUM		(4)		/*! 系统最大通道数 */
+//#define SYS_AXES_NUM		(6)     /*! 系统最大进给轴数 */
+//#define SYS_NCBRD_CFG_NUM   (6)		/*! 主控制设备数 */
+//#define SYS_SPDL_NUM		(1)		/*! 系统最大主轴数 */
+//#define SYS_NCOBJ_NUM		(80)	/*! 从设备控制对象（部件）数 */
+//#define CHAN_AXES_NUM		(4)		/*! 通道最大轴数  */
+//#define CHAN_SPDL_NUM		(1)		/*! 通道最大主轴数  */
+//#define MAX_SMC_AXES_NUM	(16)	/*! 最多运控轴数  */
+
+//#endif
 
 /*!
  * @name 参数 ID编号

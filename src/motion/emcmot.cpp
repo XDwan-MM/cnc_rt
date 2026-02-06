@@ -88,7 +88,7 @@ void emcmotPathPlan() {
         HmiSysData hmiSysData;
         #ifdef DEBUG_MODE_ENABLED
         char ncFilePath[512];
-        snprintf(ncFilePath, sizeof(ncFilePath), "%s/%s", PROJECT_DIR, "config/NC/b.nc");
+        snprintf(ncFilePath, sizeof(ncFilePath), "%s/%s", PROJECT_DIR, "config/NC/a.nc");
         parser_init(ncFilePath);
         #else
         getHmiSysDataPtr(&hmiSysData);
@@ -114,9 +114,6 @@ static void set_operating_mode() {
     }
     // 检查是否急停
     if (var_chan[0].is_estop) {
-        sys->current_mode  = sys->target_mode = MODE_ALARM;
-        var_chan[var_sys.active_chan].mode = sys->current_mode;
-        LOG_OUTPUT(ERROR, "报警下无法切换模式，请复位清除报警后再试");
         return;
     }
     // 根据切换的加工模式和当前加工模式，判断是否可以切换
@@ -223,22 +220,21 @@ static void handle_system_event(){
 
 // 主轴控制
 static void spindle_control(){
-    // switch (sys->current_mode){
-    //     case MODE_JOG:
-    //     case MODE_MPG:
-    //     case MODE_EDIT:
-    //         emcSpindleControl();
-    //         break;
-    //     case MODE_MEM:
-    //     case MODE_MDI:
-    //     case MODE_DNC:
-    //         emcmcodedeal();
-    //         break;
-    //     default:
-    //         break;
-    // }
     if(var_chan[0].is_estop) return;
-    emcSpindleControl();
+    switch (sys->current_mode){
+        case MODE_JOG:
+        case MODE_MPG:
+        case MODE_EDIT:
+            emcSpindleControl();
+            break;
+        case MODE_MEM:
+        case MODE_MDI:
+        case MODE_DNC:
+            emcmcodedeal();
+            break;
+        default:
+            break;
+    }
 }
 
 // 不同加工模式的运动控制
@@ -252,7 +248,6 @@ static void get_cmd_pos() {
             handle_alarm_cmd();
             break;
         case MODE_HOMING: // 回零
-            // todo：回零点击啸叫
             // handle_homing_cmd();
             break;
         case MODE_MDI: // MDI
@@ -278,8 +273,11 @@ static void check_for_fault() {
     //　检查系统报警
     int alarm_count = 0;
     getAlarmCount(ALARM_TYPE_ALL, ALARM_LEVEL_ALL, &alarm_count);
-    if( alarm_count > 0){
+    if(alarm_count > 0){
         var_chan[0].is_estop = true;
+        sys->target_mode = sys->current_mode;
+        sys->current_mode = MODE_ALARM;
+        var_chan[var_sys.active_chan].mode = sys->current_mode;
     }
     // 检查跟随误差
     check_ferror_fault();
@@ -406,7 +404,6 @@ static void update_status() {
     var_chan[0].act_jerk = var_chan[0].cmd_jerk;
     var_chan[0].act_spdl_speed = var_chan[0].act_spdl_speed;
     for (int i = 0; i < SYS_AXES_NUM; i++) {
-        // var_axis[i].act_pos = var_axis[i].cmd_pos;
         var_axis[i].act_vel = var_axis[i].cmd_vel;
     }
     shm_var_update();

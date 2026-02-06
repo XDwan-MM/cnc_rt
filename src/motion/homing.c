@@ -157,7 +157,7 @@ static bool homing_check_res(GNC_RES res) {
             var_chan[0].is_homing = false;
             // log_system("[home] 回零错误(%d)", res);
             LOG_OUTPUT(ERROR, "回零错误 %d", res);
-            setAlarm(ALARM_CH, ALARM_ERROR, 4000);
+            setAlarm(ALARM_CH, ALARM_ERROR, 1);
             return false;
     }
 }
