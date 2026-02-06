@@ -35,7 +35,7 @@ private:
     bool isProcessAlive(int pid);
     QSharedMemory _shm;
     bool _isInit = false;
-    QString _version = "1.1.2";
+    QString _version = "1.2.0";
     NcData* _ncData = nullptr;
     RegManager* _regManager = nullptr;
     LadManager* _ladManager = nullptr;

@@ -40,23 +40,3 @@ int getRegValue16(RegType type, int idx, unsigned short* value) {
 int getRegValue32(RegType type, int idx, unsigned int* value) {
     return ShmManager::instance().regManager()->getRegValue32(type, idx, value);
 }
-
-int setTimerCounterCurrent(RegType type, int idx, int value) {
-    return ShmManager::instance().regManager()->setTimerCounterCurrent(type, idx, value);
-}
-
-int setTimerCounterPreset(RegType type, int idx, int value) {
-    return ShmManager::instance().regManager()->setTimerCounterPreset(type, idx, value);
-}
-
-int getTimerCounter(RegType type, int idx, RegTimerCounter* value) {
-    return ShmManager::instance().regManager()->getTimerCounter(type, idx, value);
-}
-
-int getTimerCounterCurrent(RegType type, int idx, int* value) {
-    return ShmManager::instance().regManager()->getTimerCounterCurrent(type, idx, value);
-}
-
-int getTimerCounterPreset(RegType type, int idx, int* value) {
-    return ShmManager::instance().regManager()->getTimerCounterPreset(type, idx, value);
-}

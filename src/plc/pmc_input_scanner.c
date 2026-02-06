@@ -38,7 +38,7 @@ void pmc_input_scan_cycle(void) {
 
     G_INPUT_MAP curr_g;
     /* 1. 抓取寄存器快照 */
-    if (pmc_input_fetch_snapshot(&curr_g) != REG_API_SUCCESS) {
+    if (pmc_input_fetch_snapshot(&curr_g) != 0) {
         // 读取失败，跳过本周期
         return;
     }
@@ -147,7 +147,7 @@ void pmc_input_scan_cycle(void) {
 
 /** @brief 从寄存器系统同步数据到本地结构体 */
 static int pmc_input_fetch_snapshot(G_INPUT_MAP *local_snap) {
-    int ret = REG_API_SUCCESS;
+    int ret = 0;
     /* 逐个抓取 G 寄存器字节 */
     ret |= getRegValue8(REG_G, 7,   &local_snap->G0007); // 获取共享内存G7变量的值
     ret |= getRegValue8(REG_G, 8,   &local_snap->G0008); // 获取共享内存G8变量的值
@@ -159,7 +159,7 @@ static int pmc_input_fetch_snapshot(G_INPUT_MAP *local_snap) {
     ret |= getRegValue8(REG_G, 70,  &local_snap->G0070); // 获取共享内存G70变量的值
     ret |= getRegValue8(REG_G, 100, &local_snap->G0100); // 获取共享内存G100变量的值
     ret |= getRegValue8(REG_G, 102, &local_snap->G0102); // 获取共享内存G102变量的值
-    return (ret == REG_API_SUCCESS) ? REG_API_SUCCESS : REG_API_IDX_ERROR;
+    return (ret == 0) ? 0 : -1;
 }
 
 /** @brief 将解析出的逻辑打包为 PMC_EVENT 并入队 */
