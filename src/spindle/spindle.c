@@ -36,7 +36,7 @@ int32_t Spindle_Cw()
     }
     else
     {
-        // sys->is_speedArrived = true;
+        var_chan[0].is_mcode_ending = true;
         speed = target_speed;
     }
     return (int32_t)speed;
@@ -61,7 +61,7 @@ int32_t Spindle_Ccw(void)
     else
     {
         speed = target_speed;
-        // sys->is_speedArrived = true;
+        var_chan[0].is_mcode_ending = true;
     }
     return (int32_t)speed;
 }
@@ -87,6 +87,8 @@ void Spindle_Stop()
     {
         sp_stop_sem = true;
         spindle.mode = DRV_MODE_DISABLED;
+        // printf("var_chan[0].is_mcode_ending:%d \n",var_chan[0].is_mcode_ending);
+        // var_chan[0].is_mcode_ending = true;
     }
     stop_last_state = stop_current_state;
     var_chan[0].cmd_spdl_speed = vel;
@@ -130,6 +132,7 @@ void emcmcodedeal()
     if(!mcode_queue_is_empty(mcode_queue))
     {
         MCODE_BLOCK* mcode_block = mcode_queue_peak(mcode_queue);
+        setVarChanInt(0, VAR_CHAN_RUN_ROW, mcode_block->line_number, 0);
         if (mcode_block == NULL) {
             printf("Error: mcode_queue_pop returned NULL!\n");
             return; // 或其他错误处理
@@ -146,7 +149,7 @@ void emcmcodedeal()
             sp_sign = 2;
             emot_speed = -1 * mcode_block->spindle.speed ;
         }
-        else if(mcode_block->m_code == M05)
+        else if(mcode_block->m_code == M05 || mcode_block->m_code == M30)
         {
             sp_sign = 0;
         }

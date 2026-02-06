@@ -17,6 +17,7 @@ void handle_alarm_cmd(){
             sys_reset();
             // 译码器复位
             var_chan[0].is_estop = false;
+            event_queue_reset(event_queue);
             break;
         case SYS_EVENT_RERUN:
         case SYS_EVENT_PAUSE:

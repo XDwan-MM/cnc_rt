@@ -174,18 +174,21 @@ static GNC_RES task_handle_pmc_event(PMC_EVENT* event_data){
         {
             if(event_data->run_payload.run_state == 1)
             {
-                // 循环启动
-                sys->nc_event = SYS_EVENT_RERUN;
-                // log_system("[task]] 处理循环启动事件");
-                LOG_OUTPUT(INFO, "处理循环启动事件");
-                
+                if(sys->current_mode == MODE_MEM){
+                    // 循环启动
+                    sys->nc_event = SYS_EVENT_RERUN;
+                    // log_system("[task]] 处理循环启动事件");
+                    LOG_OUTPUT(INFO, "处理循环启动事件");
+                }
             }
             if(event_data->run_payload.run_state == 0)
             {
-                // 进给保持
-                sys->nc_event = SYS_EVENT_PAUSE;
-                // log_system("[task]] 处理进给保持事件");
-                LOG_OUTPUT(INFO, "处理进给保持事件");
+                if(sys->current_mode == MODE_MEM){
+                    // 进给保持
+                    sys->nc_event = SYS_EVENT_PAUSE;
+                    // log_system("[task]] 处理进给保持事件");
+                    LOG_OUTPUT(INFO, "处理进给保持事件");
+                }
             }
             break;
         }

@@ -232,6 +232,7 @@ static bool mem_check_res(GNC_RES res){
     case GNC_DATA_EMPTY:
         // 等待中无数据，则继续等待
         if(mem_check_running() && mem_exec_state == EXEC_WAITING){
+            var_chan[0].is_gcode_ending = true;
             return true;
         }   
         // 运行中无数据，则进入等待 
@@ -246,6 +247,7 @@ static bool mem_check_res(GNC_RES res){
         var_chan[0].is_running = false;
         var_chan[0].is_moving = false;
         var_chan[0].is_progend = true;
+        var_chan[0].is_gcode_ending = true;
         tp_reset();
         // log_system("[mem] 程序运行结束");
         LOG_OUTPUT(INFO, "程序运行结束");
@@ -278,6 +280,8 @@ static GNC_RES cycle_tp_get_first(){
     cycle_tp_block_update(cycle_tp->plan_block, current_pos, var_chan[0].act_feedrate);
     if(chan_look_ahead(var_chan[0].act_feedrate) == GNC_DATA_EMPTY) return GNC_DATA_EMPTY;
     if(cycle_tp_init(par_chan[0].vplan_mode, var_chan[0].act_feedrate) == GNC_CAL_ERROR) return GNC_CAL_ERROR;
+    // printf("first pos: %f %f %f", cycle_tp->plan_block->start_pos.x, cycle_tp->plan_block->start_pos.y, cycle_tp->plan_block->start_pos.z);
+    // printf("first seg end pos: %f %f %f", cycle_tp->plan_block->end_pos.x, cycle_tp->plan_block->end_pos.y, cycle_tp->plan_block->end_pos.z);
     shm_var_update_prog();
     return GNC_CAL_SUCCESS;
 }
