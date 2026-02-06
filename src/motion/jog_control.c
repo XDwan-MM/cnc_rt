@@ -19,7 +19,7 @@ void start_jog_cont(const PAR_AXIS* axis_para, simple_tp_t *jog_tp, int directio
     /* 根据方向设置JOG目标位置（增量至极限(到限位)） */
     if (direction > 0) {
         /* 正向JOG：目标位置设为最大限位 */
-        jog_tp->curr_pos = axis_para->plmt;
+        jog_tp->pos_cmd = axis_para->plmt;
     } else {
         /* 负向JOG：目标位置设为最小限位 */
         jog_tp->pos_cmd = axis_para->nlmt;
@@ -28,7 +28,7 @@ void start_jog_cont(const PAR_AXIS* axis_para, simple_tp_t *jog_tp, int directio
     /* 设置速度限制*/
     // jog_lowspd实时这边的单位是：mm/s
     // feed_override实时这边统一范围为（0.0～1.5）
-    jog_tp->max_vel = (axis_para->jog_lowspd * feed_override);
+    jog_tp->max_vel = axis_para->jog_lowspd * feed_override;
 
     /* 设置加速度限制 */
     // feed_acc实时这边统一的单位是mm/s^2
@@ -58,7 +58,7 @@ void start_jog_rapid_cont(const PAR_AXIS* axis_para, simple_tp_t *rapid_jog_tp, 
     /* 根据方向设置JOG目标位置（增量至极限(到限位)） */
     if (direction > 0) {
         /* 正向JOG：目标位置设为最大限位 */
-        rapid_jog_tp->curr_pos = axis_para->plmt;
+        rapid_jog_tp->pos_cmd = axis_para->plmt;
     } else {
         /* 负向JOG：目标位置设为最小限位 */
         rapid_jog_tp->pos_cmd = axis_para->nlmt;

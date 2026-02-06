@@ -5,6 +5,7 @@
     "files.associations": {
         "log.h": "c",
         "thread": "c",
-        "logapi.h": "c"
+        "logapi.h": "c",
+        "cnc_math.h": "c"
     }
 }
