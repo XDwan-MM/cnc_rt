@@ -89,6 +89,9 @@ GNC_RES chan_look_ahead(double vs){
         // 注意：如果长度为0，删除该段
         if(IsEqualTo(pretreat_block->length, 0)){
             queue_pop(pretreat_queue);
+            if(queue_is_empty(plan_queue) && queue_is_empty(pretreat_queue) && gcode_queue_is_empty(gcode_queue)){
+                var_chan[0].is_gcode_ending = true;
+            }
             continue;
         }
         queue_push(plan_queue, pretreat_block);

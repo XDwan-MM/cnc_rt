@@ -25,7 +25,7 @@ void sigint_handler([[maybe_unused]] int sig) {
 #ifndef DEBUG_MODE_ENABLED
 int Master_Start() {
     char eni_path[512];
-    snprintf(eni_path, sizeof(eni_path), "%s/%s", PROJECT_DIR, "config/ENI/gugao.xml");
+    snprintf(eni_path, sizeof(eni_path), "%s/%s", PROJECT_DIR, "config/ENI/gugao_io.xml");
     int error_code = ethercat_init(eni_path);
     if ( error_code < 0) {
         printf("[Warning] EtherCAT 启动失败，错误码为 %d ！\n", error_code);
@@ -70,6 +70,8 @@ int main() {
     Hal_Driver_Manager_Init();
     Hal_Driver_Array_Init();
     Hal_Io_Array_Init();
+    //初始化行程检查功能
+    Axis_Limit_Manager_Init();
     signal(SIGINT, sigint_handler);
 
 #ifndef DEBUG_MODE_ENABLED

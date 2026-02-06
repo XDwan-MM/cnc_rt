@@ -30,8 +30,7 @@
 #define SYS_NCOBJ_NUM		(8)		// 从设备控制对象（部件）数
 #define CHAN_AXES_NUM		(3)		// 通道最大轴数
 #define CHAN_SPDL_NUM		(1)		// 通道最大主轴数
-#define MAX_SMC_AXES_NUM	(4)		// 最多运控轴数/
-#define SYS_NCBRD_CFG_NUM   (6)		/*! 主控制设备数 */
+#define MAX_SMC_AXES_NUM	(4)		// 最多运控轴数
 #endif
 
 #ifdef _GNC_20_

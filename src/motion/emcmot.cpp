@@ -88,7 +88,7 @@ void emcmotPathPlan() {
         HmiSysData hmiSysData;
         #ifdef DEBUG_MODE_ENABLED
         char ncFilePath[512];
-        snprintf(ncFilePath, sizeof(ncFilePath), "%s/%s", PROJECT_DIR, "config/NC/b.nc");
+        snprintf(ncFilePath, sizeof(ncFilePath), "%s/%s", PROJECT_DIR, "config/NC/a.nc");
         parser_init(ncFilePath);
         #else
         getHmiSysDataPtr(&hmiSysData);
@@ -223,22 +223,21 @@ static void handle_system_event(){
 
 // 主轴控制
 static void spindle_control(){
-    // switch (sys->current_mode){
-    //     case MODE_JOG:
-    //     case MODE_MPG:
-    //     case MODE_EDIT:
-    //         emcSpindleControl();
-    //         break;
-    //     case MODE_MEM:
-    //     case MODE_MDI:
-    //     case MODE_DNC:
-    //         emcmcodedeal();
-    //         break;
-    //     default:
-    //         break;
-    // }
     if(var_chan[0].is_estop) return;
-    emcSpindleControl();
+    switch (sys->current_mode){
+        case MODE_JOG:
+        case MODE_MPG:
+        case MODE_EDIT:
+            emcSpindleControl();
+            break;
+        case MODE_MEM:
+        case MODE_MDI:
+        case MODE_DNC:
+            emcmcodedeal();
+            break;
+        default:
+            break;
+    }
 }
 
 // 不同加工模式的运动控制
