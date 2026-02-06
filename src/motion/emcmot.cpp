@@ -114,9 +114,6 @@ static void set_operating_mode() {
     }
     // 检查是否急停
     if (var_chan[0].is_estop) {
-        sys->current_mode  = sys->target_mode = MODE_ALARM;
-        var_chan[var_sys.active_chan].mode = sys->current_mode;
-        LOG_OUTPUT(ERROR, "报警下无法切换模式，请复位清除报警后再试");
         return;
     }
     // 根据切换的加工模式和当前加工模式，判断是否可以切换
@@ -251,7 +248,6 @@ static void get_cmd_pos() {
             handle_alarm_cmd();
             break;
         case MODE_HOMING: // 回零
-            // todo：回零点击啸叫
             // handle_homing_cmd();
             break;
         case MODE_MDI: // MDI
@@ -277,8 +273,11 @@ static void check_for_fault() {
     //　检查系统报警
     int alarm_count = 0;
     getAlarmCount(ALARM_TYPE_ALL, ALARM_LEVEL_ALL, &alarm_count);
-    if( alarm_count > 0){
+    if(alarm_count > 0){
         var_chan[0].is_estop = true;
+        sys->target_mode = sys->current_mode;
+        sys->current_mode = MODE_ALARM;
+        var_chan[var_sys.active_chan].mode = sys->current_mode;
     }
     // 检查跟随误差
     check_ferror_fault();
@@ -405,7 +404,6 @@ static void update_status() {
     var_chan[0].act_jerk = var_chan[0].cmd_jerk;
     var_chan[0].act_spdl_speed = var_chan[0].act_spdl_speed;
     for (int i = 0; i < SYS_AXES_NUM; i++) {
-        // var_axis[i].act_pos = var_axis[i].cmd_pos;
         var_axis[i].act_vel = var_axis[i].cmd_vel;
     }
     shm_var_update();

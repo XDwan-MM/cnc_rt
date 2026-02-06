@@ -21,9 +21,9 @@ GNC_RES task_mq_proc()
     if(event_queue_is_empty(event_queue)) return GNC_DATA_EMPTY;
     if(event_queue_is_full(event_queue)){
         // log_system("[task] 事件队列已满");
-        LOG_OUTPUT(ERROR, "事件队列已满");
-        setAlarm(ALARM_SY, ALARM_ERROR, 0);
-        return GNC_OPERATOR_ERROR;
+        // LOG_OUTPUT(ERROR, "事件队列已满");
+        // setAlarm(ALARM_SY, ALARM_ERROR, 0);
+        // return GNC_OPERATOR_ERROR;
     }
     // if(sys->nc_event != SYS_EVENT_NONE) return GNC_OPERATOR_WARNING;
     event_queue_pop(event_queue, &event_data);
@@ -43,7 +43,11 @@ static GNC_RES task_handle_pmc_event(PMC_EVENT* event_data){
         /* 1. 模式切换：更新目标模式 */
         case EV_MSG_MODE:
         {
-            // 使用 switch 结构替代多个 if，提高效率
+            if(sys->current_mode == MODE_ALARM){
+                // log_system("[task] 报警下不支持切换模式操作");
+                LOG_OUTPUT(ERROR, "报警下不支持切换模式操作");
+                break;
+            }
             switch (event_data->mode_payload.mode) {
             case 0: sys->target_mode = MODE_EDIT;   break; // EDIT
             case 1: sys->target_mode = MODE_MEM;    break; // MEM
@@ -54,7 +58,7 @@ static GNC_RES task_handle_pmc_event(PMC_EVENT* event_data){
             case 6: sys->target_mode = MODE_DNC;    break; // DNC (DNCI)
             default: sys->target_mode = MODE_IDLE;  break; // wcf: 我不太确定
             }
-            // log_system("[task]] 处理模式切换事件(%d)", sys->target_mode);
+            // log_system("[task] 处理模式切换事件(%d)", sys->target_mode);
             LOG_OUTPUT(INFO, "处理模式切换事件 %d", sys->target_mode);
             break;
         }

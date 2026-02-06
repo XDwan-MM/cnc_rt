@@ -95,8 +95,6 @@ static GNC_RES sys_init(){
 }
 
 GNC_RES sys_reset(){
-    sys->target_mode = MODE_IDLE;
-    sys->current_mode = MODE_IDLE;
     sys->nc_event = SYS_EVENT_NONE;
     sys->is_switching_mode = false;
     sys->is_parse_running = false;
