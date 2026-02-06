@@ -65,7 +65,16 @@ void Master_Run()
     {
         CHECK_FUNC(GM_RxPdoEntry_Get_By_Pos(&MCPDO[i], slave_list, mcp_slave_bias, 0, i));
     }
-    uint8_t drivers_slave_bias = 1;
+    uint8_t io_slave_bias = 1;
+    for (int i = 0; i < 1; i++)
+    {
+        CHECK_FUNC(GM_TxPdoEntry_Get_By_Pos(&DI0[i], slave_list, i + io_slave_bias, 0, 0));
+        CHECK_FUNC(GM_TxPdoEntry_Get_By_Pos(&DI1[i], slave_list, i + io_slave_bias, 0, 1));
+
+        CHECK_FUNC(GM_RxPdoEntry_Get_By_Pos(&DO0[i], slave_list, i + io_slave_bias, 0, 0));
+        CHECK_FUNC(GM_RxPdoEntry_Get_By_Pos(&DO1[i], slave_list, i + io_slave_bias, 0, 1));
+    }
+    uint8_t drivers_slave_bias = 2;
     /***************************根据位置索引Entry**************************/
     for (int i = 0; i < 4; i++) {
         CHECK_FUNC(GM_TxPdoEntry_Get_By_Pos(&StatusWord[i], slave_list, i + drivers_slave_bias, 0, 0));      // 获取状态字entry信息

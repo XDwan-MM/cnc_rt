@@ -76,56 +76,56 @@ static GNC_RES task_handle_pmc_event(PMC_EVENT* event_data){
                     if (direction == 1)
                     {
                         sys->nc_event = SYS_EVENT_X_POS_PRESS;
-                        LOG_OUTPUT(INFO, "处理X+按下事件");
+                        // LOG_OUTPUT(INFO, "处理X+按下事件");
                     }
                     else if (direction == -1)
                     {
                         sys->nc_event = SYS_EVENT_X_NEG_PRESS;
-                        LOG_OUTPUT(INFO, "处理X-按下事件");
+                        // LOG_OUTPUT(INFO, "处理X-按下事件");
                     }
                     else {
                         // 松开时，为了保险，可以根据 record_nc_event 或直接触发 Release
                         sys->nc_event = (sys->nc_event == SYS_EVENT_X_POS_PRESS) ?
                                             SYS_EVENT_X_POS_RELEASE : SYS_EVENT_X_NEG_RELEASE;
-                        LOG_OUTPUT(INFO, "处理Ｘ释放事件");
+                        // LOG_OUTPUT(INFO, "处理Ｘ释放事件");
                     }
                 }
                 else if (axis == AXIS_Y) {
                     if (direction == 1)
                     {
                         sys->nc_event = SYS_EVENT_Y_POS_PRESS;
-                        LOG_OUTPUT(INFO, "处理Ｙ+按下事件");
+                        // LOG_OUTPUT(INFO, "处理Ｙ+按下事件");
                     }
                     else if (direction == -1)
                     {
                         sys->nc_event = SYS_EVENT_Y_NEG_PRESS;
-                        LOG_OUTPUT(INFO, "处理Ｙ-按下事件");
+                        // LOG_OUTPUT(INFO, "处理Ｙ-按下事件");
                     }
                     else {
                         sys->nc_event = (sys->nc_event == SYS_EVENT_Y_POS_PRESS) ?
                                             SYS_EVENT_Y_POS_RELEASE : SYS_EVENT_Y_NEG_RELEASE;
-                        LOG_OUTPUT(INFO, "处理Ｙ释放事件");
+                        // LOG_OUTPUT(INFO, "处理Ｙ释放事件");
                     }
                 }
                 else if (axis == AXIS_Z) {
                     if (direction == 1)
                     {
                         sys->nc_event = SYS_EVENT_Z_POS_PRESS;
-                        LOG_OUTPUT(INFO, "处理Z+按下事件");
+                        // LOG_OUTPUT(INFO, "处理Z+按下事件");
                     }
                     else if (direction == -1)
                     {
                         sys->nc_event = SYS_EVENT_Z_NEG_PRESS;
-                        LOG_OUTPUT(INFO, "处理Z-按下事件");
+                        // LOG_OUTPUT(INFO, "处理Z-按下事件");
                     }
                     else {
                         sys->nc_event = (sys->nc_event == SYS_EVENT_Z_POS_PRESS) ?
                                             SYS_EVENT_Z_POS_RELEASE : SYS_EVENT_Z_NEG_RELEASE;
-                        LOG_OUTPUT(INFO, "处理Z释放事件");
+                        // LOG_OUTPUT(INFO, "处理Z释放事件");
                     }
                 }
                 // log_system("[task]] 处理进给轴按键事件 Axis %d action %d under mode %d", axis, direction, sys->current_mode);
-                LOG_OUTPUT(INFO, "处理进给轴按键事件 Axis %d action %d under mode %d", axis, direction, sys->current_mode);
+                // LOG_OUTPUT(INFO, "处理进给轴按键事件 Axis %d action %d under mode %d", axis, direction, sys->current_mode);
             }
             break;
         }
@@ -137,7 +137,7 @@ static GNC_RES task_handle_pmc_event(PMC_EVENT* event_data){
                 spindle.mode = DRV_MODE_CSV;
                 sp_sign = 1;
                 // log_system("[task]] 处理主轴正转事件");
-                LOG_OUTPUT(INFO, "处理主轴正转事件");
+                // LOG_OUTPUT(INFO, "处理主轴正转事件");
             }
             if(event_data->spindle_payload.direction == -1)
             {
@@ -145,13 +145,13 @@ static GNC_RES task_handle_pmc_event(PMC_EVENT* event_data){
                 spindle.mode = DRV_MODE_CSV;
                 sp_sign = 2;
                 // log_system("[task]] 处理主轴反转事件");
-                LOG_OUTPUT(INFO, "处理主轴反转事件");
+                // LOG_OUTPUT(INFO, "处理主轴反转事件");
             }
             if(event_data->spindle_payload.direction == 0)
             {
                 sp_sign = 0;
                 // log_system("[task]] 处理主轴停止事件");
-                LOG_OUTPUT(INFO, "处理主轴停止事件");
+                // LOG_OUTPUT(INFO, "处理主轴停止事件");
             }
             break;
         }
@@ -202,7 +202,7 @@ static GNC_RES task_handle_pmc_event(PMC_EVENT* event_data){
             {
                 sys->nc_event = SYS_EVENT_RESET;
                 // log_system("[task]] 处理复位事件");
-                LOG_OUTPUT(INFO, "处理复位事件");
+                // LOG_OUTPUT(INFO, "处理复位事件");
             }
             break;
         }
