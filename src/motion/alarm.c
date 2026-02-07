@@ -18,8 +18,7 @@ void handle_alarm_cmd(){
             // 译码器复位
             var_chan[0].is_estop = false;
             event_queue_reset(event_queue);
-            // 恢复报错前模式
-            sys->current_mode = sys->target_mode;
+            LOG_OUTPUT(INFO, "报警已清除");
             break;
         case SYS_EVENT_RERUN:
         case SYS_EVENT_PAUSE:

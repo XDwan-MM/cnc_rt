@@ -112,10 +112,6 @@ static void set_operating_mode() {
         sys->is_switching_mode = false;
         return;
     }
-    // 检查是否急停
-    if (var_chan[0].is_estop) {
-        return;
-    }
     // 根据切换的加工模式和当前加工模式，判断是否可以切换
     switch (sys->current_mode) {
         case MODE_IDLE:
@@ -135,7 +131,7 @@ static void set_operating_mode() {
                 LOG_OUTPUT(INFO, "系统模式切换为 %s", mode_names[sys->current_mode]);
                 break;
             }
-            sys->nc_event = SYS_EVENT_RESET;
+            // sys->nc_event = SYS_EVENT_RESET;
             sys->is_switching_mode = true;
             break;
         case MODE_EDIT:
@@ -158,15 +154,9 @@ static void set_operating_mode() {
                 LOG_OUTPUT(INFO, "系统模式切换为 %s", mode_names[sys->current_mode]);
                 break;
             }
-            sys->nc_event = SYS_EVENT_RESET;
+            // sys->nc_event = SYS_EVENT_RESET;
             sys->is_switching_mode = true;
             sys->current_mode = sys->target_mode;
-            break;
-        case MODE_ALARM:
-            sys->current_mode = sys->target_mode;
-            var_chan[var_sys.active_chan].mode = sys->current_mode;
-            // log_system("[emcmot] 系统模式切换为(%s)", mode_names[sys->current_mode]);
-            LOG_OUTPUT(INFO, "系统模式切换为 %s", mode_names[sys->current_mode]);
             break;
         case MODE_HOMING:
             if (!var_chan[0].is_homing) {
@@ -177,7 +167,7 @@ static void set_operating_mode() {
                 LOG_OUTPUT(INFO, "系统模式切换为 %s", mode_names[sys->current_mode]);
                 break;
             }
-            sys->nc_event = SYS_EVENT_RESET;
+            // sys->nc_event = SYS_EVENT_RESET;
             sys->is_switching_mode = true;
             break;
 
@@ -199,7 +189,7 @@ static void set_operating_mode() {
                 LOG_OUTPUT(INFO, "自动加工下不能切换模式，请先按进给保持后切换");
                 break;
             }
-            sys->nc_event = SYS_EVENT_RESET;
+            // sys->nc_event = SYS_EVENT_RESET;
             sys->is_switching_mode = true;
             break;
         default:
@@ -220,7 +210,7 @@ static void handle_system_event(){
 
 // 主轴控制
 static void spindle_control(){
-    if(var_chan[0].is_estop) return;
+    // if(var_chan[0].is_estop) return;
     switch (sys->current_mode){
         case MODE_JOG:
         case MODE_MPG:
@@ -243,9 +233,6 @@ static void get_cmd_pos() {
         case MODE_IDLE: // 空闲状态
             break;
         case MODE_EDIT: // 编辑
-            break;
-        case MODE_ALARM: // 系统报错
-            handle_alarm_cmd();
             break;
         case MODE_HOMING: // 回零
             // handle_homing_cmd();
@@ -270,17 +257,16 @@ static void get_cmd_pos() {
 }
 
 static void check_for_fault() {
+    // 检查跟随误差
+    check_ferror_fault();
     //　检查系统报警
     int alarm_count = 0;
     getAlarmCount(ALARM_TYPE_ALL, ALARM_LEVEL_ALL, &alarm_count);
     if(alarm_count > 0){
+        // LOG_OUTPUT(ERROR, "alarm count: %d\n", alarm_count);
         var_chan[0].is_estop = true;
-        sys->target_mode = sys->current_mode;
-        sys->current_mode = MODE_ALARM;
-        var_chan[var_sys.active_chan].mode = sys->current_mode;
-    }
-    // 检查跟随误差
-    check_ferror_fault();
+        handle_alarm_cmd();
+    } 
 }
 
 // 检查轴跟随误差错误
@@ -303,19 +289,22 @@ static void check_ferror_fault() {
     updata_axis_ferror(&var_axis[AXIS_Z].ferror_control, &par_axis[AXIS_Z], pos_cmd_z, pos_fb_z, vel_cmd_z);
 
     if (var_axis[AXIS_X].ferror_control.error_flag) {
-        // setAlarm(ALARM_CH, ALARM_ERROR, 4);
+        int res = setAlarm(ALARM_CH, ALARM_ERROR, 4);
         // log_system("[ferror] Ｘ轴跟随误差报警");
-        // LOG_OUTPUT(ERROR, "Ｘ轴跟随误差报警");
+        if(res == -8) return;
+        LOG_OUTPUT(ERROR, "Ｘ轴跟随误差报警");
     }
     if (var_axis[AXIS_Y].ferror_control.error_flag) {
-        // setAlarm(ALARM_CH, ALARM_ERROR, 5);
+        int res = setAlarm(ALARM_CH, ALARM_ERROR, 5);
         // log_system("[ferror] Ｙ轴跟随误差报警");
-        // LOG_OUTPUT(ERROR, "Ｙ轴跟随误差报警");
+        if(res == -8) return;
+        LOG_OUTPUT(ERROR, "Ｙ轴跟随误差报警");
     }
     if (var_axis[AXIS_Z].ferror_control.error_flag) {
-        // setAlarm(ALARM_CH, ALARM_ERROR, 6);
+        int res = setAlarm(ALARM_CH, ALARM_ERROR, 6);
         // log_system("[ferror] Ｚ轴跟随误差报警");
-        // LOG_OUTPUT(ERROR, "Ｚ轴跟随误差报警");
+        if(res == -8) return;
+        LOG_OUTPUT(ERROR, "Ｚ轴跟随误差报警");
     }
 }
 
@@ -390,10 +379,11 @@ static void check_for_soft_limit() {
     var_axis[AXIS_X].runtime.active_levels = Check_Axis_Limit_Violation(var_axis[AXIS_X].runtime);
     var_axis[AXIS_Y].runtime.active_levels = Check_Axis_Limit_Violation(var_axis[AXIS_Y].runtime);
     var_axis[AXIS_Z].runtime.active_levels = Check_Axis_Limit_Violation(var_axis[AXIS_Z].runtime);
-    if(var_axis[AXIS_X].runtime.active_levels || var_axis[AXIS_Y].runtime.active_levels || var_axis[AXIS_Z].runtime.active_levels){
-        // setAlarm(ALARM_CH, ALARM_ERROR, 7);
-        // log_system("[limit] 软限位超差");
-        // LOG_OUTPUT(ERROR, "软限位超差");
+    if(var_axis[AXIS_X].runtime.active_levels == 1 || var_axis[AXIS_Y].runtime.active_levels == 1 || var_axis[AXIS_Z].runtime.active_levels == 1){
+        int res = setAlarm(ALARM_CH, ALARM_ERROR, 7);
+        // log_system("[limit] 一级行程检查超限");
+        if(res == -8) return;
+        LOG_OUTPUT(ERROR, "一级行程检查超限");
     }
 }
 
