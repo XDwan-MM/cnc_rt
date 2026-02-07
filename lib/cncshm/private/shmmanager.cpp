@@ -126,6 +126,9 @@ bool ShmManager::init() {
 
 void ShmManager::setIsInit(bool isInit) {
     _isInit = isInit;
+    if (_regManager) {
+        _regManager->setIsShmInit(_isInit);
+    }
     if (_ladManager) {
         _ladManager->setIsShmInit(_isInit);
     }
