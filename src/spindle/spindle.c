@@ -1,6 +1,7 @@
 #include "spindle.h"
 #include "global.h"
 #include "mcode_queue.h"
+#include "regapi.h"
 
 double emot_speed;
 double speed;
@@ -139,21 +140,34 @@ void emcmcodedeal()
         }
         if(mcode_block->m_code == M03)
         {
+            clearRegBit(REG_F, 10, 4);
+            clearRegBit(REG_F, 10, 5);
+            setRegBit(REG_F, 10, 3);
+
             spindle.mode = DRV_MODE_CSV;
             sp_sign = 1;
             emot_speed = 1 * mcode_block->spindle.speed ;
         }
         else if(mcode_block->m_code == M04)
         {
+            clearRegBit(REG_F, 10, 3);
+            clearRegBit(REG_F, 10, 5);
+            setRegBit(REG_F, 10, 4);
+
             spindle.mode = DRV_MODE_CSV;
             sp_sign = 2;
             emot_speed = -1 * mcode_block->spindle.speed ;
         }
         else if(mcode_block->m_code == M05 || mcode_block->m_code == M30)
         {
+            clearRegBit(REG_F, 10, 3);
+            clearRegBit(REG_F, 10, 4);
+            setRegBit(REG_F, 10, 5);
+
             sp_sign = 0;
         }
         mcode_queue_pop(mcode_queue);
+        // setRegBit(REG_F, 7, 0); // MF =1;
     }
     if(spindle.state == DRV_STATE_OPERATION_ENABLED)
     {

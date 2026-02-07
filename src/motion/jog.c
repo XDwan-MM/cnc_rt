@@ -115,15 +115,14 @@ static void execute_axis_motion(int i)
     case JOG_STATE_RUNNING:
         // 使用记忆中的方向锁定运行
         start_jog_cont(&par_axis[i], &var_axis[i].jog_tp, jog_ctrls[i].direction, var_chan[0].feed_override, JOG_CYCLE_TIME);
+        // 到达正限位 日志输出
         if (fabs(var_axis[i].jog_tp.curr_pos - par_axis[i].plmt) < SPEED_THRESHOLD)
         {
-            // 到达正限位 日志输出
-            LOG_OUTPUT(INFO, "点动 %d 轴到达正限位", i);
+            LOG_OUTPUT(INFO,"点动 %d 轴到达正限位", i);
         }
-        else if (fabs(var_axis[i].jog_tp.curr_pos - par_axis[i].nlmt) < SPEED_THRESHOLD)
+        else if(fabs(var_axis[i].jog_tp.curr_pos - par_axis[i].nlmt) < SPEED_THRESHOLD)
         {
-            // 到达负限位 日志输出
-            LOG_OUTPUT(INFO, "点动 %d 轴到达负限位", i);
+            LOG_OUTPUT(INFO,"点动 %d 轴到达负限位", i);
         }
         break;
 
