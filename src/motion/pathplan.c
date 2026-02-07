@@ -46,7 +46,7 @@ GNC_RES chan_add_block(){
 
         // 构造成段
         pretreat_block->type = gcode_block->type;
-        pretreat_block->feed_vel = gcode_block->feed_vel;
+        pretreat_block->feed_vel = gcode_block->feed_vel / TIME_MINUS_2_S;
         block_cal_pos(gcode_block, pretreat_block, &pretreat_queue->pre_pos);
         
         // 计算速度
