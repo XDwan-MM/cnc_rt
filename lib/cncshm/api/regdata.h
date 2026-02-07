@@ -37,6 +37,11 @@ typedef enum {
     REG_L = 'L'
 } RegType;
 
+typedef struct {
+    int current; // 当前值
+    int preset;  // 预设值
+} RegTimerCounter;
+
 struct RegData {
     unsigned char regA[REG_A_NUM];
     unsigned char regR[REG_R_NUM];
@@ -50,8 +55,8 @@ struct RegData {
     unsigned char regQ[REG_Q_NUM];
     unsigned int regB[REG_B_NUM];
     unsigned char regK[REG_K_NUM];
-    unsigned int regT[REG_T_NUM];
-    unsigned int regC[REG_C_NUM];
+    RegTimerCounter regT[REG_T_NUM];
+    RegTimerCounter regC[REG_C_NUM];
 };
 
 #endif

@@ -76,9 +76,8 @@ typedef enum Opcode {
     OP_ROL,
     OP_ROR,
     OP_MOV,
-    OP_TMRB,
-    OP_STMR,
-    OP_CTRC,
+    OP_TMR,
+    OP_CTR,
     OP_JMP,
     OP_LBL,
     OP_CALL,
@@ -176,14 +175,15 @@ typedef struct LadRegLock {
 } LadRegLock;
 
 typedef enum LadTimerType {
-    T_TYPE_NONE,
+    T_TYPE_TMR,
     T_TYPE_TMRB,
     T_TYPE_STMR
 } LadTimerType;
 
 typedef enum LadCounterType {
-    C_TYPE_NONE,
+    C_TYPE_CTR,
     C_TYPE_CTRC,
+    C_TYPE_CTUD
 } LadCounterType;
 
 typedef struct LadData {
@@ -196,9 +196,7 @@ typedef struct LadData {
     LadIoMapping ioMappings[LAD_IO_MAX_NUM];       // 梯形图IO对照表
     LadRegLock regLocks[LAD_REG_LOCK_MAX_NUM];     // 梯形图锁定寄存器表
     LadTimerType timerTypes[REG_T_NUM];            // 梯形图定时器类型
-    unsigned int timerPreset[REG_T_NUM];           // 定时器预设值
     LadCounterType counterTypes[REG_C_NUM];        // 梯形图计数器类型
-    unsigned int counterPreset[REG_C_NUM];         // 计数器预设值
 } LadData;
 
 #endif
