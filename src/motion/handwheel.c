@@ -44,10 +44,6 @@ void Handlewheels_Motion(simple_tp_t_handwheel *tp)
     /* 从点动手轮获取计数 */
     new_hw_counts = tp->joint.count;
     delta = new_hw_counts - tp->joint.old_counts;
-    if (abs(delta) > 1000000)
-    {
-        LOG_OUTPUT(WARN, "脉冲数超过限制");
-    }
     /* 保存值供下次使用 */
     tp->joint.old_counts = new_hw_counts;
     /* 初始化完成 */

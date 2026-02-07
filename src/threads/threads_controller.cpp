@@ -71,7 +71,8 @@ void* motion_controller_thread_func(void*) {
         if (exit_flag) break;
         Hal_Driver_Update_All(true, false);
         // todo：修改此处写法
-        if (sys->nc_event == SYS_EVENT_RESET || RESET || sys->nc_event == SYS_EVENT_PAUSE) {
+        if (sys->nc_event == SYS_EVENT_RESET || RESET || var_chan[0].is_estop) 
+        {
             RESET = true;
             sp_sign = 0;
             if (sp_sign == 0 && !sp_stop_sem) {

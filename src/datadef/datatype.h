@@ -115,7 +115,6 @@ typedef enum {
     MODE_JOG,        // 手动
     MODE_RAPID_JOG,  // 快速点动
     MODE_HOMING,     // 回零
-    MODE_ALARM,      // 报警
     MODE_IDLE,       // 空闲
 } NC_MODE;
 

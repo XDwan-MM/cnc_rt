@@ -83,8 +83,8 @@ static GNC_RES traj_data_init();
 static GNC_RES sys_init(){
     sys = (SYS_DATA*)malloc(sizeof(SYS_DATA));
     if(sys == NULL) return GNC_DATA_NULL;
-    sys->target_mode = MODE_IDLE;
-    sys->current_mode = MODE_IDLE;
+    sys->target_mode = MODE_EDIT;
+    sys->current_mode = MODE_EDIT;
     sys->nc_event = SYS_EVENT_NONE;
     sys->is_switching_mode = false;
     sys->is_parse_running = false;
@@ -263,7 +263,7 @@ GNC_RES shm_var_update(){
         // 回零
         setVarChanInt(i, VAR_CHAN_IS_HOMING, var_chan[i].is_homing, 0);
         // 运行中
-        setVarChanInt(i, VAR_CHAN_IS_RUNNING, var_chan[i].is_running == 0, 0);
+        setVarChanInt(i, VAR_CHAN_IS_RUNNING, var_chan[i].is_running, 0);
         // 移动中
         setVarChanInt(i, VAR_CHAN_IS_MOVING, var_chan[i].is_moving, 0);
     }

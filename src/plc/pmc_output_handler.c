@@ -22,6 +22,10 @@ void pmc_output_feedback() {
     setRegValue8(REG_F, 0, is_running); /* REG_F 定义见 regdata.h */
     setRegValue8(REG_F, 1, is_estop);
 
+    if(var_chan[0].is_estop){
+        setRegBit(REG_F, 1, 1); //主轴状态重置 
+    }
+
     if(sys->current_mode == MODE_IDLE){
         clearRegBit(REG_F, 2, 1);
         clearRegBit(REG_F, 3, 1);

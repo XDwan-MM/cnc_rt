@@ -303,7 +303,6 @@ STATIC bool parser_check_res(GNC_RES res){
             parser_data->parser_state = PARSER_IDLE;
             // todo：译码出错让运动暂停后报警，而不是直接进入报警
             var_chan[0].is_estop = true;
-            sys->current_mode = sys->target_mode = MODE_ALARM;
             // log_system("[parser] 译码报警(%d)", res);
             LOG_OUTPUT(ERROR, "译码报警 %d", res);
             setAlarm(ALARM_CH, ALARM_ERROR, 2);
