@@ -1,6 +1,7 @@
 #include "jog.h"
 #include "jog_control.h"
 #include "global.h"
+#include "log.h"
 #include <math.h>
 
 /* --- 1. 静态局部变量 (每个轴私有的状态块) --- */
@@ -35,7 +36,6 @@ void handle_jog_cmd()
         sys->nc_event = SYS_EVENT_NONE;
         return;
     }
-
 
     // 2. 遍历各轴独立处理
     for (i = 0; i < SYS_AXES_NUM_JOG; i++)
@@ -115,6 +115,16 @@ static void execute_axis_motion(int i)
     case JOG_STATE_RUNNING:
         // 使用记忆中的方向锁定运行
         start_jog_cont(&par_axis[i], &var_axis[i].jog_tp, jog_ctrls[i].direction, var_chan[0].feed_override, JOG_CYCLE_TIME);
+        if (var_axis[i].jog_tp.curr_pos == par_axis[i].plmt)
+        {
+            // 到达正限位 日志输出
+            LOG_OUTPUT(INFO, "点动 %d 轴到达正限位", i);
+        }
+        else if (var_axis[i].jog_tp.curr_pos == par_axis[i].nlmt)
+        {
+            // 到达负限位 日志输出
+            LOG_OUTPUT(INFO, "点动 %d 轴到达负限位", i);
+        }
         break;
 
     case JOG_STATE_STOPPING:
