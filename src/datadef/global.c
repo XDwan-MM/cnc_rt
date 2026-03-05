@@ -51,22 +51,13 @@ PAR_ACMP* par_acmp;             // 误差补偿参数
 PAR_CFG par_cfg;                // 设备接口参数
 PAR_TABLE par_table;            // 刀具和刀库参数
 SYS_DATA *sys;                  // 系统数据
-GCODE_QUEUE *gcode_queue;       // 译码队列
-MCODE_QUEUE *mcode_queue;       // 译码队列
-PLAN_QUEUE *pretreat_queue;     // 预处理队列
-PLAN_QUEUE *plan_queue;         // 插补队列
 EVENT_QUEUE* event_queue;       // 事件队列
 GCODE_QUEUE *gcode_queue;       // 译码队列
 MCODE_QUEUE *mcode_queue;       // 译码队列
 PLAN_QUEUE *pretreat_queue;     // 预处理队列
-PLAN_QUEUE *plan_queue;         // 插补队列
-MEM_EXEC_STATE mem_exec_state;
-COORD_TP *pausing_tp;
-COORD_TP *cycle_tp;
-HOMING_TP *homing_tp;
-TRAJ_PARAMS* traj_data;
-TRAJ_PARAMS* free_traj_data;
-bool is_paused_in_block;
+PLAN_QUEUE *plan_queue;         // 插补队列   
+COORD_TP *cycle_tp;             // 循环轨迹规划
+HOMING_TP *homing_tp;           // 回零轨迹规划
 
 // 初始化实时var数据
 static GNC_RES rt_var_init(); 
@@ -104,43 +95,25 @@ GNC_RES sys_reset(){
 }
 
 static GNC_RES tp_init(){
-    GNC_RES res = GNC_OPERATOR_SUCCESS;
-    homing_tp = (HOMING_TP*)malloc(SYS_AXES_NUM * sizeof(HOMING_TP));
-    res = homing_tp_init(homing_tp);
-    if(res != GNC_OPERATOR_SUCCESS) return res;
-    res = plan_tp_init();
-    if(res != GNC_OPERATOR_SUCCESS) return res;
+    homing_tp_init();
+    cycle_tp_init();
+    // 调试：解释器译码队列
     gcode_queue = (GCODE_QUEUE*)malloc(sizeof(GCODE_QUEUE));
-    res = gcode_queue_init(gcode_queue);
-    if(res != GNC_OPERATOR_SUCCESS) return res;
-    mcode_queue = (MCODE_QUEUE*)malloc(sizeof(MCODE_QUEUE));
-    res = mcode_queue_init(mcode_queue);
-    if(res != GNC_OPERATOR_SUCCESS) return res;
+    gcode_queue_init(gcode_queue);
     pretreat_queue = (PLAN_QUEUE*)malloc(sizeof(PLAN_QUEUE));
-    res = queue_init(pretreat_queue);
-    if(res != GNC_OPERATOR_SUCCESS) return res;
+    queue_init(pretreat_queue);
     plan_queue = (PLAN_QUEUE*)malloc(sizeof(PLAN_QUEUE));
-    res = queue_init(plan_queue);
-    if(res != GNC_OPERATOR_SUCCESS) return res;
+    queue_init(plan_queue);
     return GNC_OPERATOR_SUCCESS;
 }
 
+
 GNC_RES tp_reset(){
-    homing_tp_reset(homing_tp);
-    plan_tp_reset();
+    homing_tp_reset();
+    cycle_tp_reset();
     gcode_queue_reset(gcode_queue);
     queue_reset(pretreat_queue);
     queue_reset(plan_queue);
-    return GNC_OPERATOR_SUCCESS;
-}
-
-static GNC_RES traj_data_init(){
-    traj_data = (TRAJ_PARAMS*)malloc(sizeof(TRAJ_PARAMS));
-    if(traj_data == NULL) return GNC_DATA_NULL;
-    memset(traj_data, 0, sizeof(TRAJ_PARAMS));
-    free_traj_data = (TRAJ_PARAMS*)malloc(SYS_AXES_NUM * sizeof(TRAJ_PARAMS));
-    if(free_traj_data == NULL) return GNC_DATA_NULL;
-    memset(free_traj_data, 0, SYS_AXES_NUM * sizeof(TRAJ_PARAMS));
     return GNC_OPERATOR_SUCCESS;
 }
 
@@ -157,8 +130,6 @@ GNC_RES rt_global_init(){
     res = sys_init();
     if(res != GNC_OPERATOR_SUCCESS) return res;
     res = tp_init();
-    if(res != GNC_OPERATOR_SUCCESS) return res;
-    res = traj_data_init();
     if(res != GNC_OPERATOR_SUCCESS) return res;
     res = task_mq_init();
     if(res != GNC_OPERATOR_SUCCESS) return res;
@@ -279,12 +250,10 @@ GNC_RES shm_var_update_prog(){
         set_modal.value.i = cycle_tp->plan_block->state.modal[i];
         setVarChanValue(0, VAR_CHAN_MODAL, 0, &set_modal, 0);
     }
-
     // 机床指令位置
     setVarAxisDouble(AXIS_X, VAR_AXIS_CMD_POS_EX, cycle_tp->plan_block->end_pos.x, 0);
     setVarAxisDouble(AXIS_Y, VAR_AXIS_CMD_POS_EX, cycle_tp->plan_block->end_pos.y, 0);
     setVarAxisDouble(AXIS_Z, VAR_AXIS_CMD_POS_EX, cycle_tp->plan_block->end_pos.z, 0);
-
     // 运行行号
     setVarChanInt(0, VAR_CHAN_RUN_ROW, cycle_tp->plan_block->line_number, 0);
     return GNC_OPERATOR_SUCCESS;

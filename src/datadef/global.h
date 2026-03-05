@@ -52,6 +52,7 @@
 extern "C" {
 #endif
 
+
 extern sem_t exit_sem;                         // 退出信号
 extern sem_t op_sem;                           // 已进入op信号，用于线程间通信
 extern int InterruptFlag;                      // 打断标志位
@@ -94,20 +95,14 @@ extern PAR_CFG par_cfg;            // 设备接口参数
 extern PAR_TABLE par_table;        // 刀具和刀库参数
 // 系统数据
 extern SYS_DATA *sys;
+extern EVENT_QUEUE* event_queue;    // 事件队列
 // 加工过程数据
-extern GCODE_QUEUE *gcode_queue;        // 译码队列
-extern MCODE_QUEUE *mcode_queue;        // 译码队列
-extern PLAN_QUEUE *pretreat_queue;      // 预处理队列
-extern PLAN_QUEUE *plan_queue;          // 插补队列
-extern EVENT_QUEUE* event_queue;        // 事件队列
-extern MEM_EXEC_STATE mem_exec_state;
-extern COORD_TP *pausing_tp;
+extern GCODE_QUEUE *gcode_queue;    // 译码队列
+extern MCODE_QUEUE *mcode_queue;    // 译码队列
+extern PLAN_QUEUE *pretreat_queue;  // 预处理队列
+extern PLAN_QUEUE *plan_queue;      // 插补队列
 extern COORD_TP *cycle_tp;
-extern bool is_paused_in_block;
 extern HOMING_TP *homing_tp;
-extern TRAJ_PARAMS* traj_data;
-extern TRAJ_PARAMS* free_traj_data;
-extern bool is_paused_in_block;
 
 GNC_RES rt_global_init();
 GNC_RES tp_reset();
