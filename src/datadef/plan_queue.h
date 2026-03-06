@@ -94,7 +94,7 @@ PLAN_BLOCK* queue_peak_tail(const PLAN_QUEUE* queue);
 // 以head为起始，向后偏移为index
 PLAN_BLOCK* queue_get_block(const PLAN_QUEUE* queue, int index);
 
-PLAN_BLOCK* queue_copy_block(const PLAN_QUEUE* queue, int index);
+void queue_copy_block(const PLAN_QUEUE* queue, int index, PLAN_BLOCK* copy_block);
 
 int queue_get_size(const PLAN_QUEUE* queue);
 
