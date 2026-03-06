@@ -12,7 +12,6 @@ static void block_cal_vel(PLAN_BLOCK* current_block);
 static void block_cal_angle(PLAN_BLOCK* current_block, VECTOR* pre_end_vector, VECTOR* cur_start_vector);
 static void block_cal_circle_vector(PLAN_BLOCK* current_block);
 static double block_cal_circle_length(PLAN_BLOCK* current_block);
-static void block_cal_lookahead_vel(PLAN_BLOCK* current_block, INTERP_TYPE pre_type, double next_start_vel);
 
 // 将译码数据转换成段
 GNC_RES chan_add_block(){
@@ -70,92 +69,6 @@ GNC_RES chan_add_block(){
         pretreat_queue->pre_vec = pretreat_block->end_vec;
     }
     return GNC_CAL_SUCCESS;
-}
-
-GNC_RES chan_look_ahead(double vs){
-    vs = fabs(vs);
-    PLAN_BLOCK* pretreat_block;
-    PLAN_BLOCK* cur_block;
-    PLAN_BLOCK* pre_block;
-
-    // 拷贝 pretreat_queue 的数据
-    for(int i = 0; i < LOOK_AHEAD_SIZE; i++){
-        // 如果前瞻队列已满，提前结束
-        if(queue_is_full(plan_queue)) break;
-        // 如果预处理队列无数据，提前结束
-        if(queue_is_empty(pretreat_queue)) break;
-        pretreat_block = queue_peak(pretreat_queue);
-        if(pretreat_block == NULL) return GNC_DATA_NULL;
-        // 注意：如果长度为0，删除该段
-        if(IsEqualTo(pretreat_block->length, 0)){
-            queue_pop(pretreat_queue);
-            if(queue_is_empty(plan_queue) && queue_is_empty(pretreat_queue) && gcode_queue_is_empty(gcode_queue)){
-                var_chan[0].is_gcode_ending = true;
-            }
-            continue;
-        }
-        queue_push(plan_queue, pretreat_block);
-        queue_pop(pretreat_queue);
-    }
-
-    if(queue_is_empty(plan_queue)) return GNC_DATA_EMPTY;
-
-    /******************************************
-    1. 初始化首末速度，从末端往前计算，每次前瞻的末段末速度为0，plan_queue->next_vel = 0
-    2. 只有两段以上才进行遍历 i > 0
-    3. 当为G01时，首段初速度会修正为前一段的末速度；其他类型的初速度为0 */
-    plan_queue->next_vel = 0;
-    // 两段及以上，初始化首末速度
-    for(int i = plan_queue->size - 1; i > 0; i--){
-        cur_block = queue_get_block(plan_queue, i);
-        if(cur_block == NULL) return GNC_DATA_NULL;
-        pre_block = queue_get_block(plan_queue, i - 1);
-        if(pre_block == NULL) return GNC_DATA_NULL;
-        block_cal_lookahead_vel(cur_block, pre_block->type, plan_queue->next_vel);
-        plan_queue->next_vel = cur_block->start_vel;
-    }
-    // 修正首段速度
-    cur_block = queue_peak(plan_queue);
-    block_cal_lookahead_vel(cur_block, plan_queue->pre_head_type, plan_queue->next_vel);
-    cur_block->start_vel = vs;
-    // 判断是否大于最大速度
-    if(cur_block->start_vel > cur_block->max_vel) cur_block->max_vel = cur_block->start_vel;
-    /*******************************************/
-    vp_cal_bid_lookahead(par_chan[0].vplan_mode, plan_queue, par_ncu.cycle);
-    return GNC_CAL_SUCCESS;
-}
-
-
-// 计算段的首末速度、最大速度、加速度、加加速度
-static void block_cal_lookahead_vel(PLAN_BLOCK* current_block, INTERP_TYPE pre_type, double next_start_vel){
-    switch(current_block->type){
-        case RAPID:
-            current_block->max_vel = current_block->feed_vel * var_chan[0].rapid_override;
-            current_block->start_vel = 0;
-            current_block->end_vel = 0;
-            break;
-
-        case CIRCLE_CCW:
-        case CIRCLE_CW:
-        case LINE:
-            current_block->max_vel = current_block->feed_vel * var_chan[0].feed_override;
-            // 预留：如果开启单段，首末速度为0
-            current_block->end_vel = next_start_vel;
-            if(sys->is_lookahead && (pre_type == LINE || pre_type == CIRCLE_CCW || pre_type == CIRCLE_CW)){
-                // block1 <-- block2 <-- block3
-                //  ------   --------   ------
-                // |?--100| |100--100| |100--0|
-                //  ------   --------   ------
-                // 如果开启前瞻，段首末速度初始化为段内最大允许速度
-                current_block->start_vel = current_block->max_vel;  
-            }else{
-                current_block->start_vel = 0;
-            }
-            break;
-
-        default:
-            break;
-    }
 }
 
 // 计算段的首末位置
@@ -357,13 +270,3 @@ void block_cal_vector(PLAN_BLOCK* current_block){
             return;
     }
 }
-
-//static double cal_three_points_angle(POS* pre_pos, POS* cur_pos, POS* next_pos){
-//    POS vector1 = POS_VECTOR(pre_pos, cur_pos);
-//    POS vector2 = POS_VECTOR(cur_pos, next_pos);
-//    double norm1 = POS_Norm(vector1);
-//    double norm2 = POS_Norm(vector2);
-//    // 注意：如果norm为0，该段长度为0
-//    if(IsEqualTo(norm1, 0) || IsEqualTo(norm2, 0)) return 0;
-//    return acos(POS_Dot(vector1, vector2) / (norm1 * norm2));
-//}

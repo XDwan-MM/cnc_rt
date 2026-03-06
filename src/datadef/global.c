@@ -51,22 +51,13 @@ PAR_ACMP* par_acmp;             // 误差补偿参数
 PAR_CFG par_cfg;                // 设备接口参数
 PAR_TABLE par_table;            // 刀具和刀库参数
 SYS_DATA *sys;                  // 系统数据
-GCODE_QUEUE *gcode_queue;       // 译码队列
-MCODE_QUEUE *mcode_queue;       // 译码队列
-PLAN_QUEUE *pretreat_queue;     // 预处理队列
-PLAN_QUEUE *plan_queue;         // 插补队列
 EVENT_QUEUE* event_queue;       // 事件队列
 GCODE_QUEUE *gcode_queue;       // 译码队列
 MCODE_QUEUE *mcode_queue;       // 译码队列
 PLAN_QUEUE *pretreat_queue;     // 预处理队列
-PLAN_QUEUE *plan_queue;         // 插补队列
-MEM_EXEC_STATE mem_exec_state;
-COORD_TP *pausing_tp;
-COORD_TP *cycle_tp;
-HOMING_TP *homing_tp;
-TRAJ_PARAMS* traj_data;
-TRAJ_PARAMS* free_traj_data;
-bool is_paused_in_block;
+PLAN_QUEUE *plan_queue;         // 插补队列   
+COORD_TP *cycle_tp;             // 循环轨迹规划
+HOMING_TP *homing_tp;           // 回零轨迹规划
 
 // 初始化实时var数据
 static GNC_RES rt_var_init(); 
@@ -105,11 +96,8 @@ GNC_RES sys_reset(){
 
 static GNC_RES tp_init(){
     GNC_RES res = GNC_OPERATOR_SUCCESS;
-    homing_tp = (HOMING_TP*)malloc(SYS_AXES_NUM * sizeof(HOMING_TP));
-    res = homing_tp_init(homing_tp);
-    if(res != GNC_OPERATOR_SUCCESS) return res;
-    res = plan_tp_init();
-    if(res != GNC_OPERATOR_SUCCESS) return res;
+    homing_tp_init();
+    cycle_tp_init();
     gcode_queue = (GCODE_QUEUE*)malloc(sizeof(GCODE_QUEUE));
     res = gcode_queue_init(gcode_queue);
     if(res != GNC_OPERATOR_SUCCESS) return res;
@@ -126,21 +114,11 @@ static GNC_RES tp_init(){
 }
 
 GNC_RES tp_reset(){
-    homing_tp_reset(homing_tp);
-    plan_tp_reset();
+    homing_tp_reset();
+    cycle_tp_reset();
     gcode_queue_reset(gcode_queue);
     queue_reset(pretreat_queue);
     queue_reset(plan_queue);
-    return GNC_OPERATOR_SUCCESS;
-}
-
-static GNC_RES traj_data_init(){
-    traj_data = (TRAJ_PARAMS*)malloc(sizeof(TRAJ_PARAMS));
-    if(traj_data == NULL) return GNC_DATA_NULL;
-    memset(traj_data, 0, sizeof(TRAJ_PARAMS));
-    free_traj_data = (TRAJ_PARAMS*)malloc(SYS_AXES_NUM * sizeof(TRAJ_PARAMS));
-    if(free_traj_data == NULL) return GNC_DATA_NULL;
-    memset(free_traj_data, 0, SYS_AXES_NUM * sizeof(TRAJ_PARAMS));
     return GNC_OPERATOR_SUCCESS;
 }
 
@@ -157,8 +135,6 @@ GNC_RES rt_global_init(){
     res = sys_init();
     if(res != GNC_OPERATOR_SUCCESS) return res;
     res = tp_init();
-    if(res != GNC_OPERATOR_SUCCESS) return res;
-    res = traj_data_init();
     if(res != GNC_OPERATOR_SUCCESS) return res;
     res = task_mq_init();
     if(res != GNC_OPERATOR_SUCCESS) return res;
@@ -279,12 +255,10 @@ GNC_RES shm_var_update_prog(){
         set_modal.value.i = cycle_tp->plan_block->state.modal[i];
         setVarChanValue(0, VAR_CHAN_MODAL, 0, &set_modal, 0);
     }
-
     // 机床指令位置
     setVarAxisDouble(AXIS_X, VAR_AXIS_CMD_POS_EX, cycle_tp->plan_block->end_pos.x, 0);
     setVarAxisDouble(AXIS_Y, VAR_AXIS_CMD_POS_EX, cycle_tp->plan_block->end_pos.y, 0);
     setVarAxisDouble(AXIS_Z, VAR_AXIS_CMD_POS_EX, cycle_tp->plan_block->end_pos.z, 0);
-
     // 运行行号
     setVarChanInt(0, VAR_CHAN_RUN_ROW, cycle_tp->plan_block->line_number, 0);
     return GNC_OPERATOR_SUCCESS;
@@ -319,18 +293,26 @@ GNC_RES rt_par_reset(){
 
 static GNC_RES shm_par_init(){
     ParamUnit par_union = {};
+    #ifdef DEBUG_MODE_ENABLED
     // NC参数
+    par_ncu.cycle = 0.001;
+    #else
     getParData(PARAMAN_FILE_NCU, 0, PAR_NCU_CYCLE, &par_union);
     // 插补周期1ms
     par_ncu.cycle = (double)par_union.value.val_uint / TIME_US_2_S;
+    #endif
     // 通道参数
     for(int i = 0; i < SYS_CHAN_NUM; i++){
         getParData(PARAMAN_FILE_CHAN, i, PAR_CH_DEFAULT_F, &par_union);
         par_chan[i].default_feed = par_union.value.val_real / TIME_MINUS_2_S;            // 通道缺省进给速度
         getParData(PARAMAN_FILE_CHAN, i, PAR_CH_DRYRUN_SPD, &par_union);
         par_chan[i].dryrun_spd = par_union.value.val_real / TIME_MINUS_2_S;              // 空运行进给速度
+        #ifdef DEBUG_MODE_ENABLED
+        par_chan[i].vplan_mode = 0;
+        #else
         getParData(PARAMAN_FILE_CHAN, i, PAR_CH_VPLAN_MODE, &par_union);
         par_chan[i].vplan_mode = par_union.value.val_uint;              // 速度规划模式 0:T_SHAPE
+        #endif
         getParData(PARAMAN_FILE_CHAN, i, PAR_CH_MAX_ECEN_ACC, &par_union);
         par_chan[i].max_tang_acc = par_union.value.val_real;            // 最大向心加速度
         getParData(PARAMAN_FILE_CHAN, i, PAR_CH_LOOKAHEAD_NUM, &par_union);
@@ -344,14 +326,33 @@ static GNC_RES shm_par_init(){
     par_axis[AXIS_X].nlmt = par_union.value.val_real;  // X轴负软极限
     getParData(PARAMAN_FILE_AXIS, 0, PAR_AX_HOME_WAY, &par_union);
     par_axis[AXIS_X].home_way = par_union.value.val_uint;             // X轴回参考点方式(0:绝对式 1:相对式)
-    getParData(PARAMAN_FILE_AXIS, 0, PAR_AX_HOME_DIR, &par_union);
-    par_axis[AXIS_X].home_crds = par_union.value.val_real;            // X轴零点位置
     getParData(PARAMAN_FILE_AXIS, 0, PAR_AX_HOME_CRDS, &par_union);
     par_axis[AXIS_X].home_dir = par_union.value.val_uint;             // X轴回参考点方向(0:正向 1:负向)
+    #ifdef DEBUG_MODE_ENABLED
+    par_axis[AXIS_X].home_crds = 100;
+    par_axis[AXIS_X].rapid_vel = 1000;
+    par_axis[AXIS_X].rapid_acc = 5000;
+    par_axis[AXIS_X].rapid_jerk = 10000;
+    par_axis[AXIS_X].feed_vel = 500;
+    par_axis[AXIS_X].feed_acc = 2000;
+    par_axis[AXIS_X].feed_jerk = 5000;
+    #else
+    getParData(PARAMAN_FILE_AXIS, 0, PAR_AX_HOME_DIR, &par_union);
+    par_axis[AXIS_X].home_crds = par_union.value.val_real;            // X轴零点位置
+    //　以下 wcf maintain 2026.02.04
+    getParData(PARAMAN_FILE_AXIS, 0, PAR_AX_RAPID_ACC, &par_union);
+    par_axis[AXIS_X].rapid_acc = CONV_T_MS_TO_ACCEL(par_union.value.val_real); // X轴快移加速度上限 (HMI 快移加减速时间常数(单位：ms), default:64ms | 实时 快移加速度上限(单位：mm/s^2))
+    getParData(PARAMAN_FILE_AXIS, 0, PAR_AX_RAPID_JK, &par_union);
+    par_axis[AXIS_X].rapid_jerk = CONV_T_MS_TO_JERK(par_union.value.val_real); // X轴快移捷度上限 (HMI 快移加减速捷度时间常数(单位：ms)，通常设定在8～150间，default:128ms | 实时 快移捷度上限(单位：mm/s^3))
+    getParData(PARAMAN_FILE_AXIS, 0, PAR_AX_FEED_ACC, &par_union);
+    par_axis[AXIS_X].feed_acc = CONV_T_MS_TO_ACCEL(par_union.value.val_real); // X轴加工加速度上限 (HMI 加工加减速时间常数(单位：ms), default:64ms | 实时 加工加速度上限(单位：mm/s^2))
+    getParData(PARAMAN_FILE_AXIS, 0, PAR_AX_FEED_JK, &par_union);
+    par_axis[AXIS_X].feed_jerk = CONV_T_MS_TO_JERK(par_union.value.val_real); // X轴加工捷度上限 (HMI 加工加减速捷度时间常数(单位：ms)，通常设定在8～150间，default:128ms | 实时 加工捷度上限(单位：mm/s^3))
     getParData(PARAMAN_FILE_AXIS, 0, PAR_AX_RAPID_SPD, &par_union);
     par_axis[AXIS_X].rapid_vel = par_union.value.val_real / TIME_MINUS_2_S;            // X轴快移速度 unit:mm/s
     getParData(PARAMAN_FILE_AXIS, 0, PAR_AX_FEED_SPD, &par_union);
     par_axis[AXIS_X].feed_vel = par_union.value.val_real / TIME_MINUS_2_S;             // X轴最高进给速度
+    #endif
     getParData(PARAMAN_FILE_AXIS, 0, PAR_AX_ATEETH, &par_union);
     par_axis[AXIS_X].ateeth = par_union.value.val_uint;
     getParData(PARAMAN_FILE_AXIS, 0, PAR_AX_MTEETH, &par_union);
@@ -363,15 +364,6 @@ static GNC_RES shm_par_init(){
     getParData(PARAMAN_FILE_AXIS, 0, PAR_AX_MPG_SPD, &par_union);
     par_axis[AXIS_X].mpg_spd = par_union.value.val_real;
     par_axis[AXIS_X].pos_tol = 0.01;              // X轴定位允差
-    //　以下 wcf maintain 2026.02.04
-    getParData(PARAMAN_FILE_AXIS, 0, PAR_AX_RAPID_ACC, &par_union);
-    par_axis[AXIS_X].rapid_acc = CONV_T_MS_TO_ACCEL(par_union.value.val_real); // X轴快移加速度上限 (HMI 快移加减速时间常数(单位：ms), default:64ms | 实时 快移加速度上限(单位：mm/s^2))
-    getParData(PARAMAN_FILE_AXIS, 0, PAR_AX_RAPID_JK, &par_union);
-    par_axis[AXIS_X].rapid_jerk = CONV_T_MS_TO_JERK(par_union.value.val_real); // X轴快移捷度上限 (HMI 快移加减速捷度时间常数(单位：ms)，通常设定在8～150间，default:128ms | 实时 快移捷度上限(单位：mm/s^3))
-    getParData(PARAMAN_FILE_AXIS, 0, PAR_AX_FEED_ACC, &par_union);
-    par_axis[AXIS_X].feed_acc = CONV_T_MS_TO_ACCEL(par_union.value.val_real); // X轴加工加速度上限 (HMI 加工加减速时间常数(单位：ms), default:64ms | 实时 加工加速度上限(单位：mm/s^2))
-    getParData(PARAMAN_FILE_AXIS, 0, PAR_AX_FEED_JK, &par_union);
-    par_axis[AXIS_X].feed_jerk = CONV_T_MS_TO_JERK(par_union.value.val_real); // X轴加工捷度上限 (HMI 加工加减速捷度时间常数(单位：ms)，通常设定在8～150间，default:128ms | 实时 加工捷度上限(单位：mm/s^3))
     getParData(PARAMAN_FILE_AXIS, 0, PAR_AX_PM_MUNIT, &par_union);
     par_axis[AXIS_X].pm_munit = CONV_UM_TO_MM(par_union.value.val_int); // X轴电子齿轮比分子 (HMI unit: um, default:16000um | 实时 单位: mm)
     getParData(PARAMAN_FILE_AXIS, 0, PAR_AX_PM_PULSE, &par_union);
@@ -398,14 +390,33 @@ static GNC_RES shm_par_init(){
     par_axis[AXIS_Y].nlmt = par_union.value.val_real;               // Y轴负软极限
     getParData(PARAMAN_FILE_AXIS, 1, PAR_AX_HOME_WAY, &par_union);
     par_axis[AXIS_Y].home_way = par_union.value.val_uint;                // Y轴回参考点方式(0:绝对式 1:相对式)
-    getParData(PARAMAN_FILE_AXIS, 1, PAR_AX_HOME_DIR, &par_union);
-    par_axis[AXIS_Y].home_crds = par_union.value.val_real;             // Y轴零点位置
     getParData(PARAMAN_FILE_AXIS, 1, PAR_AX_HOME_CRDS, &par_union);
     par_axis[AXIS_Y].home_dir = par_union.value.val_uint;                // Y轴回参考点方向(0:正向 1:负向)
-    getParData(PARAMAN_FILE_AXIS, 1, PAR_AX_RAPID_SPD, &par_union);
-    par_axis[AXIS_Y].rapid_vel = par_union.value.val_real / TIME_MINUS_2_S;            // Y轴快移速度 unit:mm/s
-    getParData(PARAMAN_FILE_AXIS, 1, PAR_AX_FEED_SPD, &par_union);
-    par_axis[AXIS_Y].feed_vel = par_union.value.val_real / TIME_MINUS_2_S;              // Y轴最高进给速度
+    #ifdef DEBUG_MODE_ENABLED
+    par_axis[AXIS_Y].home_crds = 100;
+    par_axis[AXIS_Y].rapid_vel = 1000;
+    par_axis[AXIS_Y].rapid_acc = 5000;
+    par_axis[AXIS_Y].rapid_jerk = 10000;
+    par_axis[AXIS_Y].feed_vel = 500;
+    par_axis[AXIS_Y].feed_acc = 2000;
+    par_axis[AXIS_Y].feed_jerk = 5000;
+    #else
+    getParData(PARAMAN_FILE_AXIS, 0, PAR_AX_HOME_DIR, &par_union);
+    par_axis[AXIS_Y].home_crds = par_union.value.val_real;            // X轴零点位置
+    //　以下 wcf maintain 2026.02.04
+    getParData(PARAMAN_FILE_AXIS, 0, PAR_AX_RAPID_ACC, &par_union);
+    par_axis[AXIS_Y].rapid_acc = CONV_T_MS_TO_ACCEL(par_union.value.val_real); // X轴快移加速度上限 (HMI 快移加减速时间常数(单位：ms), default:64ms | 实时 快移加速度上限(单位：mm/s^2))
+    getParData(PARAMAN_FILE_AXIS, 0, PAR_AX_RAPID_JK, &par_union);
+    par_axis[AXIS_Y].rapid_jerk = CONV_T_MS_TO_JERK(par_union.value.val_real); // X轴快移捷度上限 (HMI 快移加减速捷度时间常数(单位：ms)，通常设定在8～150间，default:128ms | 实时 快移捷度上限(单位：mm/s^3))
+    getParData(PARAMAN_FILE_AXIS, 0, PAR_AX_FEED_ACC, &par_union);
+    par_axis[AXIS_Y].feed_acc = CONV_T_MS_TO_ACCEL(par_union.value.val_real); // X轴加工加速度上限 (HMI 加工加减速时间常数(单位：ms), default:64ms | 实时 加工加速度上限(单位：mm/s^2))
+    getParData(PARAMAN_FILE_AXIS, 0, PAR_AX_FEED_JK, &par_union);
+    par_axis[AXIS_Y].feed_jerk = CONV_T_MS_TO_JERK(par_union.value.val_real); // X轴加工捷度上限 (HMI 加工加减速捷度时间常数(单位：ms)，通常设定在8～150间，default:128ms | 实时 加工捷度上限(单位：mm/s^3))
+    getParData(PARAMAN_FILE_AXIS, 0, PAR_AX_RAPID_SPD, &par_union);
+    par_axis[AXIS_Y].rapid_vel = par_union.value.val_real / TIME_MINUS_2_S;            // X轴快移速度 unit:mm/s
+    getParData(PARAMAN_FILE_AXIS, 0, PAR_AX_FEED_SPD, &par_union);
+    par_axis[AXIS_Y].feed_vel = par_union.value.val_real / TIME_MINUS_2_S;             // X轴最高进给速度
+    #endif
     getParData(PARAMAN_FILE_AXIS, 1, PAR_AX_ATEETH, &par_union);
     par_axis[AXIS_Y].ateeth = par_union.value.val_uint;
     getParData(PARAMAN_FILE_AXIS, 1, PAR_AX_MTEETH, &par_union);
@@ -418,14 +429,6 @@ static GNC_RES shm_par_init(){
     par_axis[AXIS_Y].mpg_spd = par_union.value.val_real;
     par_axis[AXIS_Y].pos_tol = 0.01;              // Y轴定位允差
     //　以下 wcf maintain 2026.02.04
-    getParData(PARAMAN_FILE_AXIS, 1, PAR_AX_RAPID_ACC, &par_union);
-    par_axis[AXIS_Y].rapid_acc = CONV_T_MS_TO_ACCEL(par_union.value.val_real); // Y轴快移加速度上限 (HMI 快移加减速时间常数(单位：ms), default:64ms | 实时 快移加速度上限(单位：mm/s^2))
-    getParData(PARAMAN_FILE_AXIS, 1, PAR_AX_RAPID_JK, &par_union);
-    par_axis[AXIS_Y].rapid_jerk = CONV_T_MS_TO_JERK(par_union.value.val_real); // Y轴快移捷度上限 (HMI 快移加减速捷度时间常数(单位：ms)，通常设定在8～150间，default:128ms | 实时 快移捷度上限(单位：mm/s^3))
-    getParData(PARAMAN_FILE_AXIS, 1, PAR_AX_FEED_ACC, &par_union);
-    par_axis[AXIS_Y].feed_acc = CONV_T_MS_TO_ACCEL(par_union.value.val_real); // Y轴加工加速度上限 (HMI 加工加减速时间常数(单位：ms), default:64ms | 实时 加工加速度上限(单位：mm/s^2))
-    getParData(PARAMAN_FILE_AXIS, 1, PAR_AX_FEED_JK, &par_union);
-    par_axis[AXIS_Y].feed_jerk = CONV_T_MS_TO_JERK(par_union.value.val_real); // Y轴加工捷度上限 (HMI 加工加减速捷度时间常数(单位：ms)，通常设定在8～150间，default:128ms | 实时 加工捷度上限(单位：mm/s^3))
     getParData(PARAMAN_FILE_AXIS, 1, PAR_AX_PM_MUNIT, &par_union);
     par_axis[AXIS_Y].pm_munit = CONV_UM_TO_MM(par_union.value.val_int); // Y轴电子齿轮比分子 (HMI unit: um, default:16000um | 实时 单位: mm)
     getParData(PARAMAN_FILE_AXIS, 1, PAR_AX_PM_PULSE, &par_union);
@@ -452,14 +455,33 @@ static GNC_RES shm_par_init(){
     par_axis[AXIS_Z].nlmt = par_union.value.val_real;               // Z轴负软极限
     getParData(PARAMAN_FILE_AXIS, 2, PAR_AX_HOME_WAY, &par_union);
     par_axis[AXIS_Z].home_way = par_union.value.val_uint;                // Z轴回参考点方式(0:绝对式 1:相对式)
-    getParData(PARAMAN_FILE_AXIS, 2, PAR_AX_HOME_DIR, &par_union);
-    par_axis[AXIS_Z].home_crds = par_union.value.val_real;             // Z轴零点位置
     getParData(PARAMAN_FILE_AXIS, 2, PAR_AX_HOME_CRDS, &par_union);
     par_axis[AXIS_Z].home_dir = par_union.value.val_uint;                // Z轴回参考点方向(0:正向 1:负向)
-    getParData(PARAMAN_FILE_AXIS, 2, PAR_AX_RAPID_SPD, &par_union);
-    par_axis[AXIS_Z].rapid_vel = par_union.value.val_real / TIME_MINUS_2_S;            // Z轴快移速度 unit:mm/s
-    getParData(PARAMAN_FILE_AXIS, 2, PAR_AX_FEED_SPD, &par_union);
-    par_axis[AXIS_Z].feed_vel = par_union.value.val_real / TIME_MINUS_2_S;              // Z轴最高进给速度
+    #ifdef DEBUG_MODE_ENABLED
+    par_axis[AXIS_Z].home_crds = 100;
+    par_axis[AXIS_Z].rapid_vel = 1000;
+    par_axis[AXIS_Z].rapid_acc = 5000;
+    par_axis[AXIS_Z].rapid_jerk = 10000;
+    par_axis[AXIS_Z].feed_vel = 500;
+    par_axis[AXIS_Z].feed_acc = 2000;
+    par_axis[AXIS_Z].feed_jerk = 5000;
+    #else
+    getParData(PARAMAN_FILE_AXIS, 0, PAR_AX_HOME_DIR, &par_union);
+    par_axis[AXIS_Z].home_crds = par_union.value.val_real;            // X轴零点位置
+    //　以下 wcf maintain 2026.02.04
+    getParData(PARAMAN_FILE_AXIS, 0, PAR_AX_RAPID_ACC, &par_union);
+    par_axis[AXIS_Z].rapid_acc = CONV_T_MS_TO_ACCEL(par_union.value.val_real); // X轴快移加速度上限 (HMI 快移加减速时间常数(单位：ms), default:64ms | 实时 快移加速度上限(单位：mm/s^2))
+    getParData(PARAMAN_FILE_AXIS, 0, PAR_AX_RAPID_JK, &par_union);
+    par_axis[AXIS_Z].rapid_jerk = CONV_T_MS_TO_JERK(par_union.value.val_real); // X轴快移捷度上限 (HMI 快移加减速捷度时间常数(单位：ms)，通常设定在8～150间，default:128ms | 实时 快移捷度上限(单位：mm/s^3))
+    getParData(PARAMAN_FILE_AXIS, 0, PAR_AX_FEED_ACC, &par_union);
+    par_axis[AXIS_Z].feed_acc = CONV_T_MS_TO_ACCEL(par_union.value.val_real); // X轴加工加速度上限 (HMI 加工加减速时间常数(单位：ms), default:64ms | 实时 加工加速度上限(单位：mm/s^2))
+    getParData(PARAMAN_FILE_AXIS, 0, PAR_AX_FEED_JK, &par_union);
+    par_axis[AXIS_Z].feed_jerk = CONV_T_MS_TO_JERK(par_union.value.val_real); // X轴加工捷度上限 (HMI 加工加减速捷度时间常数(单位：ms)，通常设定在8～150间，default:128ms | 实时 加工捷度上限(单位：mm/s^3))
+    getParData(PARAMAN_FILE_AXIS, 0, PAR_AX_RAPID_SPD, &par_union);
+    par_axis[AXIS_Z].rapid_vel = par_union.value.val_real / TIME_MINUS_2_S;            // X轴快移速度 unit:mm/s
+    getParData(PARAMAN_FILE_AXIS, 0, PAR_AX_FEED_SPD, &par_union);
+    par_axis[AXIS_Z].feed_vel = par_union.value.val_real / TIME_MINUS_2_S;             // X轴最高进给速度
+    #endif
     getParData(PARAMAN_FILE_AXIS, 2, PAR_AX_ATEETH, &par_union);
     par_axis[AXIS_Z].ateeth = par_union.value.val_uint;
     getParData(PARAMAN_FILE_AXIS, 2, PAR_AX_MTEETH, &par_union);
@@ -472,14 +494,6 @@ static GNC_RES shm_par_init(){
     par_axis[AXIS_Z].mpg_spd = par_union.value.val_real;
     par_axis[AXIS_Z].pos_tol = 0.01; // Z轴定位允差
     //　以下 wcf maintain 2026.02.04
-    getParData(PARAMAN_FILE_AXIS, 2, PAR_AX_RAPID_ACC, &par_union);
-    par_axis[AXIS_Z].rapid_acc = CONV_T_MS_TO_ACCEL(par_union.value.val_real); // Z轴快移加速度上限 (HMI 快移加减速时间常数(单位：ms), default:64ms | 实时 快移加速度上限(单位：mm/s^2))
-    getParData(PARAMAN_FILE_AXIS, 2, PAR_AX_RAPID_JK, &par_union);
-    par_axis[AXIS_Z].rapid_jerk = CONV_T_MS_TO_JERK(par_union.value.val_real); // Z轴快移捷度上限 (HMI 快移加减速捷度时间常数(单位：ms)，通常设定在8～150间，default:128ms | 实时 快移捷度上限(单位：mm/s^3))
-    getParData(PARAMAN_FILE_AXIS, 2, PAR_AX_FEED_ACC, &par_union);
-    par_axis[AXIS_Z].feed_acc = CONV_T_MS_TO_ACCEL(par_union.value.val_real); // Z轴加工加速度上限 (HMI 加工加减速时间常数(单位：ms), default:64ms | 实时 加工加速度上限(单位：mm/s^2))
-    getParData(PARAMAN_FILE_AXIS, 2, PAR_AX_FEED_JK, &par_union);
-    par_axis[AXIS_Z].feed_jerk = CONV_T_MS_TO_JERK(par_union.value.val_real); // Z轴加工捷度上限 (HMI 加工加减速捷度时间常数(单位：ms)，通常设定在8～150间，default:128ms | 实时 加工捷度上限(单位：mm/s^3))
     getParData(PARAMAN_FILE_AXIS, 2, PAR_AX_PM_MUNIT, &par_union);
     par_axis[AXIS_Z].pm_munit = CONV_UM_TO_MM(par_union.value.val_int); // Z轴电子齿轮比分子 (HMI unit: um, default:16000um | 实时 单位: mm)
     getParData(PARAMAN_FILE_AXIS, 2, PAR_AX_PM_PULSE, &par_union);
