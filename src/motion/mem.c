@@ -21,8 +21,9 @@ static void mem_cal_pos(double accum_distance);
 static void interpolate_line(PLAN_BLOCK* current_block, double accum_distance);
 static void interpolate_rapid(PLAN_BLOCK* current_block, double accum_distance);
 static void interpolate_circle(PLAN_BLOCK* current_block, double accum_distance);
-static GNC_RES cycle_tp_update_tp(double target_vel);
-static GNC_RES cycle_tp_update_params(VELPLAN_TYPE velplan_type, double cycle_time);
+
+GNC_RES cycle_tp_update_tp(double target_vel);
+GNC_RES cycle_tp_update_params(VELPLAN_TYPE velplan_type, double cycle_time);
 static bool cycle_block_is_arrived();
 static bool cycle_tp_is_newvel_unvalid(double target_vel);
 static GNC_RES cycle_tp_update_block();
@@ -34,7 +35,6 @@ static GNC_RES cycle_tp_cal_pausing(VELPLAN_TYPE velplan_type, double vs, double
 static GNC_RES cycle_tp_add_block();
 static GNC_RES cycle_tp_look_ahead(double vs);
 static void block_cal_lookahead_vel(PLAN_BLOCK* current_block, INTERP_TYPE pre_type, double next_start_vel);
-
 
 // MEM 模式下的执行流程：处理开始和暂停 → 计算插补距离 → 计算插补空间坐标
 void handle_run_cmd(){
@@ -95,7 +95,7 @@ static void mem_set_state(){
                 cycle_tp->mem_exec_state = EXEC_RUNNING;
                 cycle_tp->is_event_trigger = true;
                 var_chan[var_sys.active_chan].is_running = true;
-                // 通知译码运行，初始化译码器（路径规划线程，初始化译码器和预处理当前位置）
+                // 通知译码运行，初始化译码器
                 sys->is_parse_running = true;
                 // 译码正在运行，译码结束译码器将其置false
                 var_chan[0].is_parsering = true;
@@ -180,7 +180,6 @@ static double mem_cal_pinc(){
             if (cycle_tp_is_finished() || cycle_tp->is_event_trigger){ 
                 // 如果段内完成暂停         
                 if(cycle_tp_is_finished() && cycle_tp->is_paused_inside_block){ 
-                    // 复位
                     if(var_chan[var_sys.active_chan].is_resetting){
                         var_chan[var_sys.active_chan].is_resetting = false;
                         var_chan[var_sys.active_chan].is_running = false;
@@ -234,13 +233,10 @@ static bool mem_check_res(GNC_RES res){
 
     case GNC_DATA_EMPTY:
         // 运行中无数据，则进入等待 
-        if(mem_check_running() && cycle_tp->mem_exec_state == EXEC_RUNNING){
-            var_chan[0].is_gcode_ending = true;
-            return false;
-        }
-        // 暂停无数据
-        if(mem_check_running() && cycle_tp->mem_exec_state == EXEC_PAUSING){
-            var_chan[0].is_gcode_ending = true;
+        if(mem_check_running()){
+            if(queue_is_empty(pretreat_queue) && gcode_queue_is_empty(gcode_queue)){
+                var_chan[0].is_gcode_ending = true;
+            }
             return false;
         }
         // 译码已结束后无数据，则程序运行完成
@@ -379,7 +375,7 @@ static void interpolate_circle(PLAN_BLOCK* current_block, double accum_distance)
     }
 }
 
-static GNC_RES cycle_tp_update_tp(double target_vel){
+GNC_RES cycle_tp_update_tp(double target_vel){
     GNC_RES res = GNC_CAL_SUCCESS;
     if(cycle_tp_add_block() == GNC_DATA_EMPTY) return GNC_DATA_EMPTY;   // 如果没有插补数据
     // 如果新速度不满足，不更新新速度
@@ -397,7 +393,7 @@ static GNC_RES cycle_tp_update_tp(double target_vel){
     return res;
 }
 
-static GNC_RES cycle_tp_update_params(VELPLAN_TYPE velplan_type, double cycle_time){
+GNC_RES cycle_tp_update_params(VELPLAN_TYPE velplan_type, double cycle_time){
     vp_cal_traj_data(velplan_type, cycle_tp->vel_profile, cycle_tp->interp_cycle, cycle_tp->traj_data, cycle_time);
     cycle_tp->current_distance = cycle_tp->target_distance;
     cycle_tp->target_distance = cycle_tp->traj_data->s - cycle_tp->accum_distance;
@@ -436,11 +432,12 @@ static GNC_RES cycle_tp_update_block(){
         res = plan_block_get_update();
         // LOG_OUTPUT(INFO, "更新当前插补段");
     }
+    if(res == GNC_DATA_EMPTY) return GNC_DATA_EMPTY;
     if(IsLessThan(var_chan[var_sys.active_chan].act_feedrate, 0)) {
         return VP_CAL_V_ERROR;
     }
     if(cycle_tp_look_ahead(var_chan[var_sys.active_chan].act_feedrate) == GNC_DATA_EMPTY) return GNC_DATA_EMPTY;
-    cycle_tp->plan_block = queue_copy_block(plan_queue, 0);
+    queue_copy_block(plan_queue, 0, cycle_tp->plan_block);
     return res;
 }
 
@@ -532,8 +529,7 @@ static GNC_RES cycle_tp_add_block(){
     PLAN_BLOCK* cur_block;
     PLAN_BLOCK* pre_block;
     // 拷贝 pretreat_queue 的数据
-    // todo：par_chan[0].lookahead_num
-    for(int i = 0; i < PRE_TREAT_SIZE; i++){
+    for(int i = 0; i < LOOK_AHEAD_SIZE; i++){
         // 如果前瞻队列已满，提前结束
         if(queue_is_full(plan_queue)) break;
         // 如果预处理队列无数据，提前结束

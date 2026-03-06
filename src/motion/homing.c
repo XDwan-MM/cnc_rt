@@ -14,8 +14,9 @@ static bool abs_homing_is_tp_finished(AXIS_TYPE axis_type);
 static bool abs_homing_is_axis_homed(AXIS_TYPE axis_type);
 static double abs_homing_tp_pinc(AXIS_TYPE axis_type);
 static bool homing_check_res(GNC_RES res);
-static GNC_RES abs_homing_tp_update_params(AXIS_TYPE axis_type, double current_vel, double target_vel);
-static void abs_homing_tp_update_traj(VELPLAN_TYPE velplan_type, double cycle_time, AXIS_TYPE axis_type);
+
+GNC_RES abs_homing_tp_update_params(AXIS_TYPE axis_type, double current_vel, double target_vel);
+void abs_homing_tp_update_traj(VELPLAN_TYPE velplan_type, double cycle_time, AXIS_TYPE axis_type);
 static bool homing_tp_new_vel_valid(AXIS_TYPE axis_type, double target_vel);
 static GNC_RES abs_homing_tp_init(AXIS_TYPE axis_type);
 static GNC_RES abs_declining_tp_init(AXIS_TYPE axis_type, double target_vel);
@@ -231,7 +232,7 @@ static bool abs_homing_is_axis_homed(AXIS_TYPE axis_type){
 }
 
 void homing_tp_init(){
-    homing_tp = (HOMING_TP*)calloc(SYS_AXES_NUM * sizeof(HOMING_TP), 1);
+    homing_tp = (HOMING_TP*)calloc(SYS_AXES_NUM * sizeof(HOMING_TP), 41);
     for(int i = 0; i < SYS_AXES_NUM; i++){
         homing_tp[i].homing_block = (PLAN_BLOCK*)calloc(sizeof(PLAN_BLOCK), 1);
         homing_tp[i].homing_profile = (VEL_PROFILE*)calloc(sizeof(VEL_PROFILE), 1);
@@ -250,11 +251,11 @@ void homing_tp_init(){
 void homing_tp_reset(){
     for(int i = 0; i < SYS_AXES_NUM; i++){
         homing_tp[i].homing_state = ABS_EXEC_IDLE;
-        memset(&homing_tp[i].traj_data, 0, sizeof(TRAJ_PARAMS));
+        memset(homing_tp[i].traj_data, 0, sizeof(TRAJ_PARAMS));
     }
 }
 
-static GNC_RES abs_homing_tp_update_params(AXIS_TYPE axis_type, double current_vel, double target_vel){
+GNC_RES abs_homing_tp_update_params(AXIS_TYPE axis_type, double current_vel, double target_vel){
     GNC_RES res = VP_CAL_SUCCESS;
     // 如果新速度不满足，不更新新速度
     if(!homing_tp_new_vel_valid(axis_type, target_vel)) return res;
@@ -277,7 +278,7 @@ static GNC_RES abs_homing_tp_update_params(AXIS_TYPE axis_type, double current_v
     return res;
 }
 
-static void abs_homing_tp_update_traj(VELPLAN_TYPE velplan_type, double cycle_time, AXIS_TYPE axis_type){
+void abs_homing_tp_update_traj(VELPLAN_TYPE velplan_type, double cycle_time, AXIS_TYPE axis_type){
     vp_cal_traj_data(velplan_type, homing_tp[axis_type].homing_profile, homing_tp[axis_type].interp_cycle, homing_tp[axis_type].traj_data, cycle_time);
     homing_tp[axis_type].current_distance = homing_tp[axis_type].target_distance;
     homing_tp[axis_type].target_distance = homing_tp[axis_type].traj_data->s - homing_tp[axis_type].accum_distance;

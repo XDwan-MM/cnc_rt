@@ -166,6 +166,9 @@ static void set_operating_mode() {
                 // log_system("[emcmot] 系统模式切换为(%s)", mode_names[sys->current_mode]);
                 LOG_OUTPUT(INFO, "系统模式切换为 %s", mode_names[sys->current_mode]);
                 break;
+            }else{
+                sys->target_mode = sys->current_mode;
+                LOG_OUTPUT(INFO, "回零中不能切换模式，请先按复位后切换");
             }
             // sys->nc_event = SYS_EVENT_RESET;
             sys->is_switching_mode = true;
@@ -174,19 +177,32 @@ static void set_operating_mode() {
         case MODE_MDI:
         case MODE_MEM:
         case MODE_DNC:
-            if(!var_chan[0].is_running){
+            if(cycle_tp->mem_exec_state == EXEC_IDLE){
                 sys->current_mode = sys->target_mode;
                 sys->is_switching_mode = false;
                 // log_system("[emcmot] 系统模式切换为(%s)", mode_names[sys->current_mode]);
                 LOG_OUTPUT(INFO, "系统模式切换为 %s", mode_names[sys->current_mode]);
                 break;
             }
-            else{
+            else if(cycle_tp->mem_exec_state == EXEC_RUNNING || cycle_tp->mem_exec_state == EXEC_PAUSING){
                 sys->target_mode = sys->current_mode;
                 // log_system("[emcmot] 自动加工下不能切换模式，请先按复位后切换");
                 LOG_OUTPUT(INFO, "自动加工下不能切换模式，请先按复位后切换");
                 break;
             }
+            // if(!var_chan[0].is_running){
+            //     sys->current_mode = sys->target_mode;
+            //     sys->is_switching_mode = false;
+            //     // log_system("[emcmot] 系统模式切换为(%s)", mode_names[sys->current_mode]);
+            //     LOG_OUTPUT(INFO, "系统模式切换为 %s", mode_names[sys->current_mode]);
+            //     break;
+            // }
+            // else{
+            //     sys->target_mode = sys->current_mode;
+            //     // log_system("[emcmot] 自动加工下不能切换模式，请先按复位后切换");
+            //     LOG_OUTPUT(INFO, "自动加工下不能切换模式，请先按复位后切换");
+            //     break;
+            // }
             sys->nc_event = SYS_EVENT_RESET;
             sys->is_switching_mode = true;
             break;
@@ -286,24 +302,24 @@ static void check_ferror_fault() {
     updata_axis_ferror(&var_axis[AXIS_Y].ferror_control, &par_axis[AXIS_Y], pos_cmd_y, pos_fb_y, vel_cmd_y);
     updata_axis_ferror(&var_axis[AXIS_Z].ferror_control, &par_axis[AXIS_Z], pos_cmd_z, pos_fb_z, vel_cmd_z);
 
-    if (var_axis[AXIS_X].ferror_control.error_flag) {
-        int res = setAlarm(ALARM_CH, ALARM_ERROR, 4);
-        // log_system("[ferror] Ｘ轴跟随误差报警");
-        if(res == -8) return;
-        LOG_OUTPUT(ERROR, "Ｘ轴跟随误差报警");
-    }
-    if (var_axis[AXIS_Y].ferror_control.error_flag) {
-        int res = setAlarm(ALARM_CH, ALARM_ERROR, 5);
-        // log_system("[ferror] Ｙ轴跟随误差报警");
-        if(res == -8) return;
-        LOG_OUTPUT(ERROR, "Ｙ轴跟随误差报警");
-    }
-    if (var_axis[AXIS_Z].ferror_control.error_flag) {
-        int res = setAlarm(ALARM_CH, ALARM_ERROR, 6);
-        // log_system("[ferror] Ｚ轴跟随误差报警");
-        if(res == -8) return;
-        LOG_OUTPUT(ERROR, "Ｚ轴跟随误差报警");
-    }
+    // if (var_axis[AXIS_X].ferror_control.error_flag) {
+    //     int res = setAlarm(ALARM_CH, ALARM_ERROR, 4);
+    //     // log_system("[ferror] Ｘ轴跟随误差报警");
+    //     if(res == -8) return;
+    //     LOG_OUTPUT(ERROR, "Ｘ轴跟随误差报警");
+    // }
+    // if (var_axis[AXIS_Y].ferror_control.error_flag) {
+    //     int res = setAlarm(ALARM_CH, ALARM_ERROR, 5);
+    //     // log_system("[ferror] Ｙ轴跟随误差报警");
+    //     if(res == -8) return;
+    //     LOG_OUTPUT(ERROR, "Ｙ轴跟随误差报警");
+    // }
+    // if (var_axis[AXIS_Z].ferror_control.error_flag) {
+    //     int res = setAlarm(ALARM_CH, ALARM_ERROR, 6);
+    //     // log_system("[ferror] Ｚ轴跟随误差报警");
+    //     if(res == -8) return;
+    //     LOG_OUTPUT(ERROR, "Ｚ轴跟随误差报警");
+    // }
 }
 
 static void read_to_hal() {

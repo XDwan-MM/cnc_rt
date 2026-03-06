@@ -14,8 +14,8 @@ extern "C" {
  * @copyright   珠海格力电器股份有限公司装备动力技术研究院三所
 ********************************************************************/
 
-#include "../utils/math/cnc_math.h"
-#include "../datadef/plan_queue.h"
+#include "cnc_math.h"
+#include "plan_queue.h"
 
 #define TOL 1E-6;
 
@@ -57,12 +57,12 @@ typedef struct round_profile
     double de;
 }R_VEL_PROFILE;
 
-
 /// @brief 计算加减速曲线
 /// @param velplan_type 加减速类型：T_SHAPE, S_SHAPE, SIN_SHAPE
 /// @param plan_block 插补块
 /// @return 加减速曲线
-GNC_RES vp_cal_vel_profile(VELPLAN_TYPE velplan_type, PLAN_BLOCK* plan_block, VEL_PROFILE* vel_profile, double cycle_time);
+int vp_cal_vel_profile(VELPLAN_TYPE velplan_type, PLAN_BLOCK* plan_block, VEL_PROFILE* vel_profile, double cycle_time);
+
 /// @brief 计算插补距离
 /// @param velplan_type 加减速类型：T_SHAPE, S_SHAPE, SIN_SHAPE
 /// @param vel_profile 加减速曲线
@@ -72,10 +72,7 @@ void vp_cal_traj_data(VELPLAN_TYPE velplan_type, VEL_PROFILE* vel_profile, int i
 
 /// @brief 计算单加速/单减速段距离
 /// @param velplan_type 加减速类型：T_SHAPE, S_SHAPE, SIN_SHAPE
-/// @param vs 起始速度（非负数）
-/// @param ve 终点速度（非负数）
-/// @param amax 加速度（非负数）
-/// @param jmax 加加速度（非负数）
+/// @param plan_block 加减速段信息，vs ve acc jerk
 /// @return 单加速/单减速段距离
 double vp_cal_decel_dist(VELPLAN_TYPE velplan_type, double vs, double ve, double amax, double jmax);
 
@@ -94,9 +91,6 @@ double vp_cal_decel_vel(VELPLAN_TYPE velplan_type, double vs, double amax, doubl
 /// @return 
 void vp_cal_bid_lookahead(VELPLAN_TYPE velplan_type, PLAN_QUEUE* plan_queue, double cycle_time);
 
-GNC_RES check_block_params_valid(PLAN_BLOCK* plan_block);
-
-GNC_RES check_vel_params_valid(VEL_PROFILE* vel_profile);
 
 #ifdef __cplusplus
 }

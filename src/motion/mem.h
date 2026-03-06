@@ -17,8 +17,8 @@ extern "C" {
 #include "plan_queue.h"
 #include "trajectory.h"
 
-#define MEM_END_TOL 1E-2
-#define PRE_TREAT_SIZE 200   // 预处理的最大点数
+#define MEM_END_TOL 1E-3
+#define LOOK_AHEAD_SIZE 200  // 速度前瞻的最大段数
 
 typedef enum mem_exec_state
 {

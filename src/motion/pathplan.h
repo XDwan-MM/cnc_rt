@@ -17,6 +17,8 @@ extern "C" {
 #include <stdlib.h>
 #include "plan_queue.h"
 
+#define PRE_TREAT_SIZE 200  // 速度前瞻的最大段数
+
 /// @brief 将译码结果转换成插补段
 /// @return 
 GNC_RES chan_add_block();

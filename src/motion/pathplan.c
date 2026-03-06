@@ -270,13 +270,3 @@ void block_cal_vector(PLAN_BLOCK* current_block){
             return;
     }
 }
-
-//static double cal_three_points_angle(POS* pre_pos, POS* cur_pos, POS* next_pos){
-//    POS vector1 = POS_VECTOR(pre_pos, cur_pos);
-//    POS vector2 = POS_VECTOR(cur_pos, next_pos);
-//    double norm1 = POS_Norm(vector1);
-//    double norm2 = POS_Norm(vector2);
-//    // 注意：如果norm为0，该段长度为0
-//    if(IsEqualTo(norm1, 0) || IsEqualTo(norm2, 0)) return 0;
-//    return acos(POS_Dot(vector1, vector2) / (norm1 * norm2));
-//}
