@@ -54,7 +54,9 @@ void handle_jog_cmd()
 
         // 写回位置
         var_axis[i][VAR_AXIS_CMD_POS_EX].value.f = jog_tp[i].curr_pos;
-        // LOG_INFO("%f", jog_tp[0].curr_pos);
+        
+        // 写回速度
+        var_axis[i][VAR_CHAN_CMD_FEEDRATE].value.f = jog_tp[i].curr_vel;
     }
 
     // 3. 自动清理事件：若所有轴都回到了 IDLE 状态，重置系统事件
