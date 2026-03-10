@@ -18,30 +18,27 @@ PARSER_DATA* parser_data;
 STATIC void parser_macro_init()
 {
     for (int i = 0; i < 30000; ++i) {
-        parser_data->cmv[i].varDouble = 0;
-        parser_data->cmv[i].valid = false;
-        parser_data->cmv[i].read = 6;
-        parser_data->cmv[i].write = 6;
+        parser_data->cmv[i] = 0;
     }
-    parser_data->cmv[18004].varDouble = 10.0; // 设置半径值超差
-    parser_data->cmv[17031].varDouble = 0.0;  // 设置坐标旋转1轴运动计算方式
-    parser_data->cmv[5410].varDouble = -90.0; // 设置坐标旋转默认角度
-    parser_data->cmv[17028].varDouble = 1.0;  // 默认米制单位
-    parser_data->cmv[8132].varDouble = 1.0;   // 激活比例缩放功能G51
-    parser_data->cmv[8077].varDouble = 10.0;  // 设置渐开线插补误差最大值
-    parser_data->cmv[5114].varDouble = 0.5;   // G73钻深孔,D默认值
-    parser_data->cmv[5115].varDouble = 1.0;   // G83深孔加工循环,D默认值
+    parser_data->cmv[18004] = 10.0; // 设置半径值超差
+    parser_data->cmv[17031] = 0.0;  // 设置坐标旋转1轴运动计算方式
+    parser_data->cmv[5410] = -90.0; // 设置坐标旋转默认角度
+    parser_data->cmv[17028] = 1.0;  // 默认米制单位
+    parser_data->cmv[8132] = 1.0;   // 激活比例缩放功能G51
+    parser_data->cmv[8077] = 10.0;  // 设置渐开线插补误差最大值
+    parser_data->cmv[5114] = 0.5;   // G73钻深孔,D默认值
+    parser_data->cmv[5115] = 1.0;   // G83深孔加工循环,D默认值
 
-    // 坐标偏置
+    // 坐标偏置 todo:待shm更新后直接用，不用再赋值
     for (int a = 0; a < 3; ++a)
     {
-        getCrdsValue(CRDS_TYPE_EXT, a, &parser_data->cmv[5201 + a].varDouble);
+        getCrdsValue(CRDS_TYPE_EXT, a, &parser_data->cmv[5201 + a]);
     }
     for (int t = 0; t < 6; ++t)
     {
         for (int a = 0; a < 3; ++a)
         {
-            getCrdsValue(CRDS_TYPE_G5X + t, a, &parser_data->cmv[5221 + t * 20 + a].varDouble);
+            getCrdsValue(CRDS_TYPE_G5X + t, a, &parser_data->cmv[5221 + t * 20 + a]);
         }
     }
 }
@@ -66,7 +63,8 @@ GNC_RES parser_init(const char* parser_file_path)
     parser_data->parser_state = PARSER_READING;
     // 设置宏定义
     parser_macro_init();
-    ItpSetMacroVariable(parser_data->cmv);
+    ItpCfgGetMacroVarCB(macroVarGetValue);
+    ItpCfgSetMacroVarCB(macroVarSetValue);
     // 设置机床起点
     double ori_pos_x, ori_pos_y, ori_pos_z;
     getVarChanDouble(AXIS_X, VAR_AXIS_CMD_POS_EX, &ori_pos_x, 0);
@@ -218,6 +216,7 @@ GNC_RES parser_reading(){
     }
     if (ItpIsOver())
     {
+        LOG_OUTPUT(WARN, "译码结束");
         if (res == GNC_CAL_SUCCESS || res == GNC_OPERATOR_SUCCESS)
         {
             return GNC_PARSER_OVER;
@@ -350,4 +349,26 @@ void parser_run_mode(){
 void parser_reset(){
     ItpReset();
     parser_data->parser_state = PARSER_IDLE;
+}
+
+int macroVarGetValue(int no, double *mac)
+{
+    // todo: 待更新shm后，将以下内容改为从shm获取
+    if (no < 0 || no >= MacroVarCount)
+    {
+        return -1;
+    }
+    *mac = parser_data->cmv[no];
+    return 0;
+}
+
+int macroVarSetValue(int no, double mac)
+{
+    // todo: 待更新shm后，将以下内容改为从shm获取
+    if (no < 0 || no >= MacroVarCount)
+    {
+        return -1;
+    }
+    parser_data->cmv[no] = mac;
+    return 0;
 }
