@@ -15,8 +15,6 @@ void Spindle_Stop(void);
 void emcmcodedeal();
 void emcSpindleControl();
 
-extern double emot_speed;
-extern double speed;
 extern int sp_sign;
 extern bool sp_stop_sem;
 

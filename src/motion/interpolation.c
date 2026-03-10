@@ -184,9 +184,9 @@ void interpolationExec(double interp_pin)
 
 
     }
-    var_axis[AXIS_X].cmd_pos = pos.x;
-    var_axis[AXIS_Y].cmd_pos = pos.y;
-    var_axis[AXIS_Z].cmd_pos = pos.z;
+    var_axis[AXIS_X][VAR_AXIS_CMD_POS_EX].value.f = pos.x;
+    var_axis[AXIS_Y][VAR_AXIS_CMD_POS_EX].value.f = pos.y;
+    var_axis[AXIS_Z][VAR_AXIS_CMD_POS_EX].value.f = pos.z;
    // printf("pos: %f %f %f\n", pos.x, pos.y, pos.z);
 }
 

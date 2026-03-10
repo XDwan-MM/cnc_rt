@@ -40,9 +40,7 @@ bool RESET = false;
 // 任务控制器线程的具体实现
 void* task_controller_thread_func(void*) {
     while (!exit_flag) {
-        // todo：修改此处写法
-        usleep(5000);
-        task_mq_proc();
+        // todo：修改此处写法    
     }
     return NULL;
 }
@@ -57,7 +55,6 @@ void* soft_plc_thread_func(void*) {
         #else
         hal_task();
         pmc_input_scan_cycle();
-        pmc_output_feedback();
         #endif
     }
     return NULL;
@@ -70,8 +67,9 @@ void* motion_controller_thread_func(void*) {
         sem_wait(&motion_sem);
         if (exit_flag) break;
         Hal_Driver_Update_All(true, false);
+        task_mq_proc();
         // todo：修改此处写法
-        if (sys->nc_event == SYS_EVENT_RESET || RESET || var_chan[0].is_estop) 
+        if (rt_data->nc_event == SYS_EVENT_RESET || RESET || rt_data->sys_state[SYS_IS_ESTOP_ON]) 
         {
             RESET = true;
             sp_sign = 0;
@@ -83,6 +81,7 @@ void* motion_controller_thread_func(void*) {
             }
         }
         emcmotTrajPlan();
+        pmc_output_feedback();
         Hal_Driver_Update_All(false, true);
         sem_post(&moton_sem_exec_done);
     }

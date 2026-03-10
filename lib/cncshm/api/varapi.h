@@ -14,10 +14,13 @@
 
 #include "shmglobal.h"
 #include "vardatadef.h"
+#include "vardata.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+SHM_EXPORT VarData* getVarDataPtr();
 
 /// @brief 获取 var 变量
 /// @param type 变量类型，（VAR_TYPE_AXIS、VAR_TYPE_CHANNEL、VAR_TYPE_SYSTEM）

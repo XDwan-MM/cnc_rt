@@ -2,11 +2,13 @@
 #include <math.h>
 #include <stdlib.h>
 
+ferror_control_t ferror_control[3];   // 跟随误差控制器 // wcf add 2026.01.22
+
 /*
 * axis_para:传入的误差值单位mm
 */
 void updata_axis_ferror(ferror_control_t *axis_ferrorCtrl,
-                        const PAR_AXIS* axis_para,
+                        const ParamUnit* axis_para,
                         double pos_cmd,
                         double pos_fb,
                         double vel_cmd)
@@ -25,14 +27,14 @@ void updata_axis_ferror(ferror_control_t *axis_ferrorCtrl,
      * 速度越高，允许的误差越大
      */
     // 如果轴参数中最大速度限制大于0，则根据速度命令计算误差限制值
-    if (axis_para->vel_limit > 0.0) {
-        axis_ferrorCtrl->ferror_limit = axis_para->max_ferror * fabs(axis_ferrorCtrl->vel_cmd) / axis_para->vel_limit;
+    if (axis_para[PAR_AX_VEL_LIMIT].value.val_real > 0.0) {
+        axis_ferrorCtrl->ferror_limit = axis_para[PAR_AX_MAX_FERROR].value.val_real * fabs(axis_ferrorCtrl->vel_cmd) / axis_para[PAR_AX_VEL_LIMIT].value.val_real;
     } else {
         axis_ferrorCtrl->ferror_limit = 0.0;
     }
     /* 低速运动时计算出的跟随误差限制值可能接近0，就要引入一个最小跟随误差来判定 */
-    if (axis_ferrorCtrl->ferror_limit < axis_para->min_ferror) {
-        axis_ferrorCtrl->ferror_limit = axis_para->min_ferror;
+    if (axis_ferrorCtrl->ferror_limit < axis_para[PAR_AX_MIN_FERROR].value.val_real) {
+        axis_ferrorCtrl->ferror_limit = axis_para[PAR_AX_MIN_FERROR].value.val_real;
     }
 
     /* 检查是否超出误差限制 */

@@ -1,6 +1,8 @@
 ﻿#include "stored_stroke_check.h"
 #include "global.h"
 
+AxisLimitRuntime runtime[SYS_AXES_NUM];
+
 //// 全局限位管理器
 //typedef struct
 //{
@@ -11,15 +13,40 @@
 
 uint8_t Axis_Limit_Manager_Init(void)
 {
-    var_axis[AXIS_X].runtime.config.level1.is_enabled = 1;
-    var_axis[AXIS_X].runtime.config.level1.positive_limit = par_axis[AXIS_X].plmt;
-    var_axis[AXIS_X].runtime.config.level1.negative_limit = par_axis[AXIS_X].nlmt;
-    var_axis[AXIS_Y].runtime.config.level1.is_enabled = 1;
-    var_axis[AXIS_Y].runtime.config.level1.positive_limit = par_axis[AXIS_Y].plmt;
-    var_axis[AXIS_Y].runtime.config.level1.negative_limit = par_axis[AXIS_Y].nlmt;
-    var_axis[AXIS_Z].runtime.config.level1.is_enabled = 1;
-    var_axis[AXIS_Z].runtime.config.level1.positive_limit = par_axis[AXIS_Z].plmt;
-    var_axis[AXIS_Z].runtime.config.level1.negative_limit = par_axis[AXIS_Z].nlmt;
+    //level 1
+    runtime[AXIS_X].config.level1.is_enabled = 1;
+    runtime[AXIS_X].config.level1.positive_limit = par_axis[AXIS_X][PAR_AX_PLMT].value.val_real;
+    runtime[AXIS_X].config.level1.negative_limit = par_axis[AXIS_X][PAR_AX_NLMT].value.val_real;
+    runtime[AXIS_Y].config.level1.is_enabled = 1;
+    runtime[AXIS_Y].config.level1.positive_limit = par_axis[AXIS_Y][PAR_AX_PLMT].value.val_real;
+    runtime[AXIS_Y].config.level1.negative_limit = par_axis[AXIS_Y][PAR_AX_NLMT].value.val_real;
+    runtime[AXIS_Z].config.level1.is_enabled = 1;
+    runtime[AXIS_Z].config.level1.positive_limit = par_axis[AXIS_Z][PAR_AX_PLMT].value.val_real;
+    runtime[AXIS_Z].config.level1.negative_limit = par_axis[AXIS_Z][PAR_AX_NLMT].value.val_real;
+    //level 2
+    runtime[AXIS_X].config.level2.is_enabled = 1;
+    runtime[AXIS_X].config.level2_mode = 0;
+    runtime[AXIS_X].config.level2.positive_limit = par_axis[AXIS_X][PAR_AX_PLMT2].value.val_real;
+    runtime[AXIS_X].config.level2.negative_limit = par_axis[AXIS_X][PAR_AX_NLMT2].value.val_real;
+    runtime[AXIS_Y].config.level2.is_enabled = 1;
+    runtime[AXIS_Y].config.level2_mode = 0;
+    runtime[AXIS_Y].config.level2.positive_limit = par_axis[AXIS_Y][PAR_AX_PLMT2].value.val_real;
+    runtime[AXIS_Y].config.level2.negative_limit = par_axis[AXIS_Y][PAR_AX_NLMT2].value.val_real;
+    runtime[AXIS_Z].config.level2.is_enabled = 1;
+    runtime[AXIS_Z].config.level2_mode = 0;
+    runtime[AXIS_Z].config.level2.positive_limit = par_axis[AXIS_Z][PAR_AX_PLMT2].value.val_real;
+    runtime[AXIS_Z].config.level2.negative_limit = par_axis[AXIS_Z][PAR_AX_NLMT2].value.val_real;
+    //level 3
+    runtime[AXIS_X].config.level3.is_enabled = 1;
+    runtime[AXIS_X].config.level3.positive_limit = 300;
+    runtime[AXIS_X].config.level3.negative_limit = 200;
+    runtime[AXIS_Y].config.level3.is_enabled = 1;
+    runtime[AXIS_Y].config.level3.positive_limit = 300;
+    runtime[AXIS_Y].config.level3.negative_limit = 200;
+    runtime[AXIS_Z].config.level3.is_enabled = 1;
+    runtime[AXIS_Z].config.level3.positive_limit = 300;
+    runtime[AXIS_Z].config.level3.negative_limit = 200;
+
 }
 // 检查位置是否在限位区域内部
 uint8_t Is_Inside_Limit(float position, LimitLevel limit)

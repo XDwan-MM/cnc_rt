@@ -39,6 +39,10 @@ static VarUnion VAR_CHAR(const char* value) {
 //    return var_union;
 //}
 
+SHM_EXPORT VarData* getVarDataPtr(){
+    return ShmManager::instance().varManager()->getVarDataPtr();
+}
+
 int getVarValue(int type, int no, int index, void* value, int clientNo){
     return ShmManager::instance().varManager()->getVarData(type, no, index, 0, value, clientNo);
 }

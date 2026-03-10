@@ -3,41 +3,38 @@
 #include "mcode_queue.h"
 #include "regapi.h"
 
-double emot_speed;
-double speed;
 int sp_sign;
-bool sp_stop_sem;
-double emot_speed = 0;
-double speed = 0;
 bool sp_stop_sem = false;
-bool stop_current_state = false;
-bool stop_last_state = false;
-int32_t current_vel = 0;
-int32_t vel = 0;
-bool speedArrived;
 
+static double emot_speed = 0;
+static double speed = 0;
+static double mcp_sp_speed = 0;
+static bool stop_current_state = false;
+static bool stop_last_state = false;
+static int32_t current_vel = 0;
+static int32_t vel = 0;
 
 // 主轴正转，输入参数d_speed 主轴转速 unit 转/分钟
 int32_t Spindle_Cw()
 {
     //    double plc_max_speed = 10000;
-    double sys_max_speed = par_axis[AXIS_SP].spdl_max_speed;
-    double para_acc = par_axis[AXIS_SP].feed_acc * 10;
+    double sys_max_speed = par_axis[AXIS_SP][PAR_SPDL_MAX_SPEED].value.val_real;
+    double para_acc = par_axis[AXIS_SP][PAR_AX_FEED_ACC].value.val_real * 10;
     double diff = para_acc * 0.001;
     double target_speed;
 
+
     //    target_speed = fmin(plc_max_speed, sys_max_speed);
     //    target_speed = fmin(target_speed, emot_speed);
-    target_speed = fmin(sys_max_speed, emot_speed * var_chan[0].spdl_override);
+    target_speed = fmin(sys_max_speed, emot_speed * var_chan[0][VAR_CHAN_SPDL_OVERRIDE].value.f);
 
     if(speed + diff < target_speed)
     {
         speed = speed + diff;
-        // sys->is_speedArrived = false;
     }
     else
     {
-        var_chan[0].is_mcode_ending = true;
+        rt_set_chan_state(0, CHAN_IS_MCODE_END, true);
         speed = target_speed;
     }
     return (int32_t)speed;
@@ -45,24 +42,23 @@ int32_t Spindle_Cw()
 int32_t Spindle_Ccw(void)
 {
     //    double plc_max_speed = -10000;
-    double sys_max_speed = -1.0 * par_axis[AXIS_SP].spdl_max_speed;
-    double para_acc = par_axis[AXIS_SP].feed_acc * 10;
+    double sys_max_speed = -1.0 * par_axis[AXIS_SP][PAR_SPDL_MAX_SPEED].value.val_real;
+    double para_acc = par_axis[AXIS_SP][PAR_AX_FEED_ACC].value.val_real * 10;
     double diff = para_acc * 0.001;
     double target_speed;
 
     //    target_speed = fmax(plc_max_speed, sys_max_speed);
     //    target_speed = fmax(target_speed, emot_speed);
-    target_speed = fmax(sys_max_speed, emot_speed * var_chan[0].spdl_override);
+    target_speed = fmax(sys_max_speed, emot_speed * var_chan[0][VAR_CHAN_SPDL_OVERRIDE].value.f);
 
     if((speed - diff) > target_speed)
     {
         speed = speed - diff;
-        // sys->is_speedArrived = false;
     }
     else
     {
         speed = target_speed;
-        var_chan[0].is_mcode_ending = true;
+        rt_set_chan_state(0, CHAN_IS_MCODE_END, true);
     }
     return (int32_t)speed;
 }
@@ -88,19 +84,21 @@ void Spindle_Stop()
     {
         sp_stop_sem = true;
         spindle.mode = DRV_MODE_DISABLED;
-        // printf("var_chan[0].is_mcode_ending:%d \n",var_chan[0].is_mcode_ending);
-        // var_chan[0].is_mcode_ending = true;
     }
     stop_last_state = stop_current_state;
-    var_chan[0].cmd_spdl_speed = vel;
+    setVarChanDouble(0, VAR_CHAN_CMD_SPDL_SPEED, vel, 0);
 }
 
 void emcSpindleControl()
 {
+    if(!mcp_sp_speed)
+    {
+        mcp_sp_speed = par_axis[3][PAR_AX_DEFAULT_S].value.val_real;
+    }
     //control logic
     if(sp_sign == 2 && spindle.state == DRV_STATE_OPERATION_ENABLED)
     {
-        emot_speed = -1.0 * par_axis[AXIS_SP].default_s ;
+        emot_speed = -1.0 * mcp_sp_speed ;
         vel = Spindle_Ccw() ;
         sp_stop_sem = false;
         stop_current_state = false;
@@ -109,7 +107,7 @@ void emcSpindleControl()
     }
     else if(sp_sign == 1 && spindle.state == DRV_STATE_OPERATION_ENABLED)
     {
-        emot_speed = 1.0 * par_axis[AXIS_SP].default_s ;
+        emot_speed = 1.0 * mcp_sp_speed ;
         vel = Spindle_Cw() ;
         sp_stop_sem = false;
         stop_current_state = false;
@@ -124,7 +122,7 @@ void emcSpindleControl()
     {
         Spindle_Stop();
     }
-    var_chan[0].cmd_spdl_speed = vel;
+    setVarChanDouble(0, VAR_CHAN_CMD_SPDL_SPEED, vel, 0);
 }
 
 
@@ -146,7 +144,8 @@ void emcmcodedeal()
 
             spindle.mode = DRV_MODE_CSV;
             sp_sign = 1;
-            emot_speed = 1 * mcode_block->spindle.speed ;
+            emot_speed = 1.0 * mcode_block->spindle.speed ;
+            mcp_sp_speed = mcode_block->spindle.speed ;
         }
         else if(mcode_block->m_code == M04)
         {
@@ -156,7 +155,8 @@ void emcmcodedeal()
 
             spindle.mode = DRV_MODE_CSV;
             sp_sign = 2;
-            emot_speed = -1 * mcode_block->spindle.speed ;
+            emot_speed = -1.0 * mcode_block->spindle.speed ;
+            mcp_sp_speed = mcode_block->spindle.speed ;
         }
         else if(mcode_block->m_code == M05 || mcode_block->m_code == M30)
         {
@@ -187,7 +187,7 @@ void emcmcodedeal()
             stop_last_state = false;
             Hal_Driver_Set_Target_Vel(&spindle,vel);
         }
-        var_chan[0].cmd_spdl_speed = vel;
+        setVarChanDouble(0, VAR_CHAN_CMD_SPDL_SPEED, vel, 0);
     }
     if(sp_sign == 0)
     {
@@ -195,6 +195,5 @@ void emcmcodedeal()
         {
             Spindle_Stop();
         }
-        var_chan[0].cmd_spdl_speed = vel;
     }
 }

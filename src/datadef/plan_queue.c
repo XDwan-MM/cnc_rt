@@ -95,12 +95,13 @@ PLAN_BLOCK* queue_get_block(const PLAN_QUEUE* queue, int index){
     return &(queue->pl_block[(queue->head + index) % PLAN_QUEUE_SIZE]);
 }
 
-void queue_copy_block(const PLAN_QUEUE* queue, int index, PLAN_BLOCK* copy_block){
-    if(queue == NULL || queue->pl_block == NULL) return;
-    if(index < 0 || index >= queue->size) return;
-    if(copy_block == NULL) return;
-    memcpy(copy_block, &(queue->pl_block[(queue->head + index) % PLAN_QUEUE_SIZE]), sizeof(PLAN_BLOCK));
-    return;
+PLAN_BLOCK* queue_copy_block(const PLAN_QUEUE* queue, int index){
+    if(queue == NULL || queue->pl_block == NULL) return NULL;
+    if(index < 0 || index >= queue->size) return NULL;
+    PLAN_BLOCK* pl_block = (PLAN_BLOCK*)malloc(sizeof(PLAN_BLOCK));
+    if(pl_block == NULL) return NULL;
+    memcpy(pl_block, &(queue->pl_block[(queue->head + index) % PLAN_QUEUE_SIZE]), sizeof(PLAN_BLOCK));
+    return pl_block;
 }
 
 int queue_get_size(const PLAN_QUEUE* queue){

@@ -11,7 +11,7 @@
 #define FERROR_CONTROL_H
 
 #include <stdbool.h>
-#include "rt_par.h"
+#include "pardata.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -27,13 +27,15 @@ typedef struct {
   bool error_flag;        /* 误差标志（1=超出限制） */
 } ferror_control_t;
 
+// 外部声明,跟随误差控制器
+extern ferror_control_t ferror_control[3];
 
 /* 更新轴的跟随误差 */
 /*
 * axis_para:传入的误差值单位mm
 */
-void updata_axis_ferror(ferror_control_t *axis_ferrorCtrl,
-                        const PAR_AXIS* axis_para,
+extern void updata_axis_ferror(ferror_control_t *axis_ferrorCtrl,
+                        const ParamUnit* axis_para,
                         double pos_cmd,
                         double pos_fb,
                         double vel_cmd);

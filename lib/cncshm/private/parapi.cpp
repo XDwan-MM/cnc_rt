@@ -2,6 +2,10 @@
 #include "parmanager.h"
 #include "shmmanager.h"
 
+SHM_EXPORT ParData* getParDataPtr(){
+    return ShmManager::instance().parManager()->getParDataPtr();
+}
+
 int getParData(int file, int sub, int index, ParamUnit *data)
 {
     return ShmManager::instance().parManager()->getParData(file, sub, index, data);

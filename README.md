@@ -1,17 +1,3 @@
-### 最新版本更新注意事项
-
-1、最新实时版本更新，需更改人机交互对应的轴参数，否则电机启动很慢（加速度过小）
-
-更改人机交互  参数-> 坐标轴参数  逻辑轴0,逻辑轴1,逻辑轴2 对应的参数均需更改。
-
-100038 加工加减速时间常数(ms)  设置为64
-100039 加工加减速捷度时间常数(ms) 设置为64
-
-101038 加工加减速时间常数(ms)  设置为64
-101039 加工加减速捷度时间常数(ms) 设置为64
-
-102038 加工加减速时间常数(ms)  设置为64
-102039 加工加减速捷度时间常数(ms) 设置为64
 
 ### 使用方法
 
@@ -101,7 +87,26 @@ make: 警告：文件“../shm.pro”的修改时间在未来 18348 秒后
 
 sudo find ./* -type f -exec touch {} \;
 
+5、./build.sh: 行 55: qmake: 未找到命令
 
+sudo visudo
+
+修改Defaults secure_path, 在最后添加实际qmake路径, 例子(需要自己修改最后的路径!!!):
+Defaults        secure_path="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/snap/bin:/home/wcf/QtLib/Qt5.15.16/5.15.16/gcc_64/bin"
+
+ctrl+X 回车 保存退出.
+
+6、按照5设置后，提示qmake不能找到lisence问题
+
+找到qt企业版的lisence路径（找.qt-lisence文件在哪）
+sudo ~/.bashrc
+末尾添加一行内容（等号后面需要填写自己实际的.qt-lisence路径）
+例如：export QT_LICENSE_FILE=/home/wcf/.qt-license
+
+sudo visudo
+添加Defaults项内容
+Defaults        env_keep += "QT_LICENSE_FILE"
+ctrl+X 回车 保存退出.
 
 ### 键盘调试
 

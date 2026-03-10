@@ -6,6 +6,7 @@
 #include <alarmapi.h>
 #include <stdlib.h>
 #include "regapi.h"   /* 引入寄存器访问 API */
+#include "global.h"
 
 
 static PMC_EVENT event_data;
@@ -27,7 +28,7 @@ GNC_RES task_mq_proc()
         // setAlarm(ALARM_SY, ALARM_ERROR, 0);
         // return GNC_OPERATOR_ERROR;
     }
-    // if(sys->nc_event != SYS_EVENT_NONE) return GNC_OPERATOR_WARNING;
+    // if(rt_data->nc_event != SYS_EVENT_NONE) return GNC_OPERATOR_WARNING;
     event_queue_pop(event_queue, &event_data);
     task_handle_pmc_event(&event_data);
     return GNC_OPERATOR_SUCCESS;
@@ -36,27 +37,27 @@ GNC_RES task_mq_proc()
 const char* mode[] = {"编辑", "记忆", "MDI", "JOG", "手轮", "回零", "DNC"};
 
 static GNC_RES task_handle_pmc_event(PMC_EVENT* event_data){
-    if (!event_data || !sys) return GNC_OPERATOR_ERROR;
+    if (!event_data || !rt_data) return GNC_DATA_NULL;
 
     switch(event_data->id){
         case EV_MSG_NONE:
-            sys->nc_event = SYS_EVENT_NONE;
+            rt_data->nc_event = SYS_EVENT_NONE;
             break;
         /* 1. 模式切换：更新目标模式 */
         case EV_MSG_MODE:
         {
             switch (event_data->mode_payload.mode) {
-            case 0: sys->target_mode = MODE_EDIT;   break; // EDIT
-            case 1: sys->target_mode = MODE_MEM;    break; // MEM
-            case 2: sys->target_mode = MODE_MDI;    break; // MDI
-            case 3: sys->target_mode = MODE_JOG;    break; // JOG
-            case 4: sys->target_mode = MODE_MPG;    break; // 手轮
-            case 5: sys->target_mode = MODE_HOMING; break; // 回零 (ZRN)
-            case 6: sys->target_mode = MODE_DNC;    break; // DNC (DNCI)
-            default: sys->target_mode = MODE_IDLE;  break; // wcf: 我不太确定
+            case 0: rt_data->target_mode = MODE_EDIT;   break; // EDIT
+            case 1: rt_data->target_mode = MODE_MEM;    break; // MEM
+            case 2: rt_data->target_mode = MODE_MDI;    break; // MDI
+            case 3: rt_data->target_mode = MODE_JOG;    break; // JOG
+            case 4: rt_data->target_mode = MODE_MPG;    break; // 手轮
+            case 5: rt_data->target_mode = MODE_HOMING; break; // 回零 (ZRN)
+            case 6: rt_data->target_mode = MODE_DNC;    break; // DNC (DNCI)
+            default: rt_data->target_mode = MODE_IDLE;  break; // wcf: 我不太确定
             }
-            // log_system("[task] 处理模式切换事件(%d)", sys->target_mode);
-            LOG_OUTPUT(INFO, "处理模式切换事件 %d", sys->target_mode);
+            // log_system("[task] 处理模式切换事件(%d)", rt_data->target_mode);
+            LOG_OUTPUT(INFO, "处理模式切换事件 %d", rt_data->target_mode);
             break;
         }
         /* 2. 进给轴按键处理：根据当前模式分发内部系统事件 */
@@ -66,63 +67,63 @@ static GNC_RES task_handle_pmc_event(PMC_EVENT* event_data){
             int direction = event_data->feedaxis_key_payload.direction; // 1:正按, -1:负按, 0:松开
 
             // 基于当前系统模式进行逻辑分发
-            if (sys->current_mode == MODE_JOG || sys->current_mode == MODE_HOMING)
+            if (rt_data->current_mode == MODE_JOG || rt_data->current_mode == MODE_HOMING)
             {
                 // axis为轴号
                 if (axis == AXIS_X) {
                     if (direction == 1)
                     {
-                        sys->nc_event = SYS_EVENT_X_POS_PRESS;
+                        rt_data->nc_event = SYS_EVENT_X_POS_PRESS;
                         LOG_OUTPUT(INFO, "处理X+按下事件");
                     }
                     else if (direction == -1)
                     {
-                        sys->nc_event = SYS_EVENT_X_NEG_PRESS;
+                        rt_data->nc_event = SYS_EVENT_X_NEG_PRESS;
                         LOG_OUTPUT(INFO, "处理X-按下事件");
                     }
                     else {
                         // 松开时，为了保险，可以根据 record_nc_event 或直接触发 Release
-                        sys->nc_event = (sys->nc_event == SYS_EVENT_X_POS_PRESS) ?
+                        rt_data->nc_event = (rt_data->nc_event == SYS_EVENT_X_POS_PRESS) ?
                                             SYS_EVENT_X_POS_RELEASE : SYS_EVENT_X_NEG_RELEASE;
-                        LOG_OUTPUT(INFO, "处理Ｘ释放事件");
+                        LOG_OUTPUT(INFO, "处理X释放事件");
                     }
                 }
                 else if (axis == AXIS_Y) {
                     if (direction == 1)
                     {
-                        sys->nc_event = SYS_EVENT_Y_POS_PRESS;
-                        LOG_OUTPUT(INFO, "处理Ｙ+按下事件");
+                        rt_data->nc_event = SYS_EVENT_Y_POS_PRESS;
+                        LOG_OUTPUT(INFO, "处理Y+按下事件");
                     }
                     else if (direction == -1)
                     {
-                        sys->nc_event = SYS_EVENT_Y_NEG_PRESS;
-                        LOG_OUTPUT(INFO, "处理Ｙ-按下事件");
+                        rt_data->nc_event = SYS_EVENT_Y_NEG_PRESS;
+                        LOG_OUTPUT(INFO, "处理Y-按下事件");
                     }
                     else {
-                        sys->nc_event = (sys->nc_event == SYS_EVENT_Y_POS_PRESS) ?
+                        rt_data->nc_event = (rt_data->nc_event == SYS_EVENT_Y_POS_PRESS) ?
                                             SYS_EVENT_Y_POS_RELEASE : SYS_EVENT_Y_NEG_RELEASE;
-                        LOG_OUTPUT(INFO, "处理Ｙ释放事件");
+                        LOG_OUTPUT(INFO, "处理Y释放事件");
                     }
                 }
                 else if (axis == AXIS_Z) {
                     if (direction == 1)
                     {
-                        sys->nc_event = SYS_EVENT_Z_POS_PRESS;
+                        rt_data->nc_event = SYS_EVENT_Z_POS_PRESS;
                         LOG_OUTPUT(INFO, "处理Z+按下事件");
                     }
                     else if (direction == -1)
                     {
-                        sys->nc_event = SYS_EVENT_Z_NEG_PRESS;
+                        rt_data->nc_event = SYS_EVENT_Z_NEG_PRESS;
                         LOG_OUTPUT(INFO, "处理Z-按下事件");
                     }
                     else {
-                        sys->nc_event = (sys->nc_event == SYS_EVENT_Z_POS_PRESS) ?
+                        rt_data->nc_event = (rt_data->nc_event == SYS_EVENT_Z_POS_PRESS) ?
                                             SYS_EVENT_Z_POS_RELEASE : SYS_EVENT_Z_NEG_RELEASE;
                         LOG_OUTPUT(INFO, "处理Z释放事件");
                     }
                 }
-                // log_system("[task] 处理进给轴按键事件 Axis %d action %d under mode %d", axis, direction, sys->current_mode);
-                LOG_OUTPUT(INFO, "处理进给轴按键事件 Axis %d action %d under mode %d", axis, direction, sys->current_mode);
+                // log_system("[task] 处理进给轴按键事件 Axis %d action %d under mode %d", axis, direction, rt_data->current_mode);
+                LOG_OUTPUT(INFO, "处理进给轴按键事件 Axis %d action %d under mode %d", axis, direction, rt_data->current_mode);
             }
             break;
         }
@@ -157,17 +158,17 @@ static GNC_RES task_handle_pmc_event(PMC_EVENT* event_data){
             // 1.进给倍率
             if(event_data->override_payload.override_type == 0)
             {
-
+                // setVarChanDouble(0, VAR_CHAN_FEED_OVERRIDE, event_data->override_payload.val * 100, 0);
             }
             // 2.快速进给倍率
             if(event_data->override_payload.override_type == 1)
             {
-
+                // setVarChanDouble(0, VAR_CHAN_RAPID_OVERRIDE, event_data->override_payload.val * 100, 0);
             }
             // 3.主轴倍率
             if(event_data->override_payload.override_type == 2)
             {
-
+                setVarChanDouble(0, VAR_CHAN_SPDL_OVERRIDE, event_data->override_payload.val * 100, 0);
             }
             break;
         }
@@ -175,18 +176,18 @@ static GNC_RES task_handle_pmc_event(PMC_EVENT* event_data){
         {
             if(event_data->run_payload.run_state == 1)
             {
-                if(sys->current_mode == MODE_MEM){
+                if(rt_data->current_mode == MODE_MEM){
                     // 循环启动
-                    sys->nc_event = SYS_EVENT_RERUN;
+                    rt_data->nc_event = SYS_EVENT_RERUN;
                     // log_system("[task] 处理循环启动事件");
                     LOG_OUTPUT(INFO, "处理循环启动事件");
                 }
             }
             if(event_data->run_payload.run_state == 0)
             {
-                if(sys->current_mode == MODE_MEM){
+                if(rt_data->current_mode == MODE_MEM){
                     // 进给保持
-                    sys->nc_event = SYS_EVENT_PAUSE;
+                    rt_data->nc_event = SYS_EVENT_PAUSE;
                     // log_system("[task] 处理进给保持事件");
                     LOG_OUTPUT(INFO, "处理进给保持事件");
                 }
@@ -197,7 +198,7 @@ static GNC_RES task_handle_pmc_event(PMC_EVENT* event_data){
         {
             if(event_data->run_payload.run_state == 0)
             {
-                sys->nc_event = SYS_EVENT_RESET;
+                rt_data->nc_event = SYS_EVENT_RESET;
                 // log_system("[task] 处理复位事件");
                 LOG_OUTPUT(INFO, "处理复位事件");
                 setRegBit(REG_F, 1, 1);

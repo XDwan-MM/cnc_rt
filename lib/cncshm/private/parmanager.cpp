@@ -2,8 +2,7 @@
 #include "semaphorelocker.h"
 
 ParManager::ParManager(ParData& parData)
-    : _parData(parData)
-    , _sem("ParDataSem", 1, QSystemSemaphore::Open) {
+    : _parData(parData) {
 }
 
 ParManager::~ParManager() {
@@ -31,7 +30,6 @@ int ParManager::getParProp(int file, int sub, int index, int propType, ParamUnit
     {
         return PAR_MANAGER_ERR_INDEX;
     }
-    SemaphoreLocker locker(_sem);
     switch (file)
     {
     case PARAMAN_FILE_NCU:
@@ -114,7 +112,6 @@ int ParManager::setParProp(int file, int sub, int index, int propType, ParamUnit
     {
         return PAR_MANAGER_ERR_INDEX;
     }
-    SemaphoreLocker locker(_sem);
     switch (file)
     {
     case PARAMAN_FILE_NCU:

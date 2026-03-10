@@ -13,7 +13,6 @@
 extern "C" {
 #endif
 
-void handle_mpg_cmd();
 
 #ifdef __cplusplus
 }

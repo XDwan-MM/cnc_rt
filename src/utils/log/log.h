@@ -119,7 +119,7 @@ typedef enum{
 // 示例
 // void abs_homing_set_state() {
 //     LOG_INFO("开始设置回零状态");
-//     LOG_DEBUG("当前事件: %d", sys->nc_event);
+//     LOG_DEBUG("当前事件: %d", rt_data->nc_event);
 //     LOG_WARN("换挡模式下不允许操作");
 //     LOG_ERROR("回零初始化失败");
 // }

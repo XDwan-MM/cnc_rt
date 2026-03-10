@@ -7,6 +7,7 @@ extern "C" {
 
 #include <stdbool.h>
 #include <stdint.h>
+#include <gncdatadef.h>
 
 // 限位区域定义
 typedef struct {
@@ -30,6 +31,8 @@ typedef struct {
     uint8_t violation_flag; // 违规标志位
     uint8_t active_levels;  // 当前生效的限位级别
 } AxisLimitRuntime;
+
+extern AxisLimitRuntime runtime[SYS_AXES_NUM];
 
 // 检查位置是否在限位区域内部
 uint8_t Is_Inside_Limit(float position, LimitLevel limit);

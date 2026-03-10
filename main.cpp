@@ -13,6 +13,8 @@
 #include "parser.h"
 #include "logapi.h"
 #include "log.h"
+#include "stored_stroke_check.h"
+
 #ifdef DEBUG_MODE_ENABLED
 #include "keyboard.h"
 #endif

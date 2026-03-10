@@ -1,9 +1,9 @@
 #include "varmanager.h"
-#include "semaphorelocker.h"
+#include <stdlib.h>
+#include <stdio.h>
 
 VarManager::VarManager(VarData& varData)
-    : _varData(varData)
-    , _sem("VarDataSem", 1, QSystemSemaphore::Open) {
+    : _varData(varData) {
 }
 
 VarManager::~VarManager() {
@@ -17,7 +17,6 @@ int VarManager::getVarData(int type, int no, int index, int sub_index, void* val
     if (!value) {
         return VAR_MANAGER_POINT_NULL_ERR;
     }
-    SemaphoreLocker locker(_sem);
     switch (type)
     {
     case VAR_TYPE_AXIS:
@@ -69,7 +68,6 @@ int VarManager::setVarData(int type, int no, int index, int sub_index, const voi
     if (!value) {
         return VAR_MANAGER_POINT_NULL_ERR;
     }
-    SemaphoreLocker locker(_sem);
     switch (type)
     {
     case VAR_TYPE_AXIS:

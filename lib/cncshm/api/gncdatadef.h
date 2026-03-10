@@ -2648,9 +2648,9 @@ typedef enum{
     VAR_AXIS_MOTOR_TYPE_FLAG,		/*!< 伺服类型出错标志 {Get(Bit32)} */
     VAR_AXIS_Z_SPACE1,				/*!< Z脉间距1 {Get(Bit64)} */
     VAR_AXIS_Z_SPACE2,				/*!< Z脉间距2 {Get(Bit64)} */
-    VAR_AXIS_ACT_POS_EX,			/*!< 机床实际位置 {Get(fBit64)} */
+    VAR_AXIS_ACT_POS_EX,			/*!< 机床实际位置 {Get(fBit64)} 伺服驱动器的反馈位置*/
     VAR_AXIS_ACT_POS2_EX,			/*!< 机床实际位置2 {Get(fBit64)} */
-    VAR_AXIS_CMD_POS_EX,			/*!< 机床指令位置 {Get(fBit64)} */
+    VAR_AXIS_CMD_POS_EX,			/*!< 机床指令位置 {Get(fBit64)} 系统计算的理论位置 */  
     VAR_AXIS_ACT_POS_WCS_EX,		/*!< 工件实际位置 {Get(fBit64)} */
     VAR_AXIS_CMD_POS_WCS_EX,		/*!< 工件指令位置 {Get(fBit64)} */
     VAR_AXIS_ACT_POS_RCS_EX,		/*!< 相对实际位置 {Get(fBit64)} */

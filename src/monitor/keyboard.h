@@ -57,7 +57,6 @@ int init_keyboard(void);
 
 /**
  * @brief 键盘监控主函数
- *
  * 在Linux下监控键盘事件，实现以下功能：
  * - 模式切换：1-7 对应 JOG/快速/手轮/回零/编辑/自动/MDI
  * - 倍率调整：Q/A 进给倍率，W/S 快速倍率，E/D 主轴倍率
@@ -65,7 +64,6 @@ int init_keyboard(void);
  * - 主轴控制：Z正转，X停止，C反转
  * - 运行控制：Enter运行，Space暂停，R复位，Esc急停退出
  * - 冷却控制：8开启，9关闭
- *
  * @note 此函数会阻塞运行，直到按下Esc键或收到终止信号
  */
 void hal_keyboard_minitor(void);

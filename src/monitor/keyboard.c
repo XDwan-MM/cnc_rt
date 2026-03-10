@@ -93,23 +93,23 @@ static void print_help(void) {
     printf("╚══════════════════════════════════════════════════════════════════╝\n");
 }
     
-// 打印当前状态
+// 打印当前状态，存在多线程数据竞争，此处不保证数据有效性
 static void print_status(void) {
     printf("\r\033[K");  // 清除当前行
     printf("[============== CNC HMI ===================================\033[0m]\n");
     printf("[状态: \033[1;32m%s\033[0m] ",
-           (var_chan[0].mode < 10) ? mode_char[var_chan[0].mode] : "未知");
+           (var_chan[0][VAR_CHAN_MODE].value.i < 10) ? mode_char[var_chan[0][VAR_CHAN_MODE].value.i] : "未知");
     printf("[进给: \033[1;33m%3d%%\033[0m] ", g_feed_override);
     printf("[快速: \033[1;33m%3d%%\033[0m] ", g_rapid_override);
     printf("[主轴: \033[1;33m%3d%%\033[0m]\n", g_spindle_override);
-    printf("[译码行: \033[1;33m%3d\033[0m]", var_chan[0].dcd_row);
-    printf("[运行行: \033[1;33m%3d\033[0m]", var_chan[0].run_row);
-    printf("[程序完成: %s\033[0m]\n", var_chan[0].is_progend ? "\033[1;32m是" : "\033[1;37m否");
-    printf("[急停: %s\033[0m]", var_chan[0].is_estop ? "\033[1;31m是" : "\033[1;32m否");
-    printf("[复位: %s\033[0m]", var_chan[0].is_resetting ? "\033[1;32m是" : "\033[1;37m否");
-    printf("[运行: %s\033[0m]", var_chan[0].is_running ? "\033[1;32m是" : "\033[1;37m否");
-    printf("[回零: %s\033[0m]", var_chan[0].is_homing ? "\033[1;32m是" : "\033[1;37m否");
-    printf("[移动: %s\033[0m]\n", var_chan[0].is_moving ? "\033[1;32m是" : "\033[1;37m否");
+    printf("[译码行: \033[1;33m%3d\033[0m]", var_chan[0][VAR_CHAN_DCD_ROW].value.i);
+    printf("[运行行: \033[1;33m%3d\033[0m]", var_chan[0][VAR_CHAN_RUN_ROW].value.i);
+    printf("[程序完成: %s\033[0m]\n", var_chan[0][VAR_CHAN_IS_PROGEND].value.i ? "\033[1;32m是" : "\033[1;37m否");
+    printf("[急停: %s\033[0m]", rt_data->sys_state[SYS_IS_ESTOP_ON] ? "\033[1;31m是" : "\033[1;32m否");
+    printf("[复位: %s\033[0m]", var_chan[0][VAR_CHAN_IS_RESETTING].value.i ? "\033[1;32m是" : "\033[1;37m否");
+    printf("[运行: %s\033[0m]", var_chan[0][VAR_CHAN_IS_RUNNING].value.i ? "\033[1;32m是" : "\033[1;37m否");
+    printf("[回零: %s\033[0m]", var_chan[0][VAR_CHAN_IS_HOMING].value.i ? "\033[1;32m是" : "\033[1;37m否");
+    printf("[移动: %s\033[0m]\n", var_chan[0][VAR_CHAN_IS_MOVING].value.i ? "\033[1;32m是" : "\033[1;37m否");
     printf("[事件数量: %d\033[0m]\n", event_queue_get_size(event_queue));
     printf("[===========================================================\033[0m]\n");
     fflush(stdout);

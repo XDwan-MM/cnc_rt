@@ -98,10 +98,10 @@ HEADERS += \
     src/datadef/eventdef.h \
     src/datadef/gcode_queue.h \
     src/datadef/global.h \
+    src/datadef/rt_data.h \
     src/datadef/mcode_queue.h \
     src/datadef/plan_queue.h \
-    src/datadef/rt_par.h \
-    src/datadef/rt_var.h \
+    src/datadef/rt_data.h \
     src/hal/hal_driver.h \
     src/hal/hal_io.h \
     src/motion/alarm.h \
@@ -149,6 +149,7 @@ SOURCES += \
     src/datadef/global.c \
     src/datadef/mcode_queue.c \
     src/datadef/plan_queue.c \
+    src/datadef/rt_data.c \
     src/hal/hal_driver.c \
     src/hal/hal_io.c \
     src/motion/alarm.c \

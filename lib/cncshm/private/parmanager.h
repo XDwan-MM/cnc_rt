@@ -11,6 +11,11 @@ public:
     void setIsShmInit(bool isShmInit) {
         _isShmInit = isShmInit;
     }
+    
+    ParData* getParDataPtr() {
+        Q_ASSERT(_isShmInit);
+        return &_parData;
+    }
 
     int getParData(int file, int sub, int index, ParamUnit *data);
     int setParData(int file, int sub, int index, ParamUnit data);
@@ -29,5 +34,4 @@ private:
     };
     ParData& _parData;
     bool _isShmInit = false;
-    QSystemSemaphore _sem;
 };

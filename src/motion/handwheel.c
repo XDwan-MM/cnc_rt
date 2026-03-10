@@ -3,6 +3,13 @@
 #include <math.h>
 
 simple_tp_t_handwheel simple_tp[5];
+static uint32_t axisandrate = 0;
+static uint32_t current_count = 0; // 手轮计数器
+static bool mpg_statis = true;     // true为复位状态
+static int rate = 0;               // 倍率
+static int axis = 0;               // 轴选
+static int last_axis = 0;          // 上一个周期轴选
+static int last_rate = 0;          // 上一个周期倍率
 
 //int32_t ratio = 10000;
 int Get_Multiplier_Switch(int output)
@@ -81,9 +88,10 @@ void Handlewheels_Motion(simple_tp_t_handwheel *tp)
 
 void Simple_Tp_Update(simple_tp_t_handwheel *tp)
 {
+    double ncu_cycle = (double)par_ncu[PAR_NCU_CYCLE].value.val_uint / TIME_US_2_S;
     double max_dv, tiny_dp, pos_err, vel_req;
     /* 计算每个伺服周期内允许的最大速度变化量 */
-    max_dv = tp->max_acc * par_ncu.cycle;
+    max_dv = tp->max_acc * ncu_cycle;
     /* 计算一个极小的位置范围，在此范围内视为零 */
     tiny_dp = 0.00000001;
     pos_err = tp->pos_cmd - tp->curr_pos;
@@ -122,5 +130,78 @@ void Simple_Tp_Update(simple_tp_t_handwheel *tp)
         tp->curr_vel = vel_req;
     }
     /* 对速度积分以获得新位置 */
-    tp->curr_pos += tp->curr_vel * par_ncu.cycle;
+    tp->curr_pos += tp->curr_vel * ncu_cycle;
+}
+
+
+void handle_mpg_cmd() {
+    HW_Get_Count(&current_count);
+    HW_Get_Axis_And_Rate(&axisandrate);
+    rate = axisandrate & 0b111;
+    rate = Get_Multiplier_Switch(rate);
+    axis = (axisandrate >> 3) & 0b11111;
+    axis = Get_Axis_Switch(axis);
+
+    if (axis == -1 || (last_axis != axis) || (last_rate != rate)) {
+        for (int i = 0; i < 5; ++i) {
+            simple_tp[i].first_pass = 1;
+        }
+        mpg_statis = true;
+    } else if (axis >= 0 && axis < 5) {
+        simple_tp[axis].joint.count = current_count;
+        simple_tp[axis].joint.rate = rate;
+        if (axis == 0) {
+            //            simple_tp[axis].joint.drivers_data = pos_act[axis];
+            //假定加减速参数
+            simple_tp[0].joint.vel_limit = par_axis[AXIS_X][PAR_AX_MPG_SPD].value.val_real;
+            simple_tp[0].joint.jaccel_limit = par_axis[AXIS_X][PAR_AX_RAPID_ACC].value.val_real;
+        }
+        if (axis == 1) {
+            //假定加减速参数
+            simple_tp[1].joint.vel_limit = par_axis[AXIS_Y][PAR_AX_MPG_SPD].value.val_real;
+            simple_tp[1].joint.jaccel_limit = par_axis[AXIS_Y][PAR_AX_RAPID_ACC].value.val_real;
+        }
+        if (axis == 2) {
+            //假定加减速参数
+            simple_tp[2].joint.vel_limit = par_axis[AXIS_Z][PAR_AX_MPG_SPD].value.val_real;
+            simple_tp[2].joint.jaccel_limit = par_axis[AXIS_Z][PAR_AX_RAPID_ACC].value.val_real;
+        }
+
+        //初始化
+        if (mpg_statis) {
+            if (axis == 0) {
+                simple_tp[axis].joint.pos_cmd = simple_tp[axis].pos_cmd = simple_tp[axis].curr_pos = var_axis[AXIS_X][VAR_AXIS_CMD_POS_EX].value.f;
+            }
+            if (axis == 1) {
+                simple_tp[axis].joint.pos_cmd = simple_tp[axis].pos_cmd = simple_tp[axis].curr_pos = var_axis[AXIS_Y][VAR_AXIS_CMD_POS_EX].value.f;
+            }
+            if (axis == 2) {
+                simple_tp[axis].joint.pos_cmd = simple_tp[axis].pos_cmd = simple_tp[axis].curr_pos = var_axis[AXIS_Z][VAR_AXIS_CMD_POS_EX].value.f;
+            }
+            simple_tp[axis].curr_vel = 0;
+            mpg_statis = false;
+        }
+
+        Handlewheels_Motion(&simple_tp[axis]);
+        Simple_Tp_Update(&simple_tp[axis]);
+        simple_tp[axis].joint.pos_cmd = simple_tp[axis].curr_pos;
+        // printf("当前手轮计数：%u, 轴选：%d, 倍率：%d，手轮规划位置： %f  电机位置：%d\n", current_count, axis, rate,simple_tp[axis - 1].pos_cmd,pos_act);
+    }
+    if (!mpg_statis) {
+        switch (axis) {
+        case 0:
+            setVarAxisDouble(AXIS_X, VAR_AXIS_CMD_POS_EX, simple_tp[0].joint.pos_cmd, 0);
+            break;
+        case 1:
+            setVarAxisDouble(AXIS_Y, VAR_AXIS_CMD_POS_EX, simple_tp[1].joint.pos_cmd, 0);
+            break;
+        case 2:
+            setVarAxisDouble(AXIS_Z, VAR_AXIS_CMD_POS_EX, simple_tp[2].joint.pos_cmd, 0);
+            break;
+        }
+    }
+    last_axis = axis;
+    last_rate = rate;
+    // hal write
+    //   Hal_Driver_Update_All(false,true);
 }

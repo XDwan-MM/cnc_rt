@@ -61,7 +61,6 @@ HEADERS += \
     private/semaphorelocker.h \
     private/ladmanager.h  \
     private/shmmanager.h \
-    private/vardata.h \
     private/varmanager.h
 
 include(./api/apishm.pri)

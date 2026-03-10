@@ -1,6 +1,6 @@
 #pragma once
 #include "vardata.h"
-#include <QSystemSemaphore>
+#include "qglobal.h"
 
 class VarManager {
 public:
@@ -10,6 +10,11 @@ public:
     // 设置共享内存初始化状态
     void setIsShmInit(bool isShmInit) {
         _isShmInit = isShmInit;
+    }
+
+    VarData* getVarDataPtr() {
+        Q_ASSERT(_isShmInit);
+        return &_varData;
     }
 
     int getVarData(int type, int no, int index, int sub_index, void* value, int clientNo);
@@ -31,5 +36,4 @@ private:
     };
     VarData& _varData;
     bool _isShmInit = false;
-    QSystemSemaphore _sem;
 };

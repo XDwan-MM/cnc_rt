@@ -1,5 +1,5 @@
 /********************************************************************
- * @file        datatype.h // 原为 common.h
+ * @file        datatype.h
  * @brief       模拟运动控制外其他数据
  * @version     V1.01
  * @date        2026/01/05
@@ -49,17 +49,6 @@ typedef enum result {
     GNC_PARSER_OVER = 301,      // 译码结束
     GNC_PARSER_WAIT = 302,      // 等待译码
     GNC_PARSER_OVER_AND_WAIT = 303, // 译码结束且等待
-    VP_CAL_SUCCESS = 400,
-    VP_IS_NULL,
-    VP_PARAM_UNVALID,
-    VP_MAX_VEL_IS_ZERO,
-    VP_LENGTH_IS_ZERO,
-    VP_LENGTH_UNVALID,
-    VP_FEED_RATE_IS_ZERO,
-    VP_CAL_ERROR,
-    VP_CAL_S_ERROR,
-    VP_CAL_V_ERROR,
-    VP_DELCINE_TO_END,
 } GNC_RES;
 
 typedef enum {
@@ -134,8 +123,6 @@ typedef enum {
     SYS_EVENT_RESET,
     SYS_EVENT_RERUN,
     SYS_EVENT_PAUSE,
-    SYS_EVENT_FEED_OVERRIDE,
-    SYS_EVENT_RAPID_OVERRIDE,
     SYS_EVENT_X_POS_PRESS,
     SYS_EVENT_X_POS_RELEASE,
     SYS_EVENT_X_NEG_PRESS,
@@ -149,23 +136,6 @@ typedef enum {
     SYS_EVENT_Z_NEG_PRESS,
     SYS_EVENT_Z_NEG_RELEASE,
 } SYS_EVENT;
-
-// 系统状态
-typedef struct {
-    // button模式：按下激活
-    SYS_EVENT nc_event;
-    SYS_EVENT record_nc_event;
-    // 状态
-    NC_MODE target_mode;  // NC运行模式
-    NC_MODE current_mode; // NC运行模式
-    // 临时状态
-    bool is_switching_mode; // 是否正在切换模式
-    bool is_parse_running;  // 解释器是否运行中
-    bool is_first_run;      // 是否为第一次自动运行
-    double cpu_time_used;
-    bool is_mac_lock;
-    bool is_lookahead;
-} SYS_DATA;
 
 double POS_Distance(POS* p1, POS* p2);
 POS POS_VECTOR(POS* p1, POS* p2);

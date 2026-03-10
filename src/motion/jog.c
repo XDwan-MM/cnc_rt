@@ -4,6 +4,9 @@
 #include "log.h"
 #include <math.h>
 
+// 点动tp 全局变量定义
+simple_tp_t jog_tp[3]; // 点动控制规划器 // wcf add 2026.01.22
+
 /* --- 1. 静态局部变量 (每个轴私有的状态块) --- */
 static JOG_AXIS_CTRL jog_ctrls[SYS_AXES_NUM_JOG] = {
     {JOG_STATE_IDLE, JOG_DIR_NONE},
@@ -25,15 +28,15 @@ void handle_jog_cmd()
     int i;
 
     // 1. 处理系统级急停
-    if (var_chan[0].is_estop)
+    if (rt_data->sys_state[SYS_IS_ESTOP_ON])
     {
         for (i = 0; i < SYS_AXES_NUM_JOG; i++)
         {
-            stop_jog_cont(&var_axis[i].jog_tp, JOG_CYCLE_TIME, true);
+            stop_jog_cont(&jog_tp[i], JOG_CYCLE_TIME, true);
             jog_ctrls[i].state = JOG_STATE_IDLE;
             jog_ctrls[i].direction = JOG_DIR_NONE;
         }
-        sys->nc_event = SYS_EVENT_NONE;
+        rt_data->nc_event = SYS_EVENT_NONE;
         return;
     }
 
@@ -41,7 +44,7 @@ void handle_jog_cmd()
     for (i = 0; i < SYS_AXES_NUM_JOG; i++)
     {
         // 同步位置
-        var_axis[i].jog_tp.curr_pos = var_axis[i].cmd_pos;
+        jog_tp[i].curr_pos = var_axis[i][VAR_AXIS_CMD_POS_EX].value.f;
 
         // 更新本轴独立状态机 (事件驱动)
         update_axis_state(i);
@@ -50,13 +53,14 @@ void handle_jog_cmd()
         execute_axis_motion(i);
 
         // 写回位置
-        var_axis[i].cmd_pos = var_axis[i].jog_tp.curr_pos;
+        var_axis[i][VAR_AXIS_CMD_POS_EX].value.f = jog_tp[i].curr_pos;
+        // LOG_INFO("%f", jog_tp[0].curr_pos);
     }
 
     // 3. 自动清理事件：若所有轴都回到了 IDLE 状态，重置系统事件
     if (check_all_axes_idle())
     {
-        sys->nc_event = SYS_EVENT_NONE;
+        rt_data->nc_event = SYS_EVENT_NONE;
     }
 }
 
@@ -68,10 +72,10 @@ void handle_jog_cmd()
  */
 static void update_axis_state(int i)
 {
-    SYS_EVENT event = sys->nc_event;
+    SYS_EVENT event = rt_data->nc_event;
 
     // A. 捕捉【按下】事件：切换到 RUNNING 并锁定方向
-    if (!sys->is_switching_mode)
+    if (!rt_data->sys_state[SYS_IS_SWITCHING_MODE])
     {
         if ((i == AXIS_X && event == SYS_EVENT_X_POS_PRESS) ||
             (i == AXIS_Y && event == SYS_EVENT_Y_POS_PRESS) ||
@@ -114,22 +118,22 @@ static void execute_axis_motion(int i)
     {
     case JOG_STATE_RUNNING:
         // 使用记忆中的方向锁定运行
-        start_jog_cont(&par_axis[i], &var_axis[i].jog_tp, jog_ctrls[i].direction, var_chan[0].feed_override, JOG_CYCLE_TIME);
+        start_jog_cont(&par_axis[i], &jog_tp[i], jog_ctrls[i].direction, var_chan[0][VAR_CHAN_FEED_OVERRIDE].value.f, JOG_CYCLE_TIME);
         // 到达正限位 日志输出
-        if (fabs(var_axis[i].jog_tp.curr_pos - par_axis[i].plmt) < SPEED_THRESHOLD)
+        if (fabs(jog_tp[i].curr_pos - par_axis[i][PAR_AX_PLMT].value.val_real) < SPEED_THRESHOLD)
         {
             LOG_OUTPUT(INFO,"点动 %d 轴到达正限位", i);
         }
-        else if(fabs(var_axis[i].jog_tp.curr_pos - par_axis[i].nlmt) < SPEED_THRESHOLD)
+        else if(fabs(jog_tp[i].curr_pos - par_axis[i][PAR_AX_NLMT].value.val_real) < SPEED_THRESHOLD)
         {
             LOG_OUTPUT(INFO,"点动 %d 轴到达负限位", i);
         }
         break;
 
     case JOG_STATE_STOPPING:
-        stop_jog_cont(&var_axis[i].jog_tp, JOG_CYCLE_TIME, false);
+        stop_jog_cont(&jog_tp[i], JOG_CYCLE_TIME, false);
         // 速度降至阈值以下，彻底释放轴控制权
-        if (fabs(var_axis[i].jog_tp.curr_vel - 0.0) < SPEED_THRESHOLD)
+        if (fabs(jog_tp[i].curr_vel - 0.0) < SPEED_THRESHOLD)
         {
             jog_ctrls[i].state = JOG_STATE_IDLE;
             jog_ctrls[i].direction = JOG_DIR_NONE;

@@ -10,7 +10,9 @@
                 "/usr/include/x86_64-linux-gnu/qt5/QtWidgets",
                 "/usr/include/x86_64-linux-gnu/qt5/QtNetwork",
                 "/usr/include/c++/9", 
-                "/usr/include/x86_64-linux-gnu"
+                "/usr/include/x86_64-linux-gnu",
+                "/home/wcf/QtLib/Qt5.15.16/5.15.16/gcc_64/include",
+                "/home/wcf/QtLib/Qt5.15.16/5.15.16/gcc_64/include/QtCore"
             ],
             "defines": [
                 "QT_CORE_LIB",

@@ -6,6 +6,7 @@
 #include "global.h"
 #include "cnc_math.h"
 #include "log.h"
+#include "rt_data.h"
 
 static void block_cal_pos(GCODE_BLOCK* gcode_block, PLAN_BLOCK* current_block, POS* start_pos);
 static void block_cal_vel(PLAN_BLOCK* current_block);
@@ -21,9 +22,10 @@ GNC_RES chan_add_block(){
     if(gcode_queue_is_empty(gcode_queue)) return GNC_DATA_EMPTY;
 
     // 译码第一段类型为g00，起点为当前机床位置
-    if(sys->is_first_run){
-        pretreat_queue->pre_pos = (POS){.x = var_axis[AXIS_X].cmd_pos, .y = var_axis[AXIS_Y].cmd_pos, .z = var_axis[AXIS_Z].cmd_pos};
-        sys->is_first_run = false;
+    if(rt_get_chan_state(0, CHAN_IS_FIRST_RUN)){
+        // todo：var变量在路径线程中被读取，存在数据竞争风险，需加锁保护
+        pretreat_queue->pre_pos = (POS){.x = var_axis[AXIS_X][VAR_AXIS_CMD_POS_EX].value.f, .y = var_axis[AXIS_Y][VAR_AXIS_CMD_POS_EX].value.f, .z = var_axis[AXIS_Z][VAR_AXIS_CMD_POS_EX].value.f};
+        rt_set_chan_state(0, CHAN_IS_FIRST_RUN, false);
     }
 
     // 每次最多处理 PRE_TREAT_SIZE
@@ -90,22 +92,23 @@ static void block_cal_pos(GCODE_BLOCK* gcode_block, PLAN_BLOCK* current_block, P
 }
 
 // 计算段最大允许速度
+// todo：速度 mm/min，加速度 g/s^2，加加速度，需统一单位
 static void block_cal_vel(PLAN_BLOCK* current_block){
     switch(current_block->type){
         case RAPID:
-            current_block->feed_vel = MIN3(par_axis[0].rapid_vel, par_axis[1].rapid_vel, par_axis[2].rapid_vel);  // G00最大速度为设置的快速进给速度
+            current_block->feed_vel = MIN3(par_axis[0][PAR_AX_RAPID_SPD].value.val_real, par_axis[1][PAR_AX_RAPID_SPD].value.val_real, par_axis[2][PAR_AX_RAPID_SPD].value.val_real);  // G00最大速度为设置的快速进给速度
             current_block->max_vel = current_block->feed_vel;
-            current_block->max_acc = MIN3(par_axis[0].rapid_acc, par_axis[1].rapid_acc, par_axis[2].rapid_acc);
-            current_block->max_jerk = MIN3(par_axis[0].rapid_jerk, par_axis[1].rapid_jerk, par_axis[2].rapid_jerk);
+            current_block->max_acc = MIN3(par_axis[0][PAR_AX_RAPID_ACC].value.val_real, par_axis[1][PAR_AX_RAPID_ACC].value.val_real, par_axis[2][PAR_AX_RAPID_ACC].value.val_real);
+            current_block->max_jerk = MIN3(par_axis[0][PAR_AX_RAPID_JK].value.val_real, par_axis[1][PAR_AX_RAPID_ACC].value.val_real, par_axis[2][PAR_AX_RAPID_JK].value.val_real);
             break;
         case CIRCLE_CCW:
         case CIRCLE_CW:
         case LINE:
-            double min_feed = MIN3(par_axis[0].feed_vel, par_axis[1].feed_vel, par_axis[2].feed_vel);
+            double min_feed = MIN3(par_axis[0][PAR_AX_FEED_SPD].value.val_real, par_axis[1][PAR_AX_FEED_SPD].value.val_real, par_axis[2][PAR_AX_FEED_SPD].value.val_real);
             current_block->feed_vel = MIN(current_block->feed_vel, min_feed);   // G01|G02|G03最大速度
             current_block->max_vel = current_block->feed_vel;                   // 倍率在前瞻时计算
-            current_block->max_acc = MIN3(par_axis[0].feed_acc, par_axis[1].feed_acc, par_axis[2].feed_acc);
-            current_block->max_jerk = MIN3(par_axis[0].feed_jerk, par_axis[1].feed_jerk, par_axis[2].feed_jerk);
+            current_block->max_acc = MIN3(par_axis[0][PAR_AX_FEED_ACC].value.val_real, par_axis[1][PAR_AX_FEED_ACC].value.val_real, par_axis[2][PAR_AX_FEED_ACC].value.val_real);
+            current_block->max_jerk = MIN3(par_axis[0][PAR_AX_FEED_JK].value.val_real, par_axis[1][PAR_AX_FEED_JK].value.val_real, par_axis[2][PAR_AX_FEED_JK].value.val_real);
             break;
         default:
             break;

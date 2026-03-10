@@ -9,13 +9,14 @@
 #ifndef JOG_CONTROL_H
 #define JOG_CONTROL_H
 
-#include "rt_par.h"
+#include <stdbool.h>
 #include "simple_tp.h"
+#include "pardata.h"
 
 /* JOG方向定义 */
-#define JOG_DIR_NONE    0
-#define JOG_DIR_POSITIVE 1
-#define JOG_DIR_NEGATIVE -1
+#define JOG_DIR_NONE (0)
+#define JOG_DIR_POSITIVE (1)
+#define JOG_DIR_NEGATIVE (-1)
 
 #ifdef __cplusplus
 extern "C" {
@@ -27,11 +28,11 @@ extern "C" {
  * axis_para: 实时这边 速度的单位传入的是: mm/s
  *
  */
-void start_jog_cont(const PAR_AXIS* axis_para, simple_tp_t *jog_tp, int direction, const double feed_override, const double run_period);
-void start_jog_rapid_cont(const PAR_AXIS* axis_para, simple_tp_t *rapid_jog_tp, int direction, const double feed_override, const double run_period);
+extern void start_jog_cont(const ParamUnit* axis_para, simple_tp_t *jog_tp, int direction, const double feed_override, const double run_period);
+extern void start_jog_rapid_cont(const ParamUnit* axis_para, simple_tp_t *rapid_jog_tp, int direction, const double feed_override, const double run_period);
 
 /* 停止JOG */
-void stop_jog_cont(simple_tp_t *jog_tp, const double run_period, bool immediate);
+extern void stop_jog_cont(simple_tp_t *jog_tp, const double run_period, bool immediate);
 
 #ifdef __cplusplus
 }

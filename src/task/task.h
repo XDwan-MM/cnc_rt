@@ -10,11 +10,11 @@
 #ifndef __TASK_H__
 #define __TASK_H__
 
+#include "datatype.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-#include "global.h"
 
 // 任务消息队列初始化
 GNC_RES task_mq_init();

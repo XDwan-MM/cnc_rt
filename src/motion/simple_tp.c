@@ -8,7 +8,7 @@
  ********************************************************************/
 
 #include "simple_tp.h"
-#include <stdlib.h>
+#include <stddef.h>
 #include <math.h>
 
 void simple_tp_update(simple_tp_t *tp, double period)

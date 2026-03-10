@@ -1,11 +1,12 @@
 #include "alarm.h"
 #include "logapi.h"
 #include "log.h"
+#include "rt_data.h"
 #include <alarmapi.h>
 
 // 报警状态逻辑
 void handle_alarm_cmd(){
-    switch(sys->nc_event){
+    switch(rt_data->nc_event){
         case SYS_EVENT_NONE:
             break;
         case SYS_EVENT_RESET:
@@ -14,9 +15,9 @@ void handle_alarm_cmd(){
             // 状态复位、数据重置
             tp_reset();
             // 切换到IDLE模式
-            sys_reset();
+            rt_data_reset();
             // 译码器复位
-            var_chan[0].is_estop = false;
+            rt_data->sys_state[SYS_IS_ESTOP_ON] = false;
             event_queue_reset(event_queue);
             LOG_OUTPUT(INFO, "报警已清除");
             break;
@@ -39,5 +40,5 @@ void handle_alarm_cmd(){
             LOG_OUTPUT(ERROR, "报警下不支持操作，请按复位清除报警");
             break;
     }
-    sys->nc_event = SYS_EVENT_NONE;
+    rt_data->nc_event = SYS_EVENT_NONE;
 }

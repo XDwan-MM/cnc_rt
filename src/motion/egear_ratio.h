@@ -11,7 +11,8 @@
 #define EGEAR_RATIO_H
 
 #include <stdlib.h>
-#include "rt_par.h"
+#include <stdint.h>
+#include "pardata.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -26,7 +27,7 @@ extern "C" {
  * - axis->pm_pulse: 电子齿轮比分母，实时统一单位化 (单位: 脉冲)。约分前驱动器每转脉冲数
  * @return double   转换后的物理位置值 (单位为 mm)
  */
-extern double pulses_to_position(int32_t pulses_fb, const PAR_AXIS *axis);
+extern double pulses_to_position(int32_t pulses_fb, const ParamUnit *axis);
 
 /**
  * @brief 位置值转脉冲
@@ -37,7 +38,7 @@ extern double pulses_to_position(int32_t pulses_fb, const PAR_AXIS *axis);
  * - axis->pm_pulse: 电子齿轮比分母，实时统一单位化 (单位: 脉冲)。约分前驱动器每转脉冲数
  * @return int32_t  转换后的目标脉冲数 (单位: pulse)
  */
-extern int32_t position_to_pulses(double postion, const PAR_AXIS *axis);
+extern int32_t position_to_pulses(double postion, const ParamUnit *axis);
 
 #ifdef __cplusplus
 }

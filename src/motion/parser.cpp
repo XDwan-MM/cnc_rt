@@ -68,12 +68,16 @@ GNC_RES parser_init(const char* parser_file_path)
     parser_macro_init();
     ItpSetMacroVariable(parser_data->cmv);
     // 设置机床起点
-    ItpSetOriginMacPos(var_axis[AXIS_X].cmd_pos, var_axis[AXIS_Y].cmd_pos, var_axis[AXIS_Z].cmd_pos, 0);
+    double ori_pos_x, ori_pos_y, ori_pos_z;
+    getVarChanDouble(AXIS_X, VAR_AXIS_CMD_POS_EX, &ori_pos_x, 0);
+    getVarChanDouble(AXIS_Y, VAR_AXIS_CMD_POS_EX, &ori_pos_y, 0);
+    getVarChanDouble(AXIS_Z, VAR_AXIS_CMD_POS_EX, &ori_pos_z, 0);
+    ItpSetOriginMacPos(ori_pos_x, ori_pos_y, ori_pos_z, 0);
     // 选择NC文件（支持中文路径）
     ItpSetFile(parser_file_path);
     // 将GM指令设置为已完成
-    var_chan[0].is_gcode_ending = true;
-    var_chan[0].is_mcode_ending = true;
+    rt_set_chan_state(0, CHAN_IS_GCODE_END, true);
+    rt_set_chan_state(0, CHAN_IS_MCODE_END, true);
     return GNC_OPERATOR_SUCCESS;
 }
 
@@ -144,12 +148,12 @@ STATIC GNC_RES parser_handle_gcode(pmc_data* motion_data, NcItpState *itp_state,
         return GNC_DATA_FULL;
     }
     // 判断M代码是否已处理完成
-    if (!var_chan[0].is_mcode_ending)
+    if (!rt_get_chan_state(0, CHAN_IS_MCODE_END))
     {
         return GNC_PARSER_WAIT;
     }
     gcode_queue_push(gcode_queue, &gcode_block);
-    var_chan[0].is_gcode_ending = false;
+    rt_set_chan_state(0, CHAN_IS_GCODE_END, false);
     // printf("type: %d, feed_vel: %.2f, pos:(%.2f, %.2f, %.2f)\n", gcode_block.type, gcode_block.feed_vel, gcode_block.pos.x, gcode_block.pos.y, gcode_block.pos.z);
     return GNC_OPERATOR_SUCCESS;
 }
@@ -169,16 +173,16 @@ STATIC GNC_RES parser_handle_mcode(pmc_data* motion_data, NcItpState *itp_state,
         return GNC_DATA_FULL;
     }
     // 判断G代码是否已处理完成
-    if (!var_chan[0].is_gcode_ending)
+    if (!rt_get_chan_state(0, CHAN_IS_GCODE_END))
     {
         return GNC_PARSER_WAIT;
     }
-    if (!var_chan[0].is_mcode_ending)
+    if (!rt_get_chan_state(0, CHAN_IS_MCODE_END))
     {
         return GNC_PARSER_WAIT;
     }
     mcode_queue_push(mcode_queue, &mcode_block);
-    var_chan[0].is_mcode_ending = false;
+    rt_set_chan_state(0, CHAN_IS_MCODE_END, false);
 
     return GNC_OPERATOR_SUCCESS;
 }
@@ -270,9 +274,9 @@ STATIC bool parser_check_res(GNC_RES res){
         case GNC_PARSER_OVER:
             // log_system("[parser] 译码结束");
             LOG_OUTPUT(INFO, "译码结束");
-            var_chan[0].is_parsering = false;
+            rt_set_chan_state(0, CHAN_IS_PARSERING, false);
+            rt_set_chan_state(0, CHAN_IS_PARSER_RERUN, false);
             parser_data->parser_state = PARSER_IDLE;
-            sys->is_parse_running = false;
             parser_reset();
             return false;
         case GNC_PARSER_WAIT:
@@ -302,7 +306,6 @@ STATIC bool parser_check_res(GNC_RES res){
         default:
             parser_data->parser_state = PARSER_IDLE;
             // todo：译码出错让运动暂停后报警，而不是直接进入报警
-            var_chan[0].is_estop = true;
             // log_system("[parser] 译码报警(%d)", res);
             LOG_OUTPUT(ERROR, "译码报警 %d", res);
             setAlarm(ALARM_CH, ALARM_ERROR, 2);
@@ -312,11 +315,11 @@ STATIC bool parser_check_res(GNC_RES res){
 }
 
 void parser_run_mode(){
-    if (var_chan[0].parser_reset == true)
+    if (rt_get_chan_state(0, CHAN_IS_PARSER_RESET) == true)
     {
         parser_reset();
         gcode_queue_reset(gcode_queue);
-        var_chan[0].parser_reset = false;
+        rt_set_chan_state(0, CHAN_IS_PARSER_RESET, false);
     }
     GNC_RES res = GNC_OPERATOR_SUCCESS;
     switch(parser_data->parser_state){
