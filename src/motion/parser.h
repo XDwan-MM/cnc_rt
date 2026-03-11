@@ -18,6 +18,13 @@
 extern "C" {
 #endif
 
+/*! 宏变量相关 {*/
+#define MacroVarCount (99999)
+extern double cmv[MacroVarCount];
+int macroVarGetValue(int no, double *mac);
+int macroVarSetValue(int no, double mac);
+/*! }*/
+
 #define PARSER_BUF_SIZE 1000 //译码器最大处理长度
 
 typedef enum{
@@ -36,7 +43,7 @@ typedef struct{
     int interp_list_index;      // 译码结果索引
     int itp_line_no;            // 当前行号
     char parser_file_path[NCFILEPATH_CHAR_LEN];
-    MacroVar cmv[30000];        // 宏变量 todo:译码调整
+    double cmv[MacroVarCount];        // 宏变量 todo:译码调整
     PARSER_STATE parser_state;
 }PARSER_DATA;
 
@@ -47,7 +54,6 @@ GNC_RES parser_init(const char* parser_file_path);
 GNC_RES parser_reading();
 void parser_reset();
 void parser_run_mode();
-
 
 #ifdef __cplusplus
 }

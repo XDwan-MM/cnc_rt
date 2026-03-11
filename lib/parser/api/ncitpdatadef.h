@@ -9,6 +9,10 @@ extern "C" {
 
 #define PMC_DATA_COUNT_MAX 100     // 单行译码最大结果数
 
+/*! 宏变量函数指针 */
+typedef int (*GetMacroVarCB)(int id, double *val);
+typedef int (*SetMacroVarCB)(int id, double val);
+
 typedef struct {
     pmc_data datas[PMC_DATA_COUNT_MAX];
     int count;
