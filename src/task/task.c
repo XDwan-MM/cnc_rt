@@ -158,17 +158,26 @@ static GNC_RES task_handle_pmc_event(PMC_EVENT* event_data){
             // 1.进给倍率
             if(event_data->override_payload.override_type == 0)
             {
-                // setVarChanDouble(0, VAR_CHAN_FEED_OVERRIDE, event_data->override_payload.val * 100, 0);
+                setVarChanDouble(0, VAR_CHAN_FEED_OVERRIDE, (double)event_data->override_payload.val / 100, 0);
+                rt_data->nc_event = SYS_EVENT_FEED_OVERRIDE;
+                // log_system("[task] 处理进给倍率事件");
+                LOG_OUTPUT(INFO, "处理进给倍率事件");
             }
             // 2.快速进给倍率
             if(event_data->override_payload.override_type == 1)
             {
-                // setVarChanDouble(0, VAR_CHAN_RAPID_OVERRIDE, event_data->override_payload.val * 100, 0);
+                setVarChanDouble(0, VAR_CHAN_RAPID_OVERRIDE, (double)event_data->override_payload.val / 100, 0);
+                rt_data->nc_event = SYS_EVENT_RAPID_OVERRIDE;
+                // log_system("[task] 处理快速进给倍率事件");
+                LOG_OUTPUT(INFO, "处理快速进给倍率事件");
             }
             // 3.主轴倍率
             if(event_data->override_payload.override_type == 2)
             {
-                setVarChanDouble(0, VAR_CHAN_SPDL_OVERRIDE, event_data->override_payload.val * 100, 0);
+                setVarChanDouble(0, VAR_CHAN_SPDL_OVERRIDE, (double)event_data->override_payload.val / 100, 0);
+                rt_data->nc_event = SYS_EVENT_SPDL_OVERRIDE;
+                // log_system("[task] 处理主轴倍率事件");
+                LOG_OUTPUT(INFO, "处理主轴倍率事件");
             }
             break;
         }
