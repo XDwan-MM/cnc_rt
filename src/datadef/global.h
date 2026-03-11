@@ -96,14 +96,8 @@ extern MCODE_QUEUE *mcode_queue;        // 译码队列
 extern PLAN_QUEUE *pretreat_queue;      // 预处理队列
 extern PLAN_QUEUE *plan_queue;          // 插补队列
 extern EVENT_QUEUE* event_queue;        // 事件队列
-extern MEM_EXEC_STATE mem_exec_state;
-extern COORD_TP *pausing_tp;
-extern COORD_TP *cycle_tp;
-extern bool is_paused_in_block;
-extern HOMING_TP *homing_tp;
-extern TRAJ_PARAMS* traj_data;
-extern TRAJ_PARAMS* free_traj_data;
-extern bool is_paused_in_block;
+extern COORD_TP *cycle_tp;             // 循环轨迹规划
+extern HOMING_TP *homing_tp;           // 回零轨迹规划
 
 // 读写共享内存锁
 extern pthread_mutex_t shm_mutex;

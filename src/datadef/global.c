@@ -58,13 +58,8 @@ GCODE_QUEUE *gcode_queue;       // 译码队列
 MCODE_QUEUE *mcode_queue;       // 译码队列
 PLAN_QUEUE *pretreat_queue;     // 预处理队列
 PLAN_QUEUE *plan_queue;         // 插补队列
-MEM_EXEC_STATE mem_exec_state;
-COORD_TP *pausing_tp;
-COORD_TP *cycle_tp;
-HOMING_TP *homing_tp;
-TRAJ_PARAMS* traj_data;
-TRAJ_PARAMS* free_traj_data;
-bool is_paused_in_block;
+COORD_TP *cycle_tp;             // 循环轨迹规划
+HOMING_TP *homing_tp;           // 回零轨迹规划
 
 // 读写共享内存锁（路径规划读时加锁）
 pthread_mutex_t shm_mutex;
@@ -72,7 +67,6 @@ pthread_mutex_t shm_mutex;
 static GNC_RES shm_var_init(); 
 static GNC_RES shm_par_init();
 static GNC_RES tp_init();
-static GNC_RES traj_data_init();
 
 GNC_RES rt_global_init(){
     GNC_RES res = GNC_OPERATOR_SUCCESS;
@@ -83,8 +77,6 @@ GNC_RES rt_global_init(){
     res = rt_data_init();
     if(res != GNC_OPERATOR_SUCCESS) return res;
     res = tp_init();
-    if(res != GNC_OPERATOR_SUCCESS) return res;
-    res = traj_data_init();
     if(res != GNC_OPERATOR_SUCCESS) return res;
     res = task_mq_init();
     if(res != GNC_OPERATOR_SUCCESS) return res;
@@ -134,16 +126,32 @@ static GNC_RES shm_par_init(){
     par_chan = par_data->par[0].par_chan;          // 通道参数
     par_axis = par_data->par[0].par_axis;          // 坐标轴参数
     par_acmp = par_data->par[0].par_acmp;          // 误差补偿参数
+    #ifdef DEBUG_MODE_ENABLED
+    par_ncu[PAR_NCU_CYCLE].value.val_uint = 1000;  // 插补周期1ms
+    for(int i = 0; i < SYS_AXES_NUM; i++){
+        par_axis[i][PAR_AX_RAPID_SPD].value.val_real = 3000.0;
+        par_axis[i][PAR_AX_FEED_SPD].value.val_real = 2000.0;
+        par_axis[i][PAR_AX_RAPID_ACC].value.val_real = 1000.0;
+        par_axis[i][PAR_AX_RAPID_JK].value.val_real = 1000.0;
+        par_axis[i][PAR_AX_FEED_ACC].value.val_real = 1000.0;
+        par_axis[i][PAR_AX_FEED_JK].value.val_real = 1000.0;
+        par_axis[i][PAR_AX_HOME_CRDS].value.val_real = 100;
+    }
+    for(int i = 0; i < SYS_CHAN_NUM; i++){
+        par_chan[i][PAR_CH_DEFAULT_F].value.val_real = 1000.0;
+        par_chan[i][PAR_CH_DRYRUN_SPD].value.val_real = 1000.0;
+        par_chan[i][PAR_CH_VPLAN_MODE].value.val_uint = 0;
+        par_chan[i][PAR_CH_MAX_ECEN_ACC].value.val_real = 1000.0;
+        par_chan[i][PAR_CH_LOOKAHEAD_NUM].value.val_uint = 200;
+    }
+    #endif
     return GNC_OPERATOR_SUCCESS;
 }
 
 static GNC_RES tp_init(){
     GNC_RES res = GNC_OPERATOR_SUCCESS;
-    homing_tp = (HOMING_TP*)malloc(SYS_AXES_NUM * sizeof(HOMING_TP));
-    res = homing_tp_init(homing_tp);
-    if(res != GNC_OPERATOR_SUCCESS) return res;
-    res = plan_tp_init();
-    if(res != GNC_OPERATOR_SUCCESS) return res;
+    homing_tp_init();
+    cycle_tp_init();
     gcode_queue = (GCODE_QUEUE*)malloc(sizeof(GCODE_QUEUE));
     res = gcode_queue_init(gcode_queue);
     if(res != GNC_OPERATOR_SUCCESS) return res;
@@ -161,20 +169,10 @@ static GNC_RES tp_init(){
 
 GNC_RES tp_reset(){
     homing_tp_reset(homing_tp);
-    plan_tp_reset();
+    cycle_tp_reset();
     gcode_queue_reset(gcode_queue);
     queue_reset(pretreat_queue);
     queue_reset(plan_queue);
-    return GNC_OPERATOR_SUCCESS;
-}
-
-static GNC_RES traj_data_init(){
-    traj_data = (TRAJ_PARAMS*)malloc(sizeof(TRAJ_PARAMS));
-    if(traj_data == NULL) return GNC_DATA_NULL;
-    memset(traj_data, 0, sizeof(TRAJ_PARAMS));
-    free_traj_data = (TRAJ_PARAMS*)malloc(SYS_AXES_NUM * sizeof(TRAJ_PARAMS));
-    if(free_traj_data == NULL) return GNC_DATA_NULL;
-    memset(free_traj_data, 0, SYS_AXES_NUM * sizeof(TRAJ_PARAMS));
     return GNC_OPERATOR_SUCCESS;
 }
 
