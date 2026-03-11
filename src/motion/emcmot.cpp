@@ -261,46 +261,69 @@ static void check_for_fault() {
 }
 
 // 检查轴跟随误差错误
-static void check_ferror_fault() {
-    if(rt_data->sys_state[SYS_IS_ESTOP_ON] || rt_data->current_mode == MODE_IDLE)
+static void check_ferror_fault()
+{
+    // 急停拍下情况、(空闲、编辑状态)时不检查跟随误差，避免上电无运动误报
+    if (rt_data->sys_state[SYS_IS_ESTOP_ON] || rt_data->current_mode == MODE_IDLE ||
+        rt_data->current_mode == MODE_EDIT)
     {
         return;
     }
-    // 指令位置
-    double pos_cmd_x = rt_data->axis_data[AXIS_X].motor_cmd_pos;
-    double pos_cmd_y = rt_data->axis_data[AXIS_Y].motor_cmd_pos;
-    double pos_cmd_z = rt_data->axis_data[AXIS_Z].motor_cmd_pos;
-    // 反馈位置
-    double pos_fb_x = rt_data->axis_data[AXIS_X].motor_act_pos;
-    double pos_fb_y = rt_data->axis_data[AXIS_Y].motor_act_pos;
-    double pos_fb_z = rt_data->axis_data[AXIS_Z].motor_act_pos;
-    // 指令速度
-    double vel_cmd_x = var_axis[AXIS_X][VAR_CHAN_CMD_FEEDRATE].value.f;
-    double vel_cmd_y = var_axis[AXIS_Y][VAR_CHAN_CMD_FEEDRATE].value.f;
-    double vel_cmd_z = var_axis[AXIS_Z][VAR_CHAN_CMD_FEEDRATE].value.f;
-
-    updata_axis_ferror(&ferror_control[AXIS_X], par_axis[AXIS_X], pos_cmd_x, pos_fb_x, vel_cmd_x);
-    updata_axis_ferror(&ferror_control[AXIS_Y], par_axis[AXIS_Y], pos_cmd_y, pos_fb_y, vel_cmd_y);
-    updata_axis_ferror(&ferror_control[AXIS_Z], par_axis[AXIS_Z], pos_cmd_z, pos_fb_z, vel_cmd_z);
-
-    // if (ferror_control[AXIS_X].error_flag) {
-    //     int res = setAlarm(ALARM_CH, ALARM_ERROR, 4);
-    //     // log_system("[ferror] X轴跟随误差报警");
-    //     if(res == -8) return;
-    //     LOG_OUTPUT(ERROR, "X轴跟随误差报警");
-    // }
-    // if (ferror_control[AXIS_Y].error_flag) {
-    //     int res = setAlarm(ALARM_CH, ALARM_ERROR, 5);
-    //     // log_system("[ferror] Y轴跟随误差报警");
-    //     if(res == -8) return;
-    //     LOG_OUTPUT(ERROR, "Y轴跟随误差报警");
-    // }
-    // if (ferror_control[AXIS_Z].error_flag) {
-    //     int res = setAlarm(ALARM_CH, ALARM_ERROR, 6);
-    //     // log_system("[ferror] Z轴跟随误差报警");
-    //     if(res == -8) return;
-    //     LOG_OUTPUT(ERROR, "Z轴跟随误差报警");
-    // }
+    /* 指令速度不为0时，检测跟随误差 */
+    // x轴
+    if (fabs(var_axis[AXIS_X][VAR_CHAN_CMD_FEEDRATE].value.f - 0.0) > SPEED_THRESHOLD)
+    {
+        // 指令速度 指令位置 反馈位置
+        double vel_cmd_x = var_axis[AXIS_X][VAR_CHAN_CMD_FEEDRATE].value.f;
+        double pos_cmd_x = rt_data->axis_data[AXIS_X].motor_cmd_pos;
+        double pos_fb_x = rt_data->axis_data[AXIS_X].motor_act_pos;
+        // 计算跟随误差
+        updata_axis_ferror(&ferror_control[AXIS_X], par_axis[AXIS_X], pos_cmd_x, pos_fb_x, vel_cmd_x);
+        // 跟随误差报警处理
+        if (ferror_control[AXIS_X].error_flag)
+        {
+            // int res = setAlarm(ALARM_CH, ALARM_ERROR, 4);
+            // if (res == -8)
+            //     return;
+            LOG_OUTPUT(ERROR, "Ｘ轴跟随误差报警");
+        }
+    }
+    // y轴
+    if (fabs(var_axis[AXIS_Y][VAR_CHAN_CMD_FEEDRATE].value.f - 0.0) > SPEED_THRESHOLD)
+    {
+        // 指令速度 指令位置 反馈位置
+        double vel_cmd_y = var_axis[AXIS_Y][VAR_CHAN_CMD_FEEDRATE].value.f;
+        double pos_cmd_y = rt_data->axis_data[AXIS_Y].motor_cmd_pos;
+        double pos_fb_y = rt_data->axis_data[AXIS_Y].motor_act_pos;
+        // 计算跟随误差
+        updata_axis_ferror(&ferror_control[AXIS_Y], par_axis[AXIS_Y], pos_cmd_y, pos_fb_y, vel_cmd_y);
+        // 跟随误差报警处理
+        if (ferror_control[AXIS_Y].error_flag)
+        {
+            // int res = setAlarm(ALARM_CH, ALARM_ERROR, 4);
+            // if (res == -8)
+            //     return;
+            LOG_OUTPUT(ERROR, "Y轴跟随误差报警");
+        }
+    }
+    // z轴
+    if (fabs(var_axis[AXIS_Z][VAR_CHAN_CMD_FEEDRATE].value.f - 0.0) > SPEED_THRESHOLD)
+    {
+        // 指令速度 指令位置 反馈位置
+        double vel_cmd_z = var_axis[AXIS_Z][VAR_CHAN_CMD_FEEDRATE].value.f;
+        double pos_cmd_z = rt_data->axis_data[AXIS_Z].motor_cmd_pos;
+        double pos_fb_z = rt_data->axis_data[AXIS_Z].motor_act_pos;
+        // 计算跟随误差
+        updata_axis_ferror(&ferror_control[AXIS_Z], par_axis[AXIS_Z], pos_cmd_z, pos_fb_z, vel_cmd_z);
+        // 跟随误差报警处理
+        if (ferror_control[AXIS_Z].error_flag)
+        {
+            // int res = setAlarm(ALARM_CH, ALARM_ERROR, 4);
+            // if (res == -8)
+            //     return;
+            LOG_OUTPUT(ERROR, "Z轴跟随误差报警");
+        }
+    }
 }
 
 static void read_to_hal() {

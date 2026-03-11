@@ -196,7 +196,7 @@ static GNC_RES task_handle_pmc_event(PMC_EVENT* event_data){
         }
         case EV_MSG_RESET:
         {
-            if(event_data->run_payload.run_state == 0)
+            if(event_data->reset_payload.reset_state == 1)
             {
                 rt_data->nc_event = SYS_EVENT_RESET;
                 // log_system("[task] 处理复位事件");
@@ -204,6 +204,19 @@ static GNC_RES task_handle_pmc_event(PMC_EVENT* event_data){
                 setRegBit(REG_F, 1, 1);
             }
             break;
+        }
+        case EV_MSG_ESP:
+        {
+            if (event_data->esp_payload.esp_state == 1)
+            {
+                // var_chan[0].is_estop = 1;
+                LOG_OUTPUT(INFO, "处理急停拍下事件");
+            } 
+            if (event_data->esp_payload.esp_state == 0)
+            {
+                // var_chan[0].is_estop = 1;
+                LOG_OUTPUT(INFO, "处理急停拉起事件");
+            } 
         }
         default:
             break;

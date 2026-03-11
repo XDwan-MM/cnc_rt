@@ -27,7 +27,8 @@ typedef enum {
     EV_MSG_SPINDLE,     /**< 主轴控制 (参数1: 方向) */
     EV_MSG_OVERRIDE,    /**< 倍率调节 (参数1: 类型, 参数2: 数值) */
     EV_MSG_AUTO_RUN,    /**< 运行控制 (参数1: 启动/中止) */
-    EV_MSG_RESET        /**< 系统复位 */
+    EV_MSG_RESET,       /**< 系统复位 */
+    EV_MSG_ESP,         /**< 紧急停止 (参数1: 拍下/拉起) */
 } PMC_EVENT_ID;
 
 // 各个PMC事件对应的参数结构体定义（子结构体）, 六种事件类型对应六个参数结构体
@@ -63,6 +64,11 @@ typedef struct {
     int reset_state;
 } EV_MSG_RESET_PAYLOAD;
 
+/* 7、*/
+typedef struct {
+    int esp_state;
+} EV_MSG_ESP_PAYLOAD;
+
 /**
  * @brief CNC 事件通用结构
  * 用于在内存中统一事件格式，方便解析
@@ -76,6 +82,7 @@ typedef struct {
         EV_MSG_OVERRIDE_PAYLOAD override_payload;
         EV_MSG_AUTO_RUN_PAYLOAD run_payload;
         EV_MSG_RESET_PAYLOAD reset_payload;
+        EV_MSG_ESP_PAYLOAD esp_payload;
     };
 } PMC_EVENT;
 
