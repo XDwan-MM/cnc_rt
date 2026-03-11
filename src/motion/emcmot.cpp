@@ -163,6 +163,12 @@ static void set_operating_mode() {
                 // log_system("[emcmot] 系统模式切换为(%s)", mode_names[rt_data->current_mode]);
                 LOG_OUTPUT(INFO, "系统模式切换为 %s", mode_names[rt_data->current_mode]);
                 break;
+            }else{
+                // 回零中切换模式不能生效
+                rt_data->target_mode = rt_data->current_mode;
+                // log_system("[emcmot] 回零中不能切换模式，请先按复位后切换");
+                LOG_OUTPUT(INFO, "回零中不能切换模式，请先按复位后切换");
+                break;
             }
             rt_data->sys_state[SYS_IS_SWITCHING_MODE] = true;
             break;

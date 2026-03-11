@@ -315,7 +315,7 @@ void cycle_tp_reset(){
 static POS mem_cal_pos(POS current_pos, double accum_distance){
     if(accum_distance <= 0) return current_pos;
     PLAN_BLOCK* current_block = cycle_tp->plan_block;
-    if(current_block == NULL) return;
+    if(current_block == NULL) return current_pos;
     POS interp_pos;
     switch(current_block->type){
         case RAPID:
@@ -596,7 +596,7 @@ static GNC_RES cycle_tp_look_ahead(VELPLAN_TYPE vplan_mode, double ncu_cycle, do
 static void block_cal_lookahead_vel(PLAN_BLOCK* current_block, INTERP_TYPE pre_type, double next_start_vel){
     switch(current_block->type){
         case RAPID:
-            current_block->max_vel = current_block->max_vel * var_chan[0][VAR_CHAN_FEED_OVERRIDE].value.f;
+            current_block->max_vel = current_block->max_vel * var_chan[0][VAR_CHAN_RAPID_OVERRIDE].value.f;
             // current_block->max_vel = current_block->max_vel;
             current_block->start_vel = 0;
             current_block->end_vel = 0;
