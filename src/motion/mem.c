@@ -188,6 +188,7 @@ static double mem_cal_pinc(VELPLAN_TYPE velplan_mode, double ncu_cycle, double c
             if (cycle_tp_is_finished() || cycle_tp->is_event_trigger){ 
                 // 如果段内完成暂停         
                 if(cycle_tp_is_finished() && cycle_tp->is_paused_inside_block){ 
+                    // 复位
                     if(var_chan[0][VAR_CHAN_IS_RESETTING].value.i){
                         setVarChanInt(0, VAR_CHAN_IS_RESETTING, 0, 0);
                         setVarChanInt(0, VAR_CHAN_IS_RUNNING, 0, 0);
@@ -248,7 +249,7 @@ static bool mem_check_res(GNC_RES res){
         }
         // 译码已结束后无数据，则程序运行完成
         cycle_tp->mem_exec_state = EXEC_IDLE;
-        rt_set_chan_state(0, CHAN_IS_GCODE_END, false);
+        rt_set_chan_state(0, CHAN_IS_GCODE_END, true);
         setVarChanInt(0, VAR_CHAN_IS_RUNNING, 0, 0);
         setVarChanInt(0, VAR_CHAN_IS_MOVING, 0, 0);
         setVarChanInt(0, VAR_CHAN_IS_PROGEND, 1, 0);
