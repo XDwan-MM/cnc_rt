@@ -59,7 +59,6 @@ int main() {
     } else  {
         errno = 0;
     }
-
     // 初始化实时全局变量
     if(rt_global_init() != GNC_OPERATOR_SUCCESS){
         printf("[start] 全局变量初始化失败\n");

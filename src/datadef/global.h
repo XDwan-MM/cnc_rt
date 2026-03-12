@@ -57,6 +57,7 @@ extern sem_t exit_sem;                         // 退出信号
 extern sem_t op_sem;                           // 已进入op信号，用于线程间通信
 extern int InterruptFlag;                      // 打断标志位
 extern Slave_info* slave_list;                 // 定义从站信息结构体以存储解析结果
+extern int update_pos_flag;                    // 理论位置读取驱动器位置
 
 extern TxEntry_Unit DI0[MAX_IO_MODULES];
 extern TxEntry_Unit DI1[MAX_IO_MODULES];
@@ -76,13 +77,13 @@ extern TxEntry_Unit MCPDI[11];
 extern RxEntry_Unit MCPDO[7];
 
 // 共享内存
-extern VarData* var_data;                           // var 变量
-extern VarUnion (*var_axis)[VAR_AXIS_NUM];          // 坐标轴变量
-extern VarUnion (*var_chan)[VAR_CHAN_NUM];          // 通道变量
-extern VarUnion* var_sys;                           // 系统变量
-extern ParData* par_data;                           // par 参数 
-extern ParamUnit *par_ncu;                          // NC 参数
-extern ParamUnit *par_mac;                          // 机床用户参数
+extern VarData* var_data;                                    // var 变量
+extern VarUnion (*var_axis)[VAR_AXIS_NUM];                   // 坐标轴变量
+extern VarUnion (*var_chan)[VAR_CHAN_NUM];                   // 通道变量
+extern VarUnion* var_sys;                                    // 系统变量
+extern ParData* par_data;                                    // par 参数 
+extern ParamUnit *par_ncu;                                   // NC 参数
+extern ParamUnit *par_mac;                                   // 机床用户参数
 extern ParamUnit (*par_chan)[PARAMAN_FILE_CHAN_MAX];         // 通道参数
 extern ParamUnit (*par_axis)[PARAMAN_FILE_AXIS_MAX];         // 坐标轴参数
 extern ParamUnit (*par_acmp)[PARAMAN_FILE_ACMP_MAX];         // 误差补偿参数
@@ -90,14 +91,14 @@ extern ParamUnit (*par_cfg)[PARAMAN_FILE_CFG_MAX];           // 设备接口参�
 extern ParamUnit *par_table;                                 // 刀具和刀库参数
 
 // 实时数据
-extern RT_DATA* rt_data;                // 旧值：sys
+extern RT_DATA* rt_data;                
 extern GCODE_QUEUE *gcode_queue;        // 译码队列
 extern MCODE_QUEUE *mcode_queue;        // 译码队列
 extern PLAN_QUEUE *pretreat_queue;      // 预处理队列
 extern PLAN_QUEUE *plan_queue;          // 插补队列
 extern EVENT_QUEUE* event_queue;        // 事件队列
-extern COORD_TP *cycle_tp;             // 循环轨迹规划
-extern HOMING_TP *homing_tp;           // 回零轨迹规划
+extern COORD_TP *cycle_tp;              // 循环轨迹规划
+extern HOMING_TP *homing_tp;            // 回零轨迹规划
 
 // 读写共享内存锁
 extern pthread_mutex_t shm_mutex;
