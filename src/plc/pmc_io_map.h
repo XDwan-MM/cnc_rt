@@ -92,16 +92,16 @@ typedef struct {
  * 严格对应 regdata.h 中的 regG 寄存器偏移
  */
 typedef struct {
-    unsigned char G0007; /**< 循环启动信号 */
-    unsigned char G0008; /**< 中止与复位信号 */
-    unsigned char G0012; /**< 进给倍率 */
-    unsigned char G0014; /**< 快速倍率 */
-    unsigned char G0029; /**< 主轴停止 */
-    unsigned char G0030; /**< 主轴倍率 */
-    unsigned char G0043; /**< 模式选择 */ /**< 模式控制字节: bit0:MD1, bit1:MD2, bit2:MD4, bit5:DNCI, bit7:ZRN */
-    unsigned char G0070; /**< 主轴方向控制 */
-    unsigned char G0100; /**< 正向轴选 (JOG+) */
-    unsigned char G0102; /**< 负向轴选 (JOG-) */
+    char G0007; /**< 循环启动信号 */
+    char G0008; /**< 中止与复位信号 */
+    char G0012; /**< 进给倍率 */
+    char G0014; /**< 快速倍率 */
+    char G0029; /**< 主轴停止 */
+    char G0030; /**< 主轴倍率 */
+    char G0043; /**< 模式选择 */ /**< 模式控制字节: bit0:MD1, bit1:MD2, bit2:MD4, bit5:DNCI, bit7:ZRN */
+    char G0070; /**< 主轴方向控制 */
+    char G0100; /**< 正向轴选 (JOG+) */
+    char G0102; /**< 负向轴选 (JOG-) */
 } G_INPUT_MAP;
 #pragma pack(pop)
 
