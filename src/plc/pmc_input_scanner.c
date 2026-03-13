@@ -94,12 +94,12 @@ void pmc_input_scan_cycle(void)
     // 快速进给倍率检测G14
     if ((curr_g.G0014 & 0x03) != (last_g.G0014 & 0x03))
     {
-        int rapid_lut[] = {100, 50, 25, 1}; /* 映射到实际百分比 */
+        int rapid_lut[] = {100, 50, 25, 0}; /* 映射到实际百分比 */
         // curr_g.G0014 & 0x03 取低两位，G14.1 G14.0组合确定快速倍率
         // G14.1 = 0, G14.0 = 0；100%  (curr_g.G0014 & 0x03) == 0
         // G14.1 = 0, G14.0 = 1；50%   (curr_g.G0014 & 0x03) == 1
         // G14.1 = 1, G14.0 = 0；25%   (curr_g.G0014 & 0x03) == 2
-        // G14.1 = 1, G14.0 = 1；1%    (curr_g.G0014 & 0x03) == 3  NOTE：暂定
+        // G14.1 = 1, G14.0 = 1；0%    (curr_g.G0014 & 0x03) == 3  NOTE：暂定20260313
         pmc_dispatch_event(EV_MSG_OVERRIDE, 1, rapid_lut[curr_g.G0014 & 0x03]);
     }
     // 主轴倍率检测G30

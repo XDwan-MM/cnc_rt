@@ -218,12 +218,12 @@ static GNC_RES task_handle_pmc_event(PMC_EVENT* event_data){
         {
             if (event_data->esp_payload.esp_state == 1)
             {
-                // var_chan[0].is_estop = 1;
+                // rt_data->sys_state[SYS_IS_ESTOP_ON] = 1;
                 LOG_OUTPUT(INFO, "处理急停拍下事件");
             } 
             if (event_data->esp_payload.esp_state == 0)
             {
-                // var_chan[0].is_estop = 1;
+                // rt_data->sys_state[SYS_IS_ESTOP_ON] = 0;
                 LOG_OUTPUT(INFO, "处理急停拉起事件");
             } 
         }
