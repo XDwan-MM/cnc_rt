@@ -11,7 +11,7 @@
  * ========================================================================== */
 
 /** @brief 从寄存器系统同步数据到本地结构体 */
-static int pmc_input_fetch_snapshot(G_INPUT_MAP *local_snap);
+static void pmc_input_fetch_snapshot(G_INPUT_MAP *local_snap);
 
 /** @brief 将解析出的逻辑打包为 PMC_EVENT 并入队 */
 static void pmc_dispatch_event(PMC_EVENT_ID id, int p1, int p2);
@@ -40,11 +40,8 @@ void pmc_input_scan_cycle(void)
 
     G_INPUT_MAP curr_g;
     /* 1. 抓取寄存器快照 */
-    if (pmc_input_fetch_snapshot(&curr_g) != REG_API_SUCCESS)
-    {
-        // 读取失败，跳过本周期
-        return;
-    }
+    pmc_input_fetch_snapshot(&curr_g);
+
 
     /* 2. 模式检测：调用内部解析函数处理复合位 (MD1, MD2, MD4, DNCI, ZRN),
      * 输出模式 */
@@ -171,29 +168,21 @@ void pmc_input_scan_cycle(void)
  * ========================================================================== */
 
 /** @brief 从寄存器系统同步数据到本地结构体 */
-static int pmc_input_fetch_snapshot(G_INPUT_MAP *local_snap)
+static void pmc_input_fetch_snapshot(G_INPUT_MAP *local_snap)
 {
-    int ret = REG_API_SUCCESS;
     /* 逐个抓取 G 寄存器字节 */
-    ret |= getRegValue8(REG_G, 7, &local_snap->G0007); // 获取共享内存G7变量的值
-    ret |= getRegValue8(REG_G, 8, &local_snap->G0008); // 获取共享内存G8变量的值
-    ret |=
-        getRegValue8(REG_G, 12, &local_snap->G0012); // 获取共享内存G12变量的值
-    ret |=
-        getRegValue8(REG_G, 14, &local_snap->G0014); // 获取共享内存G14变量的值
-    ret |=
-        getRegValue8(REG_G, 29, &local_snap->G0029); // 获取共享内存G29变量的值
-    ret |=
-        getRegValue8(REG_G, 30, &local_snap->G0030); // 获取共享内存G30变量的值
-    ret |=
-        getRegValue8(REG_G, 43, &local_snap->G0043); // 获取共享内存G43变量的值
-    ret |=
-        getRegValue8(REG_G, 70, &local_snap->G0070); // 获取共享内存G70变量的值
-    ret |= getRegValue8(REG_G, 100,
-                        &local_snap->G0100); // 获取共享内存G100变量的值
-    ret |= getRegValue8(REG_G, 102,
-                        &local_snap->G0102); // 获取共享内存G102变量的值
-    return (ret == REG_API_SUCCESS) ? REG_API_SUCCESS : REG_API_IDX_ERROR;
+    getRegValue8(REG_G, 7, &local_snap->G0007); // 获取共享内存G7变量的值
+    getRegValue8(REG_G, 8, &local_snap->G0008); // 获取共享内存G8变量的值
+    getRegValue8(REG_G, 12, &local_snap->G0012); // 获取共享内存G12变量的值
+    getRegValue8(REG_G, 14, &local_snap->G0014); // 获取共享内存G14变量的值
+    getRegValue8(REG_G, 29, &local_snap->G0029); // 获取共享内存G29变量的值
+    getRegValue8(REG_G, 30, &local_snap->G0030); // 获取共享内存G30变量的值
+    getRegValue8(REG_G, 43, &local_snap->G0043); // 获取共享内存G43变量的值
+    getRegValue8(REG_G, 70, &local_snap->G0070); // 获取共享内存G70变量的值
+    getRegValue8(REG_G, 100,
+                 &local_snap->G0100); // 获取共享内存G100变量的值
+    getRegValue8(REG_G, 102,
+                 &local_snap->G0102); // 获取共享内存G102变量的值
 }
 
 /** @brief 将解析出的逻辑打包为 PMC_EVENT 并入队 */
