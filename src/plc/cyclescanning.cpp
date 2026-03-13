@@ -602,7 +602,7 @@ static void DEC_run(int NO)
 
 static void F_signal() {
     for (int i = 0; i < 128; ++i) {
-        uchar value;
+        char value;
         getRegValue8(REG_F, i, &value);
         FF[i] = value;
     }
