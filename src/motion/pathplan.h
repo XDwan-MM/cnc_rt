@@ -18,7 +18,6 @@ extern "C" {
 #include "plan_queue.h"
 
 #define PRE_TREAT_SIZE 200   // 预处理的最大点数
-#define LOOK_AHEAD_SIZE 200  // 速度前瞻的最大段数
 
 /// @brief 将译码结果转换成插补段
 /// @return 

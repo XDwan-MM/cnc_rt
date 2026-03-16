@@ -30,14 +30,12 @@ static void get_cmd_pos();
 static void update_status();
 static void check_ferror_fault();
 static void output_to_hal();
-static void read_to_hal();
+static void read_from_hal();
 static void check_for_soft_limit();
 static void compute_screw_comp();
 
 static int32_t x_cmd_Pulses, y_cmd_Pulses, z_cmd_Pulses;
 static int32_t x_target_pos, y_target_pos, z_target_pos;
-static int preop_flag = 0;
-static int first_flag = 0;
 char* mode_names[] = {"编辑", "AUTO", "MDI", "DNC", "手轮", "手动", "快速点动", "回零", "报警", "空闲"};
 
 // 轨迹规划
@@ -50,18 +48,15 @@ void emcmotTrajPlan() {
     for (int i = 0; i < var_sys[VAR_SYS_CHAN_NUM].value.i; i++) {
         // 当前活动通道
         setVarSysInt(VAR_SYS_ACTIVE_CHAN, i, 0);
-
-        // 读取抽象层数据
-        read_to_hal();
-
+        
         // 检查系统是否有异常
         check_for_fault();
+        
+        // 读取抽象层数据
+        read_from_hal();
 
         // 判断运动模式
         set_operating_mode();
-
-        // 处理事件
-        // handle_system_event();
 
         // 临时：主轴控制
         spindle_control();
@@ -83,6 +78,9 @@ void emcmotTrajPlan() {
 
         // 上传运动状态数据
         update_status();
+
+        // 清除事件
+        rt_data->nc_event = SYS_EVENT_NONE;
     }
 }
 
@@ -94,7 +92,7 @@ void emcmotPathPlan() {
             HmiSysData hmiSysData;
             #ifdef DEBUG_MODE_ENABLED
             char ncFilePath[512];
-            snprintf(ncFilePath, sizeof(ncFilePath), "%s/%s", PROJECT_DIR, "config/NC/a.nc");
+            snprintf(ncFilePath, sizeof(ncFilePath), "%s/%s", PROJECT_DIR, "config/NC/c.nc");
             parser_init(ncFilePath);
             #else
             getHmiSysDataPtr(&hmiSysData);
@@ -176,6 +174,7 @@ static void set_operating_mode() {
         case MODE_MDI:
         case MODE_MEM:
         case MODE_DNC:
+            // 除了插补G指令，需判断其他G和M指令是否完成，才能切换模式
             if (!var_chan[0][VAR_CHAN_IS_RUNNING].value.i) {
                 rt_data->current_mode = rt_data->target_mode;
                 rt_data->sys_state[SYS_IS_SWITCHING_MODE] = false;
@@ -185,25 +184,14 @@ static void set_operating_mode() {
             } else{
                 // 加工下切换模式不能生效
                 rt_data->target_mode = rt_data->current_mode;
-                // log_system("[emcmot] 自动加工下不能切换模式，请先按进给保持后切换");
-                LOG_OUTPUT(INFO, "自动加工下不能切换模式，请先按进给保持后切换");
+                // log_system("[emcmot] 自动加工下不能切换模式，请先按复位后切换");
+                LOG_OUTPUT(INFO, "自动加工下不能切换模式，请先按复位后切换");
                 break;
             }
             rt_data->sys_state[SYS_IS_SWITCHING_MODE] = true;
             break;
         default:
             break;
-    }
-}
-
-static void handle_system_event(){
-    switch (rt_data->nc_event)
-    {
-    case SYS_EVENT_RESET:
-    case SYS_EVENT_PAUSE:
-        break;
-    default:
-        break;
     }
 }
 
@@ -332,7 +320,7 @@ static void check_ferror_fault()
     }
 }
 
-static void read_to_hal() {
+static void read_from_hal() {
     // 读取实际位置
     Hal_Driver_Get_Actual_Pos(&x_axis_driver, &x_target_pos);
     rt_data->axis_data[AXIS_X].motor_act_pos = pulses_to_position(x_target_pos, par_axis[AXIS_X]);
@@ -347,21 +335,17 @@ static void read_to_hal() {
     var_axis[AXIS_Z][VAR_AXIS_ACT_POS_EX].value.f = rt_data->axis_data[AXIS_Z].motor_act_pos - 0;
 
     // 第一次运行，初始化位置
-    if (!preop_flag) {
+    if (!update_pos_flag) {
         var_axis[AXIS_X][VAR_AXIS_CMD_POS_EX].value.f = rt_data->axis_data[AXIS_X].motor_act_pos;
         var_axis[AXIS_Y][VAR_AXIS_CMD_POS_EX].value.f = rt_data->axis_data[AXIS_Y].motor_act_pos;
         var_axis[AXIS_Z][VAR_AXIS_CMD_POS_EX].value.f = rt_data->axis_data[AXIS_Z].motor_act_pos;
-        preop_flag = 1;
+        update_pos_flag = 1;
     }
 }
 
 static void output_to_hal() {
     x_cmd_Pulses = position_to_pulses(rt_data->axis_data[AXIS_X].motor_cmd_pos, par_axis[AXIS_X]);
     Hal_Driver_Set_Target_Pos(&x_axis_driver, x_cmd_Pulses);
-    // LOG_INFO("x_cmd_Pulses:%f", x_cmd_Pulses);
-    // LOG_INFO("PAR_AX_PM_MUNIT:%d", par_axis[0][PAR_AX_PM_MUNIT].value.val_int);
-    // LOG_INFO("PAR_AX_PM_MUNIT:%d", par_axis[1][PAR_AX_PM_MUNIT].value.val_int);
-    // LOG_INFO("PAR_AX_PM_MUNIT:%d", par_axis[2][PAR_AX_PM_MUNIT].value.val_int);
     y_cmd_Pulses = position_to_pulses(rt_data->axis_data[AXIS_Y].motor_cmd_pos, par_axis[AXIS_Y]);
     Hal_Driver_Set_Target_Pos(&y_axis_driver, y_cmd_Pulses);
     z_cmd_Pulses = position_to_pulses(rt_data->axis_data[AXIS_Z].motor_cmd_pos, par_axis[AXIS_Z]);

@@ -9,6 +9,8 @@ GNC_RES rt_data_init(void)
     rt_data->target_mode = MODE_EDIT;
     rt_data->current_mode = MODE_EDIT;
     rt_data->nc_event = SYS_EVENT_NONE;
+    rt_set_chan_state(0, CHAN_IS_GCODE_END, true);
+    rt_set_chan_state(0, CHAN_IS_MCODE_END, true);
     pthread_mutex_init(&rt_data->mutex, NULL);
     return GNC_OPERATOR_SUCCESS;
 }
@@ -18,9 +20,9 @@ GNC_RES rt_data_reset(void){
     rt_data->nc_event = SYS_EVENT_NONE;
     pthread_mutex_lock(&rt_data->mutex);
     memset(rt_data->sys_state, 0, sizeof(rt_data->sys_state));
-    for(int i = 0; i < SYS_CHAN_NUM; i++){
-        memset(rt_data->chan_state[i], 0, sizeof(rt_data->chan_state[i]));
-    }
+    rt_set_chan_state(0, CHAN_IS_GCODE_END, true);
+    rt_set_chan_state(0, CHAN_IS_MCODE_END, true);
+    rt_data->sys_state[SYS_IS_ESTOP_ON] = false;
     pthread_mutex_unlock(&rt_data->mutex);
     return GNC_OPERATOR_SUCCESS;
 }

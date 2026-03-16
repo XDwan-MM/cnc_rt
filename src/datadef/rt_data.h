@@ -27,8 +27,8 @@ extern "C" {
 typedef enum{
     SYS_IS_ESTOP_ON = 0,        // 是否急停 is_estop
     SYS_IS_SWITCHING_MODE,      // 是否正在切换模式 is_switching_mode
-    SYS_IS_LOOKAHEAD_ON,        // 是否开启了前瞻 is_lookahead
     SYS_IS_MAC_LOCK,            // 是否开启机床锁住 is_mac_lock
+    SYS_IS_DRY_RUN,             // 是否空运行 is_dry_run
 } SysStateIndex;
 
 // 路径和轨迹两个线程使用
@@ -39,6 +39,8 @@ typedef enum{
     CHAN_IS_GCODE_END,           // G代码是否结束 is_gcode_end   
     CHAN_IS_MCODE_END,           // M代码是否结束 is_mcode_end
     CHAN_IS_FIRST_RUN,           // 是否为第一次运行 is_first_run
+    CHAN_IS_EXACT_STOP,          // 模式到达检测 is_exact_stop
+    CHAN_IS_MODE_ARRIVE,         // 模式到达参考店检测 is_mode_arrive
 } ChanStateIndex;
 
 // 目前仅轨迹线程使用
