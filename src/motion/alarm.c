@@ -18,10 +18,10 @@ void handle_alarm_cmd(){
             // 切换到IDLE模式
             rt_data_reset();
             // 译码器复位
-            rt_data->sys_state[SYS_IS_ESTOP_ON] = false;
+            
             event_queue_reset(event_queue);
             // 更新cmd_pos位置
-            update_pos_flag = 1;
+            // update_pos_flag = 1;
             LOG_OUTPUT(INFO, "报警已清除");
             break;
         case SYS_EVENT_RERUN:

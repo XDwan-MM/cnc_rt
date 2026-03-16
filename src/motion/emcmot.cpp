@@ -58,9 +58,6 @@ void emcmotTrajPlan() {
         // 判断运动模式
         set_operating_mode();
 
-        // 处理事件
-        // handle_system_event();
-
         // 临时：主轴控制
         spindle_control();
 
@@ -81,6 +78,9 @@ void emcmotTrajPlan() {
 
         // 上传运动状态数据
         update_status();
+
+        // 清除事件
+        rt_data->nc_event = SYS_EVENT_NONE;
     }
 }
 
@@ -92,7 +92,7 @@ void emcmotPathPlan() {
             HmiSysData hmiSysData;
             #ifdef DEBUG_MODE_ENABLED
             char ncFilePath[512];
-            snprintf(ncFilePath, sizeof(ncFilePath), "%s/%s", PROJECT_DIR, "config/NC/a.nc");
+            snprintf(ncFilePath, sizeof(ncFilePath), "%s/%s", PROJECT_DIR, "config/NC/c.nc");
             parser_init(ncFilePath);
             #else
             getHmiSysDataPtr(&hmiSysData);
@@ -175,7 +175,7 @@ static void set_operating_mode() {
         case MODE_MEM:
         case MODE_DNC:
             // 除了插补G指令，需判断其他G和M指令是否完成，才能切换模式
-            if (!var_chan[0][VAR_CHAN_IS_RUNNING].value.i && rt_get_chan_state(0, CHAN_IS_GCODE_END) && rt_get_chan_state(0, CHAN_IS_MCODE_END)) {
+            if (!var_chan[0][VAR_CHAN_IS_RUNNING].value.i) {
                 rt_data->current_mode = rt_data->target_mode;
                 rt_data->sys_state[SYS_IS_SWITCHING_MODE] = false;
                 // log_system("[emcmot] 系统模式切换为(%s)", mode_names[rt_data->current_mode]);
@@ -192,17 +192,6 @@ static void set_operating_mode() {
             break;
         default:
             break;
-    }
-}
-
-static void handle_system_event(){
-    switch (rt_data->nc_event)
-    {
-    case SYS_EVENT_RESET:
-    case SYS_EVENT_PAUSE:
-        break;
-    default:
-        break;
     }
 }
 

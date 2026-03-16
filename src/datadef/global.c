@@ -98,7 +98,7 @@ static GNC_RES shm_var_init(){
         setVarChanInt(i, VAR_CHAN_CMD_FEEDRATE, 0, 0);          // 通道合成指令速度
         setVarChanInt(i, VAR_CHAN_ACT_FEEDRATE, 0, 0);          // 通道实际合成速度
         setVarChanDouble(i, VAR_CHAN_FEED_OVERRIDE, 1.0, 0);    // 进给倍率    
-        setVarChanDouble(i, VAR_CHAN_RAPID_OVERRIDE, 1.0, 0);   // 快速进给倍率
+        setVarChanDouble(i, VAR_CHAN_RAPID_OVERRIDE, 0.1, 0);   // 快速进给倍率
         setVarChanDouble(i, VAR_CHAN_SPDL_OVERRIDE, 1.0, 0);    // 主轴倍率
         setVarChanInt(i, VAR_CHAN_IS_HOMING, 0, 0);             // 回零中
         setVarChanInt(i, VAR_CHAN_IS_RUNNING, 0, 0);            // 运行中
@@ -140,7 +140,7 @@ static GNC_RES shm_par_init(){
     }
     for(int i = 0; i < SYS_CHAN_NUM; i++){
         par_chan[i][PAR_CH_DEFAULT_F].value.val_real = 1000.0;
-        par_chan[i][PAR_CH_DRYRUN_SPD].value.val_real = 1000.0;
+        par_chan[i][PAR_CH_DRYRUN_SPD].value.val_real = 3000.0;
         par_chan[i][PAR_CH_VPLAN_MODE].value.val_uint = 0;
         par_chan[i][PAR_CH_MAX_ECEN_ACC].value.val_real = 1000.0;
         par_chan[i][PAR_CH_LOOKAHEAD_NUM].value.val_uint = 200;
