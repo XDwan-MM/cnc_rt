@@ -1,6 +1,11 @@
 
 ### 使用方法
 
+0、更新共享内存
+
+git submodule init && git submodule update
+
+
 1、编译
 
 清理编译（可选）sudo ./build.sh clean

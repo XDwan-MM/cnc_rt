@@ -24,7 +24,6 @@
 
 static void check_for_fault();
 static void set_operating_mode();
-static void handle_system_event();
 static void spindle_control();
 static void get_cmd_pos();
 static void update_status();
@@ -228,6 +227,8 @@ static void get_cmd_pos() {
         case MODE_MEM: // 自动
         case MODE_DNC:
             handle_run_cmd();
+            // excute_gcode();
+            // excute_mcode();
             break;
         case MODE_JOG: // 点动
             handle_jog_cmd();

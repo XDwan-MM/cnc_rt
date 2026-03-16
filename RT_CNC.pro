@@ -104,19 +104,19 @@ HEADERS += \
     src/datadef/rt_data.h \
     src/hal/hal_driver.h \
     src/hal/hal_io.h \
+    src/motion/auto/interpolation.h \
+    src/motion/auto/mem.h \
+    src/motion/auto/parser.h \
+    src/motion/auto/pathplan.h \
     src/motion/alarm.h \
     src/motion/egear_ratio.h \
     src/motion/emcmot.h \
     src/motion/ferror_control.h \
     src/motion/handwheel.h \
     src/motion/homing.h \
-    src/motion/interpolation.h \
     src/motion/jog.h \
     src/motion/jog_control.h \
-    src/motion/mem.h \
     src/motion/mpg.h \
-    src/motion/parser.h \
-    src/motion/pathplan.h \
     src/motion/rapid.h \
     src/motion/simple_tp.h \
     src/motion/stored_stroke_check.h \
@@ -130,8 +130,8 @@ HEADERS += \
     src/plc/pmc_io_map.h \
     src/plc/pmc_output_handler.h \
     src/plc/signal_utils.h \
-    src/spindle/spindle.h \
-    src/spindle/spindlestatus.h \
+    src/motion/spindle/spindle.h \
+    src/motion/spindle/spindlestatus.h \
     src/task/task.h \
     src/threads/threads_api.h \
     src/threads/thread_manager.h \
@@ -152,19 +152,19 @@ SOURCES += \
     src/datadef/rt_data.c \
     src/hal/hal_driver.c \
     src/hal/hal_io.c \
+    src/motion/auto/interpolation.c \
+    src/motion/auto/mem.c \
+    src/motion/auto/parser.cpp \
+    src/motion/auto/pathplan.c \
     src/motion/alarm.c \
     src/motion/egear_ratio.c \
     src/motion/emcmot.cpp \
     src/motion/ferror_control.c \
     src/motion/handwheel.c \
     src/motion/homing.c \
-    src/motion/interpolation.c \
     src/motion/jog.c \
     src/motion/jog_control.c \
-    src/motion/mem.c \
     src/motion/mpg.c \
-    src/motion/parser.cpp \
-    src/motion/pathplan.c \
     src/motion/rapid.c \
     src/motion/simple_tp.c \
     src/motion/stored_stroke_check.c \
@@ -172,7 +172,7 @@ SOURCES += \
     src/plc/cyclescanning.cpp \
     src/plc/pmc_input_scanner.c \
     src/plc/pmc_output_handler.c \
-    src/spindle/spindle.c \
+    src/motion/spindle/spindle.c \
     src/task/task.c \
     src/threads/thread_manager.cpp \
     src/threads/threads.cpp \
@@ -187,10 +187,11 @@ INCLUDEPATH += \
     src/hal \
     src/master \
     src/motion \
+    src/motion/auto \
+    src/motion/spindle \
     src/monitor \
     src/plc \
     src/task \
-    src/spindle \
     src/threads \
     src/utils \
     src/utils/math \
