@@ -147,14 +147,14 @@ void pmc_input_scan_cycle(void)
         pmc_dispatch_event(EV_MSG_SPINDLE, 0, 0);
     }
 
-    /* 8.紧急停止检测(暂定: 上升沿)  G08.4 */
-    // 检测急停按下（暂定:上升沿）
-    if (SIGNAL_RISING(curr_g.G0008, last_g.G0008, 4))
+    /* 8.紧急停止检测(下降沿或常开逻辑触发)  G08.4 = 0急停拍下，G08.4 = 1急停拉起 */
+    // 检测急停按下 1->0（下降沿，如果常开逻辑触发会造成事件堆积。）
+    if (SIGNAL_FALLING(curr_g.G0008, last_g.G0008, 4))
     {
         pmc_dispatch_event(EV_MSG_ESP, 1, 0);
     }
-    // 检测急停释放（暂定:下降沿）
-    if (SIGNAL_FALLING(curr_g.G0008, last_g.G0008, 4))
+    // 检测急停释放 0->1（上升沿）
+    if (SIGNAL_RISING(curr_g.G0008, last_g.G0008, 4))
     {
         pmc_dispatch_event(EV_MSG_ESP, 0, 0);
     }
@@ -253,7 +253,7 @@ static void pmc_dispatch_event(PMC_EVENT_ID id, int p1, int p2)
     {
         event.id = id;
         event.esp_payload.esp_state = p1;
-        LOG_OUTPUT(INFO, "扫描到急停: %d, reset_state: %d", event.id, p1);
+        LOG_OUTPUT(INFO, "扫描到急停: %d, esp_state: %d", event.id, p1);
         break;
     }
     default:
