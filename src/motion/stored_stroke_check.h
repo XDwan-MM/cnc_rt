@@ -30,6 +30,7 @@ typedef struct {
     float current_position; // 当前位置
     uint8_t violation_flag; // 违规标志位
     uint8_t active_levels;  // 当前生效的限位级别
+    AXIS_TYPE axis;
 } AxisLimitRuntime;
 
 extern AxisLimitRuntime runtime[SYS_AXES_NUM];
