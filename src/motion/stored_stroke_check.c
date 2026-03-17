@@ -1,5 +1,6 @@
 ﻿#include "stored_stroke_check.h"
 #include "global.h"
+#include <alarmapi.h>
 
 AxisLimitRuntime runtime[SYS_AXES_NUM];
 
@@ -13,6 +14,10 @@ AxisLimitRuntime runtime[SYS_AXES_NUM];
 
 uint8_t Axis_Limit_Manager_Init(void)
 {
+    runtime[AXIS_X].axis = AXIS_X;
+    runtime[AXIS_Y].axis = AXIS_Y;
+    runtime[AXIS_Z].axis = AXIS_Z;
+
     //level 1
     runtime[AXIS_X].config.level1.is_enabled = 1;
     runtime[AXIS_X].config.level1.positive_limit = par_axis[AXIS_X][PAR_AX_PLMT].value.val_real;
@@ -72,6 +77,19 @@ uint8_t Check_Axis_Limit_Violation(AxisLimitRuntime runtime)
     {
         violation = 1; // 一级限位违规
         runtime.violation_flag |= 0x01;
+        if(pos > runtime.config.level1.positive_limit)
+        {
+            runtime.violation_flag |= 0x08;
+            int res = setAlarm(ALARM_AX, ALARM_ERROR, 0);
+            if(res == -8) return;
+            LOG_OUTPUT(ERROR, "朝正方向移动超过了存储行程检查1");
+        }
+        else
+        {
+            int res = setAlarm(ALARM_AX, ALARM_ERROR, 1);
+            if(res == -8) return;
+            LOG_OUTPUT(ERROR, "朝负方向移动超过了存储行程检查1");
+        }
     }
 
     // 第三级检查：必须在区域外部运动
@@ -79,6 +97,19 @@ uint8_t Check_Axis_Limit_Violation(AxisLimitRuntime runtime)
     {
         violation = 1; // 三级限位违规
         runtime.violation_flag |= 0x04;
+        if(pos >= runtime.config.level3.negative_limit)
+        {
+            runtime.violation_flag |= 0x20;
+            int res = setAlarm(ALARM_AX, ALARM_ERROR, 4);
+            if(res == -8) return;
+            LOG_OUTPUT(ERROR, "朝正方向移动超过了存储行程检查3");
+        }
+        else
+        {
+            int res = setAlarm(ALARM_AX, ALARM_ERROR, 5);
+            if(res == -8) return;
+            LOG_OUTPUT(ERROR, "朝负方向移动超过了存储行程检查3");
+        }
     }
 
     // 第二级检查：根据模式判断
@@ -90,6 +121,19 @@ uint8_t Check_Axis_Limit_Violation(AxisLimitRuntime runtime)
             {
                 violation = 1;
                 runtime.violation_flag |= 0x02;
+                if(pos > runtime.config.level2.positive_limit)
+                {
+                    runtime.violation_flag |= 0x18;
+                    int res = setAlarm(ALARM_AX, ALARM_ERROR, 2);
+                    if(res == -8) return;
+                    LOG_OUTPUT(ERROR, "朝正方向移动超过了存储行程检查2");
+                }
+                else
+                {
+                    int res = setAlarm(ALARM_AX, ALARM_ERROR, 3);
+                    if(res == -8) return;
+                    LOG_OUTPUT(ERROR, "朝负方向移动超过了存储行程检查2");
+                }
             }
         }
         else
@@ -98,29 +142,22 @@ uint8_t Check_Axis_Limit_Violation(AxisLimitRuntime runtime)
             {
                 violation = 1;
                 runtime.violation_flag |= 0x02;
+                if(pos >= runtime.config.level2.negative_limit)
+                {
+                    runtime.violation_flag |= 0x18;
+                    int res = setAlarm(ALARM_AX, ALARM_ERROR, 2);
+                    if(res == -8) return;
+                    LOG_OUTPUT(ERROR, "朝正方向移动超过了存储行程检查2");
+                }
+                else
+                {
+                    int res = setAlarm(ALARM_AX, ALARM_ERROR, 3);
+                    if(res == -8) return;
+                    LOG_OUTPUT(ERROR, "朝负方向移动超过了存储行程检查2");
+                }
             }
         }
     }
     return violation;
 }
 
-//void limit_check_task(LimitManager* mgr)
-//{
-//    if (!mgr->global_enable) return;
-
-//    for (int i = 0; i < mgr->axis_count; i++)
-//    {
-//        AxisLimitRuntime* axis = mgr->axes[i];
-
-//        // 更新当前位置（从编码器反馈读取）
-//        axis->current_position = read_axis_position(axis->config->axis_id);
-
-//        // 执行限位检查
-//        if (check_axis_limit_violation(axis))
-//        {
-//            // 触发停止信号
-
-//            break;
-//        }
-//    }
-//}

@@ -116,7 +116,6 @@ HEADERS += \
     src/motion/homing.h \
     src/motion/jog.h \
     src/motion/jog_control.h \
-    src/motion/mpg.h \
     src/motion/rapid.h \
     src/motion/simple_tp.h \
     src/motion/stored_stroke_check.h \
@@ -164,7 +163,6 @@ SOURCES += \
     src/motion/homing.c \
     src/motion/jog.c \
     src/motion/jog_control.c \
-    src/motion/mpg.c \
     src/motion/rapid.c \
     src/motion/simple_tp.c \
     src/motion/stored_stroke_check.c \
