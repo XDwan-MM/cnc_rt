@@ -14,6 +14,8 @@ static bool abs_homing_is_tp_finished(AXIS_TYPE axis_type);
 static bool abs_homing_is_axis_homed(AXIS_TYPE axis_type);
 static double abs_homing_tp_pinc(AXIS_TYPE axis_type);
 static bool homing_check_res(GNC_RES res);
+static void homing_handle_estop();
+static void homing_handle_alarm();
 
 GNC_RES abs_homing_tp_update_params(AXIS_TYPE axis_type, double current_vel, double target_vel);
 void abs_homing_tp_update_traj(VELPLAN_TYPE velplan_type, double cycle_time, AXIS_TYPE axis_type);
@@ -22,6 +24,11 @@ static GNC_RES abs_homing_tp_init(AXIS_TYPE axis_type);
 static GNC_RES abs_declining_tp_init(AXIS_TYPE axis_type, double target_vel);
 
 void handle_homing_cmd(){
+    // 处理急停，直接停止
+    if(rt_data->sys_state[SYS_IS_ESTOP_ON]){
+        homing_handle_estop();
+        return;
+    }
     homing_set_state();
     for(int axis_type = 0; axis_type < SYS_AXES_NUM; axis_type++){
         switch(par_axis[axis_type][PAR_AX_HOME_WAY].value.val_uint){
@@ -43,7 +50,11 @@ void handle_homing_cmd(){
 }
 
 static void homing_set_state(){
-    GNC_RES res = GNC_CAL_SUCCESS;
+    // 处理报警，减速停止
+    if(rt_data->sys_state[SYS_IS_ALARMING]){
+        homing_handle_alarm();
+        return;
+    }
     switch(rt_data->nc_event){
         case SYS_EVENT_NONE:
             break;
@@ -132,15 +143,27 @@ static bool homing_check_res(GNC_RES res){
     case VP_FEED_RATE_IS_ZERO:
     case VP_LENGTH_UNVALID:
     default:
-        homing_tp_reset();
-        rt_set_sys_state(SYS_IS_ESTOP_ON, true);
-        setVarChanInt(0, VAR_CHAN_IS_HOMING, 0, 0);
-        setVarChanInt(0, VAR_CHAN_IS_MOVING, 0, 0);
-        setVarChanInt(0, VAR_CHAN_IS_RESETTING, 0, 0);
+        homing_handle_estop();
         // log_system("[home] 回零错误(%d)", res);
         LOG_OUTPUT(ERROR, "回零错误 %d", res);
         setAlarm(ALARM_CH, ALARM_ERROR, 1);
         return false;
+    }
+}
+
+static void homing_handle_estop(){
+    homing_tp_reset();
+    setVarChanInt(0, VAR_CHAN_IS_HOMING, 0, 0);
+    setVarChanInt(0, VAR_CHAN_IS_MOVING, 0, 0);
+    setVarChanInt(0, VAR_CHAN_IS_RESETTING, 0, 0);
+}
+
+static void homing_handle_alarm(){
+    for(int i = 0; i < SYS_AXES_NUM; i++){
+        if(homing_tp[i].homing_state == ABS_EXEC_HOMING){
+            homing_tp[i].is_event_trigger = true;
+            homing_tp[i].homing_state = ABS_EXEC_RESETTING;
+        }
     }
 }
 
