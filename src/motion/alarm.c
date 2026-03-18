@@ -13,12 +13,12 @@ void handle_alarm_cmd(){
             // todo：判断急停释放状态，如有才可以通过复位清除报警
             // 清除报警
             cleanAllAlarm(ALARM_TYPE_ALL, ALARM_LEVEL_ALL);
+            rt_data->sys_state[SYS_IS_ALARMING] = false;
             // 状态复位、数据重置
             tp_reset();
             // 切换到IDLE模式
             rt_data_reset();
             // 译码器复位
-            
             event_queue_reset(event_queue);
             // 更新cmd_pos位置
             // update_pos_flag = 1;

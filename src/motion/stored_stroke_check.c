@@ -1,5 +1,6 @@
 ﻿#include "stored_stroke_check.h"
 #include "global.h"
+#include "log.h"
 #include <alarmapi.h>
 
 AxisLimitRuntime runtime[SYS_AXES_NUM];
