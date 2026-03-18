@@ -245,6 +245,7 @@ static void get_cmd_pos() {
 }
 
 static void check_for_fault() {
+    
     //　检查系统报警
     int alarm_count = 0;
     getAlarmCount(ALARM_TYPE_ALL, ALARM_LEVEL_ALL, &alarm_count);
@@ -277,10 +278,11 @@ static void check_ferror_fault()
         // 跟随误差报警处理
         if (ferror_control[AXIS_X].error_flag)
         {
-            // int res = setAlarm(ALARM_CH, ALARM_ERROR, 4);
-            // if (res == -8)
-            //     return;
-            LOG_OUTPUT(ERROR, "Ｘ轴跟随误差报警");
+            int res = setAlarm(ALARM_AX, ALARM_ERROR, 100);
+            if (res == -8)
+                return;
+            // 上述代码逻辑是让下面LOG只打印一次；返回值-8：表示该报警已存在。
+            LOG_OUTPUT(ERROR, "X轴跟随误差过大");
         }
     }
     // y轴
@@ -295,10 +297,10 @@ static void check_ferror_fault()
         // 跟随误差报警处理
         if (ferror_control[AXIS_Y].error_flag)
         {
-            // int res = setAlarm(ALARM_CH, ALARM_ERROR, 4);
-            // if (res == -8)
-            //     return;
-            LOG_OUTPUT(ERROR, "Y轴跟随误差报警");
+            int res = setAlarm(ALARM_AX, ALARM_ERROR, 101);
+            if (res == -8)
+                return;
+            LOG_OUTPUT(ERROR, "Y轴跟随误差过大");
         }
     }
     // z轴
@@ -313,10 +315,10 @@ static void check_ferror_fault()
         // 跟随误差报警处理
         if (ferror_control[AXIS_Z].error_flag)
         {
-            // int res = setAlarm(ALARM_CH, ALARM_ERROR, 4);
-            // if (res == -8)
-            //     return;
-            LOG_OUTPUT(ERROR, "Z轴跟随误差报警");
+            int res = setAlarm(ALARM_AX, ALARM_ERROR, 102);
+            if (res == -8)
+                return;
+            LOG_OUTPUT(ERROR, "Z轴跟随误差过大");
         }
     }
 }
@@ -353,7 +355,7 @@ static void output_to_hal() {
     Hal_Driver_Set_Target_Pos(&z_axis_driver, z_cmd_Pulses);
 }
 
-STATIC void compute_screw_comp() {
+static void compute_screw_comp() {
     double pitch_comp_val_x, pitch_comp_val_y, pitch_comp_val_z;
     double perp_comp_val_x, perp_comp_val_y, perp_comp_val_z;
 
