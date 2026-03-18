@@ -275,14 +275,22 @@ static bool mem_check_res(GNC_RES res){
 
     case GNC_DATA_NULL:
     case GNC_PARAM_UNVALID:
-    case GNC_CAL_ERROR:
-    case GNC_OPERATOR_ERROR:
     case VP_IS_NULL:
-    case VP_CAL_ERROR:
     case VP_PARAM_UNVALID:
     case VP_LENGTH_IS_ZERO:
     case VP_FEED_RATE_IS_ZERO:
     case VP_LENGTH_UNVALID:
+        mem_handle_estop();
+        // log_system("[mem] 记忆模式报警(%d)", res);
+        LOG_OUTPUT(ERROR, "记忆模式报警 %d", res);
+        setAlarm(ALARM_CH, ALARM_ERROR, 2);
+        return false;
+
+    case GNC_CAL_ERROR:
+    case GNC_OPERATOR_ERROR:
+    case VP_CAL_ERROR:
+    case VP_CAL_S_ERROR:
+    case VP_CAL_V_ERROR:
     default:
         mem_handle_estop();
         // log_system("[mem] 记忆模式报警(%d)", res);

@@ -130,18 +130,25 @@ static bool homing_check_res(GNC_RES res){
         return true;
     case VP_MAX_VEL_IS_ZERO:
         return false;
+
     case GNC_DATA_NULL:
     case GNC_PARAM_UNVALID:
-    case GNC_CAL_ERROR:
-    case GNC_OPERATOR_ERROR:
     case VP_IS_NULL:
-    case VP_CAL_ERROR:
-    case VP_CAL_S_ERROR:
-    case VP_CAL_V_ERROR:
     case VP_PARAM_UNVALID:
     case VP_LENGTH_IS_ZERO:
     case VP_FEED_RATE_IS_ZERO:
     case VP_LENGTH_UNVALID:
+        homing_handle_estop();
+        // log_system("[home] 回零错误(%d)", res);
+        LOG_OUTPUT(ERROR, "回零错误 %d", res);
+        setAlarm(ALARM_CH, ALARM_ERROR, 0);
+        return false;
+
+    case GNC_CAL_ERROR:
+    case GNC_OPERATOR_ERROR:
+    case VP_CAL_ERROR:
+    case VP_CAL_S_ERROR:
+    case VP_CAL_V_ERROR:
     default:
         homing_handle_estop();
         // log_system("[home] 回零错误(%d)", res);
