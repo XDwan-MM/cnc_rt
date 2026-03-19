@@ -249,8 +249,7 @@ static void check_for_fault() {
     int alarm_count = 0;
     getAlarmCount(ALARM_TYPE_ALL, ALARM_LEVEL_ALL, &alarm_count);
     if(alarm_count > 0){
-        // LOG_OUTPUT(ERROR, "alarm count: %d\n", alarm_count);
-        rt_data->sys_state[SYS_IS_ESTOP_ON] = true;
+        rt_data->sys_state[SYS_IS_ALARMING] = true;
         handle_alarm_cmd();
     } 
 }

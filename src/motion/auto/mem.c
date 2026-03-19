@@ -12,12 +12,14 @@
 #include "interpolation.h"
 #include <alarmapi.h>
 
-static bool mem_check_running();
-static bool cycle_tp_is_finished();
+
 static void mem_set_state();
 static bool mem_check_res(GNC_RES res);
 static bool mem_check_running();
 static double mem_cal_pinc(VELPLAN_TYPE velplan_mode, double ncu_cycle, double current_vel, POS current_pos);
+static void mem_handle_estop();
+static void mem_handle_alarm();
+static bool cycle_tp_is_finished();
 
 GNC_RES cycle_tp_update_tp(VELPLAN_TYPE vplan_mode, double ncu_cycle, double current_vel, POS current_pos, double target_vel);
 GNC_RES cycle_tp_update_params(VELPLAN_TYPE velplan_type, double cycle_time);
@@ -38,6 +40,11 @@ static void block_cal_lookahead_vel(PLAN_BLOCK* current_block);
 
 // MEM 模式下的执行流程：处理开始和暂停 → 计算插补距离 → 计算插补空间坐标
 void handle_run_cmd(){
+    // 处理急停，直接停止
+    if(rt_data->sys_state[SYS_IS_ESTOP_ON]){
+        mem_handle_estop();
+        return;
+    }
     double current_vel = var_chan[0][VAR_CHAN_ACT_FEEDRATE].value.f;
     POS current_pos = {.x = var_axis[AXIS_X][VAR_AXIS_CMD_POS_EX].value.f, .y = var_axis[AXIS_Y][VAR_AXIS_CMD_POS_EX].value.f, .z = var_axis[AXIS_Z][VAR_AXIS_CMD_POS_EX].value.f};
     int velplan_mode = par_chan[0][PAR_CH_VPLAN_MODE].value.val_int;
@@ -57,12 +64,8 @@ void handle_run_cmd(){
         gcode_queue_pop(gcode_queue);
         return;
     }
-    // double start, end;
-    // start = clock();
     // 计算插补距离
     interp_pinc = mem_cal_pinc(velplan_mode, ncu_cycle, current_vel, current_pos);
-    // end = clock();
-    // rt_data->cpu_time_used = ((double) (end - start));
     // 根据插补类型计算插补点：快速G00、直线G01、圆弧G02|03……
     interp_pos = mem_cal_pos(current_pos, interp_pinc);
     // 更新速度参数
@@ -75,8 +78,11 @@ void handle_run_cmd(){
 }
 
 static void mem_set_state(){
-    GNC_RES res = GNC_CAL_SUCCESS;
-
+    // 处理报警，减速停止
+    if(rt_data->sys_state[SYS_IS_ALARMING]){
+        mem_handle_alarm();
+        return;
+    }
     switch(rt_data->nc_event){
         case SYS_EVENT_NONE:
             break;
@@ -258,39 +264,63 @@ static bool mem_check_res(GNC_RES res){
             return false;
         }
         // 译码已结束后无数据，则程序运行完成
-        cycle_tp->mem_exec_state = EXEC_IDLE;
+        cycle_tp_reset();
         rt_set_chan_state(0, CHAN_IS_GCODE_END, true);
         setVarChanInt(0, VAR_CHAN_IS_RUNNING, 0, 0);
         setVarChanInt(0, VAR_CHAN_IS_MOVING, 0, 0);
         setVarChanInt(0, VAR_CHAN_IS_PROGEND, 1, 0);
-        tp_reset();
         // log_system("[mem] 程序运行结束");
         LOG_OUTPUT(INFO, "程序运行结束");
         return false;
 
     case GNC_DATA_NULL:
     case GNC_PARAM_UNVALID:
-    case GNC_CAL_ERROR:
-    case GNC_OPERATOR_ERROR:
     case VP_IS_NULL:
-    case VP_CAL_ERROR:
     case VP_PARAM_UNVALID:
     case VP_LENGTH_IS_ZERO:
     case VP_FEED_RATE_IS_ZERO:
     case VP_LENGTH_UNVALID:
+        mem_handle_estop();
+        // log_system("[mem] 记忆模式报警(%d)", res);
+        LOG_OUTPUT(ERROR, "记忆模式报警 %d", res);
+        setAlarm(ALARM_CH, ALARM_ERROR, 2);
+        return false;
+
+    case GNC_CAL_ERROR:
+    case GNC_OPERATOR_ERROR:
+    case VP_CAL_ERROR:
+    case VP_CAL_S_ERROR:
+    case VP_CAL_V_ERROR:
     default:
-        cycle_tp->mem_exec_state = EXEC_IDLE;
-        setVarChanInt(0, VAR_CHAN_IS_ESTOP, 1, 0);
-        setVarChanInt(0, VAR_CHAN_IS_PROGEND, 1, 0);
-        setVarChanInt(0, VAR_CHAN_IS_RESETTING, 0, 0);
-        setVarChanInt(0, VAR_CHAN_IS_RUNNING, 0, 0);
-        setVarChanInt(0, VAR_CHAN_IS_MOVING, 0, 0);
-        rt_set_chan_state(0, CHAN_IS_GCODE_END, true);
+        mem_handle_estop();
         // log_system("[mem] 记忆模式报警(%d)", res);
         LOG_OUTPUT(ERROR, "记忆模式报警 %d", res);
         setAlarm(ALARM_CH, ALARM_ERROR, 3);
         return false;
     }
+}
+
+static void mem_handle_estop(){
+    cycle_tp_reset();
+    setVarChanInt(0, VAR_CHAN_IS_RUNNING, 0, 0);
+    setVarChanInt(0, VAR_CHAN_IS_MOVING, 0, 0);
+    setVarChanInt(0, VAR_CHAN_IS_RESETTING, 0, 0);
+    setVarChanInt(0, VAR_CHAN_IS_PROGEND, 1, 0);   
+    rt_set_chan_state(0, CHAN_IS_PARSERING, false);
+    rt_set_chan_state(0, CHAN_IS_GCODE_END, true);
+}
+
+static void mem_handle_alarm(){
+    if(cycle_tp->mem_exec_state == EXEC_RUNNING){
+        if(cycle_tp->mem_exec_state == EXEC_RUNNING){
+            cycle_tp->mem_exec_state = EXEC_PAUSING;
+            cycle_tp->is_event_trigger = true;
+            setVarChanInt(0, VAR_CHAN_IS_RESETTING, 1, 0);
+        }else if(cycle_tp->mem_exec_state == EXEC_PAUSING){
+            setVarChanInt(0, VAR_CHAN_IS_RESETTING, 1, 0);
+        }
+    }
+    rt_set_chan_state(0, CHAN_IS_PARSER_RESET, true);
 }
 
 static bool mem_check_running(){
@@ -318,6 +348,7 @@ void cycle_tp_init(){
 }
 
 void cycle_tp_reset(){
+    cycle_tp->mem_exec_state = EXEC_IDLE;
     cycle_tp->plan_block->type = UNKNOWN;
     memset(cycle_tp->traj_data, 0, sizeof(TRAJ_PARAMS));
     cycle_tp->is_event_trigger = false;
@@ -408,6 +439,7 @@ static GNC_RES cycle_tp_update_vp(VELPLAN_TYPE vplan_mode, double ncu_cycle, dou
 static GNC_RES plan_block_get_next(){
     queue_pop(plan_queue);
     if(queue_is_empty(plan_queue)) return GNC_DATA_EMPTY;
+    // todo：行程限位检查
     return GNC_CAL_SUCCESS;
 }
 

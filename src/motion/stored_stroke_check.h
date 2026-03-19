@@ -8,7 +8,7 @@ extern "C" {
 #include <stdbool.h>
 #include <stdint.h>
 #include <gncdatadef.h>
-#include <datatype.h>
+#include "datatype.h"
 
 // 限位区域定义
 typedef struct {
