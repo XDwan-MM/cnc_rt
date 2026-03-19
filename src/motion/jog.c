@@ -2,6 +2,7 @@
 #include "jog_control.h"
 #include "global.h"
 #include "log.h"
+#include "alarmapi.h"
 #include <math.h>
 
 // 点动tp 全局变量定义
@@ -119,17 +120,71 @@ static void execute_axis_motion(int i)
     switch (jog_ctrls[i].state)
     {
     case JOG_STATE_RUNNING:
+        // 采用先判断位置是否超限报警，然后再执行运动的逻辑
+        if (fabs(jog_tp[i].curr_pos - par_axis[i][PAR_AX_PLMT].value.val_real) < SPEED_THRESHOLD) // 到达正限位报警 日志输出
+        {
+            if (i == 0)
+            {
+                int res = setAlarm(ALARM_AX, ALARM_ERROR, 110);
+                if (res == -8)
+                {
+                    return;
+                }
+                // 上述代码逻辑是让下面LOG只打印一次；返回值-8：表示该报警已存在。
+                LOG_OUTPUT(ERROR, "点动X轴到达正限位");
+            }
+            else if (i == 1)
+            {
+                int res = setAlarm(ALARM_AX, ALARM_ERROR, 111);
+                if (res == -8)
+                {
+                    return;
+                }
+                LOG_OUTPUT(ERROR, "点动Y轴到达正限位");
+            }
+            else if (i == 2)
+            {
+                int res = setAlarm(ALARM_AX, ALARM_ERROR, 112);
+                if (res == -8)
+                {
+                    return;
+                }
+                LOG_OUTPUT(ERROR, "点动Z轴到达正限位");
+            }
+        }
+        else if (fabs(jog_tp[i].curr_pos - par_axis[i][PAR_AX_NLMT].value.val_real) < SPEED_THRESHOLD) // 到达负限位报警 日志输出
+        {
+            if (i == 0)
+            {
+                int res = setAlarm(ALARM_AX, ALARM_ERROR, 120);
+                if (res == -8)
+                {
+                    return;
+                }
+                // 上述代码逻辑是让下面LOG只打印一次；返回值-8：表示该报警已存在。
+                LOG_OUTPUT(ERROR, "点动X轴到达负限位");
+            }
+            else if (i == 1)
+            {
+                int res = setAlarm(ALARM_AX, ALARM_ERROR, 121);
+                if (res == -8)
+                {
+                    return;
+                }
+                LOG_OUTPUT(ERROR, "点动Y轴到达负限位");
+            }
+            else if (i == 2)
+            {
+                int res = setAlarm(ALARM_AX, ALARM_ERROR, 122);
+                if (res == -8)
+                {
+                    return;
+                }
+                LOG_OUTPUT(ERROR, "点动Z轴到达负限位");
+            }
+        }
         // 使用记忆中的方向锁定运行
         start_jog_cont(&par_axis[i], &jog_tp[i], jog_ctrls[i].direction, var_chan[0][VAR_CHAN_FEED_OVERRIDE].value.f, JOG_CYCLE_TIME);
-        // 到达正限位 日志输出
-        if (fabs(jog_tp[i].curr_pos - par_axis[i][PAR_AX_PLMT].value.val_real) < SPEED_THRESHOLD)
-        {
-            LOG_OUTPUT(INFO,"点动 %d 轴到达正限位", i);
-        }
-        else if(fabs(jog_tp[i].curr_pos - par_axis[i][PAR_AX_NLMT].value.val_real) < SPEED_THRESHOLD)
-        {
-            LOG_OUTPUT(INFO,"点动 %d 轴到达负限位", i);
-        }
         break;
 
     case JOG_STATE_STOPPING:
