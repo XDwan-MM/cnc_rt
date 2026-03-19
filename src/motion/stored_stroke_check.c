@@ -67,94 +67,173 @@ uint8_t Is_Outside_Limit(float position, LimitLevel limit)
 }
 
 // 单轴限位检查主函数
-uint8_t Check_Axis_Limit_Violation(AxisLimitRuntime runtime)
+uint8_t Check_Axis_Limit_Violation(AxisLimitRuntime runtime ,bool moving)
 {
-    //    AxisLimitConfig cfg = runtime.config;
-    float pos = runtime.current_position;
+    double position = 0;
     uint8_t violation = 0;
+    if(moving)
+    {
+        position = runtime.current_position;
+    }
+    else
+    {
+        position = runtime.parser_position;
+    }
+
 
     // 第一级检查：必须在区域内部运动
-    if (runtime.config.level1.is_enabled && Is_Outside_Limit(pos, runtime.config.level1))
+    if (runtime.config.level1.is_enabled && Is_Outside_Limit(position, runtime.config.level1))
     {
         violation = 1; // 一级限位违规
         runtime.violation_flag |= 0x01;
-        if(pos > runtime.config.level1.positive_limit)
+        if(position > runtime.config.level1.positive_limit)
         {
             runtime.violation_flag |= 0x08;
-            int res = setAlarm(ALARM_AX, ALARM_ERROR, 0);
-            if(res == -8) return;
-            LOG_OUTPUT(ERROR, "朝正方向移动超过了存储行程检查1");
+            if(moving)
+            {
+                int res = setAlarm(ALARM_AX, ALARM_ERROR, 0);
+                if(res == -8) return;
+                LOG_ERROR("朝正方向移动超过了存储行程检查1");
+            }
+            else
+            {
+                int res = setAlarm(ALARM_AX, ALARM_ERROR, 10);
+                if(res == -8) return;
+                LOG_ERROR("移动前行程检查中程序段终点位置在正侧行程极限禁止区内");
+            }
         }
         else
         {
-            int res = setAlarm(ALARM_AX, ALARM_ERROR, 1);
-            if(res == -8) return;
-            LOG_OUTPUT(ERROR, "朝负方向移动超过了存储行程检查1");
+            if(moving)
+            {
+                int res = setAlarm(ALARM_AX, ALARM_ERROR, 1);
+                if(res == -8) return;
+                LOG_ERROR("朝负方向移动超过了存储行程检查1");
+            }
+            else
+            {
+                int res = setAlarm(ALARM_AX, ALARM_ERROR, 11);
+                if(res == -8) return;
+                LOG_ERROR("移动前行程检查中程序段终点位置在负侧行程极限禁止区内");
+            }
         }
     }
 
     // 第三级检查：必须在区域外部运动
-    if (runtime.config.level3.is_enabled && Is_Inside_Limit(pos, runtime.config.level3))
+    if (runtime.config.level3.is_enabled && Is_Inside_Limit(position, runtime.config.level3))
     {
         violation = 1; // 三级限位违规
         runtime.violation_flag |= 0x04;
-        if(pos >= runtime.config.level3.negative_limit)
+        if(position >= runtime.config.level3.negative_limit)
         {
             runtime.violation_flag |= 0x20;
-            int res = setAlarm(ALARM_AX, ALARM_ERROR, 4);
-            if(res == -8) return;
-            LOG_OUTPUT(ERROR, "朝正方向移动超过了存储行程检查3");
+            if(moving)
+            {
+                int res = setAlarm(ALARM_AX, ALARM_ERROR, 4);
+                if(res == -8) return;
+                LOG_ERROR("朝正方向移动超过了存储行程检查3");
+            }
+            else
+            {
+                int res = setAlarm(ALARM_AX, ALARM_ERROR, 10);
+                if(res == -8) return;
+                LOG_ERROR("移动前行程检查中程序段终点位置在正侧行程极限禁止区内");
+            }
         }
         else
         {
-            int res = setAlarm(ALARM_AX, ALARM_ERROR, 5);
-            if(res == -8) return;
-            LOG_OUTPUT(ERROR, "朝负方向移动超过了存储行程检查3");
+            if(moving)
+            {
+                int res = setAlarm(ALARM_AX, ALARM_ERROR, 5);
+                if(res == -8) return;
+                LOG_ERROR("朝负方向移动超过了存储行程检查3");
+            }
+            else
+            {
+                int res = setAlarm(ALARM_AX, ALARM_ERROR, 11);
+                if(res == -8) return;
+                LOG_ERROR("移动前行程检查中程序段终点位置在负侧行程极限禁止区内");
+            }
         }
     }
 
     // 第二级检查：根据模式判断
-    if (runtime.config.level2.is_enabled)
+    if(runtime.config.level2.is_enabled && runtime.config.level2_mode == 0)
     {
-        if (runtime.config.level2_mode == 0)
-        { // 内部检查模式
-            if (Is_Outside_Limit(pos, runtime.config.level2))
+        // 内部检查模式
+        if(Is_Outside_Limit(position, runtime.config.level2))
+        {
+            violation = 1;
+            runtime.violation_flag |= 0x02;
+            if(position > runtime.config.level2.positive_limit)
             {
-                violation = 1;
-                runtime.violation_flag |= 0x02;
-                if(pos > runtime.config.level2.positive_limit)
+                runtime.violation_flag |= 0x18;
+                if(moving)
                 {
-                    runtime.violation_flag |= 0x18;
                     int res = setAlarm(ALARM_AX, ALARM_ERROR, 2);
                     if(res == -8) return;
-                    LOG_OUTPUT(ERROR, "朝正方向移动超过了存储行程检查2");
+                    LOG_ERROR("朝正方向移动超过了存储行程检查2");
                 }
                 else
                 {
+                    int res = setAlarm(ALARM_AX, ALARM_ERROR, 10);
+                    if(res == -8) return;
+                    LOG_ERROR("移动前行程检查中程序段终点位置在正侧行程极限禁止区内");
+                }
+            }
+            else
+            {
+                if(moving)
+                {
                     int res = setAlarm(ALARM_AX, ALARM_ERROR, 3);
                     if(res == -8) return;
-                    LOG_OUTPUT(ERROR, "朝负方向移动超过了存储行程检查2");
+                    LOG_ERROR("朝负方向移动超过了存储行程检查2");
+                }
+                else
+                {
+                    int res = setAlarm(ALARM_AX, ALARM_ERROR, 10);
+                    if(res == -8) return;
+                    LOG_ERROR("移动前行程检查中程序段终点位置在正侧行程极限禁止区内");
                 }
             }
         }
-        else
-        { // 外部检查模式
-            if (Is_Inside_Limit(pos, runtime.config.level2))
+    }
+    else if(runtime.config.level2.is_enabled && runtime.config.level2_mode == 1)
+    {
+        // 外部检查模式
+        if (Is_Inside_Limit(position, runtime.config.level2))
+        {
+            violation = 1;
+            runtime.violation_flag |= 0x02;
+            if(position >= runtime.config.level2.negative_limit)
             {
-                violation = 1;
-                runtime.violation_flag |= 0x02;
-                if(pos >= runtime.config.level2.negative_limit)
+                runtime.violation_flag |= 0x18;
+                if(moving)
                 {
-                    runtime.violation_flag |= 0x18;
                     int res = setAlarm(ALARM_AX, ALARM_ERROR, 2);
                     if(res == -8) return;
-                    LOG_OUTPUT(ERROR, "朝正方向移动超过了存储行程检查2");
+                    LOG_ERROR("朝正方向移动超过了存储行程检查2");
                 }
                 else
                 {
+                    int res = setAlarm(ALARM_AX, ALARM_ERROR, 10);
+                    if(res == -8) return;
+                    LOG_ERROR("移动前行程检查中程序段终点位置在正侧行程极限禁止区内");
+                }
+            }
+            else
+            {
+                if(moving)
+                {
                     int res = setAlarm(ALARM_AX, ALARM_ERROR, 3);
                     if(res == -8) return;
-                    LOG_OUTPUT(ERROR, "朝负方向移动超过了存储行程检查2");
+                    LOG_ERROR("朝负方向移动超过了存储行程检查2");
+                }
+                else
+                {
+                    int res = setAlarm(ALARM_AX, ALARM_ERROR, 10);
+                    if(res == -8) return;
+                    LOG_ERROR("移动前行程检查中程序段终点位置在正侧行程极限禁止区内");
                 }
             }
         }
