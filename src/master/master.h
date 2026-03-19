@@ -5,8 +5,10 @@
 extern "C" {
 #endif
 
-extern void Master_Run();
+void Master_Run();
+void Master_Error(int code);
 
+extern int master_error_code;
 #ifdef __cplusplus
 }
 #endif

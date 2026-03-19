@@ -5,6 +5,7 @@
 #include <semaphore.h>
 #include "threads_api.h"
 #include "threads_config.h"  // 使用统一的类型定义
+#include "master.h"
 
 // 声明所有全局变量
 extern thread_config_t plc_config;

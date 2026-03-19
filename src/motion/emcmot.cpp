@@ -386,36 +386,10 @@ static void check_for_soft_limit() {
     runtime[0].current_position = rt_data->axis_data[AXIS_X].motor_cmd_pos;
     runtime[1].current_position = rt_data->axis_data[AXIS_Y].motor_cmd_pos;
     runtime[2].current_position = rt_data->axis_data[AXIS_Z].motor_cmd_pos;
-    runtime[0].active_levels = Check_Axis_Limit_Violation(runtime[0]);
-    runtime[1].active_levels = Check_Axis_Limit_Violation(runtime[1]);
-    runtime[2].active_levels = Check_Axis_Limit_Violation(runtime[2]);
-    // if((runtime[0].active_levels & 0x01) == 1 ||
-    //     (runtime[1].active_levels & 0x01) == 1 ||
-    //     (runtime[2].active_levels & 0x01) == 1)
-    // {
-    //     int res = setAlarm(ALARM_CH, ALARM_ERROR, 17);
-    //     // log_system("[limit] 一级行程检查超限");
-    //     if(res == -8) return;
-    //     LOG_OUTPUT(ERROR, "一级行程检查超限");
-    // }
-    // if((runtime[0].active_levels & 0x02) == 1 ||
-    //     (runtime[1].active_levels & 0x02) == 1 ||
-    //     (runtime[2].active_levels & 0x02) == 1)
-    // {
-    //     int res = setAlarm(ALARM_CH, ALARM_ERROR, 18);
-    //     // log_system("[limit] 二级行程检查超限");
-    //     if(res == -8) return;
-    //     LOG_OUTPUT(ERROR, "二级行程检查超限");
-    // }
-    // if((runtime[0].active_levels & 0x04) == 1 ||
-    //     (runtime[1].active_levels & 0x04) == 1 ||
-    //     (runtime[2].active_levels & 0x04) == 1)
-    // {
-    //     int res = setAlarm(ALARM_CH, ALARM_ERROR, 19);
-    //     // log_system("[limit] 三级行程检查超限");
-    //     if(res == -8) return;
-    //     LOG_OUTPUT(ERROR, "三级行程检查超限");
-    // }
+    runtime[0].active_levels = Check_Axis_Limit_Violation(runtime[0] ,true);
+    runtime[1].active_levels = Check_Axis_Limit_Violation(runtime[1] ,true);
+    runtime[2].active_levels = Check_Axis_Limit_Violation(runtime[2] ,true);
+
 }
 
 // 更新运动状态数据

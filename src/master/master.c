@@ -2,6 +2,8 @@
 #include "main_demo.h"
 #include "rt_sem.h"
 #include "global.h"
+#include "log.h"
+#include <alarmapi.h>
 
 #ifdef __DeveloperMode__
 #define debug printf
@@ -27,6 +29,7 @@ do { \
 
 bool sp_start_sem = false;
 bool feed_start_sem = false;
+int master_error_code = 0;
 
 void Master_Run()
 {
@@ -208,10 +211,158 @@ op_flag = 1;
 #endif
 
     }
-
-    return 1;
 err_close:
     printf("pdo线程不正常退出");
     exit_flag = 1;
-    return -1;
+}
+void Master_Error(int code)
+{
+    switch (code) {
+    case -1000:
+        setAlarm(ALARM_ETHCAT_SV, ALARM_ERROR, 0);
+        LOG_ERROR("文件或设备打开失败");
+        break;
+    case -1001:
+        setAlarm(ALARM_ETHCAT_SV, ALARM_ERROR, 1);
+        LOG_ERROR("没有找到目标");
+        break;
+    case -1002:
+        setAlarm(ALARM_ETHCAT_SV, ALARM_ERROR, 2);
+        LOG_ERROR("空指针");
+        break;
+    case -1003:
+        setAlarm(ALARM_ETHCAT_SV, ALARM_ERROR, 3);
+        LOG_ERROR("存储空间不足");
+        break;
+    case -1004:
+        setAlarm(ALARM_ETHCAT_SV, ALARM_ERROR, 4);
+        LOG_ERROR("无效的参数");
+        break;
+    case -1005:
+        setAlarm(ALARM_ETHCAT_SV, ALARM_ERROR, 5);
+        LOG_ERROR("系统参数错误");
+        break;
+    case -1006:
+        setAlarm(ALARM_ETHCAT_SV, ALARM_ERROR, 6);
+        LOG_ERROR("驱动打开失败");
+        break;
+    case -1007:
+        setAlarm(ALARM_ETHCAT_SV, ALARM_ERROR, 7);
+        LOG_ERROR("内存分配失败");
+        break;
+    case -1008:
+        setAlarm(ALARM_ETHCAT_SV, ALARM_ERROR, 8);
+        LOG_ERROR("自旋锁分配失败");
+        break;
+    case -1009:
+        setAlarm(ALARM_ETHCAT_SV, ALARM_ERROR, 9);
+        LOG_ERROR("传输驱动初始化失败");
+        break;
+    case -1010:
+        setAlarm(ALARM_ETHCAT_SV, ALARM_ERROR, 10);
+        LOG_ERROR("信号量初始化失败");
+        break;
+    case -1011:
+        setAlarm(ALARM_ETHCAT_SV, ALARM_ERROR, 11);
+        LOG_ERROR("超时");
+        break;
+    case -1012:
+        setAlarm(ALARM_ETHCAT_SV, ALARM_ERROR, 12);
+        LOG_ERROR("主站无回复");
+        break;
+    case -1013:
+        setAlarm(ALARM_ETHCAT_SV, ALARM_ERROR, 13);
+        LOG_ERROR("主站状态错误");
+        break;
+    case -2000:
+        setAlarm(ALARM_ETHCAT_SV, ALARM_ERROR, 20);
+        LOG_ERROR("无效的通信地址");
+        break;
+    case -2001:
+        setAlarm(ALARM_ETHCAT_SV, ALARM_ERROR, 21);
+        LOG_ERROR("内存映射失败");
+        break;
+    case -2002:
+        setAlarm(ALARM_ETHCAT_SV, ALARM_ERROR, 22);
+        LOG_ERROR("内存回读失败");
+        break;
+    case -3000:
+        setAlarm(ALARM_ETHCAT_SV, ALARM_ERROR, 30);
+        LOG_ERROR("eni文件解析错误");
+        break;
+    case -3001:
+        setAlarm(ALARM_ETHCAT_SV, ALARM_ERROR, 31);
+        LOG_ERROR("传入的指针已有指向地址");
+        break;
+    case -3002:
+        setAlarm(ALARM_ETHCAT_SV, ALARM_ERROR, 32);
+        LOG_ERROR("ENI文件中没有从站");
+        break;
+    case -3003:
+        setAlarm(ALARM_ETHCAT_SV, ALARM_ERROR, 33);
+        LOG_ERROR("ENI文件存在从站没有厂商号");
+        break;
+    case -3004:
+        setAlarm(ALARM_ETHCAT_SV, ALARM_ERROR, 34);
+        LOG_ERROR("ENI文件存在从站没有产品号");
+        break;
+    case -3005:
+        setAlarm(ALARM_ETHCAT_SV, ALARM_ERROR, 35);
+        LOG_ERROR("ENI文件存在从站没有看门狗");
+        break;
+    case -3006:
+        setAlarm(ALARM_ETHCAT_SV, ALARM_ERROR, 36);
+        LOG_ERROR("ENI文件存在从站没有syncyc");
+        break;
+    case -3007:
+        setAlarm(ALARM_ETHCAT_SV, ALARM_ERROR, 37);
+        LOG_ERROR("ENI文件存在从站没有syncshift");
+        break;
+    case -3008:
+        setAlarm(ALARM_ETHCAT_SV, ALARM_ERROR, 38);
+        LOG_ERROR("ENI文件存在从站的某个sm没有方向说明（Tx or Rx）");
+        break;
+    case -4000:
+        setAlarm(ALARM_ETHCAT_SV, ALARM_ERROR, 40);
+        LOG_ERROR("entry的长度无效");
+        break;
+    case -4001:
+        setAlarm(ALARM_ETHCAT_SV, ALARM_ERROR, 41);
+        LOG_ERROR("文件或设备打开失败");
+        break;
+    case -4002:
+        setAlarm(ALARM_ETHCAT_SV, ALARM_ERROR, 42);
+        LOG_ERROR("存在未完成的reg请求");
+        break;
+    case -4003:
+        setAlarm(ALARM_ETHCAT_SV, ALARM_ERROR, 43);
+        LOG_ERROR("没有已发送的reg请求");
+        break;
+    case -4004:
+        setAlarm(ALARM_ETHCAT_SV, ALARM_ERROR, 44);
+        LOG_ERROR("REG队列已满");
+        break;
+    case -4005:
+        setAlarm(ALARM_ETHCAT_SV, ALARM_ERROR, 45);
+        LOG_ERROR("存在未完成的SDO请求");
+        break;
+    case -4006:
+        setAlarm(ALARM_ETHCAT_SV, ALARM_ERROR, 46);
+        LOG_ERROR("没有已发送的reg请求");
+        break;
+    case -4007:
+        setAlarm(ALARM_ETHCAT_SV, ALARM_ERROR, 47);
+        LOG_ERROR("SDObuffer的空间不足");
+        break;
+    case -4008:
+        setAlarm(ALARM_ETHCAT_SV, ALARM_ERROR, 48);
+        LOG_ERROR("远程升级时计算次数与实际写入不符");
+        break;
+    case -9999:
+        setAlarm(ALARM_ETHCAT_SV, ALARM_ERROR, 99);
+        LOG_ERROR("未知错误");
+        break;
+    default:
+        break;
+    }
 }
