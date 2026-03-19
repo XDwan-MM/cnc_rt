@@ -114,83 +114,42 @@ static void update_axis_state(int i)
 
 /**
  * @brief 根据本轴独立持有的状态和方向，执行底层驱动
+ * 逻辑：增加了限位报警拦截。若报警未复位，禁止向超限方向运动，仅允许反向退出。
  */
 static void execute_axis_motion(int i)
 {
     switch (jog_ctrls[i].state)
     {
     case JOG_STATE_RUNNING:
-        // 采用先判断位置是否超限报警，然后再执行运动的逻辑
-        if (fabs(jog_tp[i].curr_pos - par_axis[i][PAR_AX_PLMT].value.val_real) < SPEED_THRESHOLD) // 到达正限位报警 日志输出
+    {
+        // 1. 获取当前是否处于限位位置
+        bool is_at_pos_limit = (fabs(jog_tp[i].curr_pos - par_axis[i][PAR_AX_PLMT].value.val_real) < SPEED_THRESHOLD);
+        bool is_at_neg_limit = (fabs(jog_tp[i].curr_pos - par_axis[i][PAR_AX_NLMT].value.val_real) < SPEED_THRESHOLD);
+
+        // 2. 限位后与运动拦截逻辑
+        // 如果在正限位且按下了正向移动，或者在负限位且按下了负向移动
+        if ((is_at_pos_limit && jog_ctrls[i].direction == JOG_DIR_POSITIVE) || 
+            (is_at_neg_limit && jog_ctrls[i].direction == JOG_DIR_NEGATIVE))
         {
-            if (i == 0)
-            {
-                int res = setAlarm(ALARM_AX, ALARM_ERROR, 110);
-                if (res == -8)
-                {
-                    return;
-                }
-                // 上述代码逻辑是让下面LOG只打印一次；返回值-8：表示该报警已存在。
-                LOG_OUTPUT(ERROR, "点动X轴到达正限位");
-            }
-            else if (i == 1)
-            {
-                int res = setAlarm(ALARM_AX, ALARM_ERROR, 111);
-                if (res == -8)
-                {
-                    return;
-                }
-                LOG_OUTPUT(ERROR, "点动Y轴到达正限位");
-            }
-            else if (i == 2)
-            {
-                int res = setAlarm(ALARM_AX, ALARM_ERROR, 112);
-                if (res == -8)
-                {
-                    return;
-                }
-                LOG_OUTPUT(ERROR, "点动Z轴到达正限位");
-            }
+            // 关键：修改状态为 STOPPING，强制减速，不进入下方的 start_jog_cont
+            jog_ctrls[i].state = JOG_STATE_STOPPING;
+            return; 
         }
-        else if (fabs(jog_tp[i].curr_pos - par_axis[i][PAR_AX_NLMT].value.val_real) < SPEED_THRESHOLD) // 到达负限位报警 日志输出
-        {
-            if (i == 0)
-            {
-                int res = setAlarm(ALARM_AX, ALARM_ERROR, 120);
-                if (res == -8)
-                {
-                    return;
-                }
-                // 上述代码逻辑是让下面LOG只打印一次；返回值-8：表示该报警已存在。
-                LOG_OUTPUT(ERROR, "点动X轴到达负限位");
-            }
-            else if (i == 1)
-            {
-                int res = setAlarm(ALARM_AX, ALARM_ERROR, 121);
-                if (res == -8)
-                {
-                    return;
-                }
-                LOG_OUTPUT(ERROR, "点动Y轴到达负限位");
-            }
-            else if (i == 2)
-            {
-                int res = setAlarm(ALARM_AX, ALARM_ERROR, 122);
-                if (res == -8)
-                {
-                    return;
-                }
-                LOG_OUTPUT(ERROR, "点动Z轴到达负限位");
-            }
-        }
-        // 使用记忆中的方向锁定运行
-        start_jog_cont(&par_axis[i], &jog_tp[i], jog_ctrls[i].direction, var_chan[0][VAR_CHAN_FEED_OVERRIDE].value.f, JOG_CYCLE_TIME);
+        
+        // todo
+        // 如果正向软限位报警没清除，且还是按下正向移动按键 或者 负向软限位报警没清除，且还是按下正向移动按键
+        // 不执行运动
+        
+        // 4. 执行运动：只有通过了上面的拦截逻辑，才能真正调用驱动
+        start_jog_cont(&par_axis[i], &jog_tp[i], jog_ctrls[i].direction, 
+                       var_chan[0][VAR_CHAN_FEED_OVERRIDE].value.f, JOG_CYCLE_TIME);
         break;
+    }
 
     case JOG_STATE_STOPPING:
         stop_jog_cont(&jog_tp[i], JOG_CYCLE_TIME, false);
         // 速度降至阈值以下，彻底释放轴控制权
-        if (fabs(jog_tp[i].curr_vel - 0.0) < SPEED_THRESHOLD)
+        if (fabs(jog_tp[i].curr_vel) < SPEED_THRESHOLD)
         {
             jog_ctrls[i].state = JOG_STATE_IDLE;
             jog_ctrls[i].direction = JOG_DIR_NONE;
