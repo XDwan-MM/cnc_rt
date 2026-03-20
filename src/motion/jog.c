@@ -50,7 +50,7 @@ void handle_jog_cmd()
          * 无论在哪个状态，都将规划器的最新计算结果同步给轴指令变量。
          */
         var_axis[i][VAR_AXIS_CMD_POS_EX].value.f = jog_tp[i].curr_pos;
-        var_axis[i][VAR_CHAN_CMD_FEEDRATE].value.f = jog_tp[i].curr_vel;
+        var_axis[i][VAR_AXIS_CMD_VEL].value.f = jog_tp[i].curr_vel;
     }
 
     if (check_all_axes_idle())

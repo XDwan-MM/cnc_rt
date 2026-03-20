@@ -267,10 +267,10 @@ static void check_ferror_fault()
     }
     /* 指令速度不为0时，检测跟随误差 */
     // x轴
-    if (fabs(var_axis[AXIS_X][VAR_CHAN_CMD_FEEDRATE].value.f - 0.0) > SPEED_THRESHOLD)
+    if (fabs(var_axis[AXIS_X][VAR_AXIS_CMD_VEL].value.f - 0.0) > SPEED_THRESHOLD)
     {
         // 指令速度 指令位置 反馈位置
-        double vel_cmd_x = var_axis[AXIS_X][VAR_CHAN_CMD_FEEDRATE].value.f;
+        double vel_cmd_x = var_axis[AXIS_X][VAR_AXIS_CMD_VEL].value.f;
         double pos_cmd_x = rt_data->axis_data[AXIS_X].motor_cmd_pos;
         double pos_fb_x = rt_data->axis_data[AXIS_X].motor_act_pos;
         // 计算跟随误差
@@ -286,10 +286,10 @@ static void check_ferror_fault()
         }
     }
     // y轴
-    if (fabs(var_axis[AXIS_Y][VAR_CHAN_CMD_FEEDRATE].value.f - 0.0) > SPEED_THRESHOLD)
+    if (fabs(var_axis[AXIS_Y][VAR_AXIS_CMD_VEL].value.f - 0.0) > SPEED_THRESHOLD)
     {
         // 指令速度 指令位置 反馈位置
-        double vel_cmd_y = var_axis[AXIS_Y][VAR_CHAN_CMD_FEEDRATE].value.f;
+        double vel_cmd_y = var_axis[AXIS_Y][VAR_AXIS_CMD_VEL].value.f;
         double pos_cmd_y = rt_data->axis_data[AXIS_Y].motor_cmd_pos;
         double pos_fb_y = rt_data->axis_data[AXIS_Y].motor_act_pos;
         // 计算跟随误差
@@ -304,10 +304,10 @@ static void check_ferror_fault()
         }
     }
     // z轴
-    if (fabs(var_axis[AXIS_Z][VAR_CHAN_CMD_FEEDRATE].value.f - 0.0) > SPEED_THRESHOLD)
+    if (fabs(var_axis[AXIS_Z][VAR_AXIS_CMD_VEL].value.f - 0.0) > SPEED_THRESHOLD)
     {
         // 指令速度 指令位置 反馈位置
-        double vel_cmd_z = var_axis[AXIS_Z][VAR_CHAN_CMD_FEEDRATE].value.f;
+        double vel_cmd_z = var_axis[AXIS_Z][VAR_AXIS_CMD_VEL].value.f;
         double pos_cmd_z = rt_data->axis_data[AXIS_Z].motor_cmd_pos;
         double pos_fb_z = rt_data->axis_data[AXIS_Z].motor_act_pos;
         // 计算跟随误差
