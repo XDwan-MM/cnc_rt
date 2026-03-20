@@ -398,7 +398,6 @@ static void check_for_soft_limit() {
     runtime[0].active_levels = Check_Axis_Limit_Violation(runtime[0] ,true);
     runtime[1].active_levels = Check_Axis_Limit_Violation(runtime[1] ,true);
     runtime[2].active_levels = Check_Axis_Limit_Violation(runtime[2] ,true);
-
 }
 
 // 更新运动状态数据

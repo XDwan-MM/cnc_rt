@@ -7,9 +7,9 @@
 #include "datatype.h"
 #include "pathplan.h"
 #include "log.h"
-
 #include "varapi.h"
 #include "interpolation.h"
+#include "stored_stroke_check.h"
 #include <alarmapi.h>
 
 
@@ -39,12 +39,6 @@ static void block_cal_lookahead_vel(PLAN_BLOCK* current_block);
 
 // MEM 模式下的执行流程：处理开始和暂停 → 计算插补距离 → 计算插补空间坐标
 void handle_run_cmd(){
-    // 处理急停，直接停止
-    if(rt_data->sys_state[SYS_IS_ESTOP_ON]){
-        LOG_INFO("自动下急停报警");
-        mem_handle_estop();
-        return;
-    }
     double current_vel = var_chan[0][VAR_CHAN_ACT_FEEDRATE].value.f;
     POS current_pos = {.x = var_axis[AXIS_X][VAR_AXIS_CMD_POS_EX].value.f, .y = var_axis[AXIS_Y][VAR_AXIS_CMD_POS_EX].value.f, .z = var_axis[AXIS_Z][VAR_AXIS_CMD_POS_EX].value.f};
     int velplan_mode = par_chan[0][PAR_CH_VPLAN_MODE].value.val_int;
@@ -80,7 +74,6 @@ void handle_run_cmd(){
 static void mem_set_state(){
     // 处理报警，减速停止
     if(rt_data->sys_state[SYS_IS_ALARMING]){
-        LOG_INFO("自动下报警，开始减速");
         mem_handle_alarm();
         return;
     }
@@ -320,6 +313,7 @@ static void mem_handle_alarm(){
         }else if(cycle_tp->mem_exec_state == EXEC_PAUSING){
             setVarChanInt(0, VAR_CHAN_IS_RESETTING, 1, 0);
         }
+        LOG_INFO("自动下报警，开始制动");
     }
     rt_set_chan_state(0, CHAN_IS_PARSER_RESET, true);
 }
@@ -419,6 +413,8 @@ static GNC_RES cycle_tp_update_block(VELPLAN_TYPE vplan_mode, double ncu_cycle, 
     }
     if(cycle_tp_look_ahead(vplan_mode, ncu_cycle, current_vel) == GNC_DATA_EMPTY) return GNC_DATA_EMPTY;
     queue_copy_block(plan_queue, 0, cycle_tp->plan_block);
+    // 对插补段终点进行行程限位检查
+    lookahead_check_soft_limit(&cycle_tp->plan_block->end_pos);
     return res;
 }
 
@@ -440,7 +436,6 @@ static GNC_RES cycle_tp_update_vp(VELPLAN_TYPE vplan_mode, double ncu_cycle, dou
 static GNC_RES plan_block_get_next(){
     queue_pop(plan_queue);
     if(queue_is_empty(plan_queue)) return GNC_DATA_EMPTY;
-    // todo：行程限位检查
     return GNC_CAL_SUCCESS;
 }
 

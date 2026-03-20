@@ -22,12 +22,6 @@ static GNC_RES abs_homing_tp_init(AXIS_TYPE axis_type);
 static GNC_RES abs_declining_tp_init(AXIS_TYPE axis_type, double target_vel);
 
 void handle_homing_cmd(){
-    // 处理急停，直接停止
-    if(rt_data->sys_state[SYS_IS_ESTOP_ON]){
-        LOG_INFO("回零下急停报警");
-        homing_handle_estop();
-        return;
-    }
     homing_set_state();
     for(int axis_type = 0; axis_type < SYS_AXES_NUM; axis_type++){
         switch(par_axis[axis_type][PAR_AX_HOME_WAY].value.val_uint){
@@ -51,7 +45,6 @@ void handle_homing_cmd(){
 static void homing_set_state(){
     // 处理报警，减速停止
     if(rt_data->sys_state[SYS_IS_ALARMING]){
-        LOG_INFO("回零下报警，开始减速");
         homing_handle_alarm();
         return;
     }
@@ -170,6 +163,7 @@ static void homing_handle_alarm(){
         if(homing_tp[i].homing_state == ABS_EXEC_HOMING){
             homing_tp[i].is_event_trigger = true;
             homing_tp[i].homing_state = ABS_EXEC_RESETTING;
+            LOG_INFO("回零下报警，开始制动");
         }
     }
 }

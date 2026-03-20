@@ -48,6 +48,7 @@ uint8_t Check_Axis_Limit_Violation(AxisLimitRuntime runtime ,bool moving);
 
 uint8_t Axis_Limit_Manager_Init(void);
 
+void lookahead_check_soft_limit(POS *target_pos);
 
 #ifdef __cplusplus
 }

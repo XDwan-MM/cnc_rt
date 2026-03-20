@@ -172,7 +172,7 @@ uint8_t Check_Axis_Limit_Violation(AxisLimitRuntime runtime ,bool moving)
                 {
                     int res = setAlarm(ALARM_AX, ALARM_ERROR, 2);
                     if(res == -8) return;
-                    LOG_ERROR("朝正方向移动超过了存储行程检查2");
+                    LOG_ERROR("超过了存储行程检查2");
                 }
                 else
                 {
@@ -187,7 +187,7 @@ uint8_t Check_Axis_Limit_Violation(AxisLimitRuntime runtime ,bool moving)
                 {
                     int res = setAlarm(ALARM_AX, ALARM_ERROR, 3);
                     if(res == -8) return;
-                    LOG_ERROR("朝负方向移动超过了存储行程检查2");
+                    LOG_ERROR("超过了存储行程检查2");
                 }
                 else
                 {
@@ -212,7 +212,7 @@ uint8_t Check_Axis_Limit_Violation(AxisLimitRuntime runtime ,bool moving)
                 {
                     int res = setAlarm(ALARM_AX, ALARM_ERROR, 2);
                     if(res == -8) return;
-                    LOG_ERROR("朝正方向移动超过了存储行程检查2");
+                    LOG_ERROR("超过了存储行程检查2");
                 }
                 else
                 {
@@ -227,7 +227,7 @@ uint8_t Check_Axis_Limit_Violation(AxisLimitRuntime runtime ,bool moving)
                 {
                     int res = setAlarm(ALARM_AX, ALARM_ERROR, 3);
                     if(res == -8) return;
-                    LOG_ERROR("朝负方向移动超过了存储行程检查2");
+                    LOG_ERROR("超过了存储行程检查2");
                 }
                 else
                 {
@@ -241,3 +241,11 @@ uint8_t Check_Axis_Limit_Violation(AxisLimitRuntime runtime ,bool moving)
     return violation;
 }
 
+void lookahead_check_soft_limit(POS *target_pos){
+    runtime[0].parser_position = target_pos->x;
+    runtime[1].parser_position = target_pos->y;
+    runtime[2].parser_position = target_pos->z;
+    runtime[0].active_levels = Check_Axis_Limit_Violation(runtime[0] ,true);
+    runtime[1].active_levels = Check_Axis_Limit_Violation(runtime[1] ,true);
+    runtime[2].active_levels = Check_Axis_Limit_Violation(runtime[2] ,true);
+}
