@@ -2,7 +2,6 @@
 #include "datatype.h"
 #include "global.h"
 #include "log.h"
-
 #include <alarmapi.h>
 
 static void homing_set_state();
@@ -26,6 +25,7 @@ static GNC_RES abs_declining_tp_init(AXIS_TYPE axis_type, double target_vel);
 void handle_homing_cmd(){
     // 处理急停，直接停止
     if(rt_data->sys_state[SYS_IS_ESTOP_ON]){
+        LOG_INFO("回零下急停报警");
         homing_handle_estop();
         return;
     }
@@ -52,6 +52,7 @@ void handle_homing_cmd(){
 static void homing_set_state(){
     // 处理报警，减速停止
     if(rt_data->sys_state[SYS_IS_ALARMING]){
+        LOG_INFO("回零下报警，开始减速");
         homing_handle_alarm();
         return;
     }
@@ -179,7 +180,7 @@ static double abs_homing_tp_pinc(AXIS_TYPE axis_type){
     double ncu_cycle = (double)par_ncu[PAR_NCU_CYCLE].value.val_uint / TIME_US_2_S;
     double rapid_vel = par_axis[axis_type][PAR_AX_RAPID_SPD].value.val_real;
     double rapid_override = var_chan[0][VAR_CHAN_RAPID_OVERRIDE].value.f;
-    double current_vel = fabs(var_axis[axis_type][VAR_AXIS_ACT_VEL].value.f);
+    double current_vel = fabs(var_axis[axis_type][VAR_AXIS_CMD_VEL].value.f);
     double s = 0;
     switch(homing_tp[axis_type].homing_state){
         case ABS_EXEC_IDLE:
@@ -193,6 +194,7 @@ static double abs_homing_tp_pinc(AXIS_TYPE axis_type){
                 if(abs_homing_is_axis_homed(axis_type)){
                     homing_tp[axis_type].homing_state = ABS_EXEC_IDLE;
                     setVarAxisInt(0, VAR_AXIS_IS_HOMEF, 1, 0);
+                    LOG_INFO("轴%d完成回零", axis_type);
                     break;
                 }
                 homing_tp[axis_type].max_vel = rapid_vel * rapid_override;
@@ -305,7 +307,7 @@ GNC_RES abs_homing_tp_update_params(AXIS_TYPE axis_type, double current_vel, dou
     if(!homing_tp_new_vel_valid(axis_type, target_vel)) return res;
     homing_tp[axis_type].homing_block->max_vel = par_axis[axis_type][PAR_AX_RAPID_SPD].value.val_real * var_chan[0][VAR_CHAN_RAPID_OVERRIDE].value.f;
     homing_tp[axis_type].homing_block->length = fabs(par_axis[axis_type][PAR_AX_HOME_CRDS].value.val_real - var_axis[axis_type][VAR_AXIS_CMD_POS_EX].value.f); // 设置的x轴零点与当前位置之间的距离
-    homing_tp[axis_type].homing_block->start_vel = fabs(var_axis[axis_type][VAR_AXIS_ACT_VEL].value.f);  // 当前速度
+    homing_tp[axis_type].homing_block->start_vel = fabs(var_axis[axis_type][VAR_AXIS_CMD_VEL].value.f);  // 当前速度
     homing_tp[axis_type].homing_distance = homing_tp[axis_type].homing_block->length;
     if(current_vel > homing_tp[axis_type].homing_block->max_vel) homing_tp[axis_type].homing_block->max_vel = current_vel;
     // 如果加工段允许最大速度为0（倍率为0）
@@ -332,7 +334,7 @@ void abs_homing_tp_update_traj(VELPLAN_TYPE velplan_type, double cycle_time, AXI
 }
 
 static bool homing_tp_new_vel_valid(AXIS_TYPE axis_type, double target_vel){
-    double vs = fabs(var_axis[axis_type][VAR_AXIS_ACT_VEL].value.f); double ve = 0;
+    double vs = fabs(var_axis[axis_type][VAR_AXIS_CMD_VEL].value.f); double ve = 0;
     double remain_s = fabs(par_axis[axis_type][PAR_AX_HOME_CRDS].value.val_real - var_axis[axis_type][VAR_AXIS_CMD_POS_EX].value.f); ;
     double total_decline_length = 0;
     if(vs > target_vel && target_vel >= ve){

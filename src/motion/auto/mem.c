@@ -42,6 +42,7 @@ static void block_cal_lookahead_vel(PLAN_BLOCK* current_block);
 void handle_run_cmd(){
     // 处理急停，直接停止
     if(rt_data->sys_state[SYS_IS_ESTOP_ON]){
+        LOG_INFO("自动下急停报警");
         mem_handle_estop();
         return;
     }
@@ -80,6 +81,7 @@ void handle_run_cmd(){
 static void mem_set_state(){
     // 处理报警，减速停止
     if(rt_data->sys_state[SYS_IS_ALARMING]){
+        LOG_INFO("自动下报警，开始减速");
         mem_handle_alarm();
         return;
     }
