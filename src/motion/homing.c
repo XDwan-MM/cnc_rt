@@ -13,7 +13,6 @@ static bool abs_homing_is_tp_finished(AXIS_TYPE axis_type);
 static bool abs_homing_is_axis_homed(AXIS_TYPE axis_type);
 static double abs_homing_tp_pinc(AXIS_TYPE axis_type);
 static bool homing_check_res(GNC_RES res);
-static void homing_handle_estop();
 static void homing_handle_alarm();
 
 GNC_RES abs_homing_tp_update_params(AXIS_TYPE axis_type, double current_vel, double target_vel);
@@ -159,7 +158,7 @@ static bool homing_check_res(GNC_RES res){
     }
 }
 
-static void homing_handle_estop(){
+void homing_handle_estop(){
     homing_tp_reset();
     setVarChanInt(0, VAR_CHAN_IS_HOMING, 0, 0);
     setVarChanInt(0, VAR_CHAN_IS_MOVING, 0, 0);

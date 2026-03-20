@@ -245,6 +245,16 @@ static void get_cmd_pos() {
 }
 
 static void check_for_fault() {
+    if(rt_data->sys_state[SYS_IS_ESTOP_ON]){
+        setAlarm(ALARM_SY, ALARM_ERROR, 0);
+        // 重置各个模式
+        mem_handle_estop();
+        homing_handle_estop();
+        //　不允许操作
+        rt_data->nc_event = SYS_EVENT_NONE;
+        // 不允许切换模式
+        rt_data->target_mode = rt_data->current_mode;
+    }
     //　检查系统报警
     int alarm_count = 0;
     getAlarmCount(ALARM_TYPE_ALL, ALARM_LEVEL_ALL, &alarm_count);

@@ -17,7 +17,6 @@ static void mem_set_state();
 static bool mem_check_res(GNC_RES res);
 static bool mem_check_running();
 static double mem_cal_pinc(VELPLAN_TYPE velplan_mode, double ncu_cycle, double current_vel, POS current_pos);
-static void mem_handle_estop();
 static void mem_handle_alarm();
 static bool cycle_tp_is_finished();
 
@@ -302,7 +301,7 @@ static bool mem_check_res(GNC_RES res){
     }
 }
 
-static void mem_handle_estop(){
+void mem_handle_estop(){
     cycle_tp_reset();
     setVarChanInt(0, VAR_CHAN_IS_RUNNING, 0, 0);
     setVarChanInt(0, VAR_CHAN_IS_MOVING, 0, 0);
