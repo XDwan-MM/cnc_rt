@@ -19,6 +19,7 @@ static bool mem_check_running();
 static double mem_cal_pinc(VELPLAN_TYPE velplan_mode, double ncu_cycle, double current_vel, POS current_pos);
 static void mem_handle_alarm();
 static bool cycle_tp_is_finished();
+static void mem_cal_axis_vel(POS *current_pos, POS *target_pos, double interp_pinc, double target_vel);
 
 GNC_RES cycle_tp_update_tp(VELPLAN_TYPE vplan_mode, double ncu_cycle, double current_vel, POS current_pos, double target_vel);
 GNC_RES cycle_tp_update_params(VELPLAN_TYPE velplan_type, double cycle_time);
@@ -69,6 +70,7 @@ void handle_run_cmd(){
     setVarChanDouble(0, VAR_CHAN_CMD_FEEDRATE, cycle_tp->traj_data->v * TIME_MINUS_2_S, 0);
     rt_data->chan_data[0].cmd_acc = cycle_tp->traj_data->a;
     rt_data->chan_data[0].cmd_jk = cycle_tp->traj_data->j;
+    mem_cal_axis_vel(&current_pos, &interp_pos, interp_pinc, cycle_tp->traj_data->v);
 }
 
 static void mem_set_state(){
@@ -674,4 +676,19 @@ static void block_cal_chop_vel(PLAN_BLOCK* current_block){
         default:
             break;
     }
+}
+
+static void mem_cal_axis_vel(POS *current_pos, POS *target_pos, double interp_pinc, double target_vel){
+    double x_axis_vel = 0;
+    double y_axis_vel = 0;
+    double z_axis_vel = 0;
+    if(IsGreaterThan(interp_pinc, 0)){
+        VECTOR vec = POS_VECTOR(target_pos, current_pos);
+        x_axis_vel = target_vel * vec.x / interp_pinc;
+        y_axis_vel = target_vel * vec.y / interp_pinc;
+        z_axis_vel = target_vel * vec.z / interp_pinc;
+    }
+    setVarAxisDouble(AXIS_X, VAR_AXIS_CMD_VEL, x_axis_vel, 0);
+    setVarAxisDouble(AXIS_Y, VAR_AXIS_CMD_VEL, y_axis_vel, 0);
+    setVarAxisDouble(AXIS_Z, VAR_AXIS_CMD_VEL, z_axis_vel, 0);
 }
