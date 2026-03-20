@@ -14,7 +14,7 @@ static bool abs_homing_is_axis_homed(AXIS_TYPE axis_type);
 static double abs_homing_tp_pinc(AXIS_TYPE axis_type);
 static bool homing_check_res(GNC_RES res);
 static void homing_handle_alarm();
-
+static void homing_cal_fv();
 GNC_RES abs_homing_tp_update_params(AXIS_TYPE axis_type, double current_vel, double target_vel);
 void abs_homing_tp_update_traj(VELPLAN_TYPE velplan_type, double cycle_time, AXIS_TYPE axis_type);
 static bool homing_tp_new_vel_valid(AXIS_TYPE axis_type, double target_vel);
@@ -38,8 +38,14 @@ void handle_homing_cmd(){
         rt_data->axis_data[axis_type].cmd_acc = homing_tp[axis_type].traj_data->a;
         rt_data->axis_data[axis_type].cmd_jk = homing_tp[axis_type].traj_data->j;
     }
+    homing_cal_fv();
     homing_is_all_homed();
     homing_is_resetting();
+}
+
+static void homing_cal_fv(){
+    double fv = sqrt(pow(homing_tp[0].traj_data->v, 2) + pow(homing_tp[1].traj_data->v, 2) + pow(homing_tp[2].traj_data->v, 2));
+    setVarChanDouble(0, VAR_CHAN_CMD_FEEDRATE, fv, 0);
 }
 
 static void homing_set_state(){
