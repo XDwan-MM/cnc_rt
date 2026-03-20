@@ -124,11 +124,11 @@ static void execute_axis_motion(int i)
         // 到达正限位 日志输出
         if (fabs(jog_tp[i].curr_pos - par_axis[i][PAR_AX_PLMT].value.val_real) < SPEED_THRESHOLD)
         {
-            LOG_OUTPUT(INFO,"点动 %d 轴到达正限位", i);
+            // LOG_OUTPUT(INFO,"点动 %d 轴到达正限位", i);
         }
         else if(fabs(jog_tp[i].curr_pos - par_axis[i][PAR_AX_NLMT].value.val_real) < SPEED_THRESHOLD)
         {
-            LOG_OUTPUT(INFO,"点动 %d 轴到达负限位", i);
+            // LOG_OUTPUT(INFO,"点动 %d 轴到达负限位", i);
         }
         break;
 
