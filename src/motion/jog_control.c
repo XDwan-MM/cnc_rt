@@ -1,97 +1,40 @@
 #include "jog_control.h"
-#include "stddef.h"
+#include <stddef.h>
 
-void start_jog_cont(const ParamUnit* axis_para, simple_tp_t *jog_tp, int direction, const double feed_override, const double run_period)
+void prepare_jog_params(const ParamUnit* axis_para, simple_tp_t *jog_tp, int direction, double feed_override, bool is_rapid)
 {
-    /* 输入参数检查 */
-    if ((axis_para == NULL)
-        || (jog_tp == NULL)
-        || (feed_override < 0.0)
-        || (feed_override > 3.0))
-    {
-        return ;
-    }
-    /* 检查运行方向 */
-    if (direction == 0) {
-        return;
-    }
-    /* 根据方向设置JOG目标位置（增量至极限(到限位)） */
+    if (axis_para == NULL || jog_tp == NULL || feed_override < 0.0) return;
+    if (direction == 0) return;
+
+    /* 1. 设置目标位置：根据方向指向软限位终点 */
     if (direction > 0) {
-        /* 正向JOG：目标位置设为最大限位 */
         jog_tp->pos_cmd = axis_para[PAR_AX_PLMT].value.val_real;
     } else {
-        /* 负向JOG：目标位置设为最小限位 */
         jog_tp->pos_cmd = axis_para[PAR_AX_NLMT].value.val_real;
     }
 
-    /* 设置速度限制*/
-    // jog_lowspd实时这边的单位是：mm/s
-    // feed_override实时这边统一范围为（0.0～1.5）
-    jog_tp->max_vel = axis_para[PAR_AX_JOG_LOWSPD].value.val_real * feed_override;
-
-    /* 设置加速度限制 */
-    // feed_acc实时这边统一的单位是mm/s^2
-    jog_tp->max_acc = axis_para[PAR_AX_FEED_ACC].value.val_real;
-
-    /* 使能轨迹规划器 */ // 让JOG动起来
-    jog_tp->enable = 1;
-
-    /* 更新轨迹规划器 */
-    simple_tp_update(jog_tp, run_period);
-}
-
-void start_jog_rapid_cont(const ParamUnit* axis_para, simple_tp_t *rapid_jog_tp, int direction, const double feed_override, const double run_period)
-{
-    /* 输入参数检查 */
-    if ((axis_para == NULL)
-        || (rapid_jog_tp == NULL)
-        || (feed_override < 0.0)
-        || (feed_override > 3.0))
-    {
-        return ;
-    }
-    /* 检查运行方向 */
-    if (direction == 0) {
-        return;
-    }
-    /* 根据方向设置JOG目标位置（增量至极限(到限位)） */
-    if (direction > 0) {
-        /* 正向JOG：目标位置设为最大限位 */
-        rapid_jog_tp->pos_cmd = axis_para[PAR_AX_PLMT].value.val_real;
+    /* 2. 设置速度和加速度限制 */
+    if (is_rapid) {
+        jog_tp->max_vel = axis_para[PAR_AX_JOG_FASTSPD].value.val_real * feed_override;
+        jog_tp->max_acc = axis_para[PAR_AX_RAPID_ACC].value.val_real;
     } else {
-        /* 负向JOG：目标位置设为最小限位 */
-        rapid_jog_tp->pos_cmd = axis_para[PAR_AX_NLMT].value.val_real;
+        jog_tp->max_vel = axis_para[PAR_AX_JOG_LOWSPD].value.val_real * feed_override;
+        jog_tp->max_acc = axis_para[PAR_AX_FEED_ACC].value.val_real;
     }
 
-    /* 设置速度限制*/
-    // jog_fastspd实时这边的单位是：mm/s
-    // feed_override实时这边统一范围为（0.0～1.5）
-    rapid_jog_tp->max_vel = axis_para[PAR_AX_JOG_FASTSPD].value.val_real * feed_override;
-
-    /* 设置加速度限制 */
-    // rapid_acc实时这边统一的单位是mm/s^2
-    rapid_jog_tp->max_acc = axis_para[PAR_AX_RAPID_ACC].value.val_real;
-
-    /* 使能轨迹规划器 */ // 让JOG动起来
-    rapid_jog_tp->enable = 1;
-
-    /* 更新轨迹规划器 */
-    simple_tp_update(rapid_jog_tp, run_period);
+    /* 3. 使能规划器：标记开始进入加减速计算 */
+    jog_tp->enable = 1;
 }
 
-void stop_jog_cont(simple_tp_t *jog_tp, const double run_period, bool immediate)
+void request_jog_stop(simple_tp_t *jog_tp, bool immediate)
 {
     if (jog_tp == NULL) return;
 
-    //  bool aborted = 0;
-    //  if (runing_axis->jog_tp.enable) {
-    //    aborted = 1;
-    //  }
-    /* jog轨迹规划器断使能 */
+    /* 断开使能：规划器在下一次 update 时会发现此信号并开始减速 */
     jog_tp->enable = 0;
-    if(immediate)
-    {
+
+    if (immediate) {
         jog_tp->curr_vel = 0.0;
+        jog_tp->active = 0;
     }
-    simple_tp_update(jog_tp, run_period);
 }

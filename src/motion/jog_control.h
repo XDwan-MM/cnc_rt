@@ -1,8 +1,8 @@
 /********************************************************************
  * @file        jog_control.h
- * @brief       JOG控制模块
+ * @brief       JOG控制底层接口 - 负责参数配置与状态切换
  * @version     V1.00
- * @date        2026/02/04
+ * @date        2026/03/20
  * @author      伍臣发
  * @copyright   珠海格力电器股份有限公司装备动力技术研究院三所
  ********************************************************************/
@@ -14,25 +14,30 @@
 #include "pardata.h"
 
 /* JOG方向定义 */
-#define JOG_DIR_NONE (0)
-#define JOG_DIR_POSITIVE (1)
-#define JOG_DIR_NEGATIVE (-1)
+#define JOG_DIR_NONE      (0)
+#define JOG_DIR_POSITIVE  (1)
+#define JOG_DIR_NEGATIVE  (-1)
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-/* 启动连续JOG
- * axis: 轴指针
- * direction: JOG方向（1=正向, -1=负向）
- * axis_para: 实时这边 速度的单位传入的是: mm/s
- *
+/**
+ * @brief 配置JOG/快速JOG 运动参数 (仅在按下按键瞬间或参数改变时调用)
+ * @param axis_para   轴参数指针
+ * @param jog_tp      规划器结构体
+ * @param direction   方向 (1/-1)
+ * @param feed_override 倍率 (0.0~1.5)
+ * @param is_rapid    是否为快速点动
  */
-extern void start_jog_cont(const ParamUnit* axis_para, simple_tp_t *jog_tp, int direction, const double feed_override, const double run_period);
-extern void start_jog_rapid_cont(const ParamUnit* axis_para, simple_tp_t *rapid_jog_tp, int direction, const double feed_override, const double run_period);
+void prepare_jog_params(const ParamUnit* axis_para, simple_tp_t *jog_tp, int direction, double feed_override, bool is_rapid);
 
-/* 停止JOG */
-extern void stop_jog_cont(simple_tp_t *jog_tp, const double run_period, bool immediate);
+/**
+ * @brief 请求停止JOG
+ * @param jog_tp      规划器结构体
+ * @param immediate   是否立即硬停止（不走加减速）
+ */
+void request_jog_stop(simple_tp_t *jog_tp, bool immediate);
 
 #ifdef __cplusplus
 }
