@@ -11,7 +11,7 @@
 #include "debug_mode.h"
 #include "global.h"
 #include "parser.h"
-#include "logapi.h"
+
 #include "log.h"
 #include "stored_stroke_check.h"
 

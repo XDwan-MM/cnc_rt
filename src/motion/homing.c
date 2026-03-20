@@ -2,7 +2,7 @@
 #include "datatype.h"
 #include "global.h"
 #include "log.h"
-#include "logapi.h"
+
 #include <alarmapi.h>
 
 static void homing_set_state();

@@ -1,5 +1,5 @@
 #include "alarm.h"
-#include "logapi.h"
+
 #include "log.h"
 #include "rt_data.h"
 #include <alarmapi.h>

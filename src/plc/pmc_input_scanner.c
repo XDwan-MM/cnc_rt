@@ -1,7 +1,7 @@
 #include "pmc_input_scanner.h"
 #include "global.h"
 #include "log.h"
-#include "logapi.h"
+
 #include "regapi.h"       /**< 寄存器访问 API */
 #include "signal_utils.h" /**< 边沿检测宏定义 */
 #include <string.h>

@@ -55,11 +55,6 @@ include(lib/cncshm/api/apishm.pri)
 LIBS += -L"$$PWD/lib/cncshm/bin/" -lshm
 INCLUDEPATH += $$PWD/lib/cncshm/api $$PWD/lib/cncshm
 
-# 添加日志
-include(lib/log/apilog/logapi.pri)
-LIBS += -L"$$PWD/lib/log/bin/" -lcnclog
-INCLUDEPATH += $$PWD/lib/log/apilog $$PWD/lib/log
-
 # 添加译码
 LIBS += -L$$PWD/lib/parser/lib/ -lcnc_parser
 INCLUDEPATH += $$PWD/lib/parser/api $$PWD/lib/parser

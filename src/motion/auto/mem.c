@@ -7,7 +7,7 @@
 #include "datatype.h"
 #include "pathplan.h"
 #include "log.h"
-#include "logapi.h"
+
 #include "varapi.h"
 #include "interpolation.h"
 #include <alarmapi.h>

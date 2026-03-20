@@ -17,7 +17,7 @@
 #include "stored_stroke_check.h"
 #include "parser.h"
 #include "hmisysapi.h"
-#include "logapi.h"
+
 #include <alarmapi.h>
 #include <math.h>
 #include "rt_data.h"

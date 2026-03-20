@@ -1,7 +1,7 @@
 #include "task.h"
 #include "eventdef.h"
 #include "spindle.h"
-#include "logapi.h"
+
 #include "log.h"
 #include <alarmapi.h>
 #include <stdlib.h>
