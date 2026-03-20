@@ -184,21 +184,14 @@ void handle_mpg_cmd() {
 
         Handlewheels_Motion(&simple_tp[axis]);
         Simple_Tp_Update(&simple_tp[axis]);
+        
         simple_tp[axis].joint.pos_cmd = simple_tp[axis].curr_pos;
         // printf("当前手轮计数：%u, 轴选：%d, 倍率：%d，手轮规划位置： %f  电机位置：%d\n", current_count, axis, rate,simple_tp[axis - 1].pos_cmd,pos_act);
     }
     if (!mpg_statis) {
-        switch (axis) {
-        case 0:
-            setVarAxisDouble(AXIS_X, VAR_AXIS_CMD_POS_EX, simple_tp[0].joint.pos_cmd, 0);
-            break;
-        case 1:
-            setVarAxisDouble(AXIS_Y, VAR_AXIS_CMD_POS_EX, simple_tp[1].joint.pos_cmd, 0);
-            break;
-        case 2:
-            setVarAxisDouble(AXIS_Z, VAR_AXIS_CMD_POS_EX, simple_tp[2].joint.pos_cmd, 0);
-            break;
-        }
+        setVarAxisDouble(axis, VAR_AXIS_CMD_POS_EX, simple_tp[axis].joint.pos_cmd, 0);
+        setVarAxisDouble(axis, VAR_AXIS_CMD_VEL_EX, simple_tp[axis].curr_vel, 0);
+        setVarChanDouble(0, VAR_CHAN_CMD_FEEDRATE, simple_tp[axis].curr_vel, 0);
     }
     last_axis = axis;
     last_rate = rate;
