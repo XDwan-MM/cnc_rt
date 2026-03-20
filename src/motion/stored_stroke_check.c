@@ -67,7 +67,7 @@ uint8_t Is_Outside_Limit(float position, LimitLevel limit)
 }
 
 // 单轴限位检查主函数
-uint8_t Check_Axis_Limit_Violation(AxisLimitRuntime runtime ,bool moving)
+uint8_t Check_Axis_Limit_Violation(AxisLimitRuntime runtime, bool moving)
 {
     double position = 0;
     uint8_t violation = 0;
@@ -92,13 +92,13 @@ uint8_t Check_Axis_Limit_Violation(AxisLimitRuntime runtime ,bool moving)
             if(moving)
             {
                 int res = setAlarm(ALARM_AX, ALARM_ERROR, 0);
-                if(res == -8) return;
+                if(res == -8) return violation;
                 LOG_ERROR("朝正方向移动超过了存储行程检查1");
             }
             else
             {
                 int res = setAlarm(ALARM_AX, ALARM_ERROR, 10);
-                if(res == -8) return;
+                if(res == -8) return violation;
                 LOG_ERROR("移动前行程检查中程序段终点位置在正侧行程极限禁止区内");
             }
         }
@@ -107,13 +107,13 @@ uint8_t Check_Axis_Limit_Violation(AxisLimitRuntime runtime ,bool moving)
             if(moving)
             {
                 int res = setAlarm(ALARM_AX, ALARM_ERROR, 1);
-                if(res == -8) return;
+                if(res == -8) return violation;
                 LOG_ERROR("朝负方向移动超过了存储行程检查1");
             }
             else
             {
                 int res = setAlarm(ALARM_AX, ALARM_ERROR, 11);
-                if(res == -8) return;
+                if(res == -8) return violation;
                 LOG_ERROR("移动前行程检查中程序段终点位置在负侧行程极限禁止区内");
             }
         }
@@ -130,13 +130,13 @@ uint8_t Check_Axis_Limit_Violation(AxisLimitRuntime runtime ,bool moving)
             if(moving)
             {
                 int res = setAlarm(ALARM_AX, ALARM_ERROR, 4);
-                if(res == -8) return;
+                if(res == -8) return violation;
                 LOG_ERROR("朝正方向移动超过了存储行程检查3");
             }
             else
             {
                 int res = setAlarm(ALARM_AX, ALARM_ERROR, 10);
-                if(res == -8) return;
+                if(res == -8) return violation;
                 LOG_ERROR("移动前行程检查中程序段终点位置在正侧行程极限禁止区内");
             }
         }
@@ -145,13 +145,13 @@ uint8_t Check_Axis_Limit_Violation(AxisLimitRuntime runtime ,bool moving)
             if(moving)
             {
                 int res = setAlarm(ALARM_AX, ALARM_ERROR, 5);
-                if(res == -8) return;
+                if(res == -8) return violation;
                 LOG_ERROR("朝负方向移动超过了存储行程检查3");
             }
             else
             {
                 int res = setAlarm(ALARM_AX, ALARM_ERROR, 11);
-                if(res == -8) return;
+                if(res == -8) return violation;
                 LOG_ERROR("移动前行程检查中程序段终点位置在负侧行程极限禁止区内");
             }
         }
@@ -171,13 +171,13 @@ uint8_t Check_Axis_Limit_Violation(AxisLimitRuntime runtime ,bool moving)
                 if(moving)
                 {
                     int res = setAlarm(ALARM_AX, ALARM_ERROR, 2);
-                    if(res == -8) return;
+                    if(res == -8) return violation;
                     LOG_ERROR("超过了存储行程检查2");
                 }
                 else
                 {
                     int res = setAlarm(ALARM_AX, ALARM_ERROR, 10);
-                    if(res == -8) return;
+                    if(res == -8) return violation;
                     LOG_ERROR("移动前行程检查中程序段终点位置在正侧行程极限禁止区内");
                 }
             }
@@ -186,13 +186,13 @@ uint8_t Check_Axis_Limit_Violation(AxisLimitRuntime runtime ,bool moving)
                 if(moving)
                 {
                     int res = setAlarm(ALARM_AX, ALARM_ERROR, 3);
-                    if(res == -8) return;
+                    if(res == -8) return violation;
                     LOG_ERROR("超过了存储行程检查2");
                 }
                 else
                 {
                     int res = setAlarm(ALARM_AX, ALARM_ERROR, 10);
-                    if(res == -8) return;
+                    if(res == -8) return violation;
                     LOG_ERROR("移动前行程检查中程序段终点位置在正侧行程极限禁止区内");
                 }
             }
@@ -211,13 +211,13 @@ uint8_t Check_Axis_Limit_Violation(AxisLimitRuntime runtime ,bool moving)
                 if(moving)
                 {
                     int res = setAlarm(ALARM_AX, ALARM_ERROR, 2);
-                    if(res == -8) return;
+                    if(res == -8) return violation;
                     LOG_ERROR("超过了存储行程检查2");
                 }
                 else
                 {
                     int res = setAlarm(ALARM_AX, ALARM_ERROR, 10);
-                    if(res == -8) return;
+                    if(res == -8) return violation;
                     LOG_ERROR("移动前行程检查中程序段终点位置在正侧行程极限禁止区内");
                 }
             }
@@ -226,13 +226,13 @@ uint8_t Check_Axis_Limit_Violation(AxisLimitRuntime runtime ,bool moving)
                 if(moving)
                 {
                     int res = setAlarm(ALARM_AX, ALARM_ERROR, 3);
-                    if(res == -8) return;
+                    if(res == -8) return violation;
                     LOG_ERROR("超过了存储行程检查2");
                 }
                 else
                 {
                     int res = setAlarm(ALARM_AX, ALARM_ERROR, 10);
-                    if(res == -8) return;
+                    if(res == -8) return violation;
                     LOG_ERROR("移动前行程检查中程序段终点位置在正侧行程极限禁止区内");
                 }
             }
@@ -245,7 +245,7 @@ void lookahead_check_soft_limit(POS *target_pos){
     runtime[0].parser_position = target_pos->x;
     runtime[1].parser_position = target_pos->y;
     runtime[2].parser_position = target_pos->z;
-    runtime[0].active_levels = Check_Axis_Limit_Violation(runtime[0] ,true);
-    runtime[1].active_levels = Check_Axis_Limit_Violation(runtime[1] ,true);
-    runtime[2].active_levels = Check_Axis_Limit_Violation(runtime[2] ,true);
+    runtime[0].active_levels = Check_Axis_Limit_Violation(runtime[0], false);
+    runtime[1].active_levels = Check_Axis_Limit_Violation(runtime[1], false);
+    runtime[2].active_levels = Check_Axis_Limit_Violation(runtime[2], false);
 }

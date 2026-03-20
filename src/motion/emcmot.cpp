@@ -395,9 +395,9 @@ static void check_for_soft_limit() {
     runtime[0].current_position = rt_data->axis_data[AXIS_X].motor_cmd_pos;
     runtime[1].current_position = rt_data->axis_data[AXIS_Y].motor_cmd_pos;
     runtime[2].current_position = rt_data->axis_data[AXIS_Z].motor_cmd_pos;
-    runtime[0].active_levels = Check_Axis_Limit_Violation(runtime[0] ,true);
-    runtime[1].active_levels = Check_Axis_Limit_Violation(runtime[1] ,true);
-    runtime[2].active_levels = Check_Axis_Limit_Violation(runtime[2] ,true);
+    runtime[0].active_levels = Check_Axis_Limit_Violation(runtime[0], true);
+    runtime[1].active_levels = Check_Axis_Limit_Violation(runtime[1], true);
+    runtime[2].active_levels = Check_Axis_Limit_Violation(runtime[2], true);
 }
 
 // 更新运动状态数据
