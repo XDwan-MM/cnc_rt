@@ -45,7 +45,7 @@ void handle_homing_cmd(){
 
 static void homing_cal_fv(){
     double fv = sqrt(pow(homing_tp[0].traj_data->v, 2) + pow(homing_tp[1].traj_data->v, 2) + pow(homing_tp[2].traj_data->v, 2));
-    setVarChanDouble(0, VAR_CHAN_CMD_FEEDRATE, fv, 0);
+    setVarChanDouble(0, VAR_CHAN_CMD_FEEDRATE, fv * TIME_MINUS_2_S, 0);
 }
 
 static void homing_set_state(){
@@ -178,7 +178,7 @@ static double abs_homing_tp_pinc(AXIS_TYPE axis_type){
     GNC_RES res = GNC_CAL_SUCCESS;
     double ncu_cycle = (double)par_ncu[PAR_NCU_CYCLE].value.val_uint / TIME_US_2_S;
     double rapid_vel = par_axis[axis_type][PAR_AX_RAPID_SPD].value.val_real;
-    double rapid_override = var_chan[0][VAR_CHAN_RAPID_OVERRIDE].value.f;
+    double rapid_override = var_chan[0][VAR_CHAN_RAPID_OVERRIDE].value.f / OVERRIDE_PERCENT;
     double current_vel = fabs(var_axis[axis_type][VAR_AXIS_CMD_VEL].value.f);
     double s = 0;
     switch(homing_tp[axis_type].homing_state){
@@ -304,7 +304,7 @@ GNC_RES abs_homing_tp_update_params(AXIS_TYPE axis_type, double current_vel, dou
     GNC_RES res = VP_CAL_SUCCESS;
     // 如果新速度不满足，不更新新速度
     if(!homing_tp_new_vel_valid(axis_type, target_vel)) return res;
-    homing_tp[axis_type].homing_block->max_vel = par_axis[axis_type][PAR_AX_RAPID_SPD].value.val_real * var_chan[0][VAR_CHAN_RAPID_OVERRIDE].value.f;
+    homing_tp[axis_type].homing_block->max_vel = par_axis[axis_type][PAR_AX_RAPID_SPD].value.val_real * var_chan[0][VAR_CHAN_RAPID_OVERRIDE].value.f / OVERRIDE_PERCENT;
     homing_tp[axis_type].homing_block->length = fabs(par_axis[axis_type][PAR_AX_HOME_CRDS].value.val_real - var_axis[axis_type][VAR_AXIS_CMD_POS_EX].value.f); // 设置的x轴零点与当前位置之间的距离
     homing_tp[axis_type].homing_block->start_vel = fabs(var_axis[axis_type][VAR_AXIS_CMD_VEL].value.f);  // 当前速度
     homing_tp[axis_type].homing_distance = homing_tp[axis_type].homing_block->length;

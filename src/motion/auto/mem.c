@@ -39,7 +39,7 @@ static void block_cal_lookahead_vel(PLAN_BLOCK* current_block);
 
 // MEM 模式下的执行流程：处理开始和暂停 → 计算插补距离 → 计算插补空间坐标
 void handle_run_cmd(){
-    double current_vel = var_chan[0][VAR_CHAN_ACT_FEEDRATE].value.f;
+    double current_vel = var_chan[0][VAR_CHAN_ACT_FEEDRATE].value.f / TIME_MINUS_2_S;
     POS current_pos = {.x = var_axis[AXIS_X][VAR_AXIS_CMD_POS_EX].value.f, .y = var_axis[AXIS_Y][VAR_AXIS_CMD_POS_EX].value.f, .z = var_axis[AXIS_Z][VAR_AXIS_CMD_POS_EX].value.f};
     int velplan_mode = par_chan[0][PAR_CH_VPLAN_MODE].value.val_int;
     double ncu_cycle = (double)par_ncu[PAR_NCU_CYCLE].value.val_uint / TIME_US_2_S;
@@ -66,7 +66,7 @@ void handle_run_cmd(){
     setVarAxisDouble(AXIS_X, VAR_AXIS_CMD_POS_EX, interp_pos.x, 0);
     setVarAxisDouble(AXIS_Y, VAR_AXIS_CMD_POS_EX, interp_pos.y, 0);
     setVarAxisDouble(AXIS_Z, VAR_AXIS_CMD_POS_EX, interp_pos.z, 0);
-    setVarChanDouble(0, VAR_CHAN_CMD_FEEDRATE, cycle_tp->traj_data->v, 0);
+    setVarChanDouble(0, VAR_CHAN_CMD_FEEDRATE, cycle_tp->traj_data->v * TIME_MINUS_2_S, 0);
     rt_data->chan_data[0].cmd_acc = cycle_tp->traj_data->a;
     rt_data->chan_data[0].cmd_jk = cycle_tp->traj_data->j;
 }
@@ -120,7 +120,7 @@ static void mem_set_state(){
             if(cycle_tp->mem_exec_state == EXEC_RUNNING){
                 if(!queue_is_empty(plan_queue)){
                     if(cycle_tp->plan_block->mode != PMC_MODE_TAP && cycle_tp->plan_block->type != RAPID){
-                        cycle_tp->max_vel = cycle_tp->plan_block->feed_vel * var_chan[0][VAR_CHAN_FEED_OVERRIDE].value.f;
+                        cycle_tp->max_vel = cycle_tp->plan_block->feed_vel * var_chan[0][VAR_CHAN_FEED_OVERRIDE].value.f / OVERRIDE_PERCENT;
                         cycle_tp->is_event_trigger = true;
                     }
                 }
@@ -133,7 +133,7 @@ static void mem_set_state(){
             if(cycle_tp->mem_exec_state == EXEC_RUNNING){
                 if(!queue_is_empty(plan_queue)){
                     if(cycle_tp->plan_block->mode != PMC_MODE_TAP && cycle_tp->plan_block->type == RAPID){
-                        cycle_tp->max_vel = cycle_tp->plan_block->feed_vel * var_chan[0][VAR_CHAN_RAPID_OVERRIDE].value.f;
+                        cycle_tp->max_vel = cycle_tp->plan_block->feed_vel * var_chan[0][VAR_CHAN_RAPID_OVERRIDE].value.f / OVERRIDE_PERCENT;
                         cycle_tp->is_event_trigger = true;
                     };
                 }
@@ -585,10 +585,10 @@ static void block_cal_exact_stop_vel(PLAN_BLOCK* current_block){
         case RAPID:
             if (rt_get_sys_state(SYS_IS_DRY_RUN))
             {
-                current_block->max_vel = par_chan[0][PAR_CH_DRYRUN_SPD].value.val_real * var_chan[0][VAR_CHAN_RAPID_OVERRIDE].value.f;
+                current_block->max_vel = par_chan[0][PAR_CH_DRYRUN_SPD].value.val_real * var_chan[0][VAR_CHAN_RAPID_OVERRIDE].value.f / OVERRIDE_PERCENT;
             }
             else{
-                current_block->max_vel = current_block->feed_vel * var_chan[0][VAR_CHAN_RAPID_OVERRIDE].value.f;
+                current_block->max_vel = current_block->feed_vel * var_chan[0][VAR_CHAN_RAPID_OVERRIDE].value.f / OVERRIDE_PERCENT;
             }
             current_block->start_vel = 0;
             current_block->end_vel = 0;
@@ -599,10 +599,10 @@ static void block_cal_exact_stop_vel(PLAN_BLOCK* current_block){
         case LINE:
             if (rt_get_sys_state(SYS_IS_DRY_RUN))
             {
-                current_block->max_vel = par_chan[0][PAR_CH_DRYRUN_SPD].value.val_real * var_chan[0][VAR_CHAN_FEED_OVERRIDE].value.f;
+                current_block->max_vel = par_chan[0][PAR_CH_DRYRUN_SPD].value.val_real * var_chan[0][VAR_CHAN_FEED_OVERRIDE].value.f / OVERRIDE_PERCENT;
             }
             else{
-                current_block->max_vel = current_block->feed_vel * var_chan[0][VAR_CHAN_FEED_OVERRIDE].value.f;
+                current_block->max_vel = current_block->feed_vel * var_chan[0][VAR_CHAN_FEED_OVERRIDE].value.f / OVERRIDE_PERCENT;
             }
             current_block->start_vel = 0;
             current_block->end_vel = 0;
@@ -650,10 +650,10 @@ static void block_cal_chop_vel(PLAN_BLOCK* current_block){
         case RAPID:
             if (rt_get_sys_state(SYS_IS_DRY_RUN))
             {
-                current_block->max_vel = par_chan[0][PAR_CH_DRYRUN_SPD].value.val_real * var_chan[0][VAR_CHAN_RAPID_OVERRIDE].value.f;
+                current_block->max_vel = par_chan[0][PAR_CH_DRYRUN_SPD].value.val_real * var_chan[0][VAR_CHAN_RAPID_OVERRIDE].value.f / OVERRIDE_PERCENT;
             }
             else{
-                current_block->max_vel = current_block->feed_vel * var_chan[0][VAR_CHAN_RAPID_OVERRIDE].value.f;
+                current_block->max_vel = current_block->feed_vel * var_chan[0][VAR_CHAN_RAPID_OVERRIDE].value.f / OVERRIDE_PERCENT;
             }
             current_block->start_vel = 0;
             current_block->end_vel = 0;
@@ -664,10 +664,10 @@ static void block_cal_chop_vel(PLAN_BLOCK* current_block){
         case LINE:
             if (rt_get_sys_state(SYS_IS_DRY_RUN))
             {
-                current_block->max_vel = par_chan[0][PAR_CH_DRYRUN_SPD].value.val_real * var_chan[0][VAR_CHAN_FEED_OVERRIDE].value.f;
+                current_block->max_vel = par_chan[0][PAR_CH_DRYRUN_SPD].value.val_real * var_chan[0][VAR_CHAN_FEED_OVERRIDE].value.f / OVERRIDE_PERCENT;
             }
             else{
-                current_block->max_vel = current_block->feed_vel * var_chan[0][VAR_CHAN_FEED_OVERRIDE].value.f;
+                current_block->max_vel = current_block->feed_vel * var_chan[0][VAR_CHAN_FEED_OVERRIDE].value.f / OVERRIDE_PERCENT;
             }
             current_block->start_vel = current_block->end_vel = current_block->max_vel;
             break;
