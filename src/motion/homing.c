@@ -226,7 +226,6 @@ static double abs_homing_tp_pinc(AXIS_TYPE axis_type){
             break;
 
         default:
-            // error
             break;
     };
     if(homing_tp[axis_type].homing_direction == AXIS_HOMING_NEGATIVE) s = -s;

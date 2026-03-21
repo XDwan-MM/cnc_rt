@@ -150,10 +150,18 @@ static void mem_set_state(){
                 cycle_tp->is_event_trigger = true;
             }
             break;
-        
-        default:
+
+        case SYS_EVENT_X_POS_PRESS:
+        case SYS_EVENT_Y_POS_PRESS:
+        case SYS_EVENT_Z_POS_PRESS:
+        case SYS_EVENT_X_NEG_PRESS:
+        case SYS_EVENT_Y_NEG_PRESS:
+        case SYS_EVENT_Z_NEG_PRESS:
             // log_system("[mem] 记忆模式不支持该操作");
             LOG_OUTPUT(INFO, "记忆模式不支持该操作");
+            break;
+        
+        default:
             break;
     }
 }
