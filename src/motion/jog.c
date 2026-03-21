@@ -120,7 +120,7 @@ static void execute_axis_motion(int i)
     {
     case JOG_STATE_RUNNING:
         // 使用记忆中的方向锁定运行
-        start_jog_cont(&par_axis[i], &jog_tp[i], jog_ctrls[i].direction, var_chan[0][VAR_CHAN_FEED_OVERRIDE].value.f, JOG_CYCLE_TIME);
+        start_jog_cont(&par_axis[i], &jog_tp[i], jog_ctrls[i].direction, var_chan[0][VAR_CHAN_FEED_OVERRIDE].value.f / OVERRIDE_PERCENT, JOG_CYCLE_TIME);
         // 到达正限位 日志输出
         if (fabs(jog_tp[i].curr_pos - par_axis[i][PAR_AX_PLMT].value.val_real) < SPEED_THRESHOLD)
         {
