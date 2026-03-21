@@ -102,6 +102,7 @@ static void homing_set_state(){
         case SYS_EVENT_RAPID_OVERRIDE:
             // log_system("[home] 回零处理快速进给倍率改变");
             LOG_OUTPUT(INFO, "回零处理快速进给倍率改变");
+            if(IsEqualTo(var_chan[0][VAR_CHAN_RAPID_OVERRIDE].value.f, 0)) LOG_WARN("快速倍率为0");
             for(int i = 0; i < SYS_AXES_NUM; i++){
                 if(homing_tp[i].homing_state == ABS_EXEC_HOMING){
                     homing_tp[i].is_event_trigger = true;
@@ -111,7 +112,7 @@ static void homing_set_state(){
 
         case SYS_EVENT_PAUSE:
         case SYS_EVENT_RERUN:
-            LOG_OUTPUT(INFO, "回零模式不支持此操作");
+            LOG_WARN("回零模式不支持此操作");
             break;
         
         default:
@@ -169,7 +170,7 @@ static void homing_handle_alarm(){
         if(homing_tp[i].homing_state == ABS_EXEC_HOMING){
             homing_tp[i].is_event_trigger = true;
             homing_tp[i].homing_state = ABS_EXEC_RESETTING;
-            LOG_INFO("回零下报警，开始制动");
+            LOG_WARN("回零下报警，开始制动");
         }
     }
 }
@@ -283,7 +284,7 @@ void homing_tp_init(){
         homing_tp[i].traj_data = (TRAJ_PARAMS*)calloc(sizeof(TRAJ_PARAMS), 1);
         homing_tp[i].homing_block->type = LINE;
         homing_tp[i].homing_state = ABS_EXEC_IDLE;
-        homing_tp[i].homing_block->max_vel = par_axis[i][PAR_AX_RAPID_SPD].value.val_real * var_chan[0][VAR_CHAN_RAPID_OVERRIDE].value.f;
+        homing_tp[i].homing_block->max_vel = par_axis[i][PAR_AX_RAPID_SPD].value.val_real;
         homing_tp[i].homing_block->feed_vel = par_axis[i][PAR_AX_RAPID_SPD].value.val_real;
         homing_tp[i].homing_block->max_acc = par_axis[i][PAR_AX_RAPID_ACC].value.val_real;
         homing_tp[i].homing_block->max_jerk = par_axis[i][PAR_AX_RAPID_JK].value.val_real;
@@ -301,9 +302,12 @@ void homing_tp_reset(){
 
 GNC_RES abs_homing_tp_update_params(AXIS_TYPE axis_type, double current_vel, double target_vel){
     GNC_RES res = VP_CAL_SUCCESS;
+    homing_tp[axis_type].homing_block->feed_vel = par_axis[axis_type][PAR_AX_RAPID_SPD].value.val_real;
+    homing_tp[axis_type].homing_block->max_vel = par_axis[axis_type][PAR_AX_RAPID_SPD].value.val_real * var_chan[0][VAR_CHAN_RAPID_OVERRIDE].value.f / OVERRIDE_PERCENT;
+    homing_tp[axis_type].homing_block->max_acc = par_axis[axis_type][PAR_AX_RAPID_ACC].value.val_real;
+    homing_tp[axis_type].homing_block->max_jerk = par_axis[axis_type][PAR_AX_RAPID_JK].value.val_real;
     // 如果新速度不满足，不更新新速度
     if(!homing_tp_new_vel_valid(axis_type, target_vel)) return res;
-    homing_tp[axis_type].homing_block->max_vel = par_axis[axis_type][PAR_AX_RAPID_SPD].value.val_real * var_chan[0][VAR_CHAN_RAPID_OVERRIDE].value.f / OVERRIDE_PERCENT;
     homing_tp[axis_type].homing_block->length = fabs(par_axis[axis_type][PAR_AX_HOME_CRDS].value.val_real - var_axis[axis_type][VAR_AXIS_CMD_POS_EX].value.f); // 设置的x轴零点与当前位置之间的距离
     homing_tp[axis_type].homing_block->start_vel = fabs(var_axis[axis_type][VAR_AXIS_CMD_VEL].value.f);  // 当前速度
     homing_tp[axis_type].homing_distance = homing_tp[axis_type].homing_block->length;

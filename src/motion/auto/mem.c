@@ -119,6 +119,7 @@ static void mem_set_state(){
         case SYS_EVENT_FEED_OVERRIDE:
             // log_system("[mem] 记忆模式处理进给倍率切换");
             LOG_OUTPUT(INFO, "记忆模式处理进给倍率切换");
+            if(IsEqualTo(var_chan[0][VAR_CHAN_FEED_OVERRIDE].value.f, 0)) LOG_WARN("进给倍率为0");
             if(cycle_tp->mem_exec_state == EXEC_RUNNING){
                 if(!queue_is_empty(plan_queue)){
                     if(cycle_tp->plan_block->mode != PMC_MODE_TAP && cycle_tp->plan_block->type != RAPID){
@@ -132,6 +133,7 @@ static void mem_set_state(){
         case SYS_EVENT_RAPID_OVERRIDE:
             // log_system("[mem] 记忆模式处理快速倍率切换");
             LOG_OUTPUT(INFO, "记忆模式处理快速倍率切换 %f", var_chan[0][VAR_CHAN_RAPID_OVERRIDE].value.f);
+            if(IsEqualTo(var_chan[0][VAR_CHAN_RAPID_OVERRIDE].value.f, 0)) LOG_WARN("快速倍率为0");
             if(cycle_tp->mem_exec_state == EXEC_RUNNING){
                 if(!queue_is_empty(plan_queue)){
                     if(cycle_tp->plan_block->mode != PMC_MODE_TAP && cycle_tp->plan_block->type == RAPID){
@@ -158,7 +160,7 @@ static void mem_set_state(){
         case SYS_EVENT_Y_NEG_PRESS:
         case SYS_EVENT_Z_NEG_PRESS:
             // log_system("[mem] 记忆模式不支持该操作");
-            LOG_OUTPUT(INFO, "记忆模式不支持该操作");
+            LOG_WARN("记忆模式不支持该操作");
             break;
         
         default:
@@ -323,7 +325,7 @@ static void mem_handle_alarm(){
         }else if(cycle_tp->mem_exec_state == EXEC_PAUSING){
             setVarChanInt(0, VAR_CHAN_IS_RESETTING, 1, 0);
         }
-        LOG_INFO("自动下报警，开始制动");
+        LOG_WARN("自动下报警，开始制动");
     }
     rt_set_chan_state(0, CHAN_IS_PARSER_RESET, true);
 }

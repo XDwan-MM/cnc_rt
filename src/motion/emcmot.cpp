@@ -164,7 +164,7 @@ static void set_operating_mode() {
                 // 回零中切换模式不能生效
                 rt_data->target_mode = rt_data->current_mode;
                 // log_system("[emcmot] 回零中不能切换模式，请先按复位后切换");
-                LOG_OUTPUT(INFO, "回零中不能切换模式，请先按复位后切换");
+                LOG_WARN("回零中不能切换模式，请先按复位后切换");
                 break;
             }
             rt_data->sys_state[SYS_IS_SWITCHING_MODE] = true;
@@ -184,7 +184,7 @@ static void set_operating_mode() {
                 // 加工下切换模式不能生效
                 rt_data->target_mode = rt_data->current_mode;
                 // log_system("[emcmot] 自动加工下不能切换模式，请先按复位后切换");
-                LOG_OUTPUT(INFO, "自动加工下不能切换模式，请先按复位后切换");
+                LOG_WARN("自动加工下不能切换模式，请先按复位后切换");
                 break;
             }
             rt_data->sys_state[SYS_IS_SWITCHING_MODE] = true;
@@ -250,10 +250,13 @@ static void check_for_fault() {
         // 重置各个模式
         mem_handle_estop();
         homing_handle_estop();
-        //　不允许操作
-        rt_data->nc_event = SYS_EVENT_NONE;
-        // 不允许切换模式
-        rt_data->target_mode = rt_data->current_mode;
+        if(rt_data->nc_event != SYS_EVENT_NONE || rt_data->target_mode != rt_data->current_mode){
+            //　不允许操作
+            rt_data->nc_event = SYS_EVENT_NONE;
+            // 不允许切换模式
+            rt_data->target_mode = rt_data->current_mode;
+            LOG_ERROR("急停报警下不允许操作，请检查问题！");
+        }
     }
     //　检查系统报警
     int alarm_count = 0;
