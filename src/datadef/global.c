@@ -178,25 +178,31 @@ GNC_RES tp_reset(){
 }
 
 GNC_RES shm_var_update(){
-    // 各轴位置
     VarUnion crds_type_var;
+    double crds_remain = 0.0;
     double crds_oft = 0.0;
     double act_pos_wcs_ex = 0.0;
-    for(int i = 0; i < SYS_AXES_NUM; i++){
+    for (int i = 0; i < SYS_AXES_NUM; i++)
+    {
         // 剩余移动量
-        crds_oft = var_axis[i][VAR_AXIS_PROG_POS_EX].value.f - var_axis[i][VAR_AXIS_ACT_POS_EX].value.f;
-        setVarAxisDouble(i, VAR_AXIS_LEFT_TOGO_EX, crds_oft, 0);
+        crds_remain = var_axis[i][VAR_AXIS_PROG_POS_EX].value.f - var_axis[i][VAR_AXIS_ACT_POS_EX].value.f;
+        setVarAxisDouble(i, VAR_AXIS_LEFT_TOGO_EX, crds_remain, 0);
         // 工件坐标
         getVarChanValue(0, VAR_CHAN_MODAL, 14, &crds_type_var, 0);
         getCrdsValue(CRDS_TYPE_G5X + crds_type_var.value.i, i, &crds_oft);
-        act_pos_wcs_ex = var_axis[i][VAR_AXIS_ACT_POS_EX].value.f - var_axis[i][VAR_AXIS_LEFT_TOGO_EX].value.f;
+        act_pos_wcs_ex = var_axis[i][VAR_AXIS_ACT_POS_EX].value.f - crds_oft;
         setVarAxisDouble(i, VAR_AXIS_ACT_POS_WCS_EX, act_pos_wcs_ex, 0);
+
+        double t = 0.0;
+        getVarAxisDouble(i, VAR_AXIS_ACT_POS_WCS_EX, &t, 0);
+
         // 轴速度等参数
         setVarAxisDouble(i, VAR_AXIS_ACT_VEL, var_chan[0][VAR_AXIS_CMD_VEL].value.f, 0);
         rt_data->axis_data[i].act_acc = rt_data->axis_data[i].cmd_acc;
         rt_data->axis_data[i].act_jk = rt_data->axis_data[i].cmd_jk;
     }
-    for(int i = 0; i < SYS_CHAN_NUM; i++){
+    for (int i = 0; i < SYS_CHAN_NUM; i++)
+    {
         // 运行模式
         setVarChanInt(0, VAR_CHAN_MODE, rt_data->current_mode, 0);
         // 主轴转速

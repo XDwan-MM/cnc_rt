@@ -616,56 +616,88 @@ static void G_signal() {
     }
 }
 
-static void I_map() {
-    CurrentRegData.regX[4]  = plc_in.pd_data.keyboardIn1.all;      // MCP***+5/****/door
-    CurrentRegData.regX[5]  = plc_in.pd_data.keyboardIn1.all >> 8; //-x
-    CurrentRegData.regX[6]  = plc_in.pd_data.keyboardIn2.all;      // F5
-    CurrentRegData.regX[7]  = plc_in.pd_data.keyboardIn2.all >> 8; //程序再启动
-    CurrentRegData.regX[8]  = plc_in.pd_data.keyboardIn3.all;      //刀库反转
-    CurrentRegData.regX[9]  = plc_in.pd_data.keyboardIn3.all >> 8; //排屑机正转
-    CurrentRegData.regX[10] = plc_in.pd_data.keyboardIn4.all;
-    CurrentRegData.regX[11] = plc_in.pd_data.keyboardIn4.all >> 8;
-    CurrentRegData.regX[12] = plc_in.pd_data.keyboardIn5.all;
-    CurrentRegData.regX[13] = plc_in.pd_data.keyboardIn5.all >> 8;
-    CurrentRegData.regX[14] = plc_in.pd_data.keyboardIn6.all;
-    CurrentRegData.regX[15] = plc_in.pd_data.keyboardIn6.all >> 8;
-    CurrentRegData.regX[16] = plc_in.pd_data.keyboardIn7.all;
-    CurrentRegData.regX[17] = plc_in.pd_data.keyboardIn7.all >> 8;
-    //    CurrentRegData.regX[18]=plc_in.pd_data.keyboardIn8.all;
-    //    CurrentRegData.regX[19]=plc_in.pd_data.keyboardIn8.all>>8;
 
-    //    CurrentRegData.regX[20]=plc_in.pd_data.keyboardInb.all;
-    //    CurrentRegData.regX[21]=plc_in.pd_data.keyboardInb.all>>8;
-
-    //    CurrentRegData.regX[22]=plc_in.pd_data.keyboardIn9.all;
-    //    CurrentRegData.regX[23]=plc_in.pd_data.keyboardIn9.all>>8;
-    for (int j = 0; j < 8; ++j) {
-        XX[j]      = abs(CurrentRegData.regX[j]);
-        XX[8 + j]  = abs(CurrentRegData.regX[8 + j]);
-        XX[16 + j] = abs(CurrentRegData.regX[16 + j]);
-        XX[24 + j] = abs(CurrentRegData.regX[24 + j]);
+static void RT_Xcondition()
+{
+    for (int i = 0; i < 128; ++i)
+    {
+        if(0<=XX[i]<128){
+          setRegValue8(REG_X,i,XX[i]);
+        }else
+        {
+          setRegValue8(REG_X,i,(~XX[i]+1));
+        }
     }
+}
+
+static void RT_Ycondition()
+{
+    for (int i = 0; i < 128; ++i)
+    {
+        if(0<=YY[i]<128){
+          setRegValue8(REG_Y,i,YY[i]);
+        }else
+        {
+          setRegValue8(REG_Y,i,(~YY[i]+1));
+        }
+    }
+}
+
+static void RT_Rcondition()
+{
+    for (int i = 0; i < 1024; ++i)
+    {
+        if(0<=RR[i]<128){
+          setRegValue8(REG_R,i,RR[i]);
+        }else
+        {
+          setRegValue8(REG_R,i,(~RR[i]+1));
+        }
+    }
+}
+
+static void I_map() {
+     XX[0] =plc_in.IO_In1Reg.all;
+    XX[1] =plc_in.IO_In1Reg.all>>8;
+    XX[2] =plc_in.IO_In1Reg.all>>16;
+    XX[3] =plc_in.IO_In1Reg.all>>24;
+    XX[4] =plc_in.pd_data.keyboardIn1.all;
+    XX[5] =plc_in.pd_data.keyboardIn1.all>>8;
+    XX[6] =plc_in.pd_data.keyboardIn2.all;
+    XX[7] =plc_in.pd_data.keyboardIn2.all>>8;
+    XX[8] =plc_in.pd_data.keyboardIn3.all;
+    XX[9] =plc_in.pd_data.keyboardIn3.all>>8;
+    XX[10]=plc_in.pd_data.keyboardIn4.all;
+    XX[11]=plc_in.pd_data.keyboardIn4.all>>8;
+    XX[12]=plc_in.pd_data.keyboardIn5.all;
+    XX[13]=plc_in.pd_data.keyboardIn5.all>>8;
+    XX[14]=plc_in.pd_data.keyboardIn6.all;
+    XX[15]=plc_in.pd_data.keyboardIn6.all>>8;
+    XX[16]=plc_in.pd_data.keyboardIn7.all;
+    XX[17]=plc_in.pd_data.keyboardIn7.all>>8;
+    XX[18]=plc_in.pd_data.keyboardIn8.all;
+    XX[19]=plc_in.pd_data.keyboardIn8.all>>8;
+    XX[20]=plc_in.pd_data.keyboardInb.all;
+    XX[21]=plc_in.pd_data.keyboardInb.all>>8;
+    XX[22]=plc_in.pd_data.keyboardIn9.all;
+    XX[23]=plc_in.pd_data.keyboardIn9.all>>8;
+    RT_Xcondition();
     F_signal();
 }
 
 static void O_map() {
-    for (int j = 0; j < 8; ++j)
-    {
-        CurrentRegData.regY[j]      = abs(YY[j]);
-        CurrentRegData.regY[j + 8]  = abs(YY[j + 8]);
-        CurrentRegData.regY[j + 16] = abs(YY[j + 16]);
-        CurrentRegData.regY[j + 24] = abs(YY[j + 24]);
-    }
-    plc_out.IO_Out1Reg.all = abs(CurrentRegData.regY[0]) | (abs(CurrentRegData.regY[1]) << 8) | abs(CurrentRegData.regY[2]<<16) | abs(CurrentRegData.regY[3]<<24);
-    plc_out.panel_show.keyboardOut1.all = abs(CurrentRegData.regY[4]) | (abs(CurrentRegData.regY[5])  << 8);
-    plc_out.panel_show.keyboardOut2.all = abs(CurrentRegData.regY[6]) | (abs(CurrentRegData.regY[7])  << 8);
-    plc_out.panel_show.keyboardOut3.all = abs(CurrentRegData.regY[8]) | (abs(CurrentRegData.regY[9])  << 8);
-    plc_out.panel_show.keyboardOut4.all = abs(CurrentRegData.regY[10])| (abs(CurrentRegData.regY[11]) << 8);
-    plc_out.panel_show.keyboardOut5.all = abs(CurrentRegData.regY[12])| (abs(CurrentRegData.regY[13]) << 8); // LED_MAG
-    plc_out.panel_show.keyboardOut6.all = abs(CurrentRegData.regY[14])| (abs(CurrentRegData.regY[15]) << 8); // LED_SPD
-    plc_out.panel_show.keyboardOut7.all = abs(CurrentRegData.regY[16])| (abs(CurrentRegData.regY[17]) << 8);
-    plc_out.panel_show.keyboardOut8.all = abs(CurrentRegData.regY[18])| (abs(CurrentRegData.regY[19]) << 8);
+    plc_out.IO_Out1Reg.all=(YY[0]|YY[1]<<8|YY[2]<<16|YY[3]<<24);
+    plc_out.panel_show.keyboardOut1.all=(YY[4]|YY[5]<<8);
+    plc_out.panel_show.keyboardOut2.all=(YY[6]|YY[7]<<8);
+    plc_out.panel_show.keyboardOut3.all=(YY[8]|YY[9]<<8);
+    plc_out.panel_show.keyboardOut4.all=(YY[10]|YY[11]<<8);
+    plc_out.panel_show.keyboardOut5.all=(YY[12]|YY[13]<<8);
+    plc_out.panel_show.keyboardOut6.all=(YY[14]|YY[15]<<8);
+    plc_out.panel_show.keyboardOut7.all=(YY[16]|YY[17]<<8);
+    plc_out.panel_show.keyboardOut8.all=(YY[18]|YY[19]<<8);
     G_signal();
+    RT_Rcondition();
+    RT_Ycondition();
 }
 
 static void row_run(int n) {

@@ -43,6 +43,7 @@ void emcmotTrajPlan() {
         return;
     }
 
+
     // 遍历每个通道
     for (int i = 0; i < var_sys[VAR_SYS_CHAN_NUM].value.i; i++) {
         //复位生效参数
