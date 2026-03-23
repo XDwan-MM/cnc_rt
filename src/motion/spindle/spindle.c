@@ -2,6 +2,8 @@
 #include "global.h"
 #include "mcode_queue.h"
 #include "regapi.h"
+#include "log.h"
+#include <alarmapi.h>
 
 int sp_sign;
 bool sp_stop_sem = false;
@@ -26,7 +28,7 @@ int32_t Spindle_Cw()
 
     //    target_speed = fmin(plc_max_speed, sys_max_speed);
     //    target_speed = fmin(target_speed, emot_speed);
-    target_speed = fmin(sys_max_speed, emot_speed * var_chan[0][VAR_CHAN_SPDL_OVERRIDE].value.f);
+    target_speed = fmin(sys_max_speed, emot_speed * var_chan[0][VAR_CHAN_SPDL_OVERRIDE].value.f / 100);
 
     if(speed + diff < target_speed)
     {
@@ -49,7 +51,7 @@ int32_t Spindle_Ccw(void)
 
     //    target_speed = fmax(plc_max_speed, sys_max_speed);
     //    target_speed = fmax(target_speed, emot_speed);
-    target_speed = fmax(sys_max_speed, emot_speed * var_chan[0][VAR_CHAN_SPDL_OVERRIDE].value.f);
+    target_speed = fmax(sys_max_speed, emot_speed * var_chan[0][VAR_CHAN_SPDL_OVERRIDE].value.f / 100);
 
     if((speed - diff) > target_speed)
     {
@@ -86,13 +88,16 @@ void Spindle_Stop()
         spindle.mode = DRV_MODE_DISABLED;
     }
     stop_last_state = stop_current_state;
-    setVarChanDouble(0, VAR_CHAN_CMD_SPDL_SPEED, vel, 0);
+    setVarChanInt(0, VAR_CHAN_S_CODE, vel, 0);
 }
 
 void emcSpindleControl()
 {
     if(!mcp_sp_speed)
     {
+        // int res = setAlarm(ALARM_AX, ALARM_ERROR, 123);
+        // if(res == -8) return ;
+        // LOG_ERROR("主轴速度值缺省");
         mcp_sp_speed = par_axis[3][PAR_AX_DEFAULT_S].value.val_real;
     }
     //control logic
@@ -118,11 +123,11 @@ void emcSpindleControl()
     {
         printf("dx start \n");
     }
+    setVarChanInt(0, VAR_CHAN_S_CODE, vel, 0);
     if(sp_sign == 0 && !sp_stop_sem)
     {
         Spindle_Stop();
     }
-    setVarChanDouble(0, VAR_CHAN_CMD_SPDL_SPEED, vel, 0);
 }
 
 
@@ -187,13 +192,10 @@ void emcmcodedeal()
             stop_last_state = false;
             Hal_Driver_Set_Target_Vel(&spindle,vel);
         }
-        setVarChanDouble(0, VAR_CHAN_CMD_SPDL_SPEED, vel, 0);
+        setVarChanInt(0, VAR_CHAN_S_CODE, vel, 0);
     }
-    if(sp_sign == 0)
+    if(sp_sign == 0 && !sp_stop_sem)
     {
-        if(sp_sign == 0 && !sp_stop_sem)
-        {
-            Spindle_Stop();
-        }
+        Spindle_Stop();
     }
 }

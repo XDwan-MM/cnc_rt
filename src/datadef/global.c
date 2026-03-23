@@ -200,8 +200,8 @@ GNC_RES shm_var_update(){
         // 运行模式
         setVarChanInt(0, VAR_CHAN_MODE, rt_data->current_mode, 0);
         // 主轴转速
-        setVarChanDouble(i, VAR_CHAN_S_CODE, var_chan[i][VAR_CHAN_CMD_SPDL_SPEED].value.f, 0);
-        setVarChanDouble(i, VAR_CHAN_CMD_SPDL_SPEED, var_chan[i][VAR_CHAN_CMD_SPDL_SPEED].value.f, 0);
+//        setVarChanDouble(i, VAR_CHAN_S_CODE, var_chan[i][VAR_CHAN_CMD_SPDL_SPEED].value.f, 0);
+//        setVarChanDouble(i, VAR_CHAN_CMD_SPDL_SPEED, var_chan[i][VAR_CHAN_CMD_SPDL_SPEED].value.f, 0);
         setVarChanDouble(i, VAR_CHAN_ACT_SPDL_SPEED, var_chan[i][VAR_CHAN_ACT_SPDL_SPEED].value.f, 0);
         // 通道速度等参数
         setVarChanDouble(i, VAR_CHAN_ACT_FEEDRATE, var_chan[i][VAR_CHAN_CMD_FEEDRATE].value.f, 0);
