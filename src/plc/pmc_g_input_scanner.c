@@ -1,7 +1,6 @@
-#include "pmc_input_scanner.h"
+#include "pmc_g_input_scanner.h"
 #include "global.h"
 #include "log.h"
-
 #include "regapi.h"       /**< 寄存器访问 API */
 #include "signal_utils.h" /**< 边沿检测宏定义 */
 #include <string.h>
@@ -20,7 +19,7 @@ static void pmc_dispatch_event(PMC_EVENT_ID id, int p1, int p2);
  * @brief 模式解析逻辑实现
  * 涉及 MD1, MD2, MD4 (bit 0,1,2), DNCI (bit 5), ZRN (bit 7)
  */
-static void process_mode_selection(unsigned char g43);
+static void process_mode_selection(char g43);
 
 /* ==========================================================================
  * 2. 外部函数定义 (Public Definitions)
@@ -267,7 +266,7 @@ static void pmc_dispatch_event(PMC_EVENT_ID id, int p1, int p2)
  * @brief 模式解析逻辑实现
  * 涉及 MD1, MD2, MD4 (bit 0,1,2), DNCI (bit 5), ZRN (bit 7)
  */
-static void process_mode_selection(unsigned char g43)
+static void process_mode_selection(char g43)
 {
     CNC_MODE_INDEX target_mode = CNC_MODE_INVALID; // 默认无效模式
 

@@ -97,9 +97,9 @@ static GNC_RES shm_var_init(){
     for(int i = 0; i < SYS_CHAN_NUM; i++){        
         setVarChanInt(i, VAR_CHAN_CMD_FEEDRATE, 0, 0);          // 通道合成指令速度
         setVarChanInt(i, VAR_CHAN_ACT_FEEDRATE, 0, 0);          // 通道实际合成速度
-        setVarChanDouble(i, VAR_CHAN_FEED_OVERRIDE, 1.0, 0);    // 进给倍率    
-        setVarChanDouble(i, VAR_CHAN_RAPID_OVERRIDE, 0.1, 0);   // 快速进给倍率
-        setVarChanDouble(i, VAR_CHAN_SPDL_OVERRIDE, 1.0, 0);    // 主轴倍率
+        setVarChanDouble(i, VAR_CHAN_FEED_OVERRIDE, 0.0, 0);    // 进给倍率    
+        setVarChanDouble(i, VAR_CHAN_RAPID_OVERRIDE, 0.0, 0);   // 快速进给倍率
+        setVarChanDouble(i, VAR_CHAN_SPDL_OVERRIDE, 0.0, 0);    // 主轴倍率
         setVarChanInt(i, VAR_CHAN_IS_HOMING, 0, 0);             // 回零中
         setVarChanInt(i, VAR_CHAN_IS_RUNNING, 0, 0);            // 运行中
         setVarChanInt(i, VAR_CHAN_IS_PROGEND, 0, 0);            // 程序结束

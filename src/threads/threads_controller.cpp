@@ -7,7 +7,8 @@
 #include "emcmot.h"
 #include "spindle.h"
 #include "hal_task.h"
-#include "pmc_input_scanner.h"
+#include "pmc_a_input_scanner.h"
+#include "pmc_g_input_scanner.h"
 #include "pmc_output_handler.h"
 #include <stdio.h>
 #ifdef DEBUG_MODE_ENABLED
@@ -54,6 +55,7 @@ void* soft_plc_thread_func(void*) {
         #else
         hal_task();
         pmc_input_scan_cycle();
+        pmc_a_input_scan_cycle();
         #endif
     }
     return NULL;

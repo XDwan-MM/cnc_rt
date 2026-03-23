@@ -256,6 +256,7 @@ static void check_for_fault() {
         // 重置各个模式
         mem_handle_estop();
         homing_handle_estop();
+        jog_handle_estop();
         if(rt_data->nc_event != SYS_EVENT_NONE || rt_data->target_mode != rt_data->current_mode){
             //　不允许操作
             rt_data->nc_event = SYS_EVENT_NONE;
@@ -284,10 +285,10 @@ static void check_ferror_fault()
     }
     /* 指令速度不为0时，检测跟随误差 */
     // x轴
-    if (fabs(var_axis[AXIS_X][VAR_CHAN_CMD_FEEDRATE].value.f - 0.0) > SPEED_THRESHOLD)
+    if (fabs(var_axis[AXIS_X][VAR_AXIS_CMD_VEL].value.f - 0.0) > SPEED_THRESHOLD)
     {
         // 指令速度 指令位置 反馈位置
-        double vel_cmd_x = var_axis[AXIS_X][VAR_CHAN_CMD_FEEDRATE].value.f;
+        double vel_cmd_x = var_axis[AXIS_X][VAR_AXIS_CMD_VEL].value.f;
         double pos_cmd_x = rt_data->axis_data[AXIS_X].motor_cmd_pos;
         double pos_fb_x = rt_data->axis_data[AXIS_X].motor_act_pos;
         // 计算跟随误差
@@ -295,17 +296,18 @@ static void check_ferror_fault()
         // 跟随误差报警处理
         if (ferror_control[AXIS_X].error_flag)
         {
-            // int res = setAlarm(ALARM_CH, ALARM_ERROR, 4);
-            // if (res == -8)
-            //     return;
-            LOG_OUTPUT(ERROR, "Ｘ轴跟随误差报警");
+            int res = setAlarm(ALARM_AX, ALARM_ERROR, 100);
+            if (res == -8)
+                return;
+            // 上述代码逻辑是让下面LOG只打印一次；返回值-8：表示该报警已存在。
+            LOG_OUTPUT(ERROR, "X轴跟随误差过大");
         }
     }
     // y轴
-    if (fabs(var_axis[AXIS_Y][VAR_CHAN_CMD_FEEDRATE].value.f - 0.0) > SPEED_THRESHOLD)
+    if (fabs(var_axis[AXIS_Y][VAR_AXIS_CMD_VEL].value.f - 0.0) > SPEED_THRESHOLD)
     {
         // 指令速度 指令位置 反馈位置
-        double vel_cmd_y = var_axis[AXIS_Y][VAR_CHAN_CMD_FEEDRATE].value.f;
+        double vel_cmd_y = var_axis[AXIS_Y][VAR_AXIS_CMD_VEL].value.f;
         double pos_cmd_y = rt_data->axis_data[AXIS_Y].motor_cmd_pos;
         double pos_fb_y = rt_data->axis_data[AXIS_Y].motor_act_pos;
         // 计算跟随误差
@@ -313,17 +315,17 @@ static void check_ferror_fault()
         // 跟随误差报警处理
         if (ferror_control[AXIS_Y].error_flag)
         {
-            // int res = setAlarm(ALARM_CH, ALARM_ERROR, 4);
-            // if (res == -8)
-            //     return;
-            LOG_OUTPUT(ERROR, "Y轴跟随误差报警");
+            int res = setAlarm(ALARM_AX, ALARM_ERROR, 101);
+            if (res == -8)
+                return;
+            LOG_OUTPUT(ERROR, "Y轴跟随误差过大");
         }
     }
     // z轴
-    if (fabs(var_axis[AXIS_Z][VAR_CHAN_CMD_FEEDRATE].value.f - 0.0) > SPEED_THRESHOLD)
+    if (fabs(var_axis[AXIS_Z][VAR_AXIS_CMD_VEL].value.f - 0.0) > SPEED_THRESHOLD)
     {
         // 指令速度 指令位置 反馈位置
-        double vel_cmd_z = var_axis[AXIS_Z][VAR_CHAN_CMD_FEEDRATE].value.f;
+        double vel_cmd_z = var_axis[AXIS_Z][VAR_AXIS_CMD_VEL].value.f;
         double pos_cmd_z = rt_data->axis_data[AXIS_Z].motor_cmd_pos;
         double pos_fb_z = rt_data->axis_data[AXIS_Z].motor_act_pos;
         // 计算跟随误差
@@ -331,10 +333,10 @@ static void check_ferror_fault()
         // 跟随误差报警处理
         if (ferror_control[AXIS_Z].error_flag)
         {
-            // int res = setAlarm(ALARM_CH, ALARM_ERROR, 4);
-            // if (res == -8)
-            //     return;
-            LOG_OUTPUT(ERROR, "Z轴跟随误差报警");
+            int res = setAlarm(ALARM_AX, ALARM_ERROR, 102);
+            if (res == -8)
+                return;
+            LOG_OUTPUT(ERROR, "Z轴跟随误差过大");
         }
     }
 }
@@ -371,7 +373,7 @@ static void output_to_hal() {
     Hal_Driver_Set_Target_Pos(&z_axis_driver, z_cmd_Pulses);
 }
 
-STATIC void compute_screw_comp() {
+static void compute_screw_comp() {
     double pitch_comp_val_x, pitch_comp_val_y, pitch_comp_val_z;
     double perp_comp_val_x, perp_comp_val_y, perp_comp_val_z;
 

@@ -43,15 +43,15 @@ uint8_t Axis_Limit_Manager_Init(void)
     runtime[AXIS_Z].config.level2.positive_limit = par_axis[AXIS_Z][PAR_AX_PLMT2].value.val_real;
     runtime[AXIS_Z].config.level2.negative_limit = par_axis[AXIS_Z][PAR_AX_NLMT2].value.val_real;
     //level 3
-    runtime[AXIS_X].config.level3.is_enabled = 1;
-    runtime[AXIS_X].config.level3.positive_limit = 300;
-    runtime[AXIS_X].config.level3.negative_limit = 200;
-    runtime[AXIS_Y].config.level3.is_enabled = 1;
-    runtime[AXIS_Y].config.level3.positive_limit = 300;
-    runtime[AXIS_Y].config.level3.negative_limit = 200;
-    runtime[AXIS_Z].config.level3.is_enabled = 1;
-    runtime[AXIS_Z].config.level3.positive_limit = 300;
-    runtime[AXIS_Z].config.level3.negative_limit = 200;
+    runtime[AXIS_X].config.level3.is_enabled = 0;
+    runtime[AXIS_X].config.level3.positive_limit = 3000;
+    runtime[AXIS_X].config.level3.negative_limit = 2000;
+    runtime[AXIS_Y].config.level3.is_enabled = 0;
+    runtime[AXIS_Y].config.level3.positive_limit = 3000;
+    runtime[AXIS_Y].config.level3.negative_limit = 2000;
+    runtime[AXIS_Z].config.level3.is_enabled = 0;
+    runtime[AXIS_Z].config.level3.positive_limit = 3000;
+    runtime[AXIS_Z].config.level3.negative_limit = 2000;
 
 }
 // 检查位置是否在限位区域内部

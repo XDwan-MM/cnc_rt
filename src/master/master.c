@@ -78,19 +78,24 @@ void Master_Run()
         CHECK_FUNC(GM_RxPdoEntry_Get_By_Pos(&DO1[i], slave_list, i + io_slave_bias, 0, 1));
     }
     uint8_t drivers_slave_bias = 2;
-    /***************************根据位置索引Entry**************************/
-    for (int i = 0; i < 4; i++) {
-        CHECK_FUNC(GM_TxPdoEntry_Get_By_Pos(&StatusWord[i], slave_list, i + drivers_slave_bias, 0, 0));      // 获取状态字entry信息
-        CHECK_FUNC(GM_TxPdoEntry_Get_By_Pos(&CurPos[i], slave_list, i + drivers_slave_bias, 0, 1));          // 获取当前位置entry信息
-        CHECK_FUNC(GM_TxPdoEntry_Get_By_Pos(&CurVel[i], slave_list, i + drivers_slave_bias, 1, 0));
+    for (int i = 0; i < 3; i++) 
+    {
+        GM_RxPdoEntry_Get_By_Pos(&ControlWord[i], slave_list , i + drivers_slave_bias, 0, 0);
+        GM_RxPdoEntry_Get_By_Pos(&PurPos[i], slave_list, i + drivers_slave_bias, 0, 1);
+        GM_RxPdoEntry_Get_By_Pos(&OperationMode[i], slave_list, i + drivers_slave_bias, 0, 4);
+        GM_RxPdoEntry_Get_By_Pos(&PurVel[i], slave_list, i + drivers_slave_bias, 0, 2);
 
-        CHECK_FUNC(GM_RxPdoEntry_Get_By_Pos(&PurVel[i], slave_list, i + drivers_slave_bias, 1, 0));
-        CHECK_FUNC(GM_RxPdoEntry_Get_By_Pos(&ControlWord[i], slave_list, i + drivers_slave_bias, 0, 0));     // 获取控制字entry信息
-        CHECK_FUNC(GM_RxPdoEntry_Get_By_Pos(&OperationMode[i], slave_list, i + drivers_slave_bias, 1, 1));   // 获取操作模式entry信息
-        CHECK_FUNC(GM_RxPdoEntry_Get_By_Pos(&PurPos[i], slave_list, i + drivers_slave_bias, 0, 1));
-        CHECK_FUNC(GM_RxPdoEntry_Get_By_Pos(&ErrorNumb[i], slave_list, i + drivers_slave_bias, 2, 0));
-
+        GM_TxPdoEntry_Get_By_Pos(&StatusWord[i], slave_list, i + drivers_slave_bias, 0, 0);
+        GM_TxPdoEntry_Get_By_Pos(&CurPos[i], slave_list, i + drivers_slave_bias, 0, 1);
+        GM_TxPdoEntry_Get_By_Pos(&CurVel[i], slave_list, i + drivers_slave_bias, 0, 2);
     }
+    GM_RxPdoEntry_Get_By_Pos(&ControlWord[3], slave_list, 5, 0, 0);
+    GM_RxPdoEntry_Get_By_Pos(&PurPos[3], slave_list,  5, 0, 2);
+    GM_RxPdoEntry_Get_By_Pos(&OperationMode[3], slave_list, 5, 0, 1);
+
+    GM_TxPdoEntry_Get_By_Pos(&StatusWord[3], slave_list, 5, 0, 1);
+    GM_TxPdoEntry_Get_By_Pos(&CurPos[3], slave_list, 5, 0, 3);
+
     debug("==============================握手前DMA写================================\n");
     rc = GM_Master_Send(1);
     CHECK_RC(rc, "握手前DMA写失败", err_close);
