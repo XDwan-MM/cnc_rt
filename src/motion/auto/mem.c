@@ -227,6 +227,14 @@ static double mem_cal_pinc(VELPLAN_TYPE velplan_mode, double ncu_cycle, double c
                     break;
                 }else{ 
                     res = cycle_tp_update_tp(velplan_mode, ncu_cycle, current_vel, current_pos, 0);
+                    if(res == VP_MAX_VEL_IS_ZERO && var_chan[0][VAR_CHAN_IS_RESETTING].value.i){
+                        setVarChanInt(0, VAR_CHAN_IS_RESETTING, 0, 0);
+                        setVarChanInt(0, VAR_CHAN_IS_RUNNING, 0, 0);
+                        setVarChanInt(0, VAR_CHAN_IS_MOVING, 0, 0);
+                        setVarChanInt(0, VAR_CHAN_RUN_ROW, 0, 0);
+                        cycle_tp->mem_exec_state = EXEC_IDLE;
+                        break;
+                    }
                     CHECK_RES(mem_check_res(res));
                 }
                 cycle_tp->is_event_trigger = false; 
