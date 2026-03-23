@@ -2,7 +2,6 @@
 #include "datatype.h"
 #include "global.h"
 #include "log.h"
-#include "logapi.h"
 #include <alarmapi.h>
 
 static void homing_set_state();
@@ -14,7 +13,8 @@ static bool abs_homing_is_tp_finished(AXIS_TYPE axis_type);
 static bool abs_homing_is_axis_homed(AXIS_TYPE axis_type);
 static double abs_homing_tp_pinc(AXIS_TYPE axis_type);
 static bool homing_check_res(GNC_RES res);
-
+static void homing_handle_alarm();
+static void homing_cal_fv();
 GNC_RES abs_homing_tp_update_params(AXIS_TYPE axis_type, double current_vel, double target_vel);
 void abs_homing_tp_update_traj(VELPLAN_TYPE velplan_type, double cycle_time, AXIS_TYPE axis_type);
 static bool homing_tp_new_vel_valid(AXIS_TYPE axis_type, double target_vel);
@@ -38,12 +38,22 @@ void handle_homing_cmd(){
         rt_data->axis_data[axis_type].cmd_acc = homing_tp[axis_type].traj_data->a;
         rt_data->axis_data[axis_type].cmd_jk = homing_tp[axis_type].traj_data->j;
     }
+    homing_cal_fv();
     homing_is_all_homed();
     homing_is_resetting();
 }
 
+static void homing_cal_fv(){
+    double fv = sqrt(pow(homing_tp[0].traj_data->v, 2) + pow(homing_tp[1].traj_data->v, 2) + pow(homing_tp[2].traj_data->v, 2));
+    setVarChanDouble(0, VAR_CHAN_CMD_FEEDRATE, fv * TIME_MINUS_2_S, 0);
+}
+
 static void homing_set_state(){
-    GNC_RES res = GNC_CAL_SUCCESS;
+    // 处理报警，减速停止
+    if(rt_data->sys_state[SYS_IS_ALARMING]){
+        homing_handle_alarm();
+        return;
+    }
     switch(rt_data->nc_event){
         case SYS_EVENT_NONE:
             break;
@@ -92,6 +102,7 @@ static void homing_set_state(){
         case SYS_EVENT_RAPID_OVERRIDE:
             // log_system("[home] 回零处理快速进给倍率改变");
             LOG_OUTPUT(INFO, "回零处理快速进给倍率改变");
+            if(IsEqualTo(var_chan[0][VAR_CHAN_RAPID_OVERRIDE].value.f, 0)) LOG_WARN("快速倍率为0");
             for(int i = 0; i < SYS_AXES_NUM; i++){
                 if(homing_tp[i].homing_state == ABS_EXEC_HOMING){
                     homing_tp[i].is_event_trigger = true;
@@ -101,7 +112,7 @@ static void homing_set_state(){
 
         case SYS_EVENT_PAUSE:
         case SYS_EVENT_RERUN:
-            LOG_OUTPUT(INFO, "回零模式不支持此操作");
+            LOG_WARN("回零模式不支持此操作");
             break;
         
         default:
@@ -119,24 +130,27 @@ static bool homing_check_res(GNC_RES res){
         return true;
     case VP_MAX_VEL_IS_ZERO:
         return false;
+
     case GNC_DATA_NULL:
     case GNC_PARAM_UNVALID:
-    case GNC_CAL_ERROR:
-    case GNC_OPERATOR_ERROR:
     case VP_IS_NULL:
-    case VP_CAL_ERROR:
-    case VP_CAL_S_ERROR:
-    case VP_CAL_V_ERROR:
     case VP_PARAM_UNVALID:
     case VP_LENGTH_IS_ZERO:
     case VP_FEED_RATE_IS_ZERO:
     case VP_LENGTH_UNVALID:
+        homing_handle_estop();
+        // log_system("[home] 回零错误(%d)", res);
+        LOG_OUTPUT(ERROR, "回零错误 %d", res);
+        setAlarm(ALARM_CH, ALARM_ERROR, 0);
+        return false;
+
+    case GNC_CAL_ERROR:
+    case GNC_OPERATOR_ERROR:
+    case VP_CAL_ERROR:
+    case VP_CAL_S_ERROR:
+    case VP_CAL_V_ERROR:
     default:
-        homing_tp_reset();
-        rt_set_sys_state(SYS_IS_ESTOP_ON, true);
-        setVarChanInt(0, VAR_CHAN_IS_HOMING, 0, 0);
-        setVarChanInt(0, VAR_CHAN_IS_MOVING, 0, 0);
-        setVarChanInt(0, VAR_CHAN_IS_RESETTING, 0, 0);
+        homing_handle_estop();
         // log_system("[home] 回零错误(%d)", res);
         LOG_OUTPUT(ERROR, "回零错误 %d", res);
         setAlarm(ALARM_CH, ALARM_ERROR, 1);
@@ -144,12 +158,29 @@ static bool homing_check_res(GNC_RES res){
     }
 }
 
+void homing_handle_estop(){
+    homing_tp_reset();
+    setVarChanInt(0, VAR_CHAN_IS_HOMING, 0, 0);
+    setVarChanInt(0, VAR_CHAN_IS_MOVING, 0, 0);
+    setVarChanInt(0, VAR_CHAN_IS_RESETTING, 0, 0);
+}
+
+static void homing_handle_alarm(){
+    for(int i = 0; i < SYS_AXES_NUM; i++){
+        if(homing_tp[i].homing_state == ABS_EXEC_HOMING){
+            homing_tp[i].is_event_trigger = true;
+            homing_tp[i].homing_state = ABS_EXEC_RESETTING;
+            LOG_WARN("回零下报警，开始制动");
+        }
+    }
+}
+
 static double abs_homing_tp_pinc(AXIS_TYPE axis_type){
     GNC_RES res = GNC_CAL_SUCCESS;
     double ncu_cycle = (double)par_ncu[PAR_NCU_CYCLE].value.val_uint / TIME_US_2_S;
     double rapid_vel = par_axis[axis_type][PAR_AX_RAPID_SPD].value.val_real;
-    double rapid_override = var_chan[0][VAR_CHAN_RAPID_OVERRIDE].value.f;
-    double current_vel = fabs(var_axis[axis_type][VAR_AXIS_ACT_VEL].value.f);
+    double rapid_override = var_chan[0][VAR_CHAN_RAPID_OVERRIDE].value.f / OVERRIDE_PERCENT;
+    double current_vel = fabs(var_axis[axis_type][VAR_AXIS_CMD_VEL].value.f);
     double s = 0;
     switch(homing_tp[axis_type].homing_state){
         case ABS_EXEC_IDLE:
@@ -163,6 +194,7 @@ static double abs_homing_tp_pinc(AXIS_TYPE axis_type){
                 if(abs_homing_is_axis_homed(axis_type)){
                     homing_tp[axis_type].homing_state = ABS_EXEC_IDLE;
                     setVarAxisInt(0, VAR_AXIS_IS_HOMEF, 1, 0);
+                    LOG_INFO("轴%d完成回零", axis_type);
                     break;
                 }
                 homing_tp[axis_type].max_vel = rapid_vel * rapid_override;
@@ -195,7 +227,6 @@ static double abs_homing_tp_pinc(AXIS_TYPE axis_type){
             break;
 
         default:
-            // error
             break;
     };
     if(homing_tp[axis_type].homing_direction == AXIS_HOMING_NEGATIVE) s = -s;
@@ -253,7 +284,7 @@ void homing_tp_init(){
         homing_tp[i].traj_data = (TRAJ_PARAMS*)calloc(sizeof(TRAJ_PARAMS), 1);
         homing_tp[i].homing_block->type = LINE;
         homing_tp[i].homing_state = ABS_EXEC_IDLE;
-        homing_tp[i].homing_block->max_vel = par_axis[i][PAR_AX_RAPID_SPD].value.val_real * var_chan[0][VAR_CHAN_RAPID_OVERRIDE].value.f;
+        homing_tp[i].homing_block->max_vel = par_axis[i][PAR_AX_RAPID_SPD].value.val_real;
         homing_tp[i].homing_block->feed_vel = par_axis[i][PAR_AX_RAPID_SPD].value.val_real;
         homing_tp[i].homing_block->max_acc = par_axis[i][PAR_AX_RAPID_ACC].value.val_real;
         homing_tp[i].homing_block->max_jerk = par_axis[i][PAR_AX_RAPID_JK].value.val_real;
@@ -271,11 +302,14 @@ void homing_tp_reset(){
 
 GNC_RES abs_homing_tp_update_params(AXIS_TYPE axis_type, double current_vel, double target_vel){
     GNC_RES res = VP_CAL_SUCCESS;
+    homing_tp[axis_type].homing_block->feed_vel = par_axis[axis_type][PAR_AX_RAPID_SPD].value.val_real;
+    homing_tp[axis_type].homing_block->max_vel = par_axis[axis_type][PAR_AX_RAPID_SPD].value.val_real * var_chan[0][VAR_CHAN_RAPID_OVERRIDE].value.f / OVERRIDE_PERCENT;
+    homing_tp[axis_type].homing_block->max_acc = par_axis[axis_type][PAR_AX_RAPID_ACC].value.val_real;
+    homing_tp[axis_type].homing_block->max_jerk = par_axis[axis_type][PAR_AX_RAPID_JK].value.val_real;
     // 如果新速度不满足，不更新新速度
     if(!homing_tp_new_vel_valid(axis_type, target_vel)) return res;
-    homing_tp[axis_type].homing_block->max_vel = par_axis[axis_type][PAR_AX_RAPID_SPD].value.val_real * var_chan[0][VAR_CHAN_RAPID_OVERRIDE].value.f;
     homing_tp[axis_type].homing_block->length = fabs(par_axis[axis_type][PAR_AX_HOME_CRDS].value.val_real - var_axis[axis_type][VAR_AXIS_CMD_POS_EX].value.f); // 设置的x轴零点与当前位置之间的距离
-    homing_tp[axis_type].homing_block->start_vel = fabs(var_axis[axis_type][VAR_AXIS_ACT_VEL].value.f);  // 当前速度
+    homing_tp[axis_type].homing_block->start_vel = fabs(var_axis[axis_type][VAR_AXIS_CMD_VEL].value.f);  // 当前速度
     homing_tp[axis_type].homing_distance = homing_tp[axis_type].homing_block->length;
     if(current_vel > homing_tp[axis_type].homing_block->max_vel) homing_tp[axis_type].homing_block->max_vel = current_vel;
     // 如果加工段允许最大速度为0（倍率为0）
@@ -302,7 +336,7 @@ void abs_homing_tp_update_traj(VELPLAN_TYPE velplan_type, double cycle_time, AXI
 }
 
 static bool homing_tp_new_vel_valid(AXIS_TYPE axis_type, double target_vel){
-    double vs = fabs(var_axis[axis_type][VAR_AXIS_ACT_VEL].value.f); double ve = 0;
+    double vs = fabs(var_axis[axis_type][VAR_AXIS_CMD_VEL].value.f); double ve = 0;
     double remain_s = fabs(par_axis[axis_type][PAR_AX_HOME_CRDS].value.val_real - var_axis[axis_type][VAR_AXIS_CMD_POS_EX].value.f); ;
     double total_decline_length = 0;
     if(vs > target_vel && target_vel >= ve){

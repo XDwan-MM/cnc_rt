@@ -3,7 +3,6 @@
 #include "rt_sem.h"
 #include <stdio.h>
 #include "hal_driver.h"
-#include "master.h"
 #include "task.h"
 #include "emcmot.h"
 #include "spindle.h"

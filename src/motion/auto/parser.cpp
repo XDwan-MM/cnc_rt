@@ -1,7 +1,6 @@
 #include "parser.h"
 #include "global.h"
 #include "log.h"
-#include <logapi.h>
 #include <alarmapi.h>
 #include <hmisysapi.h>
 

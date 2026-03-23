@@ -11,7 +11,7 @@
 #include "debug_mode.h"
 #include "global.h"
 #include "parser.h"
-#include "logapi.h"
+
 #include "log.h"
 #include "stored_stroke_check.h"
 
@@ -28,9 +28,10 @@ void sigint_handler([[maybe_unused]] int sig) {
 int Master_Start() {
     char eni_path[512];
     snprintf(eni_path, sizeof(eni_path), "%s/%s", PROJECT_DIR, "config/ENI/gugao_io.xml");
-    int error_code = ethercat_init(eni_path);
-    if ( error_code < 0) {
-        printf("[Warning] EtherCAT 启动失败，错误码为 %d ！\n", error_code);
+    master_error_code = ethercat_init(eni_path);
+    if ( master_error_code < 0) {
+        Master_Error(master_error_code);
+        printf("[Warning] EtherCAT 启动失败，错误码为 %d ！\n", master_error_code);
         return -1;
     }
     return 1;

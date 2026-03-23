@@ -65,21 +65,6 @@ build_shm_lib() {
     fi
 }
 
-build_log_lib() {
-    mkdir -p "$LIB_DIR/log/build"
-    cd "$LIB_DIR/log/build"
-    qmake "../cnclogapp.pro"
-    make -j$(nproc)
-    if [ $? -eq 0 ]; then
-        make install
-        sudo ldconfig
-        echo -e "${GREEN}[OK] 编译日志库成功, 安装到/usr/local/lib${NC}"
-        return 0
-    else
-        echo -e "${RED}[FAIL] 编译日志库失败${NC}"
-        return 1
-    fi
-}
 
 build_debug() {
     echo -e "${BLUE}========== 编译调试模式 ==========${NC}"
@@ -170,12 +155,6 @@ clean_build() {
         echo "  已清理: $LIB_DIR/cncshm/build"
     fi
 
-        # 清理 共享内存 构建目录
-    if [ -d "$LIB_DIR/log/build" ]; then
-        rm -rf "$LIB_DIR/log/build"
-        echo "  已清理: $LIB_DIR/log/build"
-    fi
-
     # 清理 debug 构建目录
     if [ -d "$BUILD_DIR_DEBUG" ]; then
         rm -rf "$BUILD_DIR_DEBUG"
@@ -211,21 +190,18 @@ clean_build() {
 case "${1:-all}" in
     debug)
         build_shm_lib
-        build_log_lib
         build_debug
         echo ""
         echo -e "可执行文件: ${YELLOW}$BIN_DIR/rt_cnc_d${NC}"
         ;;
     release)
         build_shm_lib
-        build_log_lib
         build_release
         echo ""
         echo -e "可执行文件: ${YELLOW}$BIN_DIR/rt_cnc${NC}"
         ;;
     all)
         build_shm_lib
-        build_log_lib
         build_all
         ;;
     clean)

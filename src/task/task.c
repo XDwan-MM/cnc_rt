@@ -1,7 +1,7 @@
 #include "task.h"
 #include "eventdef.h"
 #include "spindle.h"
-#include "logapi.h"
+
 #include "log.h"
 #include <alarmapi.h>
 #include <stdlib.h>
@@ -158,23 +158,23 @@ static GNC_RES task_handle_pmc_event(PMC_EVENT* event_data){
             // 1.进给倍率
             if(event_data->override_payload.override_type == 0)
             {
-                setVarChanDouble(0, VAR_CHAN_FEED_OVERRIDE, (double)event_data->override_payload.val / 100, 0);
+                setVarChanDouble(0, VAR_CHAN_FEED_OVERRIDE, (double)event_data->override_payload.val, 0);
                 rt_data->nc_event = SYS_EVENT_FEED_OVERRIDE;
                 // log_system("[task] 处理进给倍率事件");
-                LOG_OUTPUT(INFO, "处理进给倍率事件");
+                LOG_OUTPUT(INFO, "处理进给倍率事件 %d", event_data->override_payload.val);
             }
             // 2.快速进给倍率
             if(event_data->override_payload.override_type == 1)
             {
-                setVarChanDouble(0, VAR_CHAN_RAPID_OVERRIDE, (double)event_data->override_payload.val / 100, 0);
+                setVarChanDouble(0, VAR_CHAN_RAPID_OVERRIDE, (double)event_data->override_payload.val, 0);
                 rt_data->nc_event = SYS_EVENT_RAPID_OVERRIDE;
                 // log_system("[task] 处理快速进给倍率事件");
-                LOG_OUTPUT(INFO, "处理快速进给倍率事件");
+                LOG_OUTPUT(INFO, "处理快速进给倍率事件 %d", event_data->override_payload.val);
             }
             // 3.主轴倍率
             if(event_data->override_payload.override_type == 2)
             {
-                setVarChanDouble(0, VAR_CHAN_SPDL_OVERRIDE, (double)event_data->override_payload.val / 100, 0);
+                setVarChanDouble(0, VAR_CHAN_SPDL_OVERRIDE, (double)event_data->override_payload.val, 0);
                 rt_data->nc_event = SYS_EVENT_SPDL_OVERRIDE;
                 // log_system("[task] 处理主轴倍率事件");
                 LOG_OUTPUT(INFO, "处理主轴倍率事件");

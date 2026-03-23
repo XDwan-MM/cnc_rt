@@ -17,7 +17,7 @@
 #include "stored_stroke_check.h"
 #include "parser.h"
 #include "hmisysapi.h"
-#include "logapi.h"
+
 #include <alarmapi.h>
 #include <math.h>
 #include "rt_data.h"
@@ -164,7 +164,7 @@ static void set_operating_mode() {
                 // 回零中切换模式不能生效
                 rt_data->target_mode = rt_data->current_mode;
                 // log_system("[emcmot] 回零中不能切换模式，请先按复位后切换");
-                LOG_OUTPUT(INFO, "回零中不能切换模式，请先按复位后切换");
+                LOG_WARN("回零中不能切换模式，请先按复位后切换");
                 break;
             }
             rt_data->sys_state[SYS_IS_SWITCHING_MODE] = true;
@@ -184,7 +184,7 @@ static void set_operating_mode() {
                 // 加工下切换模式不能生效
                 rt_data->target_mode = rt_data->current_mode;
                 // log_system("[emcmot] 自动加工下不能切换模式，请先按复位后切换");
-                LOG_OUTPUT(INFO, "自动加工下不能切换模式，请先按复位后切换");
+                LOG_WARN("自动加工下不能切换模式，请先按复位后切换");
                 break;
             }
             rt_data->sys_state[SYS_IS_SWITCHING_MODE] = true;
@@ -245,13 +245,24 @@ static void get_cmd_pos() {
 }
 
 static void check_for_fault() {
-    
+    if(rt_data->sys_state[SYS_IS_ESTOP_ON]){
+        setAlarm(ALARM_SY, ALARM_ERROR, 0);
+        // 重置各个模式
+        mem_handle_estop();
+        homing_handle_estop();
+        if(rt_data->nc_event != SYS_EVENT_NONE || rt_data->target_mode != rt_data->current_mode){
+            //　不允许操作
+            rt_data->nc_event = SYS_EVENT_NONE;
+            // 不允许切换模式
+            rt_data->target_mode = rt_data->current_mode;
+            LOG_ERROR("急停报警下不允许操作，请检查问题！");
+        }
+    }
     //　检查系统报警
     int alarm_count = 0;
     getAlarmCount(ALARM_TYPE_ALL, ALARM_LEVEL_ALL, &alarm_count);
     if(alarm_count > 0){
-        // LOG_OUTPUT(ERROR, "alarm count: %d\n", alarm_count);
-        rt_data->sys_state[SYS_IS_ESTOP_ON] = true;
+        rt_data->sys_state[SYS_IS_ALARMING] = true;
         handle_alarm_cmd();
     } 
 }
@@ -388,36 +399,9 @@ static void check_for_soft_limit() {
     runtime[0].current_position = rt_data->axis_data[AXIS_X].motor_cmd_pos;
     runtime[1].current_position = rt_data->axis_data[AXIS_Y].motor_cmd_pos;
     runtime[2].current_position = rt_data->axis_data[AXIS_Z].motor_cmd_pos;
-    runtime[0].active_levels = Check_Axis_Limit_Violation(runtime[0]);
-    runtime[1].active_levels = Check_Axis_Limit_Violation(runtime[1]);
-    runtime[2].active_levels = Check_Axis_Limit_Violation(runtime[2]);
-    // if((runtime[0].active_levels & 0x01) == 1 ||
-    //     (runtime[1].active_levels & 0x01) == 1 ||
-    //     (runtime[2].active_levels & 0x01) == 1)
-    // {
-    //     int res = setAlarm(ALARM_CH, ALARM_ERROR, 17);
-    //     // log_system("[limit] 一级行程检查超限");
-    //     if(res == -8) return;
-    //     LOG_OUTPUT(ERROR, "一级行程检查超限");
-    // }
-    // if((runtime[0].active_levels & 0x02) == 1 ||
-    //     (runtime[1].active_levels & 0x02) == 1 ||
-    //     (runtime[2].active_levels & 0x02) == 1)
-    // {
-    //     int res = setAlarm(ALARM_CH, ALARM_ERROR, 18);
-    //     // log_system("[limit] 二级行程检查超限");
-    //     if(res == -8) return;
-    //     LOG_OUTPUT(ERROR, "二级行程检查超限");
-    // }
-    // if((runtime[0].active_levels & 0x04) == 1 ||
-    //     (runtime[1].active_levels & 0x04) == 1 ||
-    //     (runtime[2].active_levels & 0x04) == 1)
-    // {
-    //     int res = setAlarm(ALARM_CH, ALARM_ERROR, 19);
-    //     // log_system("[limit] 三级行程检查超限");
-    //     if(res == -8) return;
-    //     LOG_OUTPUT(ERROR, "三级行程检查超限");
-    // }
+    runtime[0].active_levels = Check_Axis_Limit_Violation(runtime[0], true);
+    runtime[1].active_levels = Check_Axis_Limit_Violation(runtime[1], true);
+    runtime[2].active_levels = Check_Axis_Limit_Violation(runtime[2], true);
 }
 
 // 更新运动状态数据

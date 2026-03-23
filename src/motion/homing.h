@@ -55,6 +55,7 @@ typedef struct{
 void homing_tp_init();
 void homing_tp_reset();
 void handle_homing_cmd();
+void homing_handle_estop();
 
 #ifdef __cplusplus
 }

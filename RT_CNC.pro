@@ -55,11 +55,6 @@ include(lib/cncshm/api/apishm.pri)
 LIBS += -L"$$PWD/lib/cncshm/bin/" -lshm
 INCLUDEPATH += $$PWD/lib/cncshm/api $$PWD/lib/cncshm
 
-# 添加日志
-include(lib/log/apilog/logapi.pri)
-LIBS += -L"$$PWD/lib/log/bin/" -lcnclog
-INCLUDEPATH += $$PWD/lib/log/apilog $$PWD/lib/log
-
 # 添加译码
 LIBS += -L$$PWD/lib/parser/lib/ -lcnc_parser
 INCLUDEPATH += $$PWD/lib/parser/api $$PWD/lib/parser
@@ -116,7 +111,6 @@ HEADERS += \
     src/motion/homing.h \
     src/motion/jog.h \
     src/motion/jog_control.h \
-    src/motion/mpg.h \
     src/motion/rapid.h \
     src/motion/simple_tp.h \
     src/motion/stored_stroke_check.h \
@@ -165,7 +159,6 @@ SOURCES += \
     src/motion/homing.c \
     src/motion/jog.c \
     src/motion/jog_control.c \
-    src/motion/mpg.c \
     src/motion/rapid.c \
     src/motion/simple_tp.c \
     src/motion/stored_stroke_check.c \

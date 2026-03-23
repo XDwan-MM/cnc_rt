@@ -48,6 +48,7 @@ typedef struct{
 void cycle_tp_init();
 void cycle_tp_reset();
 void handle_run_cmd();
+void mem_handle_estop();
 
 #ifdef __cplusplus
 }
