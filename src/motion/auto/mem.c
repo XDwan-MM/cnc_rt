@@ -459,6 +459,7 @@ static GNC_RES plan_block_get_update(double current_vel, POS current_pos){
     head_block->start_vel = current_vel;
     block_cal_vector(head_block);
     block_cal_length(head_block);
+    setVarChanInt(0, VAR_CHAN_RUN_ROW, head_block->line_number, 0);
     if(IsLessThanOrEqual(head_block->length, MEM_END_TOL)) res = plan_block_get_next();
     return res;
 }
@@ -535,6 +536,7 @@ static GNC_RES cycle_tp_add_block(){
         pretreat_block = queue_peak(pretreat_queue);
         // 注意：如果长度为0，删除该段
         if(IsLessThanOrEqual(pretreat_block->length, 0)) {
+            setVarChanInt(0, VAR_CHAN_RUN_ROW, pretreat_block->line_number, 0);
             queue_pop(pretreat_queue);
             continue;
         }

@@ -86,6 +86,10 @@ void Spindle_Stop()
     {
         sp_stop_sem = true;
         spindle.mode = DRV_MODE_DISABLED;
+
+        clearRegBit(REG_F, 10, 3);
+        clearRegBit(REG_F, 10, 4);
+        setRegBit(REG_F, 10, 5);
     }
     stop_last_state = stop_current_state;
     setVarChanInt(0, VAR_CHAN_S_CODE, vel, 0);
