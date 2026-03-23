@@ -126,7 +126,8 @@ HEADERS += \
     src/plc/mt_data.h \
     src/plc/nc_data.h \
     src/plc/plcdatatype.h \
-    src/plc/pmc_input_scanner.h \
+    src/plc/pmc_a_input_scanner.h \
+    src/plc/pmc_g_input_scanner.h \
     src/plc/pmc_io_map.h \
     src/plc/pmc_output_handler.h \
     src/plc/signal_utils.h \
@@ -170,7 +171,8 @@ SOURCES += \
     src/motion/stored_stroke_check.c \
     src/plc/hal_task.cpp \
     src/plc/cyclescanning.cpp \
-    src/plc/pmc_input_scanner.c \
+    src/plc/pmc_a_input_scanner.c \
+    src/plc/pmc_g_input_scanner.c \
     src/plc/pmc_output_handler.c \
     src/motion/spindle/spindle.c \
     src/task/task.c \

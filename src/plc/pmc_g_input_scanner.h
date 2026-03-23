@@ -1,5 +1,5 @@
-#ifndef PMC_INPUT_SCANNER_H
-#define PMC_INPUT_SCANNER_H
+#ifndef PMC_G_INPUT_SCANNER_H
+#define PMC_G_INPUT_SCANNER_H
 
 #include "pmc_io_map.h"
 #include "event_queue.h"

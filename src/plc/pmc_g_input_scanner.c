@@ -1,4 +1,4 @@
-#include "pmc_input_scanner.h"
+#include "pmc_g_input_scanner.h"
 #include "global.h"
 #include "log.h"
 #include "logapi.h"

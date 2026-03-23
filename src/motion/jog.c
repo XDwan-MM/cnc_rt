@@ -6,7 +6,7 @@
 #include <math.h>
 
 /* 全局变量定义 */
-simple_tp_t jog_tp[3]; 
+simple_tp_t jog_tp[3];
 
 static JOG_AXIS_CTRL jog_ctrls[SYS_AXES_NUM_JOG] = {
     {JOG_STATE_IDLE, JOG_DIR_NONE},
@@ -17,6 +17,7 @@ static JOG_AXIS_CTRL jog_ctrls[SYS_AXES_NUM_JOG] = {
 static void update_axis_state(int i);
 static void execute_axis_motion(int i);
 static bool check_all_axes_idle(void);
+static void jog_handle_alarm();
 
 /* --- 3. 外部接口函数定义 --- */
 
@@ -25,8 +26,7 @@ static bool check_all_axes_idle(void);
  */
 void handle_jog_cmd()
 {
-    int i;
-    for (i = 0; i < SYS_AXES_NUM_JOG; i++)
+    for (int i = 0; i < SYS_AXES_NUM_JOG; i++)
     {
         /* * 静态跟随：
          * 只有在空闲时，规划器才跟随系统当前位置。
@@ -36,12 +36,18 @@ void handle_jog_cmd()
         {
             jog_tp[i].curr_pos = var_axis[i][VAR_AXIS_CMD_POS_EX].value.f;
             jog_tp[i].curr_vel = 0.0;
-            jog_tp[i].enable   = 0;
-            jog_tp[i].active   = 0;
+            jog_tp[i].enable = 0;
+            jog_tp[i].active = 0;
         }
 
         // 1. 更新轴状态机 (处理按键信号)
         update_axis_state(i);
+
+        // 处理报警减速停止
+        if (rt_data->sys_state[SYS_IS_ALARMING])
+        {
+            jog_handle_alarm();
+        }
 
         // 2. 执行运动控制 (驱动算法)
         execute_axis_motion(i);
@@ -58,6 +64,17 @@ void handle_jog_cmd()
         rt_data->nc_event = SYS_EVENT_NONE;
     }
 }
+
+void jog_handle_estop()
+{
+    for (int i = 0; i < SYS_AXES_NUM_JOG; i++)
+    {
+        jog_ctrls[i].state = JOG_STATE_IDLE;
+        jog_ctrls[i].direction = JOG_DIR_NONE;
+        memset(&jog_tp[i], 0.0, sizeof(simple_tp_t));
+    }
+}
+
 /* --- 4. 内部私有函数定义 --- */
 
 /**
@@ -117,8 +134,8 @@ static void execute_axis_motion(int i)
          */
         if (jog_tp[i].enable == 0)
         {
-            prepare_jog_params(&par_axis[i], &jog_tp[i], jog_ctrls[i].direction, 
-                             var_chan[0][VAR_CHAN_FEED_OVERRIDE].value.f, false);
+            prepare_jog_params(&par_axis[i], &jog_tp[i], jog_ctrls[i].direction,
+                               var_chan[0][VAR_CHAN_FEED_OVERRIDE].value.f, false);
         }
 
         // 1. 获取当前是否处于限位位置
@@ -127,18 +144,18 @@ static void execute_axis_motion(int i)
 
         // 2. 限位后与运动拦截逻辑
         // 如果在正限位且按下了正向移动，或者在负限位且按下了负向移动
-        if ((is_at_pos_limit && jog_ctrls[i].direction == JOG_DIR_POSITIVE) || 
+        if ((is_at_pos_limit && jog_ctrls[i].direction == JOG_DIR_POSITIVE) ||
             (is_at_neg_limit && jog_ctrls[i].direction == JOG_DIR_NEGATIVE))
         {
             // 关键：修改状态为 STOPPING，强制减速，不进入下方的 start_jog_cont
             jog_ctrls[i].state = JOG_STATE_STOPPING;
-            return; 
+            return;
         }
-        
+
         // todo
         // 如果正向软限位报警没清除，且还是按下正向移动按键 或者 负向软限位报警没清除，且还是按下正向移动按键
         // 不执行运动
-        
+
         // 4. 执行运动：只有通过了上面的拦截逻辑，才能真正调用驱动
         /* 周期性执行算法更新 */
         simple_tp_update(&jog_tp[i], JOG_CYCLE_TIME);
@@ -148,7 +165,7 @@ static void execute_axis_motion(int i)
     case JOG_STATE_STOPPING:
         /* 撤销使能，让规划器自动减速 */
         request_jog_stop(&jog_tp[i], false);
-        
+
         /* 继续驱动算法，直到速度降为 0 */
         simple_tp_update(&jog_tp[i], JOG_CYCLE_TIME);
 
@@ -179,4 +196,15 @@ static bool check_all_axes_idle(void)
         }
     }
     return true;
+}
+
+static void jog_handle_alarm()
+{
+    for (int i = 0; i < SYS_AXES_NUM_JOG; i++)
+    {
+        if (jog_ctrls[i].state == JOG_STATE_RUNNING)
+        {
+            jog_ctrls[i].state = JOG_STATE_STOPPING;
+        }
+    }
 }

@@ -26,7 +26,10 @@ typedef struct {
 extern simple_tp_t jog_tp[3];  
 
 /* 主入口函数 */
-extern void handle_jog_cmd(void);
+extern void handle_jog_cmd();
+
+// JOG模式处理急停
+extern void jog_handle_estop();
 
 #ifdef __cplusplus
 }
