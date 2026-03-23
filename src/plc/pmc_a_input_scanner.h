@@ -2,7 +2,6 @@
 #define PMC_A_INPUT_SCANNER_H
 
 #include "pmc_io_map.h"
-#include "event_queue.h"
 
 #define A_START_ADDR 0
 #define A_BYTE_COUNT 25  // 模拟 A0-A24

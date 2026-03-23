@@ -1,11 +1,10 @@
 #include "jog.h"
-#include "jog_control.h"
 #include "global.h"
 #include "log.h"
 #include "alarmapi.h"
 #include <math.h>
 
-/* 全局变量定义 */
+/* JOG轨迹规划器 全局变量定义 */
 simple_tp_t jog_tp[3];
 
 static JOG_AXIS_CTRL jog_ctrls[SYS_AXES_NUM_JOG] = {
@@ -14,6 +13,8 @@ static JOG_AXIS_CTRL jog_ctrls[SYS_AXES_NUM_JOG] = {
     {JOG_STATE_IDLE, JOG_DIR_NONE}};
 
 /* 内部私有函数 */
+static void prepare_jog_params(const ParamUnit* axis_para, simple_tp_t *jog_tp, int direction, double feed_override, bool is_rapid);
+static void request_jog_stop(simple_tp_t *jog_tp, bool immediate);
 static void update_axis_state(int i);
 static void execute_axis_motion(int i);
 static bool check_all_axes_idle(void);
@@ -77,6 +78,44 @@ void jog_handle_estop()
 
 /* --- 4. 内部私有函数定义 --- */
 
+static void prepare_jog_params(const ParamUnit* axis_para, simple_tp_t *jog_tp, int direction, double feed_override, bool is_rapid)
+{
+    if (axis_para == NULL || jog_tp == NULL || feed_override < 0.0) return;
+    if (direction == 0) return;
+
+    /* 1. 设置目标位置：根据方向指向软限位终点 */
+    if (direction > 0) {
+        jog_tp->pos_cmd = axis_para[PAR_AX_PLMT].value.val_real;
+    } else {
+        jog_tp->pos_cmd = axis_para[PAR_AX_NLMT].value.val_real;
+    }
+
+    /* 2. 设置速度和加速度限制 */
+    if (is_rapid) {
+        jog_tp->max_vel = axis_para[PAR_AX_JOG_FASTSPD].value.val_real * feed_override;
+        jog_tp->max_acc = axis_para[PAR_AX_RAPID_ACC].value.val_real;
+    } else {
+        jog_tp->max_vel = axis_para[PAR_AX_JOG_LOWSPD].value.val_real * feed_override;
+        jog_tp->max_acc = axis_para[PAR_AX_FEED_ACC].value.val_real;
+    }
+
+    /* 3. 使能规划器：标记开始进入加减速计算 */
+    jog_tp->enable = 1;
+}
+
+static void request_jog_stop(simple_tp_t *jog_tp, bool immediate)
+{
+    if (jog_tp == NULL) return;
+
+    /* 断开使能：规划器在下一次 update 时会发现此信号并开始减速 */
+    jog_tp->enable = 0;
+
+    if (immediate) {
+        jog_tp->curr_vel = 0.0;
+        jog_tp->active = 0;
+    }
+}
+
 /**
  * @brief 更新单轴状态机
  * 逻辑：只对属于本轴的事件做出响应。若收到其他轴的 Press/Release，本轴状态维持不变。
@@ -135,7 +174,7 @@ static void execute_axis_motion(int i)
         if (jog_tp[i].enable == 0)
         {
             prepare_jog_params(&par_axis[i], &jog_tp[i], jog_ctrls[i].direction,
-                               var_chan[0][VAR_CHAN_FEED_OVERRIDE].value.f, false);
+                               var_chan[0][VAR_CHAN_FEED_OVERRIDE].value.f / OVERRIDE_PERCENT, false);
         }
 
         // 1. 获取当前是否处于限位位置

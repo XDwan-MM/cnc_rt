@@ -1,7 +1,5 @@
 #include "pmc_a_input_scanner.h"
-#include "global.h"
 #include "log.h"
-#include "logapi.h"
 #include "regapi.h"       /**< 寄存器访问 API */
 #include "signal_utils.h" /**< 边沿检测宏定义 */
 #include "alarmapi.h"
@@ -60,23 +58,24 @@ void pmc_a_input_scan_cycle(void)
         // 4. 更新历史状态，供下一周期对比
         memcpy(last_a_status, current_a_status, A_BYTE_COUNT);
     }
+}
 
-    /* ==========================================================================
-     * 3. 内部函数实现 (Private Implementations)
-     * ========================================================================== */
+/* ==========================================================================
+ * 3. 内部函数实现 (Private Implementations)
+ * ========================================================================== */
 
-    /** * @brief 从寄存器系统同步 A 变量数据到本地静态数组
-     * @param local_a_snap 指向存储 A 变量快照的数组 (例如 static unsigned char last_a_status[A_BYTE_COUNT])
-     */
-    static void pmc_a_input_fetch_snapshot(char *local_a_snap)
+/** * @brief 从寄存器系统同步 A 变量数据到本地静态数组
+ * @param local_a_snap 指向存储 A 变量快照的数组 (例如 static unsigned char last_a_status[A_BYTE_COUNT])
+ */
+static void pmc_a_input_fetch_snapshot(char *local_a_snap)
+{
+    if (local_a_snap == NULL)
+        return;
+
+    /* 使用循环逐个抓取 A 寄存器字节 (A0 - A24) */
+    for (int i = 0; i < A_BYTE_COUNT; i++)
     {
-        if (local_a_snap == NULL)
-            return;
-
-        /* 使用循环逐个抓取 A 寄存器字节 (A0 - A24) */
-        for (int i = 0; i < A_BYTE_COUNT; i++)
-        {
-            // 这里的 i 代表 A0, A1, A2... 的索引
-            getRegValue8(REG_A, i, &local_a_snap[i]);
-        }
+        // 这里的 i 代表 A0, A1, A2... 的索引
+        getRegValue8(REG_A, i, &local_a_snap[i]);
     }
+}

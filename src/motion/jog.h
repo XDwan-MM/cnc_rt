@@ -1,7 +1,15 @@
 #ifndef __JOG_H__
 #define __JOG_H__
 
+#include <stdbool.h>
 #include "simple_tp.h"
+#include "pardata.h"
+#include "simple_tp.h"
+
+/* JOG方向定义 */
+#define JOG_DIR_NONE      (0)
+#define JOG_DIR_POSITIVE  (1)
+#define JOG_DIR_NEGATIVE  (-1)
 
 #define JOG_CYCLE_TIME   (0.001)   /* 伺服周期 1ms */
 #define SPEED_THRESHOLD  (1.0e-5)  /* 停稳速度阈值 */

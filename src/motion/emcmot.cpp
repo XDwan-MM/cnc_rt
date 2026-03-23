@@ -250,6 +250,7 @@ static void check_for_fault() {
         // 重置各个模式
         mem_handle_estop();
         homing_handle_estop();
+        jog_handle_estop();
         if(rt_data->nc_event != SYS_EVENT_NONE || rt_data->target_mode != rt_data->current_mode){
             //　不允许操作
             rt_data->nc_event = SYS_EVENT_NONE;
