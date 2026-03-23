@@ -45,12 +45,18 @@ void emcmotTrajPlan() {
 
     // 遍历每个通道
     for (int i = 0; i < var_sys[VAR_SYS_CHAN_NUM].value.i; i++) {
+        //复位生效参数
+        if(rt_data->nc_event == SYS_EVENT_RESET)
+        {
+            Axis_Limit_Manager_Init();
+        }
+
         // 当前活动通道
         setVarSysInt(VAR_SYS_ACTIVE_CHAN, i, 0);
-        
+
         // 检查系统是否有异常
         check_for_fault();
-        
+
         // 读取抽象层数据
         read_from_hal();
 
@@ -120,9 +126,9 @@ static void set_operating_mode() {
             break;
         case MODE_JOG:
             // 当前点动速度为零,才能切模式成功
-            if (fabs(jog_tp[AXIS_X].curr_vel - 0.0) < SPEED_THRESHOLD 
-            && fabs(jog_tp[AXIS_Y].curr_vel - 0.0) < SPEED_THRESHOLD 
-            && fabs(jog_tp[AXIS_Z].curr_vel - 0.0) < SPEED_THRESHOLD) 
+            if (fabs(jog_tp[AXIS_X].curr_vel - 0.0) < SPEED_THRESHOLD
+            && fabs(jog_tp[AXIS_Y].curr_vel - 0.0) < SPEED_THRESHOLD
+            && fabs(jog_tp[AXIS_Z].curr_vel - 0.0) < SPEED_THRESHOLD)
             {
                 rt_data->current_mode = rt_data->target_mode;
                 rt_data->sys_state[SYS_IS_SWITCHING_MODE] = false;
@@ -140,9 +146,9 @@ static void set_operating_mode() {
             break;
         case MODE_RAPID_JOG:
             // 当前快速点动速度为零,才能切模式成功
-            if (fabs(jog_tp[AXIS_X].curr_vel - 0.0) < SPEED_THRESHOLD 
-            && fabs(jog_tp[AXIS_Y].curr_vel - 0.0) < SPEED_THRESHOLD 
-            && fabs(jog_tp[AXIS_Z].curr_vel - 0.0) < SPEED_THRESHOLD) 
+            if (fabs(jog_tp[AXIS_X].curr_vel - 0.0) < SPEED_THRESHOLD
+            && fabs(jog_tp[AXIS_Y].curr_vel - 0.0) < SPEED_THRESHOLD
+            && fabs(jog_tp[AXIS_Z].curr_vel - 0.0) < SPEED_THRESHOLD)
             {
                 rt_data->current_mode = rt_data->target_mode;
                 rt_data->sys_state[SYS_IS_SWITCHING_MODE] = false;
@@ -264,7 +270,7 @@ static void check_for_fault() {
     if(alarm_count > 0){
         rt_data->sys_state[SYS_IS_ALARMING] = true;
         handle_alarm_cmd();
-    } 
+    }
 }
 
 // 检查轴跟随误差错误
