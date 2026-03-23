@@ -90,11 +90,11 @@ static void prepare_jog_params(const ParamUnit *axis_para, simple_tp_t *jog_tp, 
     /* 1. 设置目标位置：根据方向指向软限位终点 */
     if (direction > 0)
     {
-        jog_tp->pos_cmd = axis_para[PAR_AX_PLMT].value.val_real;
+        jog_tp->pos_cmd = axis_para[PAR_AX_PLMT].value.val_real + 0.5;
     }
     else
     {
-        jog_tp->pos_cmd = axis_para[PAR_AX_NLMT].value.val_real;
+        jog_tp->pos_cmd = axis_para[PAR_AX_NLMT].value.val_real - 0.5;
     }
 
     /* 2. 设置速度和加速度限制 */
