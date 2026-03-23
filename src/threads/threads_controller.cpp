@@ -55,6 +55,7 @@ void* soft_plc_thread_func(void*) {
         #else
         hal_task();
         pmc_input_scan_cycle();
+        pmc_a_input_scan_cycle();
         #endif
     }
     return NULL;
