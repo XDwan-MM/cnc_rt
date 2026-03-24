@@ -212,6 +212,13 @@ static double abs_homing_tp_pinc(AXIS_TYPE axis_type){
             if(homing_tp[axis_type].is_event_trigger){
                 homing_tp[axis_type].is_event_trigger = false;
                 res = abs_homing_tp_update_params(axis_type, current_vel, 0);
+                if(res == VP_MAX_VEL_IS_ZERO){
+                    homing_tp[axis_type].homing_state = ABS_EXEC_IDLE;
+                    setVarChanInt(0, VAR_CHAN_IS_HOMING, 0, 0);
+                    setVarChanInt(0, VAR_CHAN_IS_MOVING, 0, 0);
+                    setVarChanInt(0, VAR_CHAN_IS_RESETTING, 0, 0);
+                    break;
+                }
                 CHECK_RES(homing_check_res(res));
                 homing_tp[axis_type].is_resetting = true;
             }
