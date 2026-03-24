@@ -4,7 +4,7 @@ int32 TM[100];
 int32 plcRunNum;
 int16 WW[REG_W_NUM];
 int32 PP[REG_P_NUM], BB[REG_B_NUM], DD[REG_D_NUM];
-uint8 XX[REG_X_NUM], YY[REG_Y_NUM], II[REG_I_NUM], QQ[REG_Q_NUM], RR[REG_R_NUM], FF[REG_F_NUM], GG[REG_G_NUM] /*,AA[REG_A_NUM]*/;
+uint8 XX[REG_X_NUM], YY[REG_Y_NUM], II[REG_I_NUM], QQ[REG_Q_NUM], RR[REG_R_NUM], FF[REG_F_NUM], GG[REG_G_NUM] ,AA[REG_A_NUM];
 
 static LadInstr PLCRun[10000];
 static LadReg PlcPara[24000];
@@ -91,6 +91,11 @@ long GetReg(char reg, int index) {
         case 'T':
             n = TM[index];
             break;
+        case 'a':
+        case 'A':
+            a = _gnc_get_a_value(index);
+            n = (long)a;
+            break;
     }
     return n;
 }
@@ -146,6 +151,11 @@ void SetReg(char reg, int index, long value) {
         case 'T':
             TM[index] = value;
             break;
+        case 'a':
+        case 'A':
+            a = (char)value;
+            _gnc_set_a_value(index, a);
+            break;
     }
 }
 
@@ -186,6 +196,10 @@ void SetRegBit(char reg, int index, int bit) {
         case 'b':
         case 'B':
             _gnc_set_b_bit(index, bit);
+            break;
+        case 'a':
+        case 'A':
+            _gnc_set_a_bit(index, bit);
             break;
     }
 }
@@ -228,6 +242,10 @@ bool GetRegBit(char reg, int index, int bit) {
         case 'B':
             if (_gnc_get_b_bit(index, bit) != 0) return true;
             break;
+        case 'a':
+        case 'A':
+            if (_gnc_get_a_bit(index, bit) != 0) return true;
+            break;  
     }
     return false;
 }
@@ -269,6 +287,10 @@ void ClrRegBit(char reg, int index, int bit) {
         case 'b':
         case 'B':
             _gnc_clr_b_bit(index, bit);
+            break;
+        case 'a':
+        case 'A':
+            _gnc_clr_a_bit(index, bit);
             break;
     }
 }
@@ -616,6 +638,16 @@ static void G_signal() {
     }
 }
 
+static void A_signal()
+{
+    {
+        for (int i = 0; i < 128; ++i)
+        {
+            uint8* value = &AA[i];
+            setRegValue8(REG_A, i, *value);
+        }
+    }
+}
 
 static void RT_Xcondition()
 {
@@ -696,6 +728,7 @@ static void O_map() {
     plc_out.panel_show.keyboardOut7.all=(YY[16]|YY[17]<<8);
     plc_out.panel_show.keyboardOut8.all=(YY[18]|YY[19]<<8);
     G_signal();
+    A_signal();
     RT_Rcondition();
     RT_Ycondition();
 }
