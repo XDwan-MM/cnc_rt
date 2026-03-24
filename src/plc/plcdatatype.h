@@ -50,7 +50,7 @@ typedef long           int64;
 extern int16 WW[REG_W_NUM];
 extern int32 PP[REG_P_NUM],BB[REG_B_NUM],DD[REG_D_NUM];
 extern uint8  XX[REG_X_NUM],YY[REG_Y_NUM],II[REG_I_NUM],QQ[REG_Q_NUM],
-             RR[REG_R_NUM],FF[REG_F_NUM],GG[REG_G_NUM]/*,AA[REG_A_NUM]*/;
+              RR[REG_R_NUM],FF[REG_F_NUM],GG[REG_G_NUM],AA[REG_A_NUM];
 
 //****************操作数处理******************
 #define _gnc_get_x_num() (REG_X_NUM)
@@ -66,6 +66,8 @@ extern uint8  XX[REG_X_NUM],YY[REG_Y_NUM],II[REG_I_NUM],QQ[REG_Q_NUM],
 #define _gnc_get_b_num() (REG_B_NUM)
 //#define _gnc_get_l_num() (REG_L_NUM)
 #define _gnc_get_s_num() (REG_S_NUM)
+#define _gnc_get_a_num() (REG_A_NUM)
+
 
 
 #define _gnc_get_x_bit(i,b) (XX[i] & (1<<b))
@@ -120,6 +122,9 @@ extern uint8  XX[REG_X_NUM],YY[REG_Y_NUM],II[REG_I_NUM],QQ[REG_Q_NUM],
 #define _gnc_set_s_bit(i,b) (SS[i] |=(1<<b))
 #define _gnc_clr_s_bit(i,b) (SS[i] &=(~(1<<b)))
 
+#define _gnc_get_a_bit(i,b) (AA[i] & (1<<b))
+#define _gnc_set_a_bit(i,b) (AA[i] |=(1<<b))
+#define _gnc_clr_a_bit(i,b) (AA[i] &=(~(1<<b)))
 
 //***************标记操作*****************
 #define _gnc_get_x_flag(i,b) (XX[i] & b)
@@ -158,6 +163,10 @@ extern uint8  XX[REG_X_NUM],YY[REG_Y_NUM],II[REG_I_NUM],QQ[REG_Q_NUM],
 #define _gnc_set_b_flag(i,b) (BB[i] |=b)
 #define _gnc_clr_b_flag(i,b) (BB[i] &=(~b))
 
+#define _gnc_get_a_flag(i,b) (AA[i] & b)
+#define _gnc_set_a_flag(i,b) (AA[i] |=b)
+#define _gnc_clr_a_flag(i,b) (AA[i] &=(~b))
+
 
 //**************值操作******************
 #define _gnc_get_x_value(i)   (XX[i])
@@ -187,6 +196,8 @@ extern uint8  XX[REG_X_NUM],YY[REG_Y_NUM],II[REG_I_NUM],QQ[REG_Q_NUM],
 #define _gnc_get_b_value(i)   (BB[i])
 #define _gnc_set_b_value(i,b) (BB[i]=b)
 
+#define _gnc_get_a_value(i)   (AA[i])
+#define _gnc_set_a_value(i,b) (AA[i]=b)
 #ifdef __cplusplus
 }				/* matches extern "C" at top */
 #endif
