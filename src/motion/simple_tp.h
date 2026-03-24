@@ -10,28 +10,26 @@
 #ifndef SIMPLE_TP_H
 #define SIMPLE_TP_H
 
-// 停止判据：微小位置容差
+#include <stdbool.h>
+
 #define TINY_DP(max_acc, period) (max_acc * period * period * 0.001)
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-/* 简单的单轴轨迹规划器结构体 */
-typedef struct simple_tp_t {
-    double pos_cmd;     /* 位置命令（目标位置） */
-    double max_vel;     /* 速度限制 */
+typedef struct simple_tp_t 
+{
+    double pos_cmd;     /* 目标位置（JOG模式下通常设为远端限位） */
+    double max_vel;     /* 当前速度限制（已包含倍率） */
     double max_acc;     /* 加速度限制 */
-    int enable;         /* 如果为零，运动会尽快停止 */
-    double curr_pos;    /* 当前位置 */
-    double curr_vel;    /* 当前速度 */
-    int active;         /* 如果运动进行中，则非零 */
+    int enable;         /* 使能信号：1-运动，0-减速停止 */
+    double curr_pos;    /* 当前位置反馈 */
+    double curr_vel;    /* 当前实时速度 */
+    int active;         /* 运动指示：非零表示正在运动或减速中 */
 } simple_tp_t;
 
-/* 更新轨迹规划器
- * period: 伺服周期（秒）
- */
-
+/* 更新轨迹规划器：由 1ms 伺服中断调用 */
 extern void simple_tp_update(simple_tp_t *tp, double period);
 
 #ifdef __cplusplus

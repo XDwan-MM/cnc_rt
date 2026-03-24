@@ -41,7 +41,6 @@ void pmc_input_scan_cycle(void)
     /* 1. 抓取寄存器快照 */
     pmc_input_fetch_snapshot(&curr_g);
 
-
     /* 2. 模式检测：调用内部解析函数处理复合位 (MD1, MD2, MD4, DNCI, ZRN),
      * 输出模式 */
     if (curr_g.G0043 != last_g.G0043)
@@ -88,6 +87,37 @@ void pmc_input_scan_cycle(void)
     // 进给倍率变化检测G12
     if (curr_g.G0012 != last_g.G0012)
     {
+        // // 1、共享内存有符号版本代码逻辑
+        // int feed_override = 0;
+
+        // /* 核心修正：强制转换为无符号字节，避免符号位干扰位运算 */
+        // unsigned char raw_val = (unsigned char)curr_g.G0012;
+
+        // /* * 倍率值 = (2^i * Vi)累加 [%]，i从0到7。
+        //  * 根据文档原理：FVi为'1'时 Vi=0；FVi为'0'时 Vi=1。FVi对应G12变量中的第i位。
+        //  * 这在逻辑上等同于对这 8 个位进行按位取反。
+        //  */
+        // unsigned char inverted_val = (unsigned char)(~raw_val);
+
+        // /* * 特殊逻辑判断:
+        //  * 1. 所有信号为 '0' (0x00) 时，视为 0%。
+        //  * 2. 所有信号为 '1' (0xFF) 时，取反后为 0，自然也是 0%。
+        //  */
+        // if (raw_val == 0x00 || raw_val == 0xFF)
+        // {
+        //     feed_override = 0;
+        // }
+        // else
+        // {
+        //     /* * 此时 inverted_val 的数值直接对应 1%~254% 的倍率。
+        //      * 例如：若信号为 0b11111010 (0xFA)，取反后为 0b00000101 (5)，即 5%。
+        //      */
+        //     feed_override = (int)inverted_val;
+        // }
+        // /* p1=0 代表进给倍率类型 (EV_MSG_OVERRIDE) */
+        // pmc_dispatch_event(EV_MSG_OVERRIDE, 0, feed_override);
+
+        // 2、共享内存无符号版本的代码逻辑
         pmc_dispatch_event(EV_MSG_OVERRIDE, 0, (int)curr_g.G0012);
     }
     // 快速进给倍率检测G14
@@ -170,8 +200,8 @@ void pmc_input_scan_cycle(void)
 static void pmc_input_fetch_snapshot(G_INPUT_MAP *local_snap)
 {
     /* 逐个抓取 G 寄存器字节 */
-    getRegValue8(REG_G, 7, &local_snap->G0007); // 获取共享内存G7变量的值
-    getRegValue8(REG_G, 8, &local_snap->G0008); // 获取共享内存G8变量的值
+    getRegValue8(REG_G, 7, &local_snap->G0007);  // 获取共享内存G7变量的值
+    getRegValue8(REG_G, 8, &local_snap->G0008);  // 获取共享内存G8变量的值
     getRegValue8(REG_G, 12, &local_snap->G0012); // 获取共享内存G12变量的值
     getRegValue8(REG_G, 14, &local_snap->G0014); // 获取共享内存G14变量的值
     getRegValue8(REG_G, 29, &local_snap->G0029); // 获取共享内存G29变量的值
