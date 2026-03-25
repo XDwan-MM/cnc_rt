@@ -351,6 +351,7 @@ void parser_run_mode(){
 void parser_reset(){
     ItpReset();
     parser_data->parser_state = PARSER_IDLE;
+    rt_set_chan_state(0, CHAN_IS_PARSERING, false);
 }
 
 int macroVarGetValue(int no, double *mac)
