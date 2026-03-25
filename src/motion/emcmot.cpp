@@ -171,6 +171,7 @@ static void set_operating_mode() {
             }else{
                 // 回零中切换模式不能生效
                 rt_data->target_mode = rt_data->current_mode;
+                setAlarm(ALARM_SY, ALARM_WARNING, 0);
                 // log_system("[emcmot] 回零中不能切换模式，请先按复位后切换");
                 LOG_WARN("回零中不能切换模式，请先按复位后切换");
                 break;
@@ -191,6 +192,7 @@ static void set_operating_mode() {
             } else{
                 // 加工下切换模式不能生效
                 rt_data->target_mode = rt_data->current_mode;
+                setAlarm(ALARM_SY, ALARM_WARNING, 1);
                 // log_system("[emcmot] 自动加工下不能切换模式，请先按复位后切换");
                 LOG_WARN("自动加工下不能切换模式，请先按复位后切换");
                 break;
@@ -269,7 +271,7 @@ static void check_for_fault() {
     }
     //　检查系统报警
     int alarm_count = 0;
-    getAlarmCount(ALARM_TYPE_ALL, ALARM_LEVEL_ALL, &alarm_count);
+    getAlarmCount(ALARM_TYPE_ALL, ALARM_ERROR, &alarm_count);
     if(alarm_count > 0){
         rt_data->sys_state[SYS_IS_ALARMING] = true;
         handle_alarm_cmd();

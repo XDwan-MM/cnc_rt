@@ -100,6 +100,14 @@ static void mem_set_state(){
         case SYS_EVENT_RERUN:
             // log_system("[mem] 记忆模式处理自动运行");
             LOG_OUTPUT(INFO, "记忆模式处理自动运行");
+            if(IsEqualTo(var_chan[0][VAR_CHAN_FEED_OVERRIDE].value.f, 0)){
+                setAlarm(ALARM_SY, ALARM_WARNING, 3);
+                LOG_WARN("进给倍率为0");
+            }
+            if(IsEqualTo(var_chan[0][VAR_CHAN_RAPID_OVERRIDE].value.f, 0)){
+                setAlarm(ALARM_SY, ALARM_WARNING, 2);
+                LOG_WARN("快速倍率为0");
+            }
             if(cycle_tp->mem_exec_state == EXEC_IDLE){
                 cycle_tp->mem_exec_state = EXEC_RUNNING;
                 cycle_tp->is_event_trigger = true;
@@ -119,7 +127,10 @@ static void mem_set_state(){
         case SYS_EVENT_FEED_OVERRIDE:
             // log_system("[mem] 记忆模式处理进给倍率切换");
             LOG_OUTPUT(INFO, "记忆模式处理进给倍率切换");
-            if(IsEqualTo(var_chan[0][VAR_CHAN_FEED_OVERRIDE].value.f, 0)) LOG_WARN("进给倍率为0");
+            if(IsEqualTo(var_chan[0][VAR_CHAN_FEED_OVERRIDE].value.f, 0)){
+                setAlarm(ALARM_SY, ALARM_WARNING, 3);
+                LOG_WARN("进给倍率为0");
+            }
             if(cycle_tp->mem_exec_state == EXEC_RUNNING){
                 if(!queue_is_empty(plan_queue)){
                     if(cycle_tp->plan_block->mode != PMC_MODE_TAP && cycle_tp->plan_block->type != RAPID){
@@ -133,7 +144,10 @@ static void mem_set_state(){
         case SYS_EVENT_RAPID_OVERRIDE:
             // log_system("[mem] 记忆模式处理快速倍率切换");
             LOG_OUTPUT(INFO, "记忆模式处理快速倍率切换 %f", var_chan[0][VAR_CHAN_RAPID_OVERRIDE].value.f);
-            if(IsEqualTo(var_chan[0][VAR_CHAN_RAPID_OVERRIDE].value.f, 0)) LOG_WARN("快速倍率为0");
+            if(IsEqualTo(var_chan[0][VAR_CHAN_RAPID_OVERRIDE].value.f, 0)){
+                setAlarm(ALARM_SY, ALARM_WARNING, 2);
+                LOG_WARN("快速倍率为0");
+            }
             if(cycle_tp->mem_exec_state == EXEC_RUNNING){
                 if(!queue_is_empty(plan_queue)){
                     if(cycle_tp->plan_block->mode != PMC_MODE_TAP && cycle_tp->plan_block->type == RAPID){
