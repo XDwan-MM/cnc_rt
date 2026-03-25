@@ -145,7 +145,7 @@ static void block_cal_circle_vector(PLAN_BLOCK* current_block){
     switch(current_block->circular_block.plane){
         case PLANE_XY:
             switch(current_block->type){
-            case CIRCLE_CW:
+            case CIRCLE_CCW:
                 current_block->start_vec.x = rs.y;
                 current_block->start_vec.y = - rs.x;
                 current_block->start_vec.z = 0;
@@ -153,7 +153,7 @@ static void block_cal_circle_vector(PLAN_BLOCK* current_block){
                 current_block->end_vec.y = - re.x;
                 current_block->end_vec.z = 0;
                 break;
-            case CIRCLE_CCW:
+            case CIRCLE_CW:
                 current_block->start_vec.x = - rs.y;
                 current_block->start_vec.y = rs.x;
                 current_block->start_vec.z = 0;
@@ -165,7 +165,7 @@ static void block_cal_circle_vector(PLAN_BLOCK* current_block){
         break;
         case PLANE_XZ:
             switch(current_block->type){
-            case CIRCLE_CW:
+            case CIRCLE_CCW:
                 current_block->start_vec.x = rs.z;
                 current_block->start_vec.y = 0;
                 current_block->start_vec.z = - rs.x;
@@ -173,7 +173,7 @@ static void block_cal_circle_vector(PLAN_BLOCK* current_block){
                 current_block->end_vec.y = 0;
                 current_block->end_vec.z = - re.x;
                 break;
-            case CIRCLE_CCW:
+            case CIRCLE_CW:
                 current_block->start_vec.x = - rs.z;
                 current_block->start_vec.y = 0;
                 current_block->start_vec.z = rs.x;
@@ -185,7 +185,7 @@ static void block_cal_circle_vector(PLAN_BLOCK* current_block){
         break;
         case PLANE_YZ:
             switch(current_block->type){
-            case CIRCLE_CW:
+            case CIRCLE_CCW:
                 current_block->start_vec.x = 0;
                 current_block->start_vec.y = rs.z;
                 current_block->start_vec.z = - rs.y;
@@ -193,7 +193,7 @@ static void block_cal_circle_vector(PLAN_BLOCK* current_block){
                 current_block->end_vec.y = re.z;
                 current_block->end_vec.z = - re.y;
                 break;
-            case CIRCLE_CCW:
+            case CIRCLE_CW:
                 current_block->start_vec.x = 0;
                 current_block->start_vec.y = - rs.z;
                 current_block->start_vec.z = rs.y;
@@ -229,10 +229,10 @@ static double block_cal_circle_length(PLAN_BLOCK* current_block){
     // 计算弧度
     double angDelta = current_block->circular_block.end_rad - current_block->circular_block.statr_rad;
     switch(current_block->type){
-        case CIRCLE_CW:
+        case CIRCLE_CCW:
             if (angDelta > 0) angDelta -= 2 * PI;
             break;
-        case CIRCLE_CCW:
+        case CIRCLE_CW:
             if (angDelta < 0) angDelta += 2 * PI;
             break;
     }
@@ -242,7 +242,6 @@ static double block_cal_circle_length(PLAN_BLOCK* current_block){
 
 // 计算段长度|圆弧长
 void block_cal_length(PLAN_BLOCK* current_block){
-    // 注意：如果段长度为0，该段无效
     switch(current_block->type){
         case RAPID:
         case LINE:
