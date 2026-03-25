@@ -6,7 +6,7 @@
 
 // 1. 定义所有线程的实例
 managed_thread_t motion_controller;
-managed_thread_t task_controller;
+// managed_thread_t task_controller;
 managed_thread_t soft_plc;
 managed_thread_t path_plan;
 managed_thread_t pdo;
@@ -29,8 +29,8 @@ int threads_start() {
     soft_plc.function = soft_plc_thread_func;
 
     // 4. 配置任务控制器线程 (较低优先级)
-    task_controller.config = task_config;
-    task_controller.function = task_controller_thread_func;
+    // task_controller.config = task_config;
+    // task_controller.function = task_controller_thread_func;
 
     // 5. 配置解释器线程
     path_plan.config = path_plan_config;
@@ -46,7 +46,7 @@ int threads_start() {
     if (create_managed_thread(&soft_plc) != 0) return EXIT_FAILURE;
     if (create_managed_thread(&motion_controller) != 0) return EXIT_FAILURE;
     if (create_managed_thread(&path_plan) != 0) return EXIT_FAILURE;
-    if (create_managed_thread(&task_controller) != 0) return EXIT_FAILURE;
+    // if (create_managed_thread(&task_controller) != 0) return EXIT_FAILURE;
 
     printf("--- 所有线程已创建 ---\n\n");
 
@@ -58,8 +58,8 @@ void threads_joint() {
     printf("%s已退出\n", motion_controller.config.thread_name);
     pthread_join(soft_plc.id, NULL);
     printf("%s已退出\n", soft_plc.config.thread_name);
-    pthread_join(task_controller.id, NULL);
-    printf("%s已退出\n", task_controller.config.thread_name);
+    // pthread_join(task_controller.id, NULL);
+    // printf("%s已退出\n", task_controller.config.thread_name);
     pthread_join(path_plan.id, NULL);
     printf("%s已退出\n", path_plan.config.thread_name);
     pthread_join(pdo.id, NULL);
