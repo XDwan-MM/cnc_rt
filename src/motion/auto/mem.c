@@ -18,6 +18,7 @@ static bool mem_check_res(GNC_RES res);
 static bool mem_check_running();
 static double mem_cal_pinc(VELPLAN_TYPE velplan_mode, double ncu_cycle, double current_vel, POS current_pos);
 static void mem_handle_alarm();
+static void mem_handle_reset();
 static bool cycle_tp_is_finished();
 static void mem_cal_axis_vel(POS *current_pos, POS *target_pos, double interp_pinc, double target_vel);
 
@@ -226,14 +227,7 @@ static double mem_cal_pinc(VELPLAN_TYPE velplan_mode, double ncu_cycle, double c
                 if(cycle_tp_is_finished() && cycle_tp->is_paused_inside_block){ 
                     // 复位
                     if(var_chan[0][VAR_CHAN_IS_RESETTING].value.i){
-                        setVarChanInt(0, VAR_CHAN_IS_RESETTING, 0, 0);
-                        setVarChanInt(0, VAR_CHAN_IS_RUNNING, 0, 0);
-                        setVarChanInt(0, VAR_CHAN_IS_MOVING, 0, 0);
-                        cycle_tp->mem_exec_state = EXEC_IDLE;
-                        // 复位，译码、预处理、前瞻队列均重置
-                        tp_reset();
-                        // 重置当前译码行
-                        setVarChanInt(0, VAR_CHAN_RUN_ROW, 0, 0);
+                        mem_handle_reset();
                     }else{
                         setVarChanInt(0, VAR_CHAN_IS_MOVING, 0, 0);
                         // LOG_OUTPUT(INFO, "程序暂停完成, %d", cycle_tp->plan_block->type);
@@ -241,14 +235,6 @@ static double mem_cal_pinc(VELPLAN_TYPE velplan_mode, double ncu_cycle, double c
                     break;
                 }else{ 
                     res = cycle_tp_update_tp(velplan_mode, ncu_cycle, current_vel, current_pos, 0);
-                    if(res == VP_MAX_VEL_IS_ZERO && var_chan[0][VAR_CHAN_IS_RESETTING].value.i){
-                        setVarChanInt(0, VAR_CHAN_IS_RESETTING, 0, 0);
-                        setVarChanInt(0, VAR_CHAN_IS_RUNNING, 0, 0);
-                        setVarChanInt(0, VAR_CHAN_IS_MOVING, 0, 0);
-                        setVarChanInt(0, VAR_CHAN_RUN_ROW, 0, 0);
-                        cycle_tp->mem_exec_state = EXEC_IDLE;
-                        break;
-                    }
                     CHECK_RES(mem_check_res(res));
                 }
                 cycle_tp->is_event_trigger = false; 
@@ -281,9 +267,17 @@ static bool mem_check_res(GNC_RES res){
             cycle_tp->plan_block->type = UNKNOWN;
             return false;
         }
+        if(var_chan[0][VAR_CHAN_IS_RESETTING].value.i){
+            mem_handle_reset();
+            return false;
+        }
         break;
 
     case GNC_DATA_EMPTY:
+        if(var_chan[0][VAR_CHAN_IS_RESETTING].value.i){
+            mem_handle_reset();
+            return false;
+        }
         // 运行中无数据，则进入等待 
         if(mem_check_running()){
             if(queue_is_empty(pretreat_queue) && gcode_queue_is_empty(gcode_queue)){
@@ -291,12 +285,7 @@ static bool mem_check_res(GNC_RES res){
             }
             return false;
         }
-        // 译码已结束后无数据，则程序运行完成
-        cycle_tp_reset();
-        rt_set_chan_state(0, CHAN_IS_GCODE_END, true);
-        setVarChanInt(0, VAR_CHAN_IS_RUNNING, 0, 0);
-        setVarChanInt(0, VAR_CHAN_IS_MOVING, 0, 0);
-        setVarChanInt(0, VAR_CHAN_IS_PROGEND, 1, 0);
+        mem_handle_reset();
         // log_system("[mem] 程序运行结束");
         LOG_OUTPUT(INFO, "程序运行结束");
         return false;
@@ -334,6 +323,18 @@ void mem_handle_estop(){
     setVarChanInt(0, VAR_CHAN_IS_MOVING, 0, 0);
     setVarChanInt(0, VAR_CHAN_IS_RESETTING, 0, 0);
     setVarChanInt(0, VAR_CHAN_IS_PROGEND, 1, 0);   
+    
+    rt_set_chan_state(0, CHAN_IS_PARSERING, false);
+    rt_set_chan_state(0, CHAN_IS_GCODE_END, true);
+}
+
+static void mem_handle_reset(){
+    cycle_tp_reset();
+    setVarChanInt(0, VAR_CHAN_IS_RUNNING, 0, 0);
+    setVarChanInt(0, VAR_CHAN_IS_MOVING, 0, 0);
+    setVarChanInt(0, VAR_CHAN_IS_RESETTING, 0, 0);
+    setVarChanInt(0, VAR_CHAN_IS_PROGEND, 1, 0);   
+    setVarChanInt(0, VAR_CHAN_RUN_ROW, 0, 0);
     rt_set_chan_state(0, CHAN_IS_PARSERING, false);
     rt_set_chan_state(0, CHAN_IS_GCODE_END, true);
 }
