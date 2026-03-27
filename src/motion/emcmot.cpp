@@ -43,13 +43,15 @@ void emcmotTrajPlan() {
         return;
     }
 
-
     // 遍历每个通道
     for (int i = 0; i < var_sys[VAR_SYS_CHAN_NUM].value.i; i++) {
-        //复位生效参数
+        
         if(rt_data->nc_event == SYS_EVENT_RESET)
         {
+            #ifndef DEBUG_MODE_ENABLED
             Master_Reset();
+            #endif
+            //复位生效参数
             Axis_Limit_Manager_Init();
         }
 
