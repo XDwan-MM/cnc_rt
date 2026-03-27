@@ -66,9 +66,9 @@ GNC_RES parser_init(const char* parser_file_path)
     ItpCfgSetMacroVarCB(macroVarSetValue);
     // 设置机床起点
     double ori_pos_x, ori_pos_y, ori_pos_z;
-    getVarChanDouble(AXIS_X, VAR_AXIS_CMD_POS_EX, &ori_pos_x, 0);
-    getVarChanDouble(AXIS_Y, VAR_AXIS_CMD_POS_EX, &ori_pos_y, 0);
-    getVarChanDouble(AXIS_Z, VAR_AXIS_CMD_POS_EX, &ori_pos_z, 0);
+    getVarAxisDouble(AXIS_X, VAR_AXIS_CMD_POS_EX, &ori_pos_x, 0);
+    getVarAxisDouble(AXIS_Y, VAR_AXIS_CMD_POS_EX, &ori_pos_y, 0);
+    getVarAxisDouble(AXIS_Z, VAR_AXIS_CMD_POS_EX, &ori_pos_z, 0);
     ItpSetOriginMacPos(ori_pos_x, ori_pos_y, ori_pos_z, 0);
     // 选择NC文件（支持中文路径）
     ItpSetFile(parser_file_path);
@@ -137,6 +137,7 @@ STATIC GNC_RES parser_handle_gcode(pmc_data* motion_data, NcItpState *itp_state,
     gcode_block.pos.x = motion_data->position.x;
     gcode_block.pos.y = motion_data->position.y;
     gcode_block.pos.z = motion_data->position.z;
+    // LOG_OUTPUT(DEBUG, "pos %f %f %f", motion_data->position.x, motion_data->position.y, motion_data->position.z);
     // 模态
     gcode_block.state = *itp_state;
     // 模组
@@ -351,7 +352,6 @@ void parser_run_mode(){
 void parser_reset(){
     ItpReset();
     parser_data->parser_state = PARSER_IDLE;
-    rt_set_chan_state(0, CHAN_IS_PARSERING, false);
 }
 
 int macroVarGetValue(int no, double *mac)
