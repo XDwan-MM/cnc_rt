@@ -7,6 +7,7 @@ extern "C" {
 
 void Master_Run();
 void Master_Error(int code);
+void Master_Reset();
 
 extern int master_error_code;
 #ifdef __cplusplus

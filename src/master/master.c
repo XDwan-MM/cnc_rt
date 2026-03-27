@@ -30,12 +30,13 @@ do { \
 bool sp_start_sem = false;
 bool feed_start_sem = false;
 int master_error_code = 0;
+bool reset_sem = 0;
 
 void Master_Run()
 {
 #ifdef MASTER_RUN_ON
     int slavernum = Hal_Driver_Get_Count();
-    uint32_t* statis = (uint32_t*)malloc(slavernum * sizeof(uint32_t));
+    uint16_t* statis = (uint16_t*)malloc(slavernum * sizeof(uint16_t));
     uint32_t* pos = (uint32_t*)malloc(slavernum * sizeof(uint32_t));
     uint32_t* pos_cmd = (uint32_t*)malloc(slavernum * sizeof(uint32_t));
 
@@ -77,9 +78,10 @@ void Master_Run()
         CHECK_FUNC(GM_RxPdoEntry_Get_By_Pos(&DO0[i], slave_list, i + io_slave_bias, 0, 0));
         CHECK_FUNC(GM_RxPdoEntry_Get_By_Pos(&DO1[i], slave_list, i + io_slave_bias, 0, 1));
     }
+
+    /***************************根据位置索引Entry**************************/
     uint8_t drivers_slave_bias = 2;
-    for (int i = 0; i < 3; i++) 
-    {
+    for (int i = 0; i < 3; i++) {
         GM_RxPdoEntry_Get_By_Pos(&ControlWord[i], slave_list , i + drivers_slave_bias, 0, 0);
         GM_RxPdoEntry_Get_By_Pos(&PurPos[i], slave_list, i + drivers_slave_bias, 0, 1);
         GM_RxPdoEntry_Get_By_Pos(&OperationMode[i], slave_list, i + drivers_slave_bias, 0, 4);
@@ -129,6 +131,46 @@ op_flag = 1;
         usleep(1000);
 #else
         sem_post(&plc_sem);
+        op_flag =1;
+        if(reset_sem)
+        {
+            for (int i = 0; i < 4; i++)
+            {
+                CHECK_FUNC(GM_TxPdoEntry_Read(StatusWord[i], &statis[i] , 4));// 获取状态字
+                CHECK_FUNC(GM_RxPdoEntry_Write(ControlWord[i], 0x80));
+                switch (i)
+                {
+                case 0:
+                    spindle.mode = DRV_MODE_DISABLED;
+                    break;
+                case 1:
+                    x_axis_driver.mode = DRV_MODE_DISABLED;
+                    break;
+                case 2:
+                    y_axis_driver.mode = DRV_MODE_DISABLED;
+                    break;
+                case 3:
+                    z_axis_driver.mode = DRV_MODE_DISABLED;
+                    break;
+                default:
+                    break;
+                }
+            }
+
+            if ((statis[0] & 0x0f) != 0x08 && (statis[1] & 0x0f) != 0x08 && (statis[2] & 0x0f) != 0x08 && (statis[3] & 0x0f) != 0x08)
+            {
+                feed_start_sem = false;
+                sp_start_sem = false;
+                reset_sem = false;
+            }
+        }
+        if(op_flag)
+        {
+            sem_post(&motion_sem);
+            sem_post(&path_plan_sem);
+            sem_wait(&moton_sem_exec_done);
+        }
+
         if(!feed_start_sem)
         {
             for (int i = 1; i < 4; i++)
@@ -138,7 +180,6 @@ op_flag = 1;
                 // 根据状态字设置控制字
                 if(((statis[i] & 0x4f) == 0x40))
                 {
-                    printf(" CHECK_FUNC(GM_RxPdoEntry_Write%d\n",i);
                     CHECK_FUNC(GM_RxPdoEntry_Write(OperationMode[i], 0x08)); // 设置操作模式
                     CHECK_FUNC(GM_RxPdoEntry_Write(ControlWord[i], 0x06));
                 }
@@ -156,17 +197,10 @@ op_flag = 1;
                 {
                     CHECK_FUNC(GM_RxPdoEntry_Write(ControlWord[i], 0x1f));
                     feed_start_sem = 1;
-                    op_flag =1;
                     printf("op_flag =1;\n");
-
                 }
+                printf("");
             }
-        }
-        if(op_flag)
-        {
-            sem_post(&motion_sem);
-            sem_post(&path_plan_sem);
-            sem_wait(&moton_sem_exec_done);
         }
 
         if(!sp_start_sem)
@@ -210,6 +244,7 @@ op_flag = 1;
                 CHECK_FUNC(GM_RxPdoEntry_Write(ControlWord[0], 0x00));
             }
         }
+
         debug("=============================发送主站周期数据==============================\n");
         rc = GM_Master_Send(1);
         CHECK_RC(rc, "发送主站周期数据失败", err_close);
@@ -220,9 +255,11 @@ err_close:
     printf("pdo线程不正常退出");
     exit_flag = 1;
 }
+
 void Master_Error(int code)
 {
-    switch (code) {
+    switch (code)
+    {
     case -1000:
         setAlarm(ALARM_ETHCAT_SV, ALARM_ERROR, 0);
         LOG_ERROR("文件或设备打开失败");
@@ -370,4 +407,11 @@ void Master_Error(int code)
     default:
         break;
     }
+}
+
+void Master_Reset()
+{
+    feed_start_sem = 1;
+    sp_start_sem = 1;
+    reset_sem = 1;
 }

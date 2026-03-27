@@ -17,7 +17,7 @@
 #include "stored_stroke_check.h"
 #include "parser.h"
 #include "hmisysapi.h"
-
+#include "master.h"
 #include <alarmapi.h>
 #include <math.h>
 #include "rt_data.h"
@@ -49,6 +49,7 @@ void emcmotTrajPlan() {
         //复位生效参数
         if(rt_data->nc_event == SYS_EVENT_RESET)
         {
+            Master_Reset();
             Axis_Limit_Manager_Init();
         }
 
