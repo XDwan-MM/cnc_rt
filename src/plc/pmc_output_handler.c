@@ -10,6 +10,10 @@
  * 外部函数定义
  * ========================================================================== */
 
+static void pmc_output_mode();
+static void pmc_output_home();
+static void pmc_output_auto();
+
 void pmc_output_feedback() {
     /**
      * 映射策略：
@@ -22,10 +26,63 @@ void pmc_output_feedback() {
     setRegValue8(REG_F, 0, is_running); /* REG_F 定义见 regdata.h */
     setRegValue8(REG_F, 1, is_estop);
 
+    // 急停报警中
     if(rt_data->sys_state[SYS_IS_ESTOP_ON]){
         setRegBit(REG_F, 1, 1); //主轴状态重置 
     }
 
+    // 报警中
+    if(rt_data->sys_state[SYS_IS_ALARMING]) setRegBit(REG_F, 1, 0); 
+    else clearRegBit(REG_F, 1, 0);
+
+    pmc_output_mode();
+}
+
+// 自动运行启动中、运行中信号、休止中信号、复位
+static void pmc_output_auto(){
+    static bool last_reset_state = false;
+    static int reset_tic = 0;
+    if(rt_data->current_mode == MODE_MEM){
+        // OP：运行中信号
+        if(var_chan[0][VAR_CHAN_IS_RUNNING].value.i) setRegBit(REG_F, 0, 7); 
+        else clearRegBit(REG_F, 0, 7);
+        // STL：启动中
+        if(cycle_tp->mem_exec_state == EXEC_RUNNING) setRegBit(REG_F, 0, 5);
+        else clearRegBit(REG_F, 0, 5);
+        // SPL：休止中
+        if(cycle_tp->mem_exec_state == EXEC_RUNNING) setRegBit(REG_F, 0, 4); 
+        else clearRegBit(REG_F, 0, 4);
+        // RST：复位
+        if(var_chan[0][VAR_CHAN_IS_RESETTING].value.i){
+            setRegBit(REG_F, 1, 1);
+            last_reset_state = true;
+        }
+        // 复位减速后延时
+        if(last_reset_state && !var_chan[0][VAR_CHAN_IS_RESETTING].value.i){
+            if(reset_tic < par_mac[PAR_MAC_HARD_RESET_DELAY].value.val_int) reset_tic++;
+            else{
+                last_reset_state = false;
+                reset_tic = 0;
+            }
+        }
+    }
+}
+
+// 各轴返回零点完成、参考点建立
+static void pmc_output_home(){
+    for (int i = 0; i < var_sys[VAR_SYS_CHAN_NUM].value.i; i++){
+        if(var_axis[i][VAR_AXIS_IS_HOMEF].value.i){
+            setRegBit(REG_F, 94, i);
+            setRegBit(REG_F, 120, i);
+        } 
+        else{
+            clearRegBit(REG_F, 94, i);
+        }
+    }
+}
+
+// 方式选择
+static void pmc_output_mode(){
     if(rt_data->current_mode == MODE_IDLE){
         clearRegBit(REG_F, 2, 1);
         clearRegBit(REG_F, 3, 1);
@@ -59,6 +116,7 @@ void pmc_output_feedback() {
         setRegBit(REG_F, 3, 5); 
     } 
 
+    // 自动运行选择检测 F3.5
     if(rt_data->current_mode == MODE_MDI) {
         clearRegBit(REG_F, 2, 1);
         clearRegBit(REG_F, 3, 1);

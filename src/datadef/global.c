@@ -214,6 +214,12 @@ GNC_RES shm_var_update(){
         rt_data->chan_data[i].act_acc = rt_data->chan_data[i].cmd_acc;
         rt_data->chan_data[i].act_jk = rt_data->chan_data[i].cmd_jk;
     }
+    // 判断各轴零点
+    for (int i = 0; i < var_sys[VAR_SYS_CHAN_NUM].value.i; i++){
+        if(fabs(par_axis[i][PAR_AX_HOME_CRDS].value.val_real - var_axis[i][VAR_AXIS_CMD_POS_EX].value.f) > HOMEF_TOL){
+            setVarAxisInt(0, VAR_AXIS_IS_HOMEF, 0, 0);
+        }
+    }
 }
 
 GNC_RES shm_var_update_prog(){
