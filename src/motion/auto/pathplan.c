@@ -26,6 +26,7 @@ GNC_RES chan_add_block(){
         // todo：var变量在路径线程中被读取，存在数据竞争风险，需加锁保护
         pretreat_queue->pre_pos = (POS){.x = var_axis[AXIS_X][VAR_AXIS_CMD_POS_EX].value.f, .y = var_axis[AXIS_Y][VAR_AXIS_CMD_POS_EX].value.f, .z = var_axis[AXIS_Z][VAR_AXIS_CMD_POS_EX].value.f};
         rt_set_chan_state(0, CHAN_IS_FIRST_RUN, false);
+        // LOG_OUTPUT(DEBUG, "%f %f %f", pretreat_queue->pre_pos.x, pretreat_queue->pre_pos.y, pretreat_queue->pre_pos.z);
     }
 
     // 每次最多处理 PRE_TREAT_SIZE
@@ -49,7 +50,7 @@ GNC_RES chan_add_block(){
         pretreat_block->type = gcode_block->type;
         pretreat_block->feed_vel = gcode_block->feed_vel / TIME_MINUS_2_S;
         block_cal_pos(gcode_block, pretreat_block, &pretreat_queue->pre_pos);
-        
+
         // 计算速度
         block_cal_vel(pretreat_block);
 
@@ -77,6 +78,8 @@ GNC_RES chan_add_block(){
 static void block_cal_pos(GCODE_BLOCK* gcode_block, PLAN_BLOCK* current_block, POS* start_pos){
     POS_COPY(&current_block->start_pos, start_pos);
     POS_COPY(&current_block->end_pos, &gcode_block->pos);
+    // LOG_OUTPUT(DEBUG, "start_pos %f %f %f", current_block->start_pos.x, current_block->start_pos.y, current_block->start_pos.z);
+    // LOG_OUTPUT(DEBUG, "end_pos %f %f %f", current_block->end_pos.x, current_block->end_pos.y, current_block->end_pos.z);
     switch(gcode_block->type){
         case CIRCLE_CCW:
         case CIRCLE_CW:
@@ -242,7 +245,6 @@ static double block_cal_circle_length(PLAN_BLOCK* current_block){
 
 // 计算段长度|圆弧长
 void block_cal_length(PLAN_BLOCK* current_block){
-    // 注意：如果段长度为0，该段无效
     switch(current_block->type){
         case RAPID:
         case LINE:

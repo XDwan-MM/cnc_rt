@@ -72,6 +72,10 @@ static void homing_set_state(){
         case SYS_EVENT_X_POS_PRESS:
             // log_system("[home] 回零处理X+按下");
             LOG_OUTPUT(INFO, "回零处理X+按下");
+            if(IsEqualTo(var_chan[0][VAR_CHAN_RAPID_OVERRIDE].value.f, 0)){
+                setAlarm(ALARM_SY, ALARM_WARNING, 2);
+                LOG_WARN("快速倍率为0");
+            }
             if(rt_data->sys_state[SYS_IS_SWITCHING_MODE]) break; // 换挡模式下，不允许操作
             if(homing_tp[AXIS_X].homing_state == ABS_EXEC_IDLE){
                 homing_tp[AXIS_X].is_event_trigger = true;  
@@ -82,6 +86,10 @@ static void homing_set_state(){
         case SYS_EVENT_Y_POS_PRESS:
             // log_system("[home] 回零处理Y+按下");
             LOG_OUTPUT(INFO, "回零处理Y+按下");
+            if(IsEqualTo(var_chan[0][VAR_CHAN_RAPID_OVERRIDE].value.f, 0)){
+                setAlarm(ALARM_SY, ALARM_WARNING, 2);
+                LOG_WARN("快速倍率为0");
+            }
             if(rt_data->sys_state[SYS_IS_SWITCHING_MODE]) break;
             if(homing_tp[AXIS_Y].homing_state == ABS_EXEC_IDLE){
                 homing_tp[AXIS_Y].is_event_trigger = true;
@@ -92,6 +100,10 @@ static void homing_set_state(){
         case SYS_EVENT_Z_POS_PRESS:
             // log_system("[home] 回零处理Z+按下");
             LOG_OUTPUT(INFO, "回零处理Z+按下");
+            if(IsEqualTo(var_chan[0][VAR_CHAN_RAPID_OVERRIDE].value.f, 0)){
+                setAlarm(ALARM_SY, ALARM_WARNING, 2);
+                LOG_WARN("快速倍率为0");
+            }
             if(rt_data->sys_state[SYS_IS_SWITCHING_MODE]) break;
             if(homing_tp[AXIS_Z].homing_state == ABS_EXEC_IDLE){
                 homing_tp[AXIS_Z].is_event_trigger = true;
@@ -102,7 +114,10 @@ static void homing_set_state(){
         case SYS_EVENT_RAPID_OVERRIDE:
             // log_system("[home] 回零处理快速进给倍率改变");
             LOG_OUTPUT(INFO, "回零处理快速进给倍率改变");
-            if(IsEqualTo(var_chan[0][VAR_CHAN_RAPID_OVERRIDE].value.f, 0)) LOG_WARN("快速倍率为0");
+            if(IsEqualTo(var_chan[0][VAR_CHAN_RAPID_OVERRIDE].value.f, 0)){
+                setAlarm(ALARM_SY, ALARM_WARNING, 2);
+                LOG_WARN("快速倍率为0");
+            }
             for(int i = 0; i < SYS_AXES_NUM; i++){
                 if(homing_tp[i].homing_state == ABS_EXEC_HOMING){
                     homing_tp[i].is_event_trigger = true;

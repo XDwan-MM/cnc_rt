@@ -27,7 +27,7 @@ void sigint_handler([[maybe_unused]] int sig) {
 #ifndef DEBUG_MODE_ENABLED
 int Master_Start() {
     char eni_path[512];
-    snprintf(eni_path, sizeof(eni_path), "%s/%s", PROJECT_DIR, "config/ENI/speed.xml");
+    snprintf(eni_path, sizeof(eni_path), "%s/%s", PROJECT_DIR, "config/ENI/gugao_io.xml");
     master_error_code = ethercat_init(eni_path);
     if ( master_error_code < 0) {
         Master_Error(master_error_code);

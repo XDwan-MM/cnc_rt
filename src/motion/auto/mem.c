@@ -18,11 +18,12 @@ static bool mem_check_res(GNC_RES res);
 static bool mem_check_running();
 static double mem_cal_pinc(VELPLAN_TYPE velplan_mode, double ncu_cycle, double current_vel, POS current_pos);
 static void mem_handle_alarm();
+static void mem_handle_reset();
 static bool cycle_tp_is_finished();
 static void mem_cal_axis_vel(POS *current_pos, POS *target_pos, double interp_pinc, double target_vel);
 
-GNC_RES cycle_tp_update_tp(VELPLAN_TYPE vplan_mode, double ncu_cycle, double current_vel, POS current_pos, double target_vel);
-GNC_RES cycle_tp_update_params(VELPLAN_TYPE velplan_type, double cycle_time);
+static GNC_RES cycle_tp_update_tp(VELPLAN_TYPE vplan_mode, double ncu_cycle, double current_vel, POS current_pos, double target_vel);
+static GNC_RES cycle_tp_update_params(VELPLAN_TYPE velplan_type, double cycle_time);
 static bool cycle_block_is_arrived(POS current_pos);
 static bool cycle_tp_is_newvel_unvalid(VELPLAN_TYPE vplan_mode, double current_vel, double target_vel);
 static GNC_RES cycle_tp_update_block(VELPLAN_TYPE vplan_mode, double ncu_cycle, double current_vel, POS current_pos);
@@ -100,6 +101,14 @@ static void mem_set_state(){
         case SYS_EVENT_RERUN:
             // log_system("[mem] 记忆模式处理自动运行");
             LOG_OUTPUT(INFO, "记忆模式处理自动运行");
+            if(IsEqualTo(var_chan[0][VAR_CHAN_FEED_OVERRIDE].value.f, 0)){
+                setAlarm(ALARM_SY, ALARM_WARNING, 3);
+                LOG_WARN("进给倍率为0");
+            }
+            if(IsEqualTo(var_chan[0][VAR_CHAN_RAPID_OVERRIDE].value.f, 0)){
+                setAlarm(ALARM_SY, ALARM_WARNING, 2);
+                LOG_WARN("快速倍率为0");
+            }
             if(cycle_tp->mem_exec_state == EXEC_IDLE){
                 cycle_tp->mem_exec_state = EXEC_RUNNING;
                 cycle_tp->is_event_trigger = true;
@@ -119,7 +128,10 @@ static void mem_set_state(){
         case SYS_EVENT_FEED_OVERRIDE:
             // log_system("[mem] 记忆模式处理进给倍率切换");
             LOG_OUTPUT(INFO, "记忆模式处理进给倍率切换");
-            if(IsEqualTo(var_chan[0][VAR_CHAN_FEED_OVERRIDE].value.f, 0)) LOG_WARN("进给倍率为0");
+            if(IsEqualTo(var_chan[0][VAR_CHAN_FEED_OVERRIDE].value.f, 0)){
+                setAlarm(ALARM_SY, ALARM_WARNING, 3);
+                LOG_WARN("进给倍率为0");
+            }
             if(cycle_tp->mem_exec_state == EXEC_RUNNING){
                 if(!queue_is_empty(plan_queue)){
                     if(cycle_tp->plan_block->mode != PMC_MODE_TAP && cycle_tp->plan_block->type != RAPID){
@@ -133,7 +145,10 @@ static void mem_set_state(){
         case SYS_EVENT_RAPID_OVERRIDE:
             // log_system("[mem] 记忆模式处理快速倍率切换");
             LOG_OUTPUT(INFO, "记忆模式处理快速倍率切换 %f", var_chan[0][VAR_CHAN_RAPID_OVERRIDE].value.f);
-            if(IsEqualTo(var_chan[0][VAR_CHAN_RAPID_OVERRIDE].value.f, 0)) LOG_WARN("快速倍率为0");
+            if(IsEqualTo(var_chan[0][VAR_CHAN_RAPID_OVERRIDE].value.f, 0)){
+                setAlarm(ALARM_SY, ALARM_WARNING, 2);
+                LOG_WARN("快速倍率为0");
+            }
             if(cycle_tp->mem_exec_state == EXEC_RUNNING){
                 if(!queue_is_empty(plan_queue)){
                     if(cycle_tp->plan_block->mode != PMC_MODE_TAP && cycle_tp->plan_block->type == RAPID){
@@ -212,14 +227,8 @@ static double mem_cal_pinc(VELPLAN_TYPE velplan_mode, double ncu_cycle, double c
                 if(cycle_tp_is_finished() && cycle_tp->is_paused_inside_block){ 
                     // 复位
                     if(var_chan[0][VAR_CHAN_IS_RESETTING].value.i){
-                        setVarChanInt(0, VAR_CHAN_IS_RESETTING, 0, 0);
-                        setVarChanInt(0, VAR_CHAN_IS_RUNNING, 0, 0);
-                        setVarChanInt(0, VAR_CHAN_IS_MOVING, 0, 0);
-                        cycle_tp->mem_exec_state = EXEC_IDLE;
-                        // 复位，译码、预处理、前瞻队列均重置
-                        tp_reset();
-                        // 重置当前译码行
-                        setVarChanInt(0, VAR_CHAN_RUN_ROW, 0, 0);
+                        mem_handle_reset();
+                        LOG_OUTPUT(DEBUG, "完成复位");
                     }else{
                         setVarChanInt(0, VAR_CHAN_IS_MOVING, 0, 0);
                         // LOG_OUTPUT(INFO, "程序暂停完成, %d", cycle_tp->plan_block->type);
@@ -227,14 +236,6 @@ static double mem_cal_pinc(VELPLAN_TYPE velplan_mode, double ncu_cycle, double c
                     break;
                 }else{ 
                     res = cycle_tp_update_tp(velplan_mode, ncu_cycle, current_vel, current_pos, 0);
-                    if(res == VP_MAX_VEL_IS_ZERO && var_chan[0][VAR_CHAN_IS_RESETTING].value.i){
-                        setVarChanInt(0, VAR_CHAN_IS_RESETTING, 0, 0);
-                        setVarChanInt(0, VAR_CHAN_IS_RUNNING, 0, 0);
-                        setVarChanInt(0, VAR_CHAN_IS_MOVING, 0, 0);
-                        setVarChanInt(0, VAR_CHAN_RUN_ROW, 0, 0);
-                        cycle_tp->mem_exec_state = EXEC_IDLE;
-                        break;
-                    }
                     CHECK_RES(mem_check_res(res));
                 }
                 cycle_tp->is_event_trigger = false; 
@@ -262,6 +263,10 @@ static bool mem_check_res(GNC_RES res){
         return true;
     
     case VP_MAX_VEL_IS_ZERO:
+        if(var_chan[0][VAR_CHAN_IS_RESETTING].value.i){
+            mem_handle_reset();
+            return false;
+        }
         // 如果进给倍率为0
         if(cycle_tp->mem_exec_state == EXEC_RUNNING){
             cycle_tp->plan_block->type = UNKNOWN;
@@ -270,6 +275,10 @@ static bool mem_check_res(GNC_RES res){
         break;
 
     case GNC_DATA_EMPTY:
+        if(var_chan[0][VAR_CHAN_IS_RESETTING].value.i){
+            mem_handle_reset();
+            return false;
+        }
         // 运行中无数据，则进入等待 
         if(mem_check_running()){
             if(queue_is_empty(pretreat_queue) && gcode_queue_is_empty(gcode_queue)){
@@ -277,21 +286,25 @@ static bool mem_check_res(GNC_RES res){
             }
             return false;
         }
-        // 译码已结束后无数据，则程序运行完成
-        cycle_tp_reset();
-        rt_set_chan_state(0, CHAN_IS_GCODE_END, true);
-        setVarChanInt(0, VAR_CHAN_IS_RUNNING, 0, 0);
-        setVarChanInt(0, VAR_CHAN_IS_MOVING, 0, 0);
-        setVarChanInt(0, VAR_CHAN_IS_PROGEND, 1, 0);
+        mem_handle_reset();
         // log_system("[mem] 程序运行结束");
         LOG_OUTPUT(INFO, "程序运行结束");
         return false;
+
+    case VP_LENGTH_IS_ZERO:
+        if(var_chan[0][VAR_CHAN_IS_RESETTING].value.i){
+            mem_handle_reset();
+            return false;
+        }
+        if(cycle_tp->mem_exec_state == EXEC_PAUSING){
+            return false;
+        }
+        break;
 
     case GNC_DATA_NULL:
     case GNC_PARAM_UNVALID:
     case VP_IS_NULL:
     case VP_PARAM_UNVALID:
-    case VP_LENGTH_IS_ZERO:
     case VP_FEED_RATE_IS_ZERO:
     case VP_LENGTH_UNVALID:
         mem_handle_estop();
@@ -320,6 +333,18 @@ void mem_handle_estop(){
     setVarChanInt(0, VAR_CHAN_IS_MOVING, 0, 0);
     setVarChanInt(0, VAR_CHAN_IS_RESETTING, 0, 0);
     setVarChanInt(0, VAR_CHAN_IS_PROGEND, 1, 0);   
+    setVarChanInt(0, VAR_CHAN_RUN_ROW, 0, 0);
+    rt_set_chan_state(0, CHAN_IS_PARSERING, false);
+    rt_set_chan_state(0, CHAN_IS_GCODE_END, true);
+}
+
+static void mem_handle_reset(){
+    cycle_tp_reset();
+    setVarChanInt(0, VAR_CHAN_IS_RUNNING, 0, 0);
+    setVarChanInt(0, VAR_CHAN_IS_MOVING, 0, 0);
+    setVarChanInt(0, VAR_CHAN_IS_RESETTING, 0, 0);
+    setVarChanInt(0, VAR_CHAN_IS_PROGEND, 1, 0);   
+    setVarChanInt(0, VAR_CHAN_RUN_ROW, 0, 0);
     rt_set_chan_state(0, CHAN_IS_PARSERING, false);
     rt_set_chan_state(0, CHAN_IS_GCODE_END, true);
 }
@@ -370,7 +395,7 @@ void cycle_tp_reset(){
     cycle_tp->is_paused_inside_block = false;
 }
 
-GNC_RES cycle_tp_update_tp(VELPLAN_TYPE vplan_mode, double ncu_cycle, double current_vel, POS current_pos, double target_vel){
+static GNC_RES cycle_tp_update_tp(VELPLAN_TYPE vplan_mode, double ncu_cycle, double current_vel, POS current_pos, double target_vel){
     GNC_RES res = GNC_CAL_SUCCESS;
     if(cycle_tp_add_block() == GNC_DATA_EMPTY) return GNC_DATA_EMPTY;   // 如果没有插补数据
     // 如果新速度不满足，不更新新速度
@@ -388,7 +413,7 @@ GNC_RES cycle_tp_update_tp(VELPLAN_TYPE vplan_mode, double ncu_cycle, double cur
     return res;
 }
 
-GNC_RES cycle_tp_update_params(VELPLAN_TYPE velplan_type, double cycle_time){
+static GNC_RES cycle_tp_update_params(VELPLAN_TYPE velplan_type, double cycle_time){
     vp_cal_traj_data(velplan_type, cycle_tp->vel_profile, cycle_tp->interp_cycle, cycle_tp->traj_data, cycle_time);
     cycle_tp->current_distance = cycle_tp->target_distance;
     cycle_tp->target_distance = cycle_tp->traj_data->s - cycle_tp->accum_distance;
@@ -396,6 +421,7 @@ GNC_RES cycle_tp_update_params(VELPLAN_TYPE velplan_type, double cycle_time){
     cycle_tp->remain_distance = cycle_tp->plan_block->length - cycle_tp->accum_distance;
     cycle_tp->interp_cycle += 1;
     if(IsLessThan(cycle_tp->target_distance, 0)){
+        LOG_DEBUG("cycle_tp->target_distance %f", cycle_tp->target_distance);
         return VP_CAL_S_ERROR;
     }
     return GNC_CAL_SUCCESS;
@@ -422,10 +448,10 @@ static GNC_RES cycle_tp_update_block(VELPLAN_TYPE vplan_mode, double ncu_cycle, 
     // 如果到达加工段终点
     if(cycle_block_is_arrived(current_pos)){
         res = plan_block_get_next();
-        // LOG_OUTPUT(INFO, "获取下一个插补段");
+        LOG_OUTPUT(INFO, "获取下一个插补段");
     }else{
         res = plan_block_get_update(current_vel, current_pos);
-        // LOG_OUTPUT(INFO, "更新当前插补段");
+        LOG_OUTPUT(INFO, "更新当前插补段");
     }
     if(res == GNC_DATA_EMPTY) return GNC_DATA_EMPTY;
     if(IsLessThan(current_vel, 0)) {
@@ -491,8 +517,13 @@ static GNC_RES cycle_tp_cal_pausing(VELPLAN_TYPE vplan_mode, double ncu_cycle, d
     double jmax = cycle_tp->plan_block->max_jerk;
     // 计算减速距离
     double decline_s = vp_cal_decel_dist(vplan_mode, vs, ve, amax, jmax);
-    if(IsLessThan(decline_s, 0)){
-        return VP_CAL_S_ERROR;
+    if(IsLessThanOrEqual(decline_s, 0)){
+        cycle_tp->interp_cycle = 1;
+        cycle_tp->vel_profile->t_cycle = 0;
+        cycle_tp->traj_data->v = ve;
+        cycle_tp->is_paused_inside_block = true;
+        LOG_DEBUG("decline_s %f", decline_s);
+        return VP_LENGTH_IS_ZERO;
     }
     if (decline_s > remain_s){ // 在当前段无法减速到ve 
         cycle_tp->plan_block->start_vel = vs; 
@@ -698,6 +729,7 @@ static void block_cal_chop_vel(PLAN_BLOCK* current_block){
     }
 }
 
+// 计算单轴速度
 static void mem_cal_axis_vel(POS *current_pos, POS *target_pos, double interp_pinc, double target_vel){
     double x_axis_vel = 0;
     double y_axis_vel = 0;
