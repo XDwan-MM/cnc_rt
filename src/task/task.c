@@ -131,24 +131,19 @@ static GNC_RES task_handle_pmc_event(PMC_EVENT* event_data){
         {
             if(event_data->spindle_payload.direction == 1)
             {
-                spindle.state = DRV_STATE_OPERATION_ENABLED;
-                spindle.mode = DRV_MODE_CSV;
+//                spindle.state = DRV_STATE_OPERATION_ENABLED;
+//                spindle.mode = DRV_MODE_CSV;
                 sp_sign = 1;
-                // log_system("[task] 处理主轴正转事件");
                 LOG_OUTPUT(INFO, "处理主轴正转事件");
             }
             if(event_data->spindle_payload.direction == -1)
             {
-                spindle.state = DRV_STATE_OPERATION_ENABLED;
-                spindle.mode = DRV_MODE_CSV;
                 sp_sign = 2;
-                // log_system("[task] 处理主轴反转事件");
                 LOG_OUTPUT(INFO, "处理主轴反转事件");
             }
             if(event_data->spindle_payload.direction == 0)
             {
                 sp_sign = 0;
-                // log_system("[task] 处理主轴停止事件");
                 LOG_OUTPUT(INFO, "处理主轴停止事件");
             }
             break;

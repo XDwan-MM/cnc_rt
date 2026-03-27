@@ -86,7 +86,6 @@ void Spindle_Stop()
     {
         sp_stop_sem = true;
         spindle.mode = DRV_MODE_DISABLED;
-
         clearRegBit(REG_F, 10, 3);
         clearRegBit(REG_F, 10, 4);
         setRegBit(REG_F, 10, 5);
@@ -97,16 +96,25 @@ void Spindle_Stop()
 
 void emcSpindleControl()
 {
+    if(sp_sign == 0)
+    {
+        if(!sp_stop_sem)
+            Spindle_Stop();
+        return;
+    }
     if(!mcp_sp_speed)
     {
-        // int res = setAlarm(ALARM_AX, ALARM_ERROR, 123);
-        // if(res == -8) return ;
-        // LOG_ERROR("主轴速度值缺省");
-        mcp_sp_speed = par_axis[3][PAR_AX_DEFAULT_S].value.val_real;
+        int res = setAlarm(ALARM_AX, ALARM_ERROR, 123);
+        if(res == -8) return ;
+        LOG_ERROR("主轴速度值缺省");
+        sp_sign = 0;
+        // mcp_sp_speed = par_axis[3][PAR_AX_DEFAULT_S].value.val_real;
     }
     //control logic
     if(sp_sign == 2 && spindle.state == DRV_STATE_OPERATION_ENABLED)
     {
+        spindle.mode = DRV_MODE_CSV;
+
         emot_speed = -1.0 * mcp_sp_speed ;
         vel = Spindle_Ccw() ;
         sp_stop_sem = false;
@@ -116,6 +124,8 @@ void emcSpindleControl()
     }
     else if(sp_sign == 1 && spindle.state == DRV_STATE_OPERATION_ENABLED)
     {
+        spindle.mode = DRV_MODE_CSV;
+
         emot_speed = 1.0 * mcp_sp_speed ;
         vel = Spindle_Cw() ;
         sp_stop_sem = false;
@@ -128,10 +138,7 @@ void emcSpindleControl()
         printf("dx start \n");
     }
     setVarChanInt(0, VAR_CHAN_S_CODE, vel, 0);
-    if(sp_sign == 0 && !sp_stop_sem)
-    {
-        Spindle_Stop();
-    }
+
 }
 
 
@@ -178,6 +185,13 @@ void emcmcodedeal()
         mcode_queue_pop(mcode_queue);
         // setRegBit(REG_F, 7, 0); // MF =1;
     }
+    if(sp_sign == 0)
+    {
+        if(!sp_stop_sem)
+            Spindle_Stop();
+        return;
+    }
+
     if(spindle.state == DRV_STATE_OPERATION_ENABLED)
     {
         if(sp_sign == 2)
@@ -197,9 +211,5 @@ void emcmcodedeal()
             Hal_Driver_Set_Target_Vel(&spindle,vel);
         }
         setVarChanInt(0, VAR_CHAN_S_CODE, vel, 0);
-    }
-    if(sp_sign == 0 && !sp_stop_sem)
-    {
-        Spindle_Stop();
     }
 }
