@@ -232,7 +232,7 @@ static double mem_cal_pinc(VELPLAN_TYPE velplan_mode, double ncu_cycle, double c
                     }else{
                         setVarChanInt(0, VAR_CHAN_IS_MOVING, 0, 0);
                         // LOG_OUTPUT(INFO, "程序暂停完成, %d", cycle_tp->plan_block->type);
-                    }                  
+                    }                
                     break;
                 }else{ 
                     res = cycle_tp_update_tp(velplan_mode, ncu_cycle, current_vel, current_pos, 0);
@@ -286,6 +286,8 @@ static bool mem_check_res(GNC_RES res){
             }
             return false;
         }
+        // 加工计数
+        setVarChanInt(0, VAR_CHAN_PART_CNTR, var_chan[0][VAR_CHAN_PART_CNTR].value.i + 1, 0);
         mem_handle_reset();
         // log_system("[mem] 程序运行结束");
         LOG_OUTPUT(INFO, "程序运行结束");
