@@ -26,6 +26,7 @@ GNC_RES chan_add_block(){
         // todo：var变量在路径线程中被读取，存在数据竞争风险，需加锁保护
         pretreat_queue->pre_pos = (POS){.x = var_axis[AXIS_X][VAR_AXIS_CMD_POS_EX].value.f, .y = var_axis[AXIS_Y][VAR_AXIS_CMD_POS_EX].value.f, .z = var_axis[AXIS_Z][VAR_AXIS_CMD_POS_EX].value.f};
         rt_set_chan_state(0, CHAN_IS_FIRST_RUN, false);
+        // LOG_OUTPUT(DEBUG, "%f %f %f", pretreat_queue->pre_pos.x, pretreat_queue->pre_pos.y, pretreat_queue->pre_pos.z);
     }
 
     // 每次最多处理 PRE_TREAT_SIZE
@@ -49,7 +50,7 @@ GNC_RES chan_add_block(){
         pretreat_block->type = gcode_block->type;
         pretreat_block->feed_vel = gcode_block->feed_vel / TIME_MINUS_2_S;
         block_cal_pos(gcode_block, pretreat_block, &pretreat_queue->pre_pos);
-        
+
         // 计算速度
         block_cal_vel(pretreat_block);
 
@@ -77,6 +78,8 @@ GNC_RES chan_add_block(){
 static void block_cal_pos(GCODE_BLOCK* gcode_block, PLAN_BLOCK* current_block, POS* start_pos){
     POS_COPY(&current_block->start_pos, start_pos);
     POS_COPY(&current_block->end_pos, &gcode_block->pos);
+    // LOG_OUTPUT(DEBUG, "start_pos %f %f %f", current_block->start_pos.x, current_block->start_pos.y, current_block->start_pos.z);
+    // LOG_OUTPUT(DEBUG, "end_pos %f %f %f", current_block->end_pos.x, current_block->end_pos.y, current_block->end_pos.z);
     switch(gcode_block->type){
         case CIRCLE_CCW:
         case CIRCLE_CW:
@@ -145,7 +148,7 @@ static void block_cal_circle_vector(PLAN_BLOCK* current_block){
     switch(current_block->circular_block.plane){
         case PLANE_XY:
             switch(current_block->type){
-            case CIRCLE_CCW:
+            case CIRCLE_CW:
                 current_block->start_vec.x = rs.y;
                 current_block->start_vec.y = - rs.x;
                 current_block->start_vec.z = 0;
@@ -153,7 +156,7 @@ static void block_cal_circle_vector(PLAN_BLOCK* current_block){
                 current_block->end_vec.y = - re.x;
                 current_block->end_vec.z = 0;
                 break;
-            case CIRCLE_CW:
+            case CIRCLE_CCW:
                 current_block->start_vec.x = - rs.y;
                 current_block->start_vec.y = rs.x;
                 current_block->start_vec.z = 0;
@@ -165,7 +168,7 @@ static void block_cal_circle_vector(PLAN_BLOCK* current_block){
         break;
         case PLANE_XZ:
             switch(current_block->type){
-            case CIRCLE_CCW:
+            case CIRCLE_CW:
                 current_block->start_vec.x = rs.z;
                 current_block->start_vec.y = 0;
                 current_block->start_vec.z = - rs.x;
@@ -173,7 +176,7 @@ static void block_cal_circle_vector(PLAN_BLOCK* current_block){
                 current_block->end_vec.y = 0;
                 current_block->end_vec.z = - re.x;
                 break;
-            case CIRCLE_CW:
+            case CIRCLE_CCW:
                 current_block->start_vec.x = - rs.z;
                 current_block->start_vec.y = 0;
                 current_block->start_vec.z = rs.x;
@@ -185,7 +188,7 @@ static void block_cal_circle_vector(PLAN_BLOCK* current_block){
         break;
         case PLANE_YZ:
             switch(current_block->type){
-            case CIRCLE_CCW:
+            case CIRCLE_CW:
                 current_block->start_vec.x = 0;
                 current_block->start_vec.y = rs.z;
                 current_block->start_vec.z = - rs.y;
@@ -193,7 +196,7 @@ static void block_cal_circle_vector(PLAN_BLOCK* current_block){
                 current_block->end_vec.y = re.z;
                 current_block->end_vec.z = - re.y;
                 break;
-            case CIRCLE_CW:
+            case CIRCLE_CCW:
                 current_block->start_vec.x = 0;
                 current_block->start_vec.y = - rs.z;
                 current_block->start_vec.z = rs.y;
@@ -229,10 +232,10 @@ static double block_cal_circle_length(PLAN_BLOCK* current_block){
     // 计算弧度
     double angDelta = current_block->circular_block.end_rad - current_block->circular_block.statr_rad;
     switch(current_block->type){
-        case CIRCLE_CCW:
+        case CIRCLE_CW:
             if (angDelta > 0) angDelta -= 2 * PI;
             break;
-        case CIRCLE_CW:
+        case CIRCLE_CCW:
             if (angDelta < 0) angDelta += 2 * PI;
             break;
     }
