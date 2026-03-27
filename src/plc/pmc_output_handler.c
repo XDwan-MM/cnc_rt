@@ -36,34 +36,35 @@ void pmc_output_feedback() {
     else clearRegBit(REG_F, 1, 0);
 
     pmc_output_mode();
+    pmc_output_auto();
+    pmc_output_home();
 }
 
 // 自动运行启动中、运行中信号、休止中信号、复位
 static void pmc_output_auto(){
     static bool last_reset_state = false;
     static int reset_tic = 0;
-    if(rt_data->current_mode == MODE_MEM){
-        // OP：运行中信号
-        if(var_chan[0][VAR_CHAN_IS_RUNNING].value.i) setRegBit(REG_F, 0, 7); 
-        else clearRegBit(REG_F, 0, 7);
-        // STL：启动中
-        if(cycle_tp->mem_exec_state == EXEC_RUNNING) setRegBit(REG_F, 0, 5);
-        else clearRegBit(REG_F, 0, 5);
-        // SPL：休止中
-        if(cycle_tp->mem_exec_state == EXEC_RUNNING) setRegBit(REG_F, 0, 4); 
-        else clearRegBit(REG_F, 0, 4);
-        // RST：复位
-        if(var_chan[0][VAR_CHAN_IS_RESETTING].value.i){
-            setRegBit(REG_F, 1, 1);
-            last_reset_state = true;
-        }
-        // 复位减速后延时
-        if(last_reset_state && !var_chan[0][VAR_CHAN_IS_RESETTING].value.i){
-            if(reset_tic < par_mac[PAR_MAC_HARD_RESET_DELAY].value.val_int) reset_tic++;
-            else{
-                last_reset_state = false;
-                reset_tic = 0;
-            }
+    // OP：运行中信号
+    if(var_chan[0][VAR_CHAN_IS_RUNNING].value.i) setRegBit(REG_F, 0, 7); 
+    else clearRegBit(REG_F, 0, 7);
+    // STL：启动中
+    if(cycle_tp->mem_exec_state == EXEC_RUNNING) setRegBit(REG_F, 0, 5);
+    else clearRegBit(REG_F, 0, 5);
+    // SPL：休止中
+    if(cycle_tp->mem_exec_state == EXEC_PAUSING) setRegBit(REG_F, 0, 4); 
+    else clearRegBit(REG_F, 0, 4);
+    // RST：复位
+    if(var_chan[0][VAR_CHAN_IS_RESETTING].value.i){
+        setRegBit(REG_F, 1, 1);
+        last_reset_state = true;
+    }
+    // 复位减速后延时
+    if(last_reset_state && !var_chan[0][VAR_CHAN_IS_RESETTING].value.i){
+        if(reset_tic < par_mac[PAR_MAC_HARD_RESET_DELAY].value.val_int) reset_tic++;
+        else{
+            clearRegBit(REG_F, 1, 1);
+            last_reset_state = false;
+            reset_tic = 0;   
         }
     }
 }
