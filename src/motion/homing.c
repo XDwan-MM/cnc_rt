@@ -299,7 +299,7 @@ static bool abs_homing_is_axis_homed(AXIS_TYPE axis_type){
 }
 
 void homing_tp_init(){
-    homing_tp = (HOMING_TP*)calloc(SYS_AXES_NUM * sizeof(HOMING_TP), 41);
+    homing_tp = (HOMING_TP*)calloc(SYS_AXES_NUM * sizeof(HOMING_TP), 1);
     for(int i = 0; i < SYS_AXES_NUM; i++){
         homing_tp[i].homing_block = (PLAN_BLOCK*)calloc(sizeof(PLAN_BLOCK), 1);
         homing_tp[i].homing_profile = (VEL_PROFILE*)calloc(sizeof(VEL_PROFILE), 1);

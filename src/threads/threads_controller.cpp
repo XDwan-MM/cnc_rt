@@ -93,10 +93,12 @@ void* motion_controller_thread_func(void*) {
         Hal_Driver_Update_All(false, true);
         end = get_ns();
         // printf("%10f", (end - start) / 1e6);
+        #ifndef DEBUG_MODE_ENABLED
         if(IsGreaterThan((end - start) / 1e6, 1.5)){
             int res = setAlarm(ALARM_SY, ALARM_ERROR, 1);
             if(res != -8) LOG_OUTPUT(ERROR, "实时超时 %10f", (end - start) / 1e6);
         }
+        #endif
         sem_post(&moton_sem_exec_done);
     }
     return NULL;

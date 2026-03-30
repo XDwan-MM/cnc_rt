@@ -101,6 +101,8 @@ HEADERS += \
     src/hal/hal_io.h \
     src/motion/auto/interpolation.h \
     src/motion/auto/mem.h \
+    src/motion/auto/mem_mst.h \
+    src/motion/auto/mem_gcode.h \
     src/motion/auto/parser.h \
     src/motion/auto/pathplan.h \
     src/motion/alarm.h \
@@ -148,6 +150,8 @@ SOURCES += \
     src/hal/hal_io.c \
     src/motion/auto/interpolation.c \
     src/motion/auto/mem.c \
+    src/motion/auto/mem_mst.c \
+    src/motion/auto/mem_gcode.c \
     src/motion/auto/parser.cpp \
     src/motion/auto/pathplan.c \
     src/motion/alarm.c \
