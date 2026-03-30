@@ -18,6 +18,7 @@ extern "C" {
 #include "trajectory.h"
 
 #define HOME_TOL 1E-5   // 回零偏差，单位mm（与驱动器分辨率相关，与跟随误差相关）
+#define HOMEF_TOL 1E-3
 
 // 绝对式回零状态
 typedef enum{

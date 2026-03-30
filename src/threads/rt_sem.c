@@ -3,7 +3,7 @@
 volatile sig_atomic_t exit_flag = 0;
 volatile int op_flag;
 
-sem_t plc_sem, motion_sem, /*task_sem,*/ path_plan_sem,moton_sem_exec_done;
+sem_t plc_sem, motion_sem, /*task_sem,*/ path_plan_sem, moton_sem_exec_done;
 
 void init_rt_sem() {
     sem_init(&plc_sem, 0, 0);
