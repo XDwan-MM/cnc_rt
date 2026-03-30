@@ -10,7 +10,10 @@
 #include "pmc_a_input_scanner.h"
 #include "pmc_g_input_scanner.h"
 #include "pmc_output_handler.h"
+#include "log.h"
 #include <stdio.h>
+#include <time.h>
+#include <alarmapi.h>
 #ifdef DEBUG_MODE_ENABLED
 #include "master_sim.h"
 #include "keyboard.h"
@@ -37,13 +40,16 @@ thread_config_t path_plan_config = {.core_id = 2, .policy = SCHED_RR, .priority 
 // todo：修改此处写法
 bool RESET = false;
 
-// 任务控制器线程的具体实现
-// void* task_controller_thread_func(void*) {
-//     while (!exit_flag) {
-//         // todo：修改此处写法    
-//     }
-//     return NULL;
-// }
+// 线程首末时间
+static long long start = 0;
+static long long end = 0;
+
+// 获取单调时间（纳秒）
+static inline long long get_ns() {
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return ts.tv_sec * 1000000000LL + ts.tv_nsec;
+}
 
 // 软PLC线程的具体实现
 void* soft_plc_thread_func(void*) {
@@ -67,6 +73,7 @@ void* motion_controller_thread_func(void*) {
     {
         sem_wait(&motion_sem);
         if (exit_flag) break;
+        start = get_ns();
         Hal_Driver_Update_All(true, false);
         task_mq_proc();
         // todo：修改此处写法
@@ -84,6 +91,12 @@ void* motion_controller_thread_func(void*) {
         emcmotTrajPlan();
         pmc_output_feedback();
         Hal_Driver_Update_All(false, true);
+        end = get_ns();
+        // printf("%10f", (end - start) / 1e6);
+        if(IsGreaterThan((end - start) / 1e6, 1.5)){
+            int res = setAlarm(ALARM_SY, ALARM_ERROR, 1);
+            if(res != -8) LOG_OUTPUT(ERROR, "实时超时 %10f", (end - start) / 1e6);
+        }
         sem_post(&moton_sem_exec_done);
     }
     return NULL;
@@ -93,12 +106,21 @@ void* motion_controller_thread_func(void*) {
 void* path_plan_thread_func(void*) {
     while (!exit_flag)
     {
+        // todo：不需要信号量
         sem_wait(&path_plan_sem);
         if (exit_flag) break;
         emcmotPathPlan();
     }
     return NULL;
 }
+
+// 任务控制器线程的具体实现
+// void* task_controller_thread_func(void*) {
+//     while (!exit_flag) {
+//         // todo：修改此处写法    
+//     }
+//     return NULL;
+// }
 
 void* pdo_thread_func(void*) {
 #ifdef DEBUG_MODE_ENABLED
