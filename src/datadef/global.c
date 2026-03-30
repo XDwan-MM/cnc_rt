@@ -106,6 +106,11 @@ static GNC_RES shm_var_init(){
         setVarChanInt(i, VAR_CHAN_IS_ESTOP, 0, 0);              // 急停
         setVarChanInt(i, VAR_CHAN_IS_RESETTING, 0, 0);          // 复位中
         setVarChanInt(i, VAR_CHAN_IS_MOVING, 0, 0);             // 轴移动中
+        #ifdef DEBUG_MODE_ENABLED
+        setVarChanDouble(i, VAR_CHAN_FEED_OVERRIDE, 100.0, 0);    // 进给倍率    
+        setVarChanDouble(i, VAR_CHAN_RAPID_OVERRIDE, 100.0, 0);   // 快速进给倍率
+        setVarChanDouble(i, VAR_CHAN_SPDL_OVERRIDE, 100.0, 0);    // 主轴倍率
+        #endif
     }
     // 坐标轴数据
     for(int i = 0; i < SYS_AXES_NUM; i++){    
@@ -137,6 +142,12 @@ static GNC_RES shm_par_init(){
         par_axis[i][PAR_AX_FEED_ACC].value.val_real = 1000.0;
         par_axis[i][PAR_AX_FEED_JK].value.val_real = 1000.0;
         par_axis[i][PAR_AX_HOME_CRDS].value.val_real = 100;
+        par_axis[i][PAR_AX_PLMT].value.val_real = 1500;
+        par_axis[i][PAR_AX_NLMT].value.val_real = -1500;
+        par_axis[i][PAR_AX_PLMT2].value.val_real = 1000;
+        par_axis[i][PAR_AX_NLMT2].value.val_real = -1000;
+        par_axis[i][PAR_AX_MAX_FERROR].value.val_real = 1000;
+        par_axis[i][PAR_AX_MIN_FERROR].value.val_real = 500;
     }
     for(int i = 0; i < SYS_CHAN_NUM; i++){
         par_chan[i][PAR_CH_DEFAULT_F].value.val_real = 1000.0;
