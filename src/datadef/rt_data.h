@@ -23,13 +23,17 @@ extern "C" {
 #define SYS_STATE_NUM 100
 #define CHAN_STATE_NUM 100
 
-// 目前仅轨迹线程使用
+// 路径和轨迹线程使用
 typedef enum{
-    SYS_IS_ESTOP_ON = 0,        // 是否急停 is_estop
+    SYS_IS_ESTOP_ON = 0,        // 是否急停
     SYS_IS_ALARMING,            // 是否正在报警中
-    SYS_IS_SWITCHING_MODE,      // 是否正在切换模式 is_switching_mode
-    SYS_IS_MAC_LOCK,            // 是否开启机床锁住 is_mac_lock
-    SYS_IS_DRY_RUN,             // 是否空运行 is_dry_run
+    SYS_IS_SWITCHING_MODE,      // 是否正在切换模式
+    SYS_IS_MAC_LOCK,            // 机床锁住 
+    SYS_IS_DRY_RUN,             // 空运行
+    SYS_IS_BLOCK_SKIP,          // 程序段跳过（路径和轨迹线程使用）
+    SYS_IS_SINGLE_BLOCK,        // 单段
+    SYS_IS_OPT_STOP,            // 选择停
+    SYS_IS_MSBT_LOCK,           // 辅助功能锁住
 } SysStateIndex;
 
 // 路径和轨迹两个线程使用
