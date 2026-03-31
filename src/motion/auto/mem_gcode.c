@@ -113,6 +113,7 @@ static void mem_set_state(){
                 cycle_tp->mem_exec_state = EXEC_RUNNING;
                 cycle_tp->is_event_trigger = true;
                 setVarChanInt(0, VAR_CHAN_IS_RUNNING, 1, 0);
+                setVarChanInt(0, VAR_CHAN_IS_MOVING, 1, 0);
                 //　通知译码运行，初始化译码器
                 rt_set_chan_state(0, CHAN_IS_PARSER_RERUN, true);
                 // 译码正在运行，译码结束译码器将其置false
@@ -122,6 +123,7 @@ static void mem_set_state(){
                 cycle_tp->mem_exec_state = EXEC_RUNNING;
                 cycle_tp->is_event_trigger = true;
                 setVarChanInt(0, VAR_CHAN_IS_RUNNING, 1, 0);
+                setVarChanInt(0, VAR_CHAN_IS_MOVING, 1, 0);
             }
             break;
 
@@ -288,6 +290,7 @@ static bool mem_check_res(GNC_RES res){
         }
         // 加工计数
         setVarChanInt(0, VAR_CHAN_PART_CNTR, var_chan[0][VAR_CHAN_PART_CNTR].value.i + 1, 0);
+        LOG_INFO("加工计数 %d", var_chan[0][VAR_CHAN_PART_CNTR].value.i);
         mem_handle_reset();
         // log_system("[mem] 程序运行结束");
         LOG_OUTPUT(INFO, "程序运行结束");
@@ -450,10 +453,10 @@ static GNC_RES cycle_tp_update_block(VELPLAN_TYPE vplan_mode, double ncu_cycle, 
     // 如果到达加工段终点
     if(cycle_block_is_arrived(current_pos)){
         res = plan_block_get_next();
-        LOG_OUTPUT(INFO, "获取下一个插补段");
+        // LOG_OUTPUT(INFO, "获取下一个插补段");
     }else{
         res = plan_block_get_update(current_vel, current_pos);
-        LOG_OUTPUT(INFO, "更新当前插补段");
+        // LOG_OUTPUT(INFO, "更新当前插补段");
     }
     if(res == GNC_DATA_EMPTY) return GNC_DATA_EMPTY;
     if(IsLessThan(current_vel, 0)) {

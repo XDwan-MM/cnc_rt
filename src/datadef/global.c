@@ -189,7 +189,7 @@ GNC_RES tp_reset(){
 }
 
 GNC_RES shm_var_update(){
-    VarUnion crds_type_var;
+    VarUnion crds_type_var = {0};
     double crds_remain = 0.0;
     double crds_oft = 0.0;
     double act_pos_wcs_ex = 0.0;
@@ -200,7 +200,7 @@ GNC_RES shm_var_update(){
         setVarAxisDouble(i, VAR_AXIS_LEFT_TOGO_EX, crds_remain, 0);
         // 工件坐标
         getVarChanValue(0, VAR_CHAN_MODAL, 14, &crds_type_var, 0);
-        getCrdsValue(CRDS_TYPE_G5X + crds_type_var.value.i, i, &crds_oft);
+        getCrdsValue(CRDS_TYPE_G5X + crds_type_var.value.i - 1, i, &crds_oft);
         act_pos_wcs_ex = var_axis[i][VAR_AXIS_ACT_POS_EX].value.f - crds_oft;
         setVarAxisDouble(i, VAR_AXIS_ACT_POS_WCS_EX, act_pos_wcs_ex, 0);
         // 轴速度等参数

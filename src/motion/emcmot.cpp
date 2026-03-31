@@ -53,6 +53,7 @@ void emcmotTrajPlan() {
             #endif
             //复位生效参数
             Axis_Limit_Manager_Init();
+            cleanAllAlarm(ALARM_TYPE_ALL, ALARM_WARNING);
         }
 
         // 当前活动通道
