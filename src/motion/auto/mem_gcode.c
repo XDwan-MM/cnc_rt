@@ -39,7 +39,7 @@ static void block_cal_tap_vel(PLAN_BLOCK* current_block);
 static void block_cal_chop_vel(PLAN_BLOCK* current_block);
 static void block_cal_lookahead_vel(PLAN_BLOCK* current_block);
 
-// MEM 模式下的执行流程：处理开始和暂停 → 计算插补距离 → 计算插补空间坐标
+// G指令执行流程：处理开始和暂停 → 计算插补距离 → 计算插补空间坐标
 void execute_gcode(){
     double current_vel = var_chan[0][VAR_CHAN_ACT_FEEDRATE].value.f / TIME_MINUS_2_S;
     POS current_pos = {.x = var_axis[AXIS_X][VAR_AXIS_CMD_POS_EX].value.f, .y = var_axis[AXIS_Y][VAR_AXIS_CMD_POS_EX].value.f, .z = var_axis[AXIS_Z][VAR_AXIS_CMD_POS_EX].value.f};

@@ -14,6 +14,7 @@ static bool abs_homing_is_axis_homed(AXIS_TYPE axis_type);
 static double abs_homing_tp_pinc(AXIS_TYPE axis_type);
 static bool homing_check_res(GNC_RES res);
 static void homing_handle_alarm();
+static void homing_handle_reset();
 static void homing_cal_fv();
 GNC_RES abs_homing_tp_update_params(AXIS_TYPE axis_type, double current_vel, double target_vel);
 void abs_homing_tp_update_traj(VELPLAN_TYPE velplan_type, double cycle_time, AXIS_TYPE axis_type);
@@ -180,6 +181,13 @@ void homing_handle_estop(){
     setVarChanInt(0, VAR_CHAN_IS_RESETTING, 0, 0);
 }
 
+static void homing_handle_reset(){
+    homing_tp_reset();
+    setVarChanInt(0, VAR_CHAN_IS_HOMING, 0, 0);
+    setVarChanInt(0, VAR_CHAN_IS_MOVING, 0, 0);
+    setVarChanInt(0, VAR_CHAN_IS_RESETTING, 0, 0);
+}
+
 static void homing_handle_alarm(){
     for(int i = 0; i < SYS_AXES_NUM; i++){
         if(homing_tp[i].homing_state == ABS_EXEC_HOMING){
@@ -227,11 +235,8 @@ static double abs_homing_tp_pinc(AXIS_TYPE axis_type){
             if(homing_tp[axis_type].is_event_trigger){
                 homing_tp[axis_type].is_event_trigger = false;
                 res = abs_homing_tp_update_params(axis_type, current_vel, 0);
-                if(res == VP_MAX_VEL_IS_ZERO){
-                    homing_tp[axis_type].homing_state = ABS_EXEC_IDLE;
-                    setVarChanInt(0, VAR_CHAN_IS_HOMING, 0, 0);
-                    setVarChanInt(0, VAR_CHAN_IS_MOVING, 0, 0);
-                    setVarChanInt(0, VAR_CHAN_IS_RESETTING, 0, 0);
+                if(res == VP_MAX_VEL_IS_ZERO || res == VP_LENGTH_IS_ZERO){
+                    homing_handle_reset();
                     break;
                 }
                 CHECK_RES(homing_check_res(res));
@@ -331,6 +336,7 @@ GNC_RES abs_homing_tp_update_params(AXIS_TYPE axis_type, double current_vel, dou
     // 如果新速度不满足，不更新新速度
     if(!homing_tp_new_vel_valid(axis_type, target_vel)) return res;
     homing_tp[axis_type].homing_block->length = fabs(par_axis[axis_type][PAR_AX_HOME_CRDS].value.val_real - var_axis[axis_type][VAR_AXIS_CMD_POS_EX].value.f); // 设置的x轴零点与当前位置之间的距离
+    // todo：如果回零距离极小
     homing_tp[axis_type].homing_block->start_vel = fabs(var_axis[axis_type][VAR_AXIS_CMD_VEL].value.f);  // 当前速度
     homing_tp[axis_type].homing_distance = homing_tp[axis_type].homing_block->length;
     if(current_vel > homing_tp[axis_type].homing_block->max_vel) homing_tp[axis_type].homing_block->max_vel = current_vel;
@@ -394,6 +400,8 @@ static GNC_RES abs_declining_tp_init(AXIS_TYPE axis_type, double target_vel){
     double ncu_cycle = (double)par_ncu[PAR_NCU_CYCLE].value.val_uint / TIME_US_2_S;
     homing_tp[axis_type].homing_block->end_vel = target_vel;
     homing_tp[axis_type].homing_block->length = vp_cal_decel_dist(T_SHAPE, vs, ve, amax, jmax); // 减速距离
+    // 如果减速距离极小
+    if(IsEqualTo(homing_tp[axis_type].homing_block->length, 0)) return VP_LENGTH_IS_ZERO;
     res = vp_cal_vel_profile(T_SHAPE, homing_tp[axis_type].homing_block, homing_tp[axis_type].homing_profile, ncu_cycle); // 速度控制方式：T型、S型、SIN型
     homing_tp[axis_type].interp_cycle = 1;
     homing_tp[axis_type].accum_distance = 0;
