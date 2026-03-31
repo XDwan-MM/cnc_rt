@@ -1,0 +1,78 @@
+#ifndef NCITPMACRODEF_H
+#define NCITPMACRODEF_H
+
+/*! 宏变量函数指针 */
+typedef int (*GetMacroVarCB)(int id, double *val);
+typedef int (*SetMacroVarCB)(int id, double val);
+
+/*! 宏变量枚举定义 */
+typedef enum {
+    ITP_MACRO_TOOL_GAUGE_X = 1421,          // 对刀仪X轴坐标
+    ITP_MACRO_TOOL_GAUGE_Y = 1422,          // 对刀仪Y轴坐标
+    ITP_MACRO_TOOL_GAUGE_MEASUREING_FEED = 1423,    // 对刀仪测量速度
+    ITP_MACRO_TOOL_GAUGE_LOW_SPEED_AREA = 1424,     // 对刀仪减速区域长度
+    ITP_MACRO_TOOL_GAUGE_MEASUREING_AREA = 1425,    // 对刀仪测定区域长度
+
+    ITP_MACRO_G73_RETRACT_DISTANCE = 5114,  // G73钻深孔,D默认值（退刀）
+    ITP_MACRO_G83_RETRACT_DISTANCE = 5115,  // G83深孔加工循环,D默认值（退刀）
+
+    ITP_MACRO_CRDS_EXT_0 = 5201,        // 坐标系EXT-第0轴
+    ITP_MACRO_CRDS_EXT_1,
+    ITP_MACRO_CRDS_EXT_2,
+    ITP_MACRO_CRDS_EXT_3,
+    ITP_MACRO_CRDS_EXT_4,
+    ITP_MACRO_CRDS_EXT_5,
+    ITP_MACRO_CRDS_G54_0 = 5221,        // 坐标系G54-第0轴
+    ITP_MACRO_CRDS_G54_1,
+    ITP_MACRO_CRDS_G54_2,
+    ITP_MACRO_CRDS_G54_3,
+    ITP_MACRO_CRDS_G54_4,
+    ITP_MACRO_CRDS_G54_5,
+    ITP_MACRO_CRDS_G55_0 = 5241,        // 坐标系G55
+    ITP_MACRO_CRDS_G55_1,
+    ITP_MACRO_CRDS_G55_2,
+    ITP_MACRO_CRDS_G55_3,
+    ITP_MACRO_CRDS_G55_4,
+    ITP_MACRO_CRDS_G55_5,
+    ITP_MACRO_CRDS_G56_0 = 5261,        // 坐标系G56
+    ITP_MACRO_CRDS_G56_1,
+    ITP_MACRO_CRDS_G56_2,
+    ITP_MACRO_CRDS_G56_3,
+    ITP_MACRO_CRDS_G56_4,
+    ITP_MACRO_CRDS_G56_5,
+    ITP_MACRO_CRDS_G57_0 = 5281,        // 坐标系G57
+    ITP_MACRO_CRDS_G57_1,
+    ITP_MACRO_CRDS_G57_2,
+    ITP_MACRO_CRDS_G57_3,
+    ITP_MACRO_CRDS_G57_4,
+    ITP_MACRO_CRDS_G57_5,
+    ITP_MACRO_CRDS_G58_0 = 5301,        // 坐标系G58
+    ITP_MACRO_CRDS_G58_1,
+    ITP_MACRO_CRDS_G58_2,
+    ITP_MACRO_CRDS_G58_3,
+    ITP_MACRO_CRDS_G58_4,
+    ITP_MACRO_CRDS_G58_5,
+    ITP_MACRO_CRDS_G59_0 = 5321,        // 坐标系G59
+    ITP_MACRO_CRDS_G59_1,
+    ITP_MACRO_CRDS_G59_2,
+    ITP_MACRO_CRDS_G59_3,
+    ITP_MACRO_CRDS_G59_4,
+    ITP_MACRO_CRDS_G59_5,
+
+    ITP_MACRO_SCALING_RATIO_TYPE = 5400,        // 比例缩放倍率方式选择
+    ITP_MACRO_ROTARY_ANGLE_DEF = 5410,          // 坐标旋转默认角度
+    ITP_MACRO_SCALING_RATIO_P = 5411,           // 各轴比例缩放倍率-P缺省值
+    ITP_MACRO_SCALING_RATIO_IJK = 5421,         // 不同轴比例缩放倍率-IJK缺省值
+
+    ITP_MACRO_INVOLUTE_INTERPOLATION_ERROR_MAX = 8077,  // 渐开线插补误差最大值
+    ITP_MACRO_PROPORTIONAL_SCALING_ENABLE = 8132,   // 比例缩放功能G51(0:无效，1:有效)
+
+    ITP_MACRO_METRIC_IMPERIAL_UNIT = 17028,         // 公英制(0:英制 1:公制)
+    ITP_MACRO_NULLRUN_FEED = 17029,                 // 空运行速度
+    ITP_MACRO_ROTATION_MOTION_METHOD_1 = 17031,     // 坐标旋转1轴运动计算方式
+    ITP_MACRO_RADIUS_TOLERANCE = 18004,             // 半径值超差
+
+    ITP_MACRO_SPINDLE_ORIENTATION_ANGLE_DEF = 19056,    // 主轴定向角度默认值M19
+} ItpMacroDef;
+
+#endif // NCITPMACRODEF_H
