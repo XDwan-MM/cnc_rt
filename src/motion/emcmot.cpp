@@ -240,8 +240,6 @@ static void get_cmd_pos() {
         case MODE_MEM: // 自动
         case MODE_DNC:
             handle_run_cmd();
-            // excute_gcode();
-            // excute_mcode();
             break;
         case MODE_JOG: // 点动
             handle_jog_cmd();
