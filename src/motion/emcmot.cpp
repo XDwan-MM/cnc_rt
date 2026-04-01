@@ -39,6 +39,7 @@ char* mode_names[] = {"编辑", "AUTO", "MDI", "DNC", "手轮", "手动", "快�
 
 // 轨迹规划
 void emcmotTrajPlan() {
+    // todo：什么时候op_flag=0，为0应统一关闭线程，报错退出系统
     if (op_flag == 0) {
         return;
     }
@@ -240,8 +241,6 @@ static void get_cmd_pos() {
         case MODE_MEM: // 自动
         case MODE_DNC:
             handle_run_cmd();
-            // excute_gcode();
-            // excute_mcode();
             break;
         case MODE_JOG: // 点动
             handle_jog_cmd();

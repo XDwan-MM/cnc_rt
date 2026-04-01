@@ -6,18 +6,36 @@
 git submodule init && git submodule update
 
 
-1、编译
+1、修改界面参数配置文件
+
+1-1、测试平台（不靠墙那台）
+逻辑轴0 的参数 电子齿轮比分母 设置为 1500000
+逻辑轴1 的参数 电子齿轮比分母 设置为 1500000
+逻辑轴2 的参数 电子齿轮比分母 设置为 8388608
+
+1-2、测试平台（靠墙那台）
+逻辑轴0 的参数 电子齿轮比分母 设置为 100000
+逻辑轴1 的参数 电子齿轮比分母 设置为 100000
+逻辑轴2 的参数 电子齿轮比分母 设置为 100000
+
+
+2、修改主站配置文件
+
+打开 master.c 文件，如果为测试平台2，请注释 #define PLATFORM_1
+
+
+3、编译
 
 清理编译（可选）sudo ./build.sh clean
 
 sudo ./build.sh
 
 
-２、编译并运行
+4、编译并运行
 
 启动人机界面 sudo ./cnc_hmi_v3
 
-编译并运行实时　sudo ./build.sh run
+编译并运行实时　sudo ./build.sh
 
 
 3、运行实时
@@ -31,16 +49,6 @@ sudo ./rt_cnc
 cd bin
 sudo ./rt_cnc_d
 
-### 不同平台 电子齿轮比 配置
-1、测试平台（不靠墙那台）
-逻辑轴0 的参数 电子齿轮比分母 设置为 1500000
-逻辑轴1 的参数 电子齿轮比分母 设置为 1500000
-逻辑轴2 的参数 电子齿轮比分母 设置为 8388608
-
-2、测试平台（靠墙那台）
-逻辑轴0 的参数 电子齿轮比分母 设置为 100000
-逻辑轴1 的参数 电子齿轮比分母 设置为 100000
-逻辑轴2 的参数 电子齿轮比分母 设置为 100000
 
 
 
@@ -48,18 +56,16 @@ sudo ./rt_cnc_d
 
 1、当更换平台时，需使用要更换的测试平台的master.c文件进行替换
 
-2、修改main.cpp中的ENI文件
-
 - 9楼实验室第一台测试平台：speed.xml
 
-- 9楼实验室第一台测试平台：gugao.xml
+- 9楼实验室第一台测试平台：gugao_io.xml
 
 示例：
 
 ```C
 int Master_Start() {
     char eni_path[512];
-    snprintf(eni_path, sizeof(eni_path), "%s/%s", PROJECT_DIR, "config/ENI/gugao.xml");
+    snprintf(eni_path, sizeof(eni_path), "%s/%s", PROJECT_DIR, "config/ENI/gugao_io.xml");
     int error_code = ethercat_init(eni_path);
     if ( error_code < 0) {
         printf("[Warning] EtherCAT 启动失败，错误码为 %d ！\n", error_code);
@@ -75,7 +81,6 @@ int Master_Start() {
 １、参数　权限管理　系统管理员　登录　444444
 
 ２、诊断　状态显示　FG
-
 
 
 
@@ -123,6 +128,7 @@ sudo visudo
 添加Defaults项内容
 Defaults        env_keep += "QT_LICENSE_FILE"
 ctrl+X 回车 保存退出.
+
 
 ### 键盘调试
 
@@ -223,7 +229,6 @@ ctrl+X 回车 保存退出.
 - task_controller_thread_func：任务线程
 - path_plan_thread_func：路径规划线程
 - pdo_thread_func：pdo线程，产生信号量
-
 
 
 

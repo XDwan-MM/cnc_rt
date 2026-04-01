@@ -11,6 +11,10 @@
 #define debug(...)
 #endif
 
+// todo：配置两个测试平台的宏定义，在此处选择
+// 如果为测试平台2，请注释该定义（靠墙机器）
+// #define PLATFORM_1 
+
 // ===============错误检查宏=================
 #define CHECK_RC(rc,info,label) \
 do { \
@@ -31,6 +35,21 @@ bool sp_start_sem = false;
 bool feed_start_sem = false;
 int master_error_code = 0;
 bool reset_sem = 0;
+
+int Master_Start() {
+    char eni_path[512];
+    #ifdef PLATFORM_1
+    snprintf(eni_path, sizeof(eni_path), "%s/%s", PROJECT_DIR, "config/ENI/speed.xml");
+    #else
+    snprintf(eni_path, sizeof(eni_path), "%s/%s", PROJECT_DIR, "config/ENI/gugao_io.xml");
+    #endif
+    master_error_code = ethercat_init(eni_path);
+    if ( master_error_code < 0) {
+        Master_Error(master_error_code);
+        return -1;
+    }
+    return 1;
+}
 
 void Master_Run()
 {
@@ -121,9 +140,8 @@ void Master_Run()
         }
 #endif
 #ifndef MASTER_RUN_ON
-
         post_rt_sem_all();
-op_flag = 1;
+        op_flag = 1;
         usleep(1000);
 #else
         sem_post(&plc_sem);
