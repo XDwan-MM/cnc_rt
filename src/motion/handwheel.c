@@ -1,5 +1,5 @@
 ﻿#include "handwheel.h"
-#include "log.h"
+#include <hmisysapi.h>
 #include <math.h>
 
 simple_tp_t_handwheel simple_tp[5];

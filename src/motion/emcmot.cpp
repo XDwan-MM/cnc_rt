@@ -1,6 +1,6 @@
 #include "emcmot.h"
 #include "global.h"
-#include "log.h"
+#include <hmisysapi.h>
 #include "egear_ratio.h"
 #include "mcode_queue.h"
 #include "ferror_control.h"
@@ -39,6 +39,7 @@ char* mode_names[] = {"编辑", "AUTO", "MDI", "DNC", "手轮", "手动", "快�
 
 // 轨迹规划
 void emcmotTrajPlan() {
+    // todo：什么时候op_flag=0，为0应统一关闭线程，报错退出系统
     if (op_flag == 0) {
         return;
     }
@@ -138,7 +139,7 @@ static void set_operating_mode() {
                 rt_data->current_mode = rt_data->target_mode;
                 rt_data->sys_state[SYS_IS_SWITCHING_MODE] = false;
                 // log_system("[emcmot] 系统模式切换为(%s)", mode_names[rt_data->current_mode]);
-                LOG_OUTPUT(INFO, "系统模式切换为 %s", mode_names[rt_data->current_mode]);
+                LOG(LOG_LEVEL_INFO, "系统模式切换为 %s", mode_names[rt_data->current_mode]);
                 break;
             }
             rt_data->sys_state[SYS_IS_SWITCHING_MODE] = true;
@@ -147,7 +148,7 @@ static void set_operating_mode() {
         case MODE_MPG:
             rt_data->current_mode = rt_data->target_mode;
             // log_system("[emcmot] 系统模式切换为(%s)", mode_names[rt_data->current_mode]);
-            LOG_OUTPUT(INFO, "系统模式切换为 %s", mode_names[rt_data->current_mode]);
+            LOG(LOG_LEVEL_INFO, "系统模式切换为 %s", mode_names[rt_data->current_mode]);
             break;
         case MODE_RAPID_JOG:
             // 当前快速点动速度为零,才能切模式成功
@@ -158,7 +159,7 @@ static void set_operating_mode() {
                 rt_data->current_mode = rt_data->target_mode;
                 rt_data->sys_state[SYS_IS_SWITCHING_MODE] = false;
                 // log_system("[emcmot] 系统模式切换为(%s)", mode_names[rt_data->current_mode]);
-                LOG_OUTPUT(INFO, "系统模式切换为 %s", mode_names[rt_data->current_mode]);
+                LOG(LOG_LEVEL_INFO, "系统模式切换为 %s", mode_names[rt_data->current_mode]);
                 break;
             }
             rt_data->sys_state[SYS_IS_SWITCHING_MODE] = true;
@@ -169,14 +170,14 @@ static void set_operating_mode() {
                 rt_data->current_mode = rt_data->target_mode;
                 rt_data->sys_state[SYS_IS_SWITCHING_MODE] = false;
                 // log_system("[emcmot] 系统模式切换为(%s)", mode_names[rt_data->current_mode]);
-                LOG_OUTPUT(INFO, "系统模式切换为 %s", mode_names[rt_data->current_mode]);
+                LOG(LOG_LEVEL_INFO, "系统模式切换为 %s", mode_names[rt_data->current_mode]);
                 break;
             }else{
                 // 回零中切换模式不能生效
                 rt_data->target_mode = rt_data->current_mode;
                 setAlarm(ALARM_SY, ALARM_WARNING, 0);
                 // log_system("[emcmot] 回零中不能切换模式，请先按复位后切换");
-                LOG_WARN("回零中不能切换模式，请先按复位后切换");
+                LOG(LOG_LEVEL_WARN, "回零中不能切换模式，请先按复位后切换");
                 break;
             }
             rt_data->sys_state[SYS_IS_SWITCHING_MODE] = true;
@@ -190,14 +191,14 @@ static void set_operating_mode() {
                 rt_data->current_mode = rt_data->target_mode;
                 rt_data->sys_state[SYS_IS_SWITCHING_MODE] = false;
                 // log_system("[emcmot] 系统模式切换为(%s)", mode_names[rt_data->current_mode]);
-                LOG_OUTPUT(INFO, "系统模式切换为 %s", mode_names[rt_data->current_mode]);
+                LOG(LOG_LEVEL_INFO, "系统模式切换为 %s", mode_names[rt_data->current_mode]);
                 break;
             } else{
                 // 加工下切换模式不能生效
                 rt_data->target_mode = rt_data->current_mode;
                 setAlarm(ALARM_SY, ALARM_WARNING, 1);
                 // log_system("[emcmot] 自动加工下不能切换模式，请先按复位后切换");
-                LOG_WARN("自动加工下不能切换模式，请先按复位后切换");
+                LOG(LOG_LEVEL_WARN, "自动加工下不能切换模式，请先按复位后切换");
                 break;
             }
             rt_data->sys_state[SYS_IS_SWITCHING_MODE] = true;
@@ -267,7 +268,7 @@ static void check_for_fault() {
             rt_data->nc_event = SYS_EVENT_NONE;
             // 不允许切换模式
             rt_data->target_mode = rt_data->current_mode;
-            LOG_ERROR("急停报警下不允许操作，请检查问题！");
+            LOG(LOG_LEVEL_ERR, "急停报警下不允许操作，请检查问题！");
         }
     }
     //　检查系统报警
@@ -305,7 +306,7 @@ static void check_ferror_fault()
             if (res == -8)
                 return;
             // 上述代码逻辑是让下面LOG只打印一次；返回值-8：表示该报警已存在。
-            LOG_OUTPUT(ERROR, "X轴跟随误差过大");
+            LOG(LOG_LEVEL_ERR, "X轴跟随误差过大");
         }
     }
     // y轴
@@ -323,7 +324,7 @@ static void check_ferror_fault()
             int res = setAlarm(ALARM_AX, ALARM_ERROR, 101);
             if (res == -8)
                 return;
-            LOG_OUTPUT(ERROR, "Y轴跟随误差过大");
+            LOG(LOG_LEVEL_ERR, "Y轴跟随误差过大");
         }
     }
     // z轴
@@ -341,7 +342,7 @@ static void check_ferror_fault()
             int res = setAlarm(ALARM_AX, ALARM_ERROR, 102);
             if (res == -8)
                 return;
-            LOG_OUTPUT(ERROR, "Z轴跟随误差过大");
+            LOG(LOG_LEVEL_ERR, "Z轴跟随误差过大");
         }
     }
 }

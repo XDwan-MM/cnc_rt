@@ -10,7 +10,7 @@
 #include "pmc_a_input_scanner.h"
 #include "pmc_g_input_scanner.h"
 #include "pmc_output_handler.h"
-#include "log.h"
+#include <hmisysapi.h>
 #include <stdio.h>
 #include <time.h>
 #include <alarmapi.h>
@@ -96,7 +96,7 @@ void* motion_controller_thread_func(void*) {
         #ifndef DEBUG_MODE_ENABLED
         if(IsGreaterThan((end - start) / 1e6, 1.5)){
             int res = setAlarm(ALARM_SY, ALARM_ERROR, 1);
-            if(res != -8) LOG_OUTPUT(ERROR, "实时超时 %10f", (end - start) / 1e6);
+            if(res != -8) LOG(LOG_LEVEL_ERR, "实时超时 %10f", (end - start) / 1e6);
         }
         #endif
         sem_post(&moton_sem_exec_done);

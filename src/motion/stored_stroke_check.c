@@ -1,6 +1,6 @@
 ﻿#include "stored_stroke_check.h"
 #include "global.h"
-#include "log.h"
+#include <hmisysapi.h>
 #include <alarmapi.h>
 
 AxisLimitRuntime runtime[SYS_AXES_NUM];
@@ -93,13 +93,13 @@ uint8_t Check_Axis_Limit_Violation(AxisLimitRuntime runtime, bool moving)
             {
                 int res = setAlarm(ALARM_AX, ALARM_ERROR, 0);
                 if(res == -8) return violation;
-                LOG_ERROR("朝正方向移动超过了存储行程检查1");
+                LOG(LOG_LEVEL_ERR, "朝正方向移动超过了存储行程检查1");
             }
             else
             {
                 int res = setAlarm(ALARM_AX, ALARM_ERROR, 10);
                 if(res == -8) return violation;
-                LOG_ERROR("移动前行程检查中程序段终点位置在正侧行程极限禁止区内");
+                LOG(LOG_LEVEL_ERR, "移动前行程检查中程序段终点位置在正侧行程极限禁止区内");
             }
         }
         else
@@ -108,13 +108,13 @@ uint8_t Check_Axis_Limit_Violation(AxisLimitRuntime runtime, bool moving)
             {
                 int res = setAlarm(ALARM_AX, ALARM_ERROR, 1);
                 if(res == -8) return violation;
-                LOG_ERROR("朝负方向移动超过了存储行程检查1");
+                LOG(LOG_LEVEL_ERR, "朝负方向移动超过了存储行程检查1");
             }
             else
             {
                 int res = setAlarm(ALARM_AX, ALARM_ERROR, 11);
                 if(res == -8) return violation;
-                LOG_ERROR("移动前行程检查中程序段终点位置在负侧行程极限禁止区内");
+                LOG(LOG_LEVEL_ERR, "移动前行程检查中程序段终点位置在负侧行程极限禁止区内");
             }
         }
     }
@@ -131,13 +131,13 @@ uint8_t Check_Axis_Limit_Violation(AxisLimitRuntime runtime, bool moving)
             {
                 int res = setAlarm(ALARM_AX, ALARM_ERROR, 4);
                 if(res == -8) return violation;
-                LOG_ERROR("朝正方向移动超过了存储行程检查3");
+                LOG(LOG_LEVEL_ERR, "朝正方向移动超过了存储行程检查3");
             }
             else
             {
                 int res = setAlarm(ALARM_AX, ALARM_ERROR, 10);
                 if(res == -8) return violation;
-                LOG_ERROR("移动前行程检查中程序段终点位置在正侧行程极限禁止区内");
+                LOG(LOG_LEVEL_ERR, "移动前行程检查中程序段终点位置在正侧行程极限禁止区内");
             }
         }
         else
@@ -146,13 +146,13 @@ uint8_t Check_Axis_Limit_Violation(AxisLimitRuntime runtime, bool moving)
             {
                 int res = setAlarm(ALARM_AX, ALARM_ERROR, 5);
                 if(res == -8) return violation;
-                LOG_ERROR("朝负方向移动超过了存储行程检查3");
+                LOG(LOG_LEVEL_ERR, "朝负方向移动超过了存储行程检查3");
             }
             else
             {
                 int res = setAlarm(ALARM_AX, ALARM_ERROR, 11);
                 if(res == -8) return violation;
-                LOG_ERROR("移动前行程检查中程序段终点位置在负侧行程极限禁止区内");
+                LOG(LOG_LEVEL_ERR, "移动前行程检查中程序段终点位置在负侧行程极限禁止区内");
             }
         }
     }
@@ -172,13 +172,13 @@ uint8_t Check_Axis_Limit_Violation(AxisLimitRuntime runtime, bool moving)
                 {
                     int res = setAlarm(ALARM_AX, ALARM_ERROR, 2);
                     if(res == -8) return violation;
-                    LOG_ERROR("超过了存储行程检查2");
+                    LOG(LOG_LEVEL_ERR, "超过了存储行程检查2");
                 }
                 else
                 {
                     int res = setAlarm(ALARM_AX, ALARM_ERROR, 10);
                     if(res == -8) return violation;
-                    LOG_ERROR("移动前行程检查中程序段终点位置在正侧行程极限禁止区内");
+                    LOG(LOG_LEVEL_ERR, "移动前行程检查中程序段终点位置在正侧行程极限禁止区内");
                 }
             }
             else
@@ -187,13 +187,13 @@ uint8_t Check_Axis_Limit_Violation(AxisLimitRuntime runtime, bool moving)
                 {
                     int res = setAlarm(ALARM_AX, ALARM_ERROR, 3);
                     if(res == -8) return violation;
-                    LOG_ERROR("超过了存储行程检查2");
+                    LOG(LOG_LEVEL_ERR, "超过了存储行程检查2");
                 }
                 else
                 {
                     int res = setAlarm(ALARM_AX, ALARM_ERROR, 10);
                     if(res == -8) return violation;
-                    LOG_ERROR("移动前行程检查中程序段终点位置在正侧行程极限禁止区内");
+                    LOG(LOG_LEVEL_ERR, "移动前行程检查中程序段终点位置在正侧行程极限禁止区内");
                 }
             }
         }
@@ -212,13 +212,13 @@ uint8_t Check_Axis_Limit_Violation(AxisLimitRuntime runtime, bool moving)
                 {
                     int res = setAlarm(ALARM_AX, ALARM_ERROR, 2);
                     if(res == -8) return violation;
-                    LOG_ERROR("超过了存储行程检查2");
+                    LOG(LOG_LEVEL_ERR, "超过了存储行程检查2");
                 }
                 else
                 {
                     int res = setAlarm(ALARM_AX, ALARM_ERROR, 10);
                     if(res == -8) return violation;
-                    LOG_ERROR("移动前行程检查中程序段终点位置在正侧行程极限禁止区内");
+                    LOG(LOG_LEVEL_ERR, "移动前行程检查中程序段终点位置在正侧行程极限禁止区内");
                 }
             }
             else
@@ -227,13 +227,13 @@ uint8_t Check_Axis_Limit_Violation(AxisLimitRuntime runtime, bool moving)
                 {
                     int res = setAlarm(ALARM_AX, ALARM_ERROR, 3);
                     if(res == -8) return violation;
-                    LOG_ERROR("超过了存储行程检查2");
+                    LOG(LOG_LEVEL_ERR, "超过了存储行程检查2");
                 }
                 else
                 {
                     int res = setAlarm(ALARM_AX, ALARM_ERROR, 10);
                     if(res == -8) return violation;
-                    LOG_ERROR("移动前行程检查中程序段终点位置在正侧行程极限禁止区内");
+                    LOG(LOG_LEVEL_ERR, "移动前行程检查中程序段终点位置在正侧行程极限禁止区内");
                 }
             }
         }

@@ -11,10 +11,9 @@
 #include "debug_mode.h"
 #include "global.h"
 #include "parser.h"
-
-#include "log.h"
+#include <hmisysapi.h>
 #include "stored_stroke_check.h"
-
+#include "master.h"
 #ifdef DEBUG_MODE_ENABLED
 #include "keyboard.h"
 #endif
@@ -23,20 +22,6 @@
 void sigint_handler([[maybe_unused]] int sig) {
     exit_flag = 1;
 }
-
-#ifndef DEBUG_MODE_ENABLED
-int Master_Start() {
-    char eni_path[512];
-    snprintf(eni_path, sizeof(eni_path), "%s/%s", PROJECT_DIR, "config/ENI/gugao_io.xml");
-    master_error_code = ethercat_init(eni_path);
-    if ( master_error_code < 0) {
-        Master_Error(master_error_code);
-        printf("[Warning] EtherCAT 启动失败，错误码为 %d ！\n", master_error_code);
-        return -1;
-    }
-    return 1;
-}
-#endif
 
 void printMode() {
     printf("\n");
@@ -67,7 +52,6 @@ int main() {
     };
     // 初始化译码器
     parser_new();
-    printf("[start] 全局变量初始化sucess\n");
     // 初始化硬件抽象层
     Hal_Driver_Manager_Init();
     Hal_Driver_Array_Init();
@@ -75,24 +59,22 @@ int main() {
     //初始化行程检查功能
     Axis_Limit_Manager_Init();
     signal(SIGINT, sigint_handler);
-
+    // 启动主站
 #ifndef DEBUG_MODE_ENABLED
-    // 仅实时模式启动真实主站
     if (Master_Start() < 0) {
         printf("\n[严重错误] EtherCAT 主站启动失败！程序将终止。\n");
         printf("原因: 可能是 DMA 驱动未加载 (/dev/Gree_DMA0...) 或 XML 路径错误。\n");
         return -1; // 直接退出，不再启动线程
     }
-#else
-    // 初始化键盘
+#else // 模拟时不启动主站
     if (init_keyboard() < 0) {
         fprintf(stderr, "键盘初始化失败\n");
         return -1;
     }
 #endif
-
-    init_rt_sem(); //需要放在线程启动（threads_start()函数）前
-    // 启动各个线程
+    // 创建信号量，需要放在线程启动（threads_start函数）前
+    init_rt_sem();
+    // 启动各个线程，pdo线程运行master_run，给各实时线程发送信号量
     if (threads_start()) {
         printf("\n[start] 线程创建失败，主线程退出。\n");
         exit(1);
@@ -100,23 +82,20 @@ int main() {
     while (!exit_flag) {
         sleep(1);
     }
-
     printf("\n[exit] 收到退出信号，正在关闭线程...\n");
-
     // 唤醒所有阻塞在信号量上的线程，让它们能够检查 exit_flag 并退出
     for (int i = 0; i < 3; i++) {
         post_rt_sem_all();
     }
-
+    // 释放线程
     threads_joint();
     destroy_rt_sem();
-
+    // 关闭主站
     int error_code = ethercat_close();
     if ( error_code < 0) {
         printf("[Warning] EtherCAT 关闭失败，错误码为 %d ！\n", error_code);
         return -1;
     }
-
     printf("[exit] 程序正常退出\n");
     return 0;
 }

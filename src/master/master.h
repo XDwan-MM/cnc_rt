@@ -5,11 +5,13 @@
 extern "C" {
 #endif
 
+extern int master_error_code;
+
+int Master_Start();
 void Master_Run();
 void Master_Error(int code);
 void Master_Reset();
 
-extern int master_error_code;
 #ifdef __cplusplus
 }
 #endif

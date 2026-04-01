@@ -2,7 +2,7 @@
 #include "global.h"
 #include "mcode_queue.h"
 #include "regapi.h"
-#include "log.h"
+#include <hmisysapi.h>
 #include <alarmapi.h>
 
 int sp_sign;
@@ -106,7 +106,7 @@ void emcSpindleControl()
     {
         int res = setAlarm(ALARM_AX, ALARM_ERROR, 123);
         if(res == -8) return ;
-        LOG_ERROR("主轴速度值缺省");
+        LOG(LOG_LEVEL_ERR, "主轴速度值缺省");
         sp_sign = 0;
         // mcp_sp_speed = par_axis[3][PAR_AX_DEFAULT_S].value.val_real;
     }
