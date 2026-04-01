@@ -300,12 +300,12 @@ static void process_mode_selection(char g43)
 {
     CNC_MODE_INDEX target_mode = CNC_MODE_INVALID; // 默认无效模式
 
-    // 1. 判定高优先级信号
-    if (GET_BIT(g43, 7))
+    // 1. 判定高优先级信号 
+    if (GET_BIT(g43, 7)) // 判断第7位
     {
         target_mode = CNC_MODE_ZRN; // ZRN 置位进入回零模式
     }
-    else if (GET_BIT(g43, 5))
+    else if (GET_BIT(g43, 5)) // 判断第5位
     {
         target_mode = CNC_MODE_DNC; // DNCI 置位
     }
