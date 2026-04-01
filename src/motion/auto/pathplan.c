@@ -5,7 +5,7 @@
 #include "gcode_queue.h"
 #include "global.h"
 #include "cnc_math.h"
-#include "log.h"
+#include <hmisysapi.h>
 #include "rt_data.h"
 
 static void block_cal_pos(GCODE_BLOCK* gcode_block, PLAN_BLOCK* current_block, POS* start_pos);
@@ -26,7 +26,7 @@ GNC_RES chan_add_block(){
         // todo：var变量在路径线程中被读取，存在数据竞争风险，需加锁保护
         pretreat_queue->pre_pos = (POS){.x = var_axis[AXIS_X][VAR_AXIS_CMD_POS_EX].value.f, .y = var_axis[AXIS_Y][VAR_AXIS_CMD_POS_EX].value.f, .z = var_axis[AXIS_Z][VAR_AXIS_CMD_POS_EX].value.f};
         rt_set_chan_state(0, CHAN_IS_FIRST_RUN, false);
-        // LOG_OUTPUT(DEBUG, "%f %f %f", pretreat_queue->pre_pos.x, pretreat_queue->pre_pos.y, pretreat_queue->pre_pos.z);
+        // LOG(LOG_LEVEL_DEBUG,  "%f %f %f", pretreat_queue->pre_pos.x, pretreat_queue->pre_pos.y, pretreat_queue->pre_pos.z);
     }
 
     // 每次最多处理 PRE_TREAT_SIZE
@@ -78,8 +78,8 @@ GNC_RES chan_add_block(){
 static void block_cal_pos(GCODE_BLOCK* gcode_block, PLAN_BLOCK* current_block, POS* start_pos){
     POS_COPY(&current_block->start_pos, start_pos);
     POS_COPY(&current_block->end_pos, &gcode_block->pos);
-    // LOG_OUTPUT(DEBUG, "start_pos %f %f %f", current_block->start_pos.x, current_block->start_pos.y, current_block->start_pos.z);
-    // LOG_OUTPUT(DEBUG, "end_pos %f %f %f", current_block->end_pos.x, current_block->end_pos.y, current_block->end_pos.z);
+    // LOG(LOG_LEVEL_DEBUG,  "start_pos %f %f %f", current_block->start_pos.x, current_block->start_pos.y, current_block->start_pos.z);
+    // LOG(LOG_LEVEL_DEBUG,  "end_pos %f %f %f", current_block->end_pos.x, current_block->end_pos.y, current_block->end_pos.z);
     switch(gcode_block->type){
         case CIRCLE_CCW:
         case CIRCLE_CW:

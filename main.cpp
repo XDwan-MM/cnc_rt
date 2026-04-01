@@ -11,8 +11,7 @@
 #include "debug_mode.h"
 #include "global.h"
 #include "parser.h"
-
-#include "log.h"
+#include <hmisysapi.h>
 #include "stored_stroke_check.h"
 
 #ifdef DEBUG_MODE_ENABLED

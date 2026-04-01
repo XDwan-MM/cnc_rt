@@ -1,8 +1,7 @@
 #include "task.h"
 #include "eventdef.h"
 #include "spindle.h"
-
-#include "log.h"
+#include <hmisysapi.h>
 #include <alarmapi.h>
 #include <stdlib.h>
 #include "regapi.h"   /* 引入寄存器访问 API */
@@ -24,7 +23,7 @@ GNC_RES task_mq_proc()
     if(event_queue_is_empty(event_queue)) return GNC_DATA_EMPTY;
     if(event_queue_is_full(event_queue)){
         // log_system("[task] 事件队列已满");
-        // LOG_OUTPUT(ERROR, "事件队列已满");
+        // LOG(LOG_LEVEL_ERR, "事件队列已满");
         // setAlarm(ALARM_SY, ALARM_ERROR, 0);
         // return GNC_OPERATOR_ERROR;
     }
@@ -57,7 +56,7 @@ static GNC_RES task_handle_pmc_event(PMC_EVENT* event_data){
             default: rt_data->target_mode = MODE_IDLE;  break; // wcf: 我不太确定
             }
             // log_system("[task] 处理模式切换事件(%d)", rt_data->target_mode);
-            LOG_OUTPUT(INFO, "处理模式切换事件 %d", rt_data->target_mode);
+            LOG(LOG_LEVEL_INFO, "处理模式切换事件 %d", rt_data->target_mode);
             break;
         }
         /* 2. 进给轴按键处理：根据当前模式分发内部系统事件 */
@@ -74,56 +73,56 @@ static GNC_RES task_handle_pmc_event(PMC_EVENT* event_data){
                     if (direction == 1)
                     {
                         rt_data->nc_event = SYS_EVENT_X_POS_PRESS;
-                        LOG_OUTPUT(INFO, "处理X+按下事件");
+                        LOG(LOG_LEVEL_INFO, "处理X+按下事件");
                     }
                     else if (direction == -1)
                     {
                         rt_data->nc_event = SYS_EVENT_X_NEG_PRESS;
-                        LOG_OUTPUT(INFO, "处理X-按下事件");
+                        LOG(LOG_LEVEL_INFO, "处理X-按下事件");
                     }
                     else {
                         // 松开时，为了保险，可以根据 record_nc_event 或直接触发 Release
                         rt_data->nc_event = (rt_data->nc_event == SYS_EVENT_X_POS_PRESS) ?
                                             SYS_EVENT_X_POS_RELEASE : SYS_EVENT_X_NEG_RELEASE;
-                        LOG_OUTPUT(INFO, "处理X释放事件");
+                        LOG(LOG_LEVEL_INFO, "处理X释放事件");
                     }
                 }
                 else if (axis == AXIS_Y) {
                     if (direction == 1)
                     {
                         rt_data->nc_event = SYS_EVENT_Y_POS_PRESS;
-                        LOG_OUTPUT(INFO, "处理Y+按下事件");
+                        LOG(LOG_LEVEL_INFO, "处理Y+按下事件");
                     }
                     else if (direction == -1)
                     {
                         rt_data->nc_event = SYS_EVENT_Y_NEG_PRESS;
-                        LOG_OUTPUT(INFO, "处理Y-按下事件");
+                        LOG(LOG_LEVEL_INFO, "处理Y-按下事件");
                     }
                     else {
                         rt_data->nc_event = (rt_data->nc_event == SYS_EVENT_Y_POS_PRESS) ?
                                             SYS_EVENT_Y_POS_RELEASE : SYS_EVENT_Y_NEG_RELEASE;
-                        LOG_OUTPUT(INFO, "处理Y释放事件");
+                        LOG(LOG_LEVEL_INFO, "处理Y释放事件");
                     }
                 }
                 else if (axis == AXIS_Z) {
                     if (direction == 1)
                     {
                         rt_data->nc_event = SYS_EVENT_Z_POS_PRESS;
-                        LOG_OUTPUT(INFO, "处理Z+按下事件");
+                        LOG(LOG_LEVEL_INFO, "处理Z+按下事件");
                     }
                     else if (direction == -1)
                     {
                         rt_data->nc_event = SYS_EVENT_Z_NEG_PRESS;
-                        LOG_OUTPUT(INFO, "处理Z-按下事件");
+                        LOG(LOG_LEVEL_INFO, "处理Z-按下事件");
                     }
                     else {
                         rt_data->nc_event = (rt_data->nc_event == SYS_EVENT_Z_POS_PRESS) ?
                                             SYS_EVENT_Z_POS_RELEASE : SYS_EVENT_Z_NEG_RELEASE;
-                        LOG_OUTPUT(INFO, "处理Z释放事件");
+                        LOG(LOG_LEVEL_INFO, "处理Z释放事件");
                     }
                 }
                 // log_system("[task] 处理进给轴按键事件 Axis %d action %d under mode %d", axis, direction, rt_data->current_mode);
-                LOG_OUTPUT(INFO, "处理进给轴按键事件 Axis %d action %d under mode %d", axis, direction, rt_data->current_mode);
+                LOG(LOG_LEVEL_INFO, "处理进给轴按键事件 Axis %d action %d under mode %d", axis, direction, rt_data->current_mode);
             }
             break;
         }
@@ -134,17 +133,17 @@ static GNC_RES task_handle_pmc_event(PMC_EVENT* event_data){
 //                spindle.state = DRV_STATE_OPERATION_ENABLED;
 //                spindle.mode = DRV_MODE_CSV;
                 sp_sign = 1;
-                LOG_OUTPUT(INFO, "处理主轴正转事件");
+                LOG(LOG_LEVEL_INFO, "处理主轴正转事件");
             }
             if(event_data->spindle_payload.direction == -1)
             {
                 sp_sign = 2;
-                LOG_OUTPUT(INFO, "处理主轴反转事件");
+                LOG(LOG_LEVEL_INFO, "处理主轴反转事件");
             }
             if(event_data->spindle_payload.direction == 0)
             {
                 sp_sign = 0;
-                LOG_OUTPUT(INFO, "处理主轴停止事件");
+                LOG(LOG_LEVEL_INFO, "处理主轴停止事件");
             }
             break;
         }
@@ -156,7 +155,7 @@ static GNC_RES task_handle_pmc_event(PMC_EVENT* event_data){
                 setVarChanDouble(0, VAR_CHAN_FEED_OVERRIDE, (double)event_data->override_payload.val, 0);
                 rt_data->nc_event = SYS_EVENT_FEED_OVERRIDE;
                 // log_system("[task] 处理进给倍率事件");
-                LOG_OUTPUT(INFO, "处理进给倍率事件 %d", event_data->override_payload.val);
+                LOG(LOG_LEVEL_INFO, "处理进给倍率事件 %d", event_data->override_payload.val);
             }
             // 2.快速进给倍率
             if(event_data->override_payload.override_type == 1)
@@ -164,7 +163,7 @@ static GNC_RES task_handle_pmc_event(PMC_EVENT* event_data){
                 setVarChanDouble(0, VAR_CHAN_RAPID_OVERRIDE, (double)event_data->override_payload.val, 0);
                 rt_data->nc_event = SYS_EVENT_RAPID_OVERRIDE;
                 // log_system("[task] 处理快速进给倍率事件");
-                LOG_OUTPUT(INFO, "处理快速进给倍率事件 %d", event_data->override_payload.val);
+                LOG(LOG_LEVEL_INFO, "处理快速进给倍率事件 %d", event_data->override_payload.val);
             }
             // 3.主轴倍率
             if(event_data->override_payload.override_type == 2)
@@ -172,7 +171,7 @@ static GNC_RES task_handle_pmc_event(PMC_EVENT* event_data){
                 setVarChanDouble(0, VAR_CHAN_SPDL_OVERRIDE, (double)event_data->override_payload.val, 0);
                 rt_data->nc_event = SYS_EVENT_SPDL_OVERRIDE;
                 // log_system("[task] 处理主轴倍率事件");
-                LOG_OUTPUT(INFO, "处理主轴倍率事件");
+                LOG(LOG_LEVEL_INFO, "处理主轴倍率事件");
             }
             break;
         }
@@ -184,7 +183,7 @@ static GNC_RES task_handle_pmc_event(PMC_EVENT* event_data){
                     // 循环启动
                     rt_data->nc_event = SYS_EVENT_RERUN;
                     // log_system("[task] 处理循环启动事件");
-                    LOG_OUTPUT(INFO, "处理循环启动事件");
+                    LOG(LOG_LEVEL_INFO, "处理循环启动事件");
                 }
             }
             if(event_data->run_payload.run_state == 0)
@@ -193,7 +192,7 @@ static GNC_RES task_handle_pmc_event(PMC_EVENT* event_data){
                     // 进给保持
                     rt_data->nc_event = SYS_EVENT_PAUSE;
                     // log_system("[task] 处理进给保持事件");
-                    LOG_OUTPUT(INFO, "处理进给保持事件");
+                    LOG(LOG_LEVEL_INFO, "处理进给保持事件");
                 }
             }
             break;
@@ -204,7 +203,7 @@ static GNC_RES task_handle_pmc_event(PMC_EVENT* event_data){
             {
                 rt_data->nc_event = SYS_EVENT_RESET;
                 // log_system("[task] 处理复位事件");
-                LOG_OUTPUT(INFO, "处理复位事件");
+                LOG(LOG_LEVEL_INFO, "处理复位事件");
                 setRegBit(REG_F, 1, 1);
             }
             break;
@@ -214,12 +213,12 @@ static GNC_RES task_handle_pmc_event(PMC_EVENT* event_data){
             if (event_data->esp_payload.esp_state == 1)
             {
                 // rt_data->sys_state[SYS_IS_ESTOP_ON] = 1;
-                LOG_OUTPUT(INFO, "处理急停拍下事件");
+                LOG(LOG_LEVEL_INFO, "处理急停拍下事件");
             } 
             if (event_data->esp_payload.esp_state == 0)
             {
                 // rt_data->sys_state[SYS_IS_ESTOP_ON] = 0;
-                LOG_OUTPUT(INFO, "处理急停拉起事件");
+                LOG(LOG_LEVEL_INFO, "处理急停拉起事件");
             } 
         }
         default:

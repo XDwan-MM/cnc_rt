@@ -1,7 +1,7 @@
 #include "homing.h"
 #include "datatype.h"
 #include "global.h"
-#include "log.h"
+#include <hmisysapi.h>
 #include <alarmapi.h>
 
 static void homing_set_state();
@@ -60,7 +60,7 @@ static void homing_set_state(){
 
         case SYS_EVENT_RESET:
             // log_system("[home] 回零处理复位");
-            LOG_OUTPUT(INFO, "回零处理复位");
+            LOG(LOG_LEVEL_INFO, "回零处理复位");
             for(int i = 0; i < SYS_AXES_NUM; i++){
                 if(homing_tp[i].homing_state == ABS_EXEC_HOMING){
                     homing_tp[i].is_event_trigger = true;
@@ -71,10 +71,10 @@ static void homing_set_state(){
 
         case SYS_EVENT_X_POS_PRESS:
             // log_system("[home] 回零处理X+按下");
-            LOG_OUTPUT(INFO, "回零处理X+按下");
+            LOG(LOG_LEVEL_INFO, "回零处理X+按下");
             if(IsEqualTo(var_chan[0][VAR_CHAN_RAPID_OVERRIDE].value.f, 0)){
                 setAlarm(ALARM_SY, ALARM_WARNING, 2);
-                LOG_WARN("快速倍率为0");
+                LOG(LOG_LEVEL_WARN, "快速倍率为0");
             }
             if(rt_data->sys_state[SYS_IS_SWITCHING_MODE]) break; // 换挡模式下，不允许操作
             if(homing_tp[AXIS_X].homing_state == ABS_EXEC_IDLE){
@@ -85,10 +85,10 @@ static void homing_set_state(){
 
         case SYS_EVENT_Y_POS_PRESS:
             // log_system("[home] 回零处理Y+按下");
-            LOG_OUTPUT(INFO, "回零处理Y+按下");
+            LOG(LOG_LEVEL_INFO, "回零处理Y+按下");
             if(IsEqualTo(var_chan[0][VAR_CHAN_RAPID_OVERRIDE].value.f, 0)){
                 setAlarm(ALARM_SY, ALARM_WARNING, 2);
-                LOG_WARN("快速倍率为0");
+                LOG(LOG_LEVEL_WARN, "快速倍率为0");
             }
             if(rt_data->sys_state[SYS_IS_SWITCHING_MODE]) break;
             if(homing_tp[AXIS_Y].homing_state == ABS_EXEC_IDLE){
@@ -99,10 +99,10 @@ static void homing_set_state(){
 
         case SYS_EVENT_Z_POS_PRESS:
             // log_system("[home] 回零处理Z+按下");
-            LOG_OUTPUT(INFO, "回零处理Z+按下");
+            LOG(LOG_LEVEL_INFO, "回零处理Z+按下");
             if(IsEqualTo(var_chan[0][VAR_CHAN_RAPID_OVERRIDE].value.f, 0)){
                 setAlarm(ALARM_SY, ALARM_WARNING, 2);
-                LOG_WARN("快速倍率为0");
+                LOG(LOG_LEVEL_WARN, "快速倍率为0");
             }
             if(rt_data->sys_state[SYS_IS_SWITCHING_MODE]) break;
             if(homing_tp[AXIS_Z].homing_state == ABS_EXEC_IDLE){
@@ -113,10 +113,10 @@ static void homing_set_state(){
         
         case SYS_EVENT_RAPID_OVERRIDE:
             // log_system("[home] 回零处理快速进给倍率改变");
-            LOG_OUTPUT(INFO, "回零处理快速进给倍率改变");
+            LOG(LOG_LEVEL_INFO, "回零处理快速进给倍率改变");
             if(IsEqualTo(var_chan[0][VAR_CHAN_RAPID_OVERRIDE].value.f, 0)){
                 setAlarm(ALARM_SY, ALARM_WARNING, 2);
-                LOG_WARN("快速倍率为0");
+                LOG(LOG_LEVEL_WARN, "快速倍率为0");
             }
             for(int i = 0; i < SYS_AXES_NUM; i++){
                 if(homing_tp[i].homing_state == ABS_EXEC_HOMING){
@@ -127,7 +127,7 @@ static void homing_set_state(){
 
         case SYS_EVENT_PAUSE:
         case SYS_EVENT_RERUN:
-            LOG_WARN("回零模式不支持此操作");
+            LOG(LOG_LEVEL_WARN, "回零模式不支持此操作");
             break;
         
         default:
@@ -155,7 +155,7 @@ static bool homing_check_res(GNC_RES res){
     case VP_LENGTH_UNVALID:
         homing_handle_estop();
         // log_system("[home] 回零错误(%d)", res);
-        LOG_OUTPUT(ERROR, "回零错误 %d", res);
+        LOG(LOG_LEVEL_ERR, "回零错误 %d", res);
         setAlarm(ALARM_CH, ALARM_ERROR, 0);
         return false;
 
@@ -167,7 +167,7 @@ static bool homing_check_res(GNC_RES res){
     default:
         homing_handle_estop();
         // log_system("[home] 回零错误(%d)", res);
-        LOG_OUTPUT(ERROR, "回零错误 %d", res);
+        LOG(LOG_LEVEL_ERR, "回零错误 %d", res);
         setAlarm(ALARM_CH, ALARM_ERROR, 1);
         return false;
     }
@@ -185,7 +185,7 @@ static void homing_handle_alarm(){
         if(homing_tp[i].homing_state == ABS_EXEC_HOMING){
             homing_tp[i].is_event_trigger = true;
             homing_tp[i].homing_state = ABS_EXEC_RESETTING;
-            LOG_WARN("回零下报警，开始制动");
+            LOG(LOG_LEVEL_WARN, "回零下报警，开始制动");
         }
     }
 }
@@ -209,7 +209,7 @@ static double abs_homing_tp_pinc(AXIS_TYPE axis_type){
                 if(abs_homing_is_axis_homed(axis_type)){
                     homing_tp[axis_type].homing_state = ABS_EXEC_IDLE;
                     setVarAxisInt(0, VAR_AXIS_IS_HOMEF, 1, 0);
-                    LOG_INFO("轴%d完成回零", axis_type);
+                    LOG(LOG_LEVEL_INFO, "轴%d完成回零", axis_type);
                     break;
                 }
                 homing_tp[axis_type].max_vel = rapid_vel * rapid_override;
@@ -382,7 +382,7 @@ static GNC_RES abs_homing_tp_init(AXIS_TYPE axis_type){
     homing_tp[axis_type].remain_distance = homing_tp[axis_type].homing_block->length; // 单个轴的零点距离
     if(par_axis[axis_type][PAR_AX_HOME_CRDS].value.val_real > var_axis[axis_type][VAR_AXIS_CMD_POS_EX].value.f) homing_tp[axis_type].homing_direction = AXIS_HOMING_POSITIVE;  // 回零移动方向
     else homing_tp[axis_type].homing_direction = AXIS_HOMING_NEGATIVE;
-    // if(res != VP_CAL_SUCCESS) LOG_OUTPUT(ERROR, "vp cal vel profile fail");
+    // if(res != VP_CAL_SUCCESS) LOG(LOG_LEVEL_ERR, "vp cal vel profile fail");
     return res;
 }
 
@@ -400,6 +400,6 @@ static GNC_RES abs_declining_tp_init(AXIS_TYPE axis_type, double target_vel){
     homing_tp[axis_type].remain_distance = homing_tp[axis_type].homing_block->length; // 单个轴的零点距离
     if(par_axis[axis_type][PAR_AX_HOME_CRDS].value.val_real > var_axis[axis_type][VAR_AXIS_CMD_POS_EX].value.f) homing_tp[axis_type].homing_direction = AXIS_HOMING_POSITIVE;  // 回零移动方向
     else homing_tp[axis_type].homing_direction = AXIS_HOMING_NEGATIVE;
-    // if(res != VP_CAL_SUCCESS) LOG_OUTPUT(ERROR, "vp cal vel profile fail");
+    // if(res != VP_CAL_SUCCESS) LOG(LOG_LEVEL_ERR, "vp cal vel profile fail");
     return res;
 }

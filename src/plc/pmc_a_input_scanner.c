@@ -1,5 +1,5 @@
 #include "pmc_a_input_scanner.h"
-#include "log.h"
+#include <hmisysapi.h>
 #include "regapi.h"       /**< 寄存器访问 API */
 #include "signal_utils.h" /**< 边沿检测宏定义 */
 #include "alarmapi.h"

@@ -5,7 +5,7 @@
 #include "regapi.h"   /* 引入寄存器访问 API */
 #include "regdata.h"  /* 引入 RegType 定义 */
 #include "global.h"
-#include "log.h"
+#include <hmisysapi.h>
 
 /* ==========================================================================
  * 外部函数定义
@@ -64,7 +64,7 @@ static void pmc_output_auto(){
         if(reset_tic < par_mac[PAR_MAC_HARD_RESET_DELAY].value.val_int){
             reset_tic++;
             setRegBit(REG_F, 1, 1);
-            // LOG_DEBUG("复位减速后延时 %d", reset_tic);
+            // LOG(LOG_LEVEL_DEBUG, "复位减速后延时 %d", reset_tic);
         }
         else{
             clearRegBit(REG_F, 1, 1);
