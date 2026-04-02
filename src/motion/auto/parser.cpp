@@ -196,15 +196,13 @@ GNC_RES parser_reading(){
     int error_no = ItpError();
     if (error_no >= 0)
     {
-        // log_system("[parser] 译码错误(%d)", error_no);
         setAlarm(ALARM_PS, ALARM_ERROR, error_no);
         LOG(LOG_LEVEL_ERR, "译码错误 %d", error_no);
         return GNC_CAL_ERROR;
     }
     if (parser_data->itp_datas.count <= 0)
     {
-        // log_system("[parser] 译码为空");
-        LOG(LOG_LEVEL_WARN, "译码为空"); // 空包
+        // LOG(LOG_LEVEL_WARN, "译码为空"); // 空包
     }
     else
     {

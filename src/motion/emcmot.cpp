@@ -103,7 +103,7 @@ void emcmotPathPlan() {
             HmiSysData hmiSysData;
             #ifdef DEBUG_MODE_ENABLED
             char ncFilePath[512];
-            snprintf(ncFilePath, sizeof(ncFilePath), "%s/%s", PROJECT_DIR, "config/NC/c.nc");
+            snprintf(ncFilePath, sizeof(ncFilePath), "%s/%s", PROJECT_DIR, "config/NC/234.txt");
             parser_init(ncFilePath);
             #else
             getHmiSysDataPtr(&hmiSysData);
