@@ -249,3 +249,42 @@ void lookahead_check_soft_limit(POS *target_pos){
     runtime[1].active_levels = Check_Axis_Limit_Violation(runtime[1], false);
     runtime[2].active_levels = Check_Axis_Limit_Violation(runtime[2], false);
 }
+
+//void Axis_Status_Init()
+//{
+//    for (int var = 0; var < SYS_AXES_NUM; ++var)
+//    {
+//        rt_data->axis_data[var].axis_status.is_moving = 0;
+//        rt_data->axis_data[var].axis_status.direction = 0;
+//        rt_data->axis_data[var].axis_status.is_init = 0;
+//    }
+//}
+
+void Axis_Status_Update()
+{
+    for (int var = 0; var < SYS_AXES_NUM; ++var)
+    {
+        rt_data->axis_data[var].axis_status.current_pos = rt_data->axis_data[var].motor_cmd_pos;
+        double delta = rt_data->axis_data[var].axis_status.current_pos - rt_data->axis_data[var].axis_status.last_pos;
+        rt_data->axis_data[var].axis_status.last_pos = rt_data->axis_data[var].axis_status.current_pos;
+        if(!rt_data->axis_data[var].axis_status.is_init)
+        {
+            rt_data->axis_data[var].axis_status.is_init = 1;
+            return ;
+        }
+        if(delta == 0)
+        {
+            rt_data->axis_data[var].axis_status.is_moving = 0;
+        }
+        else if(delta > 0)
+        {
+            rt_data->axis_data[var].axis_status.is_moving = 1;
+            rt_data->axis_data[var].axis_status.direction = 1;
+        }
+        else if(delta < 0)
+        {
+            rt_data->axis_data[var].axis_status.is_moving = 1;
+            rt_data->axis_data[var].axis_status.direction = 0;
+        }
+    }
+}

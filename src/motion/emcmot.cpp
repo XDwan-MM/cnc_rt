@@ -419,6 +419,7 @@ static void check_for_soft_limit() {
 
 // 更新运动状态数据
 static void update_status() {
+    Axis_Status_Update();
     shm_var_update();
 }
 

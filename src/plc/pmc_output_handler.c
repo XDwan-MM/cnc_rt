@@ -14,6 +14,7 @@
 static void pmc_output_mode();
 static void pmc_output_home();
 static void pmc_output_auto();
+static void pmc_output_axis_status();
 
 void pmc_output_feedback() {
     /**
@@ -39,6 +40,7 @@ void pmc_output_feedback() {
     pmc_output_mode();
     pmc_output_auto();
     pmc_output_home();
+    pmc_output_axis_status();
 }
 
 // 自动运行启动中、运行中信号、休止中信号、复位
@@ -187,5 +189,29 @@ static void pmc_output_mode(){
         clearRegBit(REG_F, 3, 5);
         clearRegBit(REG_F, 3, 6);
         setRegBit(REG_F, 4, 5);
+    }
+}
+
+//轴移动状态输出
+static void pmc_output_axis_status()
+{
+    for (int i = 0; i < 3; i++)
+    {
+        if(rt_data->axis_data[i].axis_status.is_moving)
+        {
+            if(rt_data->axis_data[i].axis_status.direction)
+            {
+                setRegBit(REG_F, 106, i);
+            }
+            else
+            {
+                clearRegBit(REG_F, 106, i);
+            }
+            setRegBit(REG_F, 102, i);
+        }
+        else
+        {
+            clearRegBit(REG_F, 102, i);
+        }
     }
 }
