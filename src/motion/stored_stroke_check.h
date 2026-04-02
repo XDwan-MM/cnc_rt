@@ -12,8 +12,8 @@ extern "C" {
 
 // 限位区域定义
 typedef struct {
-    float positive_limit; // 正方向边界值
-    float negative_limit; // 负方向边界值
+    double positive_limit; // 正方向边界值
+    double negative_limit; // 负方向边界值
     uint8_t is_enabled;   // 该级限位是否启用
 } LimitLevel;
 
@@ -33,6 +33,7 @@ typedef struct {
     uint8_t violation_flag; // 违规标志位
     uint8_t active_levels;  // 当前生效的限位级别
     AXIS_TYPE axis;
+
 } AxisLimitRuntime;
 
 extern AxisLimitRuntime runtime[SYS_AXES_NUM];
@@ -47,6 +48,8 @@ uint8_t Is_Outside_Limit(float position, LimitLevel limit);
 uint8_t Check_Axis_Limit_Violation(AxisLimitRuntime runtime ,bool moving);
 
 uint8_t Axis_Limit_Manager_Init(void);
+
+void Axis_Status_Update();
 
 void lookahead_check_soft_limit(POS *target_pos);
 

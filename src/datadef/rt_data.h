@@ -48,6 +48,14 @@ typedef enum{
     CHAN_IS_MODE_ARRIVE,         // 模式到达参考店检测 is_mode_arrive
 } ChanStateIndex;
 
+typedef struct {
+    double last_pos;
+    double current_pos;
+    bool is_moving;              //是否在运动  1运动　0静止
+    bool direction;               //运动方向　　１正向  0负向
+    bool is_init;
+} AxisStatus;
+
 // 目前仅轨迹线程使用
 typedef struct{
     double act_acc;
@@ -58,6 +66,7 @@ typedef struct{
     double motor_act_pos;              // 带误差补偿的驱动器反馈位置 // wcf add 2026.01.22
     double pitch_comp_val;             // 当前位置螺距误差补偿值 (单位:um)  // wcf add 2026.01.23
     double perp_comp_val;              // 当前位置垂直度误差补偿值 (单位:mm)  // wcf add 2026.01.23
+    AxisStatus axis_status;
 }RT_AXIS;
 
 // 目前仅轨迹线程使用
