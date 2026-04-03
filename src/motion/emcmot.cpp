@@ -52,8 +52,9 @@ void emcmotTrajPlan() {
             #ifndef DEBUG_MODE_ENABLED
             Master_Reset();
             #endif
-            //复位生效参数
+            // 复位生效参数
             Axis_Limit_Manager_Init();
+            // 清除警告
             cleanAllAlarm(ALARM_TYPE_ALL, ALARM_WARNING);
         }
 
@@ -138,7 +139,6 @@ static void set_operating_mode() {
             {
                 rt_data->current_mode = rt_data->target_mode;
                 rt_data->sys_state[SYS_IS_SWITCHING_MODE] = false;
-                // log_system("[emcmot] 系统模式切换为(%s)", mode_names[rt_data->current_mode]);
                 LOG(LOG_LEVEL_INFO, "系统模式切换为 %s", mode_names[rt_data->current_mode]);
                 break;
             }
@@ -147,7 +147,6 @@ static void set_operating_mode() {
         case MODE_EDIT:
         case MODE_MPG:
             rt_data->current_mode = rt_data->target_mode;
-            // log_system("[emcmot] 系统模式切换为(%s)", mode_names[rt_data->current_mode]);
             LOG(LOG_LEVEL_INFO, "系统模式切换为 %s", mode_names[rt_data->current_mode]);
             break;
         case MODE_RAPID_JOG:
@@ -158,7 +157,6 @@ static void set_operating_mode() {
             {
                 rt_data->current_mode = rt_data->target_mode;
                 rt_data->sys_state[SYS_IS_SWITCHING_MODE] = false;
-                // log_system("[emcmot] 系统模式切换为(%s)", mode_names[rt_data->current_mode]);
                 LOG(LOG_LEVEL_INFO, "系统模式切换为 %s", mode_names[rt_data->current_mode]);
                 break;
             }
@@ -169,14 +167,12 @@ static void set_operating_mode() {
             if (!var_chan[0][VAR_CHAN_IS_HOMING].value.i) {
                 rt_data->current_mode = rt_data->target_mode;
                 rt_data->sys_state[SYS_IS_SWITCHING_MODE] = false;
-                // log_system("[emcmot] 系统模式切换为(%s)", mode_names[rt_data->current_mode]);
                 LOG(LOG_LEVEL_INFO, "系统模式切换为 %s", mode_names[rt_data->current_mode]);
                 break;
             }else{
                 // 回零中切换模式不能生效
                 rt_data->target_mode = rt_data->current_mode;
                 setAlarm(ALARM_SY, ALARM_WARNING, 0);
-                // log_system("[emcmot] 回零中不能切换模式，请先按复位后切换");
                 LOG(LOG_LEVEL_WARN, "回零中不能切换模式，请先按复位后切换");
                 break;
             }
@@ -190,14 +186,12 @@ static void set_operating_mode() {
             if (!var_chan[0][VAR_CHAN_IS_RUNNING].value.i) {
                 rt_data->current_mode = rt_data->target_mode;
                 rt_data->sys_state[SYS_IS_SWITCHING_MODE] = false;
-                // log_system("[emcmot] 系统模式切换为(%s)", mode_names[rt_data->current_mode]);
                 LOG(LOG_LEVEL_INFO, "系统模式切换为 %s", mode_names[rt_data->current_mode]);
                 break;
             } else{
                 // 加工下切换模式不能生效
                 rt_data->target_mode = rt_data->current_mode;
                 setAlarm(ALARM_SY, ALARM_WARNING, 1);
-                // log_system("[emcmot] 自动加工下不能切换模式，请先按复位后切换");
                 LOG(LOG_LEVEL_WARN, "自动加工下不能切换模式，请先按复位后切换");
                 break;
             }
@@ -238,7 +232,7 @@ static void get_cmd_pos() {
             handle_homing_cmd();
             break;
         case MODE_MDI: // MDI
-        case MODE_MEM: // 自动
+        case MODE_MEM: // 记忆
         case MODE_DNC:
             handle_run_cmd();
             break;

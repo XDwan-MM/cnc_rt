@@ -22,18 +22,16 @@ GNC_RES task_mq_proc()
 {
     if(event_queue_is_empty(event_queue)) return GNC_DATA_EMPTY;
     if(event_queue_is_full(event_queue)){
-        // log_system("[task] 事件队列已满");
         // LOG(LOG_LEVEL_ERR, "事件队列已满");
         // setAlarm(ALARM_SY, ALARM_ERROR, 0);
         // return GNC_OPERATOR_ERROR;
     }
-    // if(rt_data->nc_event != SYS_EVENT_NONE) return GNC_OPERATOR_WARNING;
     event_queue_pop(event_queue, &event_data);
     task_handle_pmc_event(&event_data);
     return GNC_OPERATOR_SUCCESS;
 }
 
-const char* mode[] = {"编辑", "记忆", "MDI", "JOG", "手轮", "回零", "DNC"};
+const char* mode[] = {"编辑", "记忆", "MDI", "JOG", "手轮", "回零", "DNC", "未知"};
 
 static GNC_RES task_handle_pmc_event(PMC_EVENT* event_data){
     if (!event_data || !rt_data) return GNC_DATA_NULL;
@@ -55,7 +53,6 @@ static GNC_RES task_handle_pmc_event(PMC_EVENT* event_data){
             case 6: rt_data->target_mode = MODE_DNC;    break; // DNC (DNCI)
             default: rt_data->target_mode = MODE_IDLE;  break; // wcf: 我不太确定
             }
-            // log_system("[task] 处理模式切换事件(%d)", rt_data->target_mode);
             LOG(LOG_LEVEL_INFO, "处理模式切换事件 %d", rt_data->target_mode);
             break;
         }
@@ -121,7 +118,6 @@ static GNC_RES task_handle_pmc_event(PMC_EVENT* event_data){
                         LOG(LOG_LEVEL_INFO, "处理Z释放事件");
                     }
                 }
-                // log_system("[task] 处理进给轴按键事件 Axis %d action %d under mode %d", axis, direction, rt_data->current_mode);
                 LOG(LOG_LEVEL_INFO, "处理进给轴按键事件 Axis %d action %d under mode %d", axis, direction, rt_data->current_mode);
             }
             break;
@@ -154,7 +150,6 @@ static GNC_RES task_handle_pmc_event(PMC_EVENT* event_data){
             {
                 setVarChanDouble(0, VAR_CHAN_FEED_OVERRIDE, (double)event_data->override_payload.val, 0);
                 rt_data->nc_event = SYS_EVENT_FEED_OVERRIDE;
-                // log_system("[task] 处理进给倍率事件");
                 LOG(LOG_LEVEL_INFO, "处理进给倍率事件 %d", event_data->override_payload.val);
             }
             // 2.快速进给倍率
@@ -162,7 +157,6 @@ static GNC_RES task_handle_pmc_event(PMC_EVENT* event_data){
             {
                 setVarChanDouble(0, VAR_CHAN_RAPID_OVERRIDE, (double)event_data->override_payload.val, 0);
                 rt_data->nc_event = SYS_EVENT_RAPID_OVERRIDE;
-                // log_system("[task] 处理快速进给倍率事件");
                 LOG(LOG_LEVEL_INFO, "处理快速进给倍率事件 %d", event_data->override_payload.val);
             }
             // 3.主轴倍率
@@ -170,7 +164,6 @@ static GNC_RES task_handle_pmc_event(PMC_EVENT* event_data){
             {
                 setVarChanDouble(0, VAR_CHAN_SPDL_OVERRIDE, (double)event_data->override_payload.val, 0);
                 rt_data->nc_event = SYS_EVENT_SPDL_OVERRIDE;
-                // log_system("[task] 处理主轴倍率事件");
                 LOG(LOG_LEVEL_INFO, "处理主轴倍率事件");
             }
             break;
@@ -182,7 +175,6 @@ static GNC_RES task_handle_pmc_event(PMC_EVENT* event_data){
                 if(rt_data->current_mode == MODE_MEM){
                     // 循环启动
                     rt_data->nc_event = SYS_EVENT_RERUN;
-                    // log_system("[task] 处理循环启动事件");
                     LOG(LOG_LEVEL_INFO, "处理循环启动事件");
                 }
             }
@@ -191,7 +183,6 @@ static GNC_RES task_handle_pmc_event(PMC_EVENT* event_data){
                 if(rt_data->current_mode == MODE_MEM){
                     // 进给保持
                     rt_data->nc_event = SYS_EVENT_PAUSE;
-                    // log_system("[task] 处理进给保持事件");
                     LOG(LOG_LEVEL_INFO, "处理进给保持事件");
                 }
             }
@@ -202,7 +193,6 @@ static GNC_RES task_handle_pmc_event(PMC_EVENT* event_data){
             if(event_data->reset_payload.reset_state == 1)
             {
                 rt_data->nc_event = SYS_EVENT_RESET;
-                // log_system("[task] 处理复位事件");
                 LOG(LOG_LEVEL_INFO, "处理复位事件");
                 setRegBit(REG_F, 1, 1);
             }

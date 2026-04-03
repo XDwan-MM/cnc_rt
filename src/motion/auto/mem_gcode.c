@@ -85,7 +85,6 @@ static void mem_set_state(){
             break;
 
         case SYS_EVENT_RESET:
-            // log_system("[mem] 记忆模式处理复位");
             LOG(LOG_LEVEL_INFO, "记忆模式处理复位");
             if(cycle_tp->mem_exec_state == EXEC_RUNNING){
                 cycle_tp->mem_exec_state = EXEC_PAUSING;
@@ -99,7 +98,6 @@ static void mem_set_state(){
             break;
         
         case SYS_EVENT_RERUN:
-            // log_system("[mem] 记忆模式处理自动运行");
             LOG(LOG_LEVEL_INFO, "记忆模式处理自动运行");
             if(IsEqualTo(var_chan[0][VAR_CHAN_FEED_OVERRIDE].value.f, 0)){
                 setAlarm(ALARM_SY, ALARM_WARNING, 3);
@@ -128,7 +126,6 @@ static void mem_set_state(){
             break;
 
         case SYS_EVENT_FEED_OVERRIDE:
-            // log_system("[mem] 记忆模式处理进给倍率切换");
             LOG(LOG_LEVEL_INFO, "记忆模式处理进给倍率切换");
             if(IsEqualTo(var_chan[0][VAR_CHAN_FEED_OVERRIDE].value.f, 0)){
                 setAlarm(ALARM_SY, ALARM_WARNING, 3);
@@ -145,7 +142,6 @@ static void mem_set_state(){
             break;
 
         case SYS_EVENT_RAPID_OVERRIDE:
-            // log_system("[mem] 记忆模式处理快速倍率切换");
             LOG(LOG_LEVEL_INFO, "记忆模式处理快速倍率切换 %f", var_chan[0][VAR_CHAN_RAPID_OVERRIDE].value.f);
             if(IsEqualTo(var_chan[0][VAR_CHAN_RAPID_OVERRIDE].value.f, 0)){
                 setAlarm(ALARM_SY, ALARM_WARNING, 2);
@@ -162,7 +158,6 @@ static void mem_set_state(){
             break;
         
         case SYS_EVENT_PAUSE:
-            // log_system("[mem] 记忆模式处理暂停");
             LOG(LOG_LEVEL_INFO, "记忆模式处理暂停");
             if(cycle_tp->mem_exec_state == EXEC_RUNNING){
                 cycle_tp->mem_exec_state = EXEC_PAUSING;
@@ -176,7 +171,6 @@ static void mem_set_state(){
         case SYS_EVENT_X_NEG_PRESS:
         case SYS_EVENT_Y_NEG_PRESS:
         case SYS_EVENT_Z_NEG_PRESS:
-            // log_system("[mem] 记忆模式不支持该操作");
             LOG(LOG_LEVEL_WARN, "记忆模式不支持该操作");
             break;
         
@@ -292,7 +286,6 @@ static bool mem_check_res(GNC_RES res){
         setVarChanInt(0, VAR_CHAN_PART_CNTR, var_chan[0][VAR_CHAN_PART_CNTR].value.i + 1, 0);
         LOG(LOG_LEVEL_INFO, "加工计数 %d", var_chan[0][VAR_CHAN_PART_CNTR].value.i);
         mem_handle_reset();
-        // log_system("[mem] 程序运行结束");
         LOG(LOG_LEVEL_INFO, "程序运行结束");
         return false;
 
@@ -313,7 +306,6 @@ static bool mem_check_res(GNC_RES res){
     case VP_FEED_RATE_IS_ZERO:
     case VP_LENGTH_UNVALID:
         mem_handle_estop();
-        // log_system("[mem] 记忆模式报警(%d)", res);
         LOG(LOG_LEVEL_ERR, "记忆模式报警 %d", res);
         setAlarm(ALARM_CH, ALARM_ERROR, 2);
         return false;
@@ -325,7 +317,6 @@ static bool mem_check_res(GNC_RES res){
     case VP_CAL_V_ERROR:
     default:
         mem_handle_estop();
-        // log_system("[mem] 记忆模式报警(%d)", res);
         LOG(LOG_LEVEL_ERR, "记忆模式报警 %d", res);
         setAlarm(ALARM_CH, ALARM_ERROR, 3);
         return false;

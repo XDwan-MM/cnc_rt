@@ -60,7 +60,6 @@ static void homing_set_state(){
             break;
 
         case SYS_EVENT_RESET:
-            // log_system("[home] 回零处理复位");
             LOG(LOG_LEVEL_INFO, "回零处理复位");
             for(int i = 0; i < SYS_AXES_NUM; i++){
                 if(homing_tp[i].homing_state == ABS_EXEC_HOMING){
@@ -71,7 +70,6 @@ static void homing_set_state(){
             break;
 
         case SYS_EVENT_X_POS_PRESS:
-            // log_system("[home] 回零处理X+按下");
             LOG(LOG_LEVEL_INFO, "回零处理X+按下");
             if(IsEqualTo(var_chan[0][VAR_CHAN_RAPID_OVERRIDE].value.f, 0)){
                 setAlarm(ALARM_SY, ALARM_WARNING, 2);
@@ -85,7 +83,6 @@ static void homing_set_state(){
             break;
 
         case SYS_EVENT_Y_POS_PRESS:
-            // log_system("[home] 回零处理Y+按下");
             LOG(LOG_LEVEL_INFO, "回零处理Y+按下");
             if(IsEqualTo(var_chan[0][VAR_CHAN_RAPID_OVERRIDE].value.f, 0)){
                 setAlarm(ALARM_SY, ALARM_WARNING, 2);
@@ -99,7 +96,6 @@ static void homing_set_state(){
             break;
 
         case SYS_EVENT_Z_POS_PRESS:
-            // log_system("[home] 回零处理Z+按下");
             LOG(LOG_LEVEL_INFO, "回零处理Z+按下");
             if(IsEqualTo(var_chan[0][VAR_CHAN_RAPID_OVERRIDE].value.f, 0)){
                 setAlarm(ALARM_SY, ALARM_WARNING, 2);
@@ -113,7 +109,6 @@ static void homing_set_state(){
             break;
         
         case SYS_EVENT_RAPID_OVERRIDE:
-            // log_system("[home] 回零处理快速进给倍率改变");
             LOG(LOG_LEVEL_INFO, "回零处理快速进给倍率改变");
             if(IsEqualTo(var_chan[0][VAR_CHAN_RAPID_OVERRIDE].value.f, 0)){
                 setAlarm(ALARM_SY, ALARM_WARNING, 2);
@@ -155,7 +150,6 @@ static bool homing_check_res(GNC_RES res){
     case VP_FEED_RATE_IS_ZERO:
     case VP_LENGTH_UNVALID:
         homing_handle_estop();
-        // log_system("[home] 回零错误(%d)", res);
         LOG(LOG_LEVEL_ERR, "回零错误 %d", res);
         setAlarm(ALARM_CH, ALARM_ERROR, 0);
         return false;
@@ -167,7 +161,6 @@ static bool homing_check_res(GNC_RES res){
     case VP_CAL_V_ERROR:
     default:
         homing_handle_estop();
-        // log_system("[home] 回零错误(%d)", res);
         LOG(LOG_LEVEL_ERR, "回零错误 %d", res);
         setAlarm(ALARM_CH, ALARM_ERROR, 1);
         return false;
