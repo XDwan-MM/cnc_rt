@@ -18,7 +18,7 @@ static JOG_AXIS_CTRL rapid_jog_ctrls[SYS_AXES_NUM_JOG] = {
     {JOG_STATE_IDLE, JOG_DIR_NONE}};
 
 /* 内部私有函数声明 */
-static void prepare_jog_params(int i, int direction, double feed_override, bool is_rapid);
+static void prepare_jog_params(int i, int direction, double feed_override, jog_planner_t *axis_jog_tp, bool is_rapid);
 static void update_axis_state(int i, JOG_AXIS_CTRL *jog_axis_ctrl);
 static void execute_axis_logic(int i, JOG_AXIS_CTRL *jog_axis_ctrl, jog_planner_t *axis_jog_tp, const bool is_rapid);
 static bool check_all_axes_idle_jog(void);
@@ -42,8 +42,12 @@ void handle_jog_cmd()
         /* 2. 处理按键信号与状态机切换 */
         update_axis_state(i, &jog_ctrls[i]);
 
+        printf("jog_ctrls[0] %d\n", jog_ctrls[0].state);
+
         /* 4. 执行普通JOG运动计算逻辑 */
         execute_axis_logic(i, &jog_ctrls[i], &jog_tp[i], false);
+
+        // printf("jog_ctrls[SYS_AXES_NUM_JOG] %f\n", jog_ctrls[i]);
 
         /* 5. 指令输出给外部系统变量 */
         var_axis[i][VAR_AXIS_CMD_POS_EX].value.f = jog_tp[i].curr_pos;
@@ -125,77 +129,6 @@ void jog_handle_estop()
 }
 
 /**
- * @brief 轴运动执行逻辑 (带前瞻软限位拦截)
- * 根据快速标志位选择 运动类型：快速JOG/普通JOG。
- */
-static void execute_axis_logic(int i, JOG_AXIS_CTRL *jog_axis_ctrl, jog_planner_t *axis_jog_tp, bool is_rapid)
-{
-    switch (jog_axis_ctrl->state)
-    {
-    case JOG_STATE_RUNNING:
-    {
-        // 获取倍率
-        double cur_ovr = var_chan[0][VAR_CHAN_FEED_OVERRIDE].value.f / 100.0;
-
-        /* 1. 更新目标速度 */
-        prepare_jog_params(i, jog_axis_ctrl->direction, cur_ovr, is_rapid);
-
-        /* 2. 软限位前瞻拦截预测 */
-        double p_limit = par_axis[i][PAR_AX_PLMT].value.val_real;
-        double n_limit = par_axis[i][PAR_AX_NLMT].value.val_real;
-
-        // 兼容工业规范：如果正限位严格大于负限位，视为有限位直线轴。
-        // 如果正负限位设置相等(如全是0)，则视为无限旋转轴，跳过限位检查。
-        if (p_limit > n_limit)
-        {
-            double curr_v = axis_jog_tp->curr_vel;
-            double decel = axis_jog_tp->max_acc;
-
-            // 计算理论刹车距离，乘以 1.05 作为安全余量，防止浮点累加误差导致轻微越界
-            // 减小1.05系数，就可以超过限位
-            double stop_dist = (curr_v * curr_v) / (2.0 * decel) * 1.05;
-
-            bool is_limit = false;
-            if (jog_axis_ctrl->direction == JOG_DIR_POSITIVE)
-            {
-                is_limit = ((axis_jog_tp->curr_pos + stop_dist) >= p_limit);
-            }
-            else if (jog_axis_ctrl->direction == JOG_DIR_NEGATIVE)
-            {
-                is_limit = ((axis_jog_tp->curr_pos - stop_dist) <= n_limit);
-            }
-            // 超出限位，则降速
-            if (is_limit)
-            {
-                jog_axis_ctrl->state = JOG_STATE_STOPPING;
-            }
-        }
-
-        /* 运行规划器：每一帧执行速度线性逼近 */
-        jog_planner_update(axis_jog_tp, JOG_CYCLE_TIME);
-        break;
-    }
-
-    case JOG_STATE_STOPPING:
-        /* 关闭使能，目标速度强制归零，触发底层线性减速逻辑 */
-        axis_jog_tp->enable = 0;
-        /* 运行规划器：每一帧执行速度线性逼近 */
-        jog_planner_update(axis_jog_tp, JOG_CYCLE_TIME);
-
-        /* 检查是否完全停稳 */
-        if (!axis_jog_tp->active)
-        {
-            jog_axis_ctrl->state = JOG_STATE_IDLE;
-            jog_axis_ctrl->direction = JOG_DIR_NONE;
-        }
-        break;
-
-    default:
-        break;
-    }
-}
-
-/**
  * @brief 根据按键事件更新状态机
  */
 static void update_axis_state(int i, JOG_AXIS_CTRL *jog_axis_ctrl)
@@ -237,67 +170,21 @@ static void update_axis_state(int i, JOG_AXIS_CTRL *jog_axis_ctrl)
         break;
 
     case JOG_STATE_RUNNING:
-        /*********第一种方式开始**************/
-        // A. 捕捉当前方向按键的【释放】
-        bool is_released = false;
-        if (jog_axis_ctrl->direction == JOG_DIR_POSITIVE)
-        {
-            // 如果当前在往正向跑，就只监控“正向按键”是否被松开
-            if ((i == AXIS_X && event == SYS_EVENT_X_POS_RELEASE) ||
-                (i == AXIS_Y && event == SYS_EVENT_Y_POS_RELEASE) ||
-                (i == AXIS_Z && event == SYS_EVENT_Z_POS_RELEASE))
-                is_released = true;
-        }
-        else
-        {
-            // 如果当前在往负向跑，就只监控“负向按键”是否被松开
-            if ((i == AXIS_X && event == SYS_EVENT_X_NEG_RELEASE) ||
-                (i == AXIS_Y && event == SYS_EVENT_Y_NEG_RELEASE) ||
-                (i == AXIS_Z && event == SYS_EVENT_Z_NEG_RELEASE))
-                is_released = true;
-        }
-        if (is_released)
-        {
-            jog_axis_ctrl->state = JOG_STATE_STOPPING; // 切换状态机到减速
-        }
-        // B. 捕捉【瞬间反向按下】：正在正向跑时按下了负向键，或反之
-        else if (jog_axis_ctrl->direction == JOG_DIR_POSITIVE)
-        {
-            // 正在正向跑时，如果突然按下了负向键
-            if ((i == AXIS_X && event == SYS_EVENT_X_NEG_PRESS) ||
-                (i == AXIS_Y && event == SYS_EVENT_Y_NEG_PRESS) ||
-                (i == AXIS_Z && event == SYS_EVENT_Z_NEG_PRESS))
-            {
-                jog_axis_ctrl->direction = JOG_DIR_NEGATIVE; // 直接切方向，规划器会自动过零
-            }
-        }
-        else if (jog_axis_ctrl->direction == JOG_DIR_NEGATIVE)
-        {
-            // 正在负向跑时，如果突然按下了正向键
-            if ((i == AXIS_X && event == SYS_EVENT_X_POS_PRESS) ||
-                (i == AXIS_Y && event == SYS_EVENT_Y_POS_PRESS) ||
-                (i == AXIS_Z && event == SYS_EVENT_Z_POS_PRESS))
-            {
-                jog_axis_ctrl->direction = JOG_DIR_POSITIVE;
-            }
-        }
-        /*********第一种方式结束**************/
+        /* 第二种方式开始 */
+        // 捕捉【按键释放】：不再区分正负向释放，只要对应的轴释放就停止
+        bool is_release = false;
+        if (i == AXIS_X && (event == SYS_EVENT_X_POS_RELEASE || event == SYS_EVENT_X_NEG_RELEASE))
+            is_release = true;
+        if (i == AXIS_Y && (event == SYS_EVENT_Y_POS_RELEASE || event == SYS_EVENT_Y_NEG_RELEASE))
+            is_release = true;
+        if (i == AXIS_Z && (event == SYS_EVENT_Z_POS_RELEASE || event == SYS_EVENT_Z_NEG_RELEASE))
+            is_release = true;
 
-        // /* 第二种方式开始 */
-        // // 捕捉【按键释放】：不再区分正负向释放，只要对应的轴释放就停止
-        // bool is_release = false;
-        // if (i == AXIS_X && (event == SYS_EVENT_X_POS_RELEASE || event == SYS_EVENT_X_NEG_RELEASE))
-        //     is_release = true;
-        // if (i == AXIS_Y && (event == SYS_EVENT_Y_POS_RELEASE || event == SYS_EVENT_Y_NEG_RELEASE))
-        //     is_release = true;
-        // if (i == AXIS_Z && (event == SYS_EVENT_Z_POS_RELEASE || event == SYS_EVENT_Z_NEG_RELEASE))
-        //     is_release = true;
-
-        // if (is_release)
-        // {
-        //     jog_axis_ctrl->state = JOG_STATE_STOPPING;
-        // }
-        // /* 第二种方式结束 */
+        if (is_release)
+        {
+            jog_axis_ctrl->state = JOG_STATE_STOPPING;
+        }
+        /* 第二种方式结束 */
         break;
 
     case JOG_STATE_STOPPING:
@@ -323,13 +210,89 @@ static void update_axis_state(int i, JOG_AXIS_CTRL *jog_axis_ctrl)
 }
 
 /**
+ * @brief 轴运动执行逻辑 (带前瞻软限位拦截)
+ * 根据快速标志位选择 运动类型：快速JOG/普通JOG。
+ */
+static void execute_axis_logic(int i, JOG_AXIS_CTRL *jog_axis_ctrl, jog_planner_t *axis_jog_tp, bool is_rapid)
+{
+    switch (jog_axis_ctrl->state)
+    {
+    case JOG_STATE_RUNNING:
+    {
+        // 获取倍率
+        double cur_ovr = var_chan[0][VAR_CHAN_FEED_OVERRIDE].value.f / 100.0;
+
+        /* 1. 更新目标速度 */
+        prepare_jog_params(i, jog_axis_ctrl->direction, cur_ovr, axis_jog_tp, is_rapid);
+
+        /* 2. 软限位前瞻拦截预测 */
+        double p_limit = par_axis[i][PAR_AX_PLMT].value.val_real;
+        double n_limit = par_axis[i][PAR_AX_NLMT].value.val_real;
+
+        // 兼容工业规范：如果正限位严格大于负限位，视为有限位直线轴。
+        // 如果正负限位设置相等(如全是0)，则视为无限旋转轴，跳过限位检查。
+        if (p_limit > n_limit)
+        {
+            double curr_v = axis_jog_tp->curr_vel;
+            double decel = axis_jog_tp->max_acc;
+
+            // 计算理论刹车距离，乘以 1.05 作为安全余量，防止浮点累加误差导致轻微越界
+            // 减小1.05系数，就可以超过限位
+            double stop_dist = (curr_v * curr_v) / (2.0 * decel) * 1.05;
+
+            bool is_limit = false;
+            if (jog_axis_ctrl->direction == JOG_DIR_POSITIVE)
+            {
+                is_limit = ((axis_jog_tp->curr_pos + stop_dist) >= p_limit);
+            }
+            else if (jog_axis_ctrl->direction == JOG_DIR_NEGATIVE)
+            {
+                is_limit = ((axis_jog_tp->curr_pos - stop_dist) <= n_limit);
+            }
+            // 超出限位，则降速
+            if (is_limit)
+            {
+                jog_axis_ctrl->state = JOG_STATE_STOPPING;
+            }
+        }
+        /* 使能规划器 */
+        axis_jog_tp->enable = 1;
+        /* 运行规划器：每一帧执行速度线性逼近 */
+        jog_planner_update(axis_jog_tp, JOG_CYCLE_TIME);
+        break;
+    }
+
+    case JOG_STATE_STOPPING:
+        /* 关闭使能，目标速度强制归零，触发底层线性减速逻辑 */
+        axis_jog_tp->enable = 0;
+        /* 运行规划器：每一帧执行速度线性逼近 */
+        jog_planner_update(axis_jog_tp, JOG_CYCLE_TIME);
+
+        /* 检查是否完全停稳 */
+        if (!axis_jog_tp->active)
+        {
+            jog_axis_ctrl->state = JOG_STATE_IDLE;
+            jog_axis_ctrl->direction = JOG_DIR_NONE;
+        }
+        break;
+
+    default:
+        /* 关闭使能，目标速度强制归零，触发底层线性减速逻辑 */
+        axis_jog_tp->enable = 0;
+        /* 运行规划器：每一帧执行速度线性逼近 */
+        jog_planner_update(axis_jog_tp, JOG_CYCLE_TIME);
+        break;
+    }
+}
+
+/**
  * @brief 内部函数：准备并更新规划器参数
  * @param i 轴索引
  * @param direction 运动方向
  * @param feed_override 实时倍率 (0.0 - 1.2)
  * @param is_rapid 是否为快速点动模式
  */
-static void prepare_jog_params(int i, int direction, double feed_override, bool is_rapid)
+static void prepare_jog_params(int i, int direction, double feed_override, jog_planner_t *axis_jog_tp, bool is_rapid)
 {
     /* 1. 模式参数选择 */
     // 普通jog：1）慢速点动速度 2）加工加速度
@@ -338,11 +301,8 @@ static void prepare_jog_params(int i, int direction, double feed_override, bool 
     double base_acc = is_rapid ? par_axis[i][PAR_AX_RAPID_ACC].value.val_real : par_axis[i][PAR_AX_FEED_ACC].value.val_real;
 
     /* 2. 直接设定带方向的目标速度 */
-    jog_tp[i].target_vel = base_vel * feed_override * direction;
-    jog_tp[i].max_acc = base_acc;
-
-    /* 3. 使能规划器 */
-    jog_tp[i].enable = 1;
+    axis_jog_tp->target_vel = base_vel * feed_override * direction;
+    axis_jog_tp->max_acc = base_acc;
 }
 
 /**
