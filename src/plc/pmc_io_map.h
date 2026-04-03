@@ -6,14 +6,15 @@
  * 映射逻辑：基于 MD1(bit0), MD2(bit1), MD4(bit2), DNCI(bit5), ZRN(bit7) 的组合
  */
 typedef enum {
-    CNC_MODE_EDIT = 0,    /**< 编辑 (MD1=0, MD2=0, MD4=0) */
-    CNC_MODE_MEM  = 1,    /**< 存储器 (MD1=1, MD2=0, MD4=0) */
-    CNC_MODE_MDI  = 2,    /**< MDI (MD1=0, MD2=1, MD4=0) */
-    CNC_MODE_JOG  = 3,    /**< JOG (MD1=1, MD2=1, MD4=0) */
-    CNC_MODE_MPG  = 4,    /**< 手轮 (MD1=0, MD2=0, MD4=1) */
-    CNC_MODE_ZRN  = 5,    /**< 回零 (ZRN=1) */
-    CNC_MODE_DNC  = 6,    /**< DNC运行 (DNCI=1) */
-    CNC_MODE_INVALID = 7  /**< 无效模式 */
+    CNC_MODE_INVALID = 0,  /**< 无效模式 */
+    CNC_MODE_EDIT = 1,    /**< 编辑 */
+    CNC_MODE_MEM  = 2,    /**< 存储器 */
+    CNC_MODE_MDI  = 3,    /**< MDI */
+    CNC_MODE_JOG  = 4,    /**< JOG */
+    CNC_MODE_MPG  = 5,    /**< 手轮 */
+    CNC_MODE_ZRN  = 6,    /**< 回零 */
+    CNC_MODE_DNC  = 7,    /**< DNC运行 */
+    CNC_MODE_RAPID = 8,   /**< RAPID */
 } CNC_MODE_INDEX;
 
 /**
@@ -25,7 +26,7 @@ typedef enum {
     EV_MSG_MODE,        /**< 模式切换 (参数1: 模式索引) */
     EV_MSG_FEEDAXIS_KEY,/**< 进给轴按键事件 (参数1: 轴号, 参数2: 方向) */
     EV_MSG_SPINDLE,     /**< 主轴控制 (参数1: 方向) */
-    EV_MSG_OVERRIDE,    /**< 倍率调节 (参数1: 类型, 参数2: 数值) */
+    EV_MSG_OVERRIDE,    /**< 倍率调节 (参数1: 倍率类型, 参数2: 数值) */
     EV_MSG_AUTO_RUN,    /**< 运行控制 (参数1: 启动/中止) */
     EV_MSG_RESET,       /**< 系统复位 */
     EV_MSG_ESP,         /**< 紧急停止 (参数1: 拍下/拉起) */

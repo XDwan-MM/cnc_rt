@@ -112,9 +112,7 @@ HEADERS += \
     src/motion/handwheel.h \
     src/motion/homing.h \
     src/motion/jog.h \
-    src/motion/rapid.h \
-    src/motion/simple_tp.h \
-    src/motion/spindle/spl_control.h \
+    src/motion/jog_planner.h \
     src/motion/stored_stroke_check.h \
     src/plc/ctimer.h \
     src/plc/cyclescanning.h \
@@ -159,9 +157,7 @@ SOURCES += \
     src/motion/handwheel.c \
     src/motion/homing.c \
     src/motion/jog.c \
-    src/motion/rapid.c \
-    src/motion/simple_tp.c \
-    src/motion/spindle/spl_control.c \
+    src/motion/jog_planner.c \
     src/motion/stored_stroke_check.c \
     src/plc/hal_task.cpp \
     src/plc/cyclescanning.cpp \

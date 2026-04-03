@@ -7,7 +7,6 @@
 #include "pathplan.h"
 #include "rt_sem.h"
 #include "alarm.h"
-#include "rapid.h"
 #include "jog.h"
 #include "handwheel.h"
 #include "homing.h"
@@ -132,9 +131,9 @@ static void set_operating_mode() {
             break;
         case MODE_JOG:
             // 当前点动速度为零,才能切模式成功
-            if (fabs(jog_tp[AXIS_X].curr_vel - 0.0) < SPEED_THRESHOLD
-            && fabs(jog_tp[AXIS_Y].curr_vel - 0.0) < SPEED_THRESHOLD
-            && fabs(jog_tp[AXIS_Z].curr_vel - 0.0) < SPEED_THRESHOLD)
+            if (fabs(jog_tp[AXIS_X].curr_vel) < SPEED_THRESHOLD
+            && fabs(jog_tp[AXIS_Y].curr_vel) < SPEED_THRESHOLD
+            && fabs(jog_tp[AXIS_Z].curr_vel) < SPEED_THRESHOLD)
             {
                 rt_data->current_mode = rt_data->target_mode;
                 rt_data->sys_state[SYS_IS_SWITCHING_MODE] = false;
@@ -150,9 +149,9 @@ static void set_operating_mode() {
             break;
         case MODE_RAPID_JOG:
             // 当前快速点动速度为零,才能切模式成功
-            if (fabs(jog_tp[AXIS_X].curr_vel - 0.0) < SPEED_THRESHOLD
-            && fabs(jog_tp[AXIS_Y].curr_vel - 0.0) < SPEED_THRESHOLD
-            && fabs(jog_tp[AXIS_Z].curr_vel - 0.0) < SPEED_THRESHOLD)
+            if (fabs(rapid_jog_tp[AXIS_X].curr_vel) < SPEED_THRESHOLD
+            && fabs(rapid_jog_tp[AXIS_Y].curr_vel) < SPEED_THRESHOLD
+            && fabs(rapid_jog_tp[AXIS_Z].curr_vel) < SPEED_THRESHOLD)
             {
                 rt_data->current_mode = rt_data->target_mode;
                 rt_data->sys_state[SYS_IS_SWITCHING_MODE] = false;
@@ -229,7 +228,7 @@ static void get_cmd_pos() {
             handle_jog_cmd();
             break;
         case MODE_RAPID_JOG: // 快速点动
-            handle_jog_rapid_cmd();
+            handle_rapid_jog_cmd();
             break;
         case MODE_MPG: // 手轮
             handle_mpg_cmd();
