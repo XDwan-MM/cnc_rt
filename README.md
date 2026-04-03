@@ -3,7 +3,8 @@
 
 0、更新共享内存
 
-git submodule init && git submodule update
+sudo rm -rf ./lib/cncshm/ （如报错文件已存在）
+git submodule init && git submodule update --remote
 
 
 1、修改界面参数配置文件
