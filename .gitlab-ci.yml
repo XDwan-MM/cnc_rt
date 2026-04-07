@@ -9,19 +9,118 @@
   - ./write.sh
   - curl -uly_35b717:AP38qFMP2jfnFYm5gav4KV2EyXV -T tag.log  "http://10.2.30.32:8081/artifactory/source/ly/tag_bash/cnc/tag.log"
 
-编译:
-  stage: deploy
+远程触发:
+  stage: build
+  tags:
+    - hmi_v3
+  script: 
+    - |
+      echo "1670,$(curl -s -X POST --fail -F token=$MOTION_Token -F ref=feature_ci http://10.2.29.14:8084/api/v4/projects/1670/trigger/pipeline | jq -r '.id')" > pipeline_ids.txt
+      echo "1671,$(curl -s -X POST --fail -F token=$HAL_Token -F ref=feature_ci http://10.2.29.14:8084/api/v4/projects/1671/trigger/pipeline | jq -r '.id')" >> pipeline_ids.txt
+      echo "1672,$(curl -s -X POST --fail -F token=$PARSER_Token -F ref=feature_ci http://10.2.29.14:8084/api/v4/projects/1672/trigger/pipeline | jq -r '.id')" >> pipeline_ids.txt
+      echo "1673,$(curl -s -X POST --fail -F token=$MASTER_Token -F ref=feature_ci http://10.2.29.14:8084/api/v4/projects/1673/trigger/pipeline | jq -r '.id')" >> pipeline_ids.txt
+      echo "1674,$(curl -s -X POST --fail -F token=$PLC_Token -F ref=feature_ci http://10.2.29.14:8084/api/v4/projects/1674/trigger/pipeline | jq -r '.id')" >> pipeline_ids.txt
+      echo "1675,$(curl -s -X POST --fail -F token=$ERROR_Token -F ref=feature_ci http://10.2.29.14:8084/api/v4/projects/1675/trigger/pipeline | jq -r '.id')" >> pipeline_ids.txt
+  when: manual
+  artifacts:
+    paths:
+      - pipeline_ids.txt
+    expire_in: 1 hour
+
+编译监听:
+  stage: test
   tags:
     - hmi_v3
   script:
-    # - ./build.sh clean
+    - |
+      PIPELINE_INFOS=()
+      while IFS=, read -r project_id pipeline_id; do
+        PIPELINE_INFOS+=("$project_id,$pipeline_id")
+      done < pipeline_ids.txt
+
+      MAX_RETRIES=60
+      SLEEP_INTERVAL=60
+      for (( i=1; i<=MAX_RETRIES; i++ )); do
+        ALL_COMPLETED=true
+        FAILED_PIPELINE=""
+        
+        for info in "${PIPELINE_INFOS[@]}"; do
+          IFS=, read -r project_id pipeline_id <<< "$info"
+          RESPONSE=$(curl -s -w "\n%{http_code}" \
+            -H "PRIVATE-TOKEN: glpat-LNLVSs3NGAx9BdY5dvfQ" \
+            "http://10.2.29.14:8084/api/v4/projects/${project_id}/pipelines/${pipeline_id}")
+          
+          HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
+          RESPONSE_BODY=$(echo "$RESPONSE" | head -n -1)
+          
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "❌ API Error (Project ${project_id}, Pipeline ${pipeline_id}): $RESPONSE_BODY"
+            exit 1
+          fi
+          
+          # STATUS=$(echo "$RESPONSE_BODY" | jq -r '.status')
+          STATUS=$(echo "$RESPONSE_BODY" | jq -r 'if type == "array" then .[0].status else .status end')
+          
+          case "$STATUS" in
+            success) echo "✅ Pipeline ${pipeline_id} (Project ${project_id}) completed successfully." ;;
+            failed|canceled|skipped) 
+              ALL_COMPLETED=false
+              FAILED_PIPELINE="${pipeline_id} (Project ${project_id})"
+              echo "❌ Pipeline ${pipeline_id} (Project ${project_id}) failed. Status: $STATUS"
+              ;;
+            running|pending) 
+              ALL_COMPLETED=false
+              echo "⏳ Pipeline ${pipeline_id} (Project ${project_id}) still running..."
+              ;;
+            *) echo "⚠️ Unknown status: $STATUS" ;;
+          esac
+        done
+        
+        if [ "$ALL_COMPLETED" = true ]; then
+          echo "✅ All pipelines completed successfully!"
+          exit 0
+        else
+          echo "⏳ Waiting for all pipelines to finish... (Retry $i/$MAX_RETRIES, Total: $((i*SLEEP_INTERVAL))s)"
+          sleep $SLEEP_INTERVAL
+        fi
+      done
+      
+      echo "⏰ Timeout: Pipelines didn't complete within $((MAX_RETRIES*SLEEP_INTERVAL)) seconds (60 minutes)"
+      exit 1
+  needs: [远程触发]
+
+快速编译:
+  stage: build
+  tags:
+    - hmi_v3
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "push"
+      # 可选：限制只在特定分支，如果不限制，去掉下面的 if 即可
+    - if: $CI_COMMIT_BRANCH =~ /^(main|develop|feature\/.*)$/
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_PIPELINE_SOURCE == "web" # 允许手动触发
+  script:
+    # 1.添加静态库
+    - echo "⏳ Initializing Lib..."
+    - mkdir -p lib/PLC/bin
+    - mkdir -p lib/PLC/include
+    - mkdir -p DIR
+    - cd DIR
+    - curl -uly_35b717:AP38qFMP2jfnFYm5gav4KV2EyXV -O "http://10.2.30.32:8081/artifactory/source/ly/CNC-Lib/PLC/bin.tar.xz"
+    - tar -xJf bin.tar.xz -C ../lib/PLC/bin
+    - curl -uly_35b717:AP38qFMP2jfnFYm5gav4KV2EyXV -O "http://10.2.30.32:8081/artifactory/source/ly/CNC-Lib/PLC/include.tar.xz"
+    - tar -xJf include.tar.xz -C ../lib/PLC/include
+    - echo "✅ Update Lib Success!"
+    - cd ..
+    # 2.编译子模块
+    - ./build.sh clean
     - echo "⏳ Initializing Submodules..."
     - git submodule init && git submodule update --init --recursive
     - echo "⏳ Compiling Submodule..."
     - cd ./lib/cncshm
-    - qmake
-    - make -j$(nproc)
+    - ./build.sh
     - echo "✅ Compiled Submodules Success!"
+    # 3.编译rt_cnc
     - cd ../../
     - echo "⏳ Compiling Main Project..."
     # - ./build.sh
@@ -29,8 +128,47 @@
     - make -j$(nproc)
     - echo "✅ Compiled Main Project Success!"
     - ls
+    # 4.添加版本号信息
+    - *tag-change
+    - tar -cvJf cnc_rt_1.0.0.$SUM_B.tar bin/rt_cnc
+    - curl -uly_35b717:AP38qFMP2jfnFYm5gav4KV2EyXV -T cnc_rt_1.0.0.$SUM_B.tar  "http://10.2.30.32:8081/artifactory/hmi_cnc/${CI_COMMIT_REF_NAME}/"
+
+远程编译:
+  stage: deploy
+  tags:
+    - hmi_v3
+  script:
+    # 1.添加静态库
+    - echo "⏳ Initializing Lib..."
+    - mkdir -p lib/PLC/bin
+    - mkdir -p lib/PLC/include
+    - mkdir -p DIR
+    - cd DIR
+    - curl -uly_35b717:AP38qFMP2jfnFYm5gav4KV2EyXV -O "http://10.2.30.32:8081/artifactory/source/ly/CNC-Lib/PLC/bin.tar.xz"
+    - tar -xJf bin.tar.xz -C ../lib/PLC/bin
+    - curl -uly_35b717:AP38qFMP2jfnFYm5gav4KV2EyXV -O "http://10.2.30.32:8081/artifactory/source/ly/CNC-Lib/PLC/include.tar.xz"
+    - tar -xJf include.tar.xz -C ../lib/PLC/include
+    - echo "✅ Update Lib Success!"
+    - cd ..
+    # 2.编译子模块
+    - ./build.sh clean
+    - echo "⏳ Initializing Submodules..."
+    - git submodule init && git submodule update --init --recursive
+    - echo "⏳ Compiling Submodule..."
+    - cd ./lib/cncshm
+    - ./build.sh
+    - echo "✅ Compiled Submodules Success!"
+    # 3.编译rt_cnc
+    - cd ../../
+    - echo "⏳ Compiling Main Project..."
+    # - ./build.sh
+    - qmake
+    - make -j$(nproc)
+    - echo "✅ Compiled Main Project Success!"
+    - ls
+    # 4.添加版本号信息
     - *tag-change
     - tar -cvJf cnc_rt_1.0.0.$SUM_B.tar bin/rt_cnc
     - curl -uly_35b717:AP38qFMP2jfnFYm5gav4KV2EyXV -T cnc_rt_1.0.0.$SUM_B.tar  "http://10.2.30.32:8081/artifactory/hmi_cnc/${CI_COMMIT_REF_NAME}/"
   # when: manual
-  # needs: [编译监听]
+  needs: [编译监听]
