@@ -1,0 +1,36 @@
+.tag-change: &tag-change
+  - curl -uly_35b717:AP38qFMP2jfnFYm5gav4KV2EyXV -O  "http://10.2.30.32:8081/artifactory/source/ly/tag_bash/cnc/tag.log"
+  - curl -uly_35b717:AP38qFMP2jfnFYm5gav4KV2EyXV -O  "http://10.2.30.32:8081/artifactory/source/ly/tag_bash/cnc/add_b.sh"
+  - curl -uly_35b717:AP38qFMP2jfnFYm5gav4KV2EyXV -O  "http://10.2.30.32:8081/artifactory/source/ly/tag_bash/cnc/write.sh"
+  - chmod 777 tag.log write.sh
+  - source tag.log
+  - source add_b.sh
+  - export SUM_B
+  - ./write.sh
+  - curl -uly_35b717:AP38qFMP2jfnFYm5gav4KV2EyXV -T tag.log  "http://10.2.30.32:8081/artifactory/source/ly/tag_bash/cnc/tag.log"
+
+编译:
+  stage: deploy
+  tags:
+    - hmi_v3
+  script:
+    # - ./build.sh clean
+    - echo "⏳ Initializing Submodules..."
+    - git submodule init && git submodule update --init --recursive
+    - echo "⏳ Compiling Submodule..."
+    - cd ./lib/cncshm
+    - qmake
+    - make -j$(nproc)
+    - echo "✅ Compiled Submodules Success!"
+    - cd ../../
+    - echo "⏳ Compiling Main Project..."
+    # - ./build.sh
+    - qmake
+    - make -j$(nproc)
+    - echo "✅ Compiled Main Project Success!"
+    - ls
+    - *tag-change
+    - tar -cvJf cnc_rt_1.0.0.$SUM_B.tar bin/rt_cnc
+    - curl -uly_35b717:AP38qFMP2jfnFYm5gav4KV2EyXV -T cnc_rt_1.0.0.$SUM_B.tar  "http://10.2.30.32:8081/artifactory/hmi_cnc/${CI_COMMIT_REF_NAME}/"
+  # when: manual
+  # needs: [编译监听]
