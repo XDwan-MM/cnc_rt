@@ -1,9 +1,16 @@
 
 ### 使用方法
 
-0、更新共享内存
+0、更新子模块（如共享内存）
 
 sudo rm -rf ./lib/cncshm/ （如报错文件已存在）
+
+拉取当前版本
+
+git submodule init && git submodule update --init --recursive
+
+更新到最新版本（请勿轻易使用，除非确认需要更新到子模块最新版本）
+
 git submodule init && git submodule update --remote
 
 
