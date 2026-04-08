@@ -240,22 +240,23 @@ void Master_Run()
                 spindle.state = DRV_STATE_SWITCHED_ON;
                 CHECK_FUNC(GM_RxPdoEntry_Write(ControlWord[0], 0x0f));
             }
-            else if((statis[0] & 0x27f) == 0x237 && (spindle.state = DRV_STATE_SWITCHED_ON))
+            else if((statis[0] & 0x27f) == 0x237 && (spindle.state == DRV_STATE_SWITCHED_ON))
             {
                 spindle.state = DRV_STATE_OPERATION_ENABLED;
                 CHECK_FUNC(GM_RxPdoEntry_Write(ControlWord[0], 0x1f));
-                sp_start_sem = 1;
+                sp_start_sem = true;
             }
-            if(spindle.state != DRV_STATE_SWITCHED_ON)
-            {
-                sp_start_sem = 0;
-            }
+//            if(spindle.state != DRV_STATE_SWITCHED_ON)
+//            {
+//                sp_start_sem = 0;
+//            }
         }
         if(spindle.mode == DRV_MODE_DISABLED)
         {
             if(spindle.state != DRV_STATE_NOT_READY)
             {
                 CHECK_FUNC(GM_RxPdoEntry_Write(ControlWord[0], 0x00));
+                sp_start_sem = false;
             }
         }
 

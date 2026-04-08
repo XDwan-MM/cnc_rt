@@ -13,7 +13,7 @@
 #include "handwheel.h"
 #include "homing.h"
 #include "mem.h"
-#include "spindle.h"
+#include "spindle_test.h"
 #include "stored_stroke_check.h"
 #include "parser.h"
 #include "hmisysapi.h"
@@ -211,19 +211,24 @@ static void set_operating_mode() {
 // 主轴控制
 static void spindle_control(){
     // if(rt_data->sys_state[SYS_IS_ESTOP_ON]) return;
-    switch (rt_data->current_mode){
-        case MODE_JOG:
-        case MODE_MPG:
-        case MODE_EDIT:
-            emcSpindleControl();
-            break;
-        case MODE_MEM:
-        case MODE_MDI:
-        case MODE_DNC:
-            emcmcodedeal();
-            break;
-        default:
-            break;
+//    switch (rt_data->current_mode){
+//        case MODE_JOG:
+//        case MODE_MPG:
+//        case MODE_EDIT:
+//            emcSpindleControl();
+//            break;
+//        case MODE_MEM:
+//        case MODE_MDI:
+//        case MODE_DNC:
+//            emcmcodedeal();
+//            break;
+//        default:
+//            break;
+//    }
+    spindle_set_state();
+    if(spindle.mode == DRV_MODE_CSV)
+    {
+        spindle_cal_speed();
     }
 }
 

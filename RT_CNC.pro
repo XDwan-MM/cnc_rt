@@ -114,6 +114,7 @@ HEADERS += \
     src/motion/jog.h \
     src/motion/rapid.h \
     src/motion/simple_tp.h \
+    src/motion/spindle/spindle_test.h \
     src/motion/stored_stroke_check.h \
     src/plc/ctimer.h \
     src/plc/cyclescanning.h \
@@ -162,6 +163,7 @@ SOURCES += \
     src/motion/jog.c \
     src/motion/rapid.c \
     src/motion/simple_tp.c \
+    src/motion/spindle/spindle_test.c \
     src/motion/stored_stroke_check.c \
     src/plc/hal_task.cpp \
     src/plc/cyclescanning.cpp \

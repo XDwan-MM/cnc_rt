@@ -1,11 +1,12 @@
 #include "task.h"
 #include "eventdef.h"
-#include "spindle.h"
+//#include "spindle.h"
 #include <hmisysapi.h>
 #include <alarmapi.h>
 #include <stdlib.h>
 #include "regapi.h"   /* 引入寄存器访问 API */
 #include "global.h"
+#include "spindle_test.h"
 
 
 static PMC_EVENT event_data;
@@ -132,17 +133,20 @@ static GNC_RES task_handle_pmc_event(PMC_EVENT* event_data){
             {
 //                spindle.state = DRV_STATE_OPERATION_ENABLED;
 //                spindle.mode = DRV_MODE_CSV;
-                sp_sign = 1;
+//                sp_sign = 1;
+                spl_data.spl_event = SPINDLE_EVENT_STOP;
                 LOG(LOG_LEVEL_INFO, "处理主轴正转事件");
             }
             if(event_data->spindle_payload.direction == -1)
             {
-                sp_sign = 2;
+                spl_data.spl_event = SPINDLE_EVENT_STOP;
+//                sp_sign = 2;
                 LOG(LOG_LEVEL_INFO, "处理主轴反转事件");
             }
             if(event_data->spindle_payload.direction == 0)
             {
-                sp_sign = 0;
+                spl_data.spl_event = SPINDLE_EVENT_STOP;
+//                sp_sign = 0;
                 LOG(LOG_LEVEL_INFO, "处理主轴停止事件");
             }
             break;
