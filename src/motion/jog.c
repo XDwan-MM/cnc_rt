@@ -29,7 +29,6 @@ static bool check_all_axes_idle_rapid_jog(void);
  */
 void handle_jog_cmd()
 {
-    printf("jog_para vel%f acc%f override%d \n", par_axis[0][PAR_AX_JOG_LOWSPD].value.val_real, par_axis[0][PAR_AX_FEED_ACC].value.val_real, var_chan[0][VAR_CHAN_FEED_OVERRIDE].value.f);
     for (int i = 0; i < SYS_AXES_NUM_JOG; i++)
     {
         /* 1. 静态同步：IDLE状态下强制同步位置，防止从JOG切入其他模式时位置突跳 */
@@ -43,7 +42,6 @@ void handle_jog_cmd()
         /* 2. 处理按键信号与状态机切换 */
         update_axis_state(i, &jog_ctrls[i]);
 
-        printf("jog_ctrls %d %d %d \n", jog_ctrls[0].state, jog_ctrls[1].state, jog_ctrls[2].state);
 
         /* 4. 执行普通JOG运动计算逻辑 */
         execute_axis_logic(i, &jog_ctrls[i], &jog_tp[i], false);
@@ -75,6 +73,8 @@ void handle_jog_cmd()
  */
 void handle_rapid_jog_cmd()
 {
+    // printf("jog_para vel%f acc%f override%f \n", par_axis[0][PAR_AX_JOG_FASTSPD].value.val_real, par_axis[0][PAR_AX_RAPID_ACC].value.val_real, var_chan[0][VAR_CHAN_FEED_OVERRIDE].value.f);
+
     for (int i = 0; i < SYS_AXES_NUM_JOG; i++)
     {
         /* 1. 静态同步：IDLE状态下强制同步位置，防止从JOG切入其他模式时位置突跳 */
@@ -85,8 +85,11 @@ void handle_rapid_jog_cmd()
             rapid_jog_tp[i].enable = 0;
         }
 
+        printf("rapid_jog_ctrls before %d %d %d \n", rapid_jog_ctrls[0].state, rapid_jog_ctrls[1].state, rapid_jog_ctrls[2].state);
         /* 2. 处理按键信号与状态机切换 */
         update_axis_state(i, &rapid_jog_ctrls[i]);
+
+        printf("rapid_jog_ctrls after %d %d %d \n", rapid_jog_ctrls[0].state, rapid_jog_ctrls[1].state, rapid_jog_ctrls[2].state);
 
         /* 4. 执行快速JOG运动计算逻辑 */
         execute_axis_logic(i, &rapid_jog_ctrls[i], &rapid_jog_tp[i], true);

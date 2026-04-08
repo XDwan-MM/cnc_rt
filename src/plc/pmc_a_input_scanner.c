@@ -51,11 +51,19 @@ void pmc_a_input_scan_cycle(void)
             // 检测上升沿 (0 -> 1): 产生报警
             if (SIGNAL_RISING(current_a_status[i], last_a_status[i], bit))
             {
+                if(alarm_no == 1)
+                {
+                printf("jiting baojing \n");
+                }
                 setAlarm(ALARM_PC, ALARM_ERROR, alarm_no);
             }
             // 检测下降沿 (1 -> 0): 消除报警
             else if (SIGNAL_FALLING(current_a_status[i], last_a_status[i], bit))
             {
+                if(alarm_no == 1)
+                {
+                printf("jiting baojing xiaochu\n");
+                }
                 delAlarm(ALARM_PC, ALARM_ERROR, alarm_no);
             }
         }

@@ -14,7 +14,7 @@
  */
 static const int SCAN_G_REGS[] =
     {
-        4, 5, 6, 7, 8, 14, 19, 29, 32, 43, 44, 45, 61, 62, 70, 100, 102, 130, 132, 134 /* 已有信号的地址 */
+        4, 5, 6, 7, 8, 12, 14, 19, 29, 30, 32, 43, 44, 45, 61, 62, 70, 100, 102, 130, 132, 134 /* 已有信号的地址 */
                                                                                        /* <--- 您想新增的信号地址 */
 };
 
@@ -124,38 +124,38 @@ void pmc_g_input_scan_cycle(void)
     // 进给倍率变化检测G12
     if (SIGNAL_BYTE_CHANGED(curr_g.g_regs[12], last_g.g_regs[12]))
     {
-        // // 1、共享内存有符号版本代码逻辑
-        // int feed_override = 0;
+        // 1、共享内存有符号版本代码逻辑
+        int feed_override = 0;
 
-        // /* 核心修正：强制转换为无符号字节，避免符号位干扰位运算 */
-        // unsigned char raw_val = (unsigned char)curr_g.G0012;
+        /* 核心修正：强制转换为无符号字节，避免符号位干扰位运算 */
+        unsigned char raw_val = (unsigned char)curr_g.g_regs[12];
 
-        // /* * 倍率值 = (2^i * Vi)累加 [%]，i从0到7。
-        //  * 根据文档原理：FVi为'1'时 Vi=0；FVi为'0'时 Vi=1。FVi对应G12变量中的第i位。
-        //  * 这在逻辑上等同于对这 8 个位进行按位取反。
-        //  */
-        // unsigned char inverted_val = (unsigned char)(~raw_val);
+        /* * 倍率值 = (2^i * Vi)累加 [%]，i从0到7。
+         * 根据文档原理：FVi为'1'时 Vi=0；FVi为'0'时 Vi=1。FVi对应G12变量中的第i位。
+         * 这在逻辑上等同于对这 8 个位进行按位取反。
+         */
+        unsigned char inverted_val = (unsigned char)(~raw_val);
 
-        // /* * 特殊逻辑判断:
-        //  * 1. 所有信号为 '0' (0x00) 时，视为 0%。
-        //  * 2. 所有信号为 '1' (0xFF) 时，取反后为 0，自然也是 0%。
-        //  */
-        // if (raw_val == 0x00 || raw_val == 0xFF)
-        // {
-        //     feed_override = 0;
-        // }
-        // else
-        // {
-        //     /* * 此时 inverted_val 的数值直接对应 1%~254% 的倍率。
-        //      * 例如：若信号为 0b11111010 (0xFA)，取反后为 0b00000101 (5)，即 5%。
-        //      */
-        //     feed_override = (int)inverted_val;
-        // }
-        // /* p1=0 代表进给倍率类型 (EV_MSG_OVERRIDE) */
-        // pmc_dispatch_event(EV_MSG_OVERRIDE, 0, feed_override);
+        /* * 特殊逻辑判断:
+         * 1. 所有信号为 '0' (0x00) 时，视为 0%。
+         * 2. 所有信号为 '1' (0xFF) 时，取反后为 0，自然也是 0%。
+         */
+        if (raw_val == 0x00 || raw_val == 0xFF)
+        {
+            feed_override = 0;
+        }
+        else
+        {
+            /* * 此时 inverted_val 的数值直接对应 1%~254% 的倍率。
+             * 例如：若信号为 0b11111010 (0xFA)，取反后为 0b00000101 (5)，即 5%。
+             */
+            feed_override = (int)inverted_val;
+        }
+        /* p1=0 代表进给倍率类型 (EV_MSG_OVERRIDE) */
+        pmc_dispatch_event(EV_MSG_OVERRIDE, 0, feed_override);
 
-        // 2、共享内存无符号版本的代码逻辑
-        pmc_dispatch_event(EV_MSG_OVERRIDE, 0, (int)curr_g.g_regs[12]);
+        // // 2、共享内存无符号版本的代码逻辑
+        // pmc_dispatch_event(EV_MSG_OVERRIDE, 0, (int)curr_g.g_regs[12]);
     }
     // 快速进给倍率检测G14
     if ((curr_g.g_regs[14] & 0x03) != (last_g.g_regs[14] & 0x03))
@@ -206,13 +206,13 @@ void pmc_g_input_scan_cycle(void)
         // 产生主轴正转事件 入队
         pmc_dispatch_event(EV_MSG_SPINDLE, 1, 0);
     }
-    if (SIGNAL_RISING(curr_g.g_regs[29], last_g.g_regs[29], 6))
+    if (SIGNAL_FALLING(curr_g.g_regs[29], last_g.g_regs[29], 6))
     {
         // 产生主轴停止事件 入队
         pmc_dispatch_event(EV_MSG_SPINDLE, 0, 0);
     }
 
-    /* 主轴定向 G70.6 */
+    /* 主轴定向 G70.6 */ 
     if (SIGNAL_RISING(curr_g.g_regs[70], last_g.g_regs[70], 6))
     {
         LOG(LOG_LEVEL_INFO, "扫描到G70.6 发生上升沿");
