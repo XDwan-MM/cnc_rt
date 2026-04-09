@@ -290,14 +290,15 @@ static bool mem_check_res(GNC_RES res){
         return false;
 
     case VP_LENGTH_IS_ZERO:
-        if(var_chan[0][VAR_CHAN_IS_RESETTING].value.i){
-            mem_handle_reset();
-            return false;
-        }
-        if(cycle_tp->mem_exec_state == EXEC_PAUSING){
-            return false;
-        }
-        break;
+        // if(var_chan[0][VAR_CHAN_IS_RESETTING].value.i){
+        //     mem_handle_reset();
+        //     return false;
+        // }
+        // if(cycle_tp->mem_exec_state == EXEC_PAUSING){
+        //     return false;
+        // }
+        // break;
+        return false;
 
     case GNC_DATA_NULL:
     case GNC_PARAM_UNVALID:
@@ -403,7 +404,8 @@ static GNC_RES cycle_tp_update_tp(VELPLAN_TYPE vplan_mode, double ncu_cycle, dou
     res = cycle_tp_update_block(vplan_mode, ncu_cycle, current_vel, current_pos);
     if(res != GNC_CAL_SUCCESS) return res;
     // 如果加工段允许最大速度为0（倍率为0）
-    if(IsEqualTo(cycle_tp->plan_block->max_vel, 0)) return VP_MAX_VEL_IS_ZERO; 
+    if(IsEqualTo(cycle_tp->plan_block->max_vel, 0)) return VP_MAX_VEL_IS_ZERO;
+    // todo：如果加速或减速的距离很小，当前速度 = 目标速度
     res = cycle_tp_update_vp(vplan_mode, ncu_cycle, current_vel, target_vel);
     if(res != GNC_CAL_SUCCESS) return res;
     return res;
@@ -549,7 +551,10 @@ static bool cycle_block_is_arrived(POS current_pos){
     if((fabs(head_block->end_pos.y - current_pos.y)) > MEM_END_TOL) return false;
     if((fabs(head_block->end_pos.z - current_pos.z)) > MEM_END_TOL) return false;
     // 如果是到位检测模组，发送到位信号
-    if(head_block->mode == PMC_MODE_ARRIVE_CHECK) rt_set_chan_state(0, CHAN_IS_MODE_ARRIVE, true);
+    if(head_block->mode == PMC_MODE_ARRIVE_CHECK){
+        rt_set_chan_state(0, CHAN_IS_MODE_ARRIVE, true);
+        // todo：G27返回参考点检测信号的控制时序
+    }
     if(head_block->mode == PMC_MODE_EXACT_STOP) rt_set_chan_state(0, CHAN_IS_EXACT_STOP, true);
     return true;
 }

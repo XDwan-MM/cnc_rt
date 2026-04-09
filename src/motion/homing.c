@@ -329,10 +329,9 @@ GNC_RES abs_homing_tp_update_params(AXIS_TYPE axis_type, double current_vel, dou
     // 如果新速度不满足，不更新新速度
     if(!homing_tp_new_vel_valid(axis_type, target_vel)) return res;
     homing_tp[axis_type].homing_block->length = fabs(par_axis[axis_type][PAR_AX_HOME_CRDS].value.val_real - var_axis[axis_type][VAR_AXIS_CMD_POS_EX].value.f); // 设置的x轴零点与当前位置之间的距离
-    // todo：如果回零距离极小
     homing_tp[axis_type].homing_block->start_vel = fabs(var_axis[axis_type][VAR_AXIS_CMD_VEL].value.f);  // 当前速度
     homing_tp[axis_type].homing_distance = homing_tp[axis_type].homing_block->length;
-    if(current_vel > homing_tp[axis_type].homing_block->max_vel) homing_tp[axis_type].homing_block->max_vel = current_vel;
+    if(current_vel > homing_tp[axis_type].homing_block->max_vel) homing_tp[axis_type].homing_block->max_vel = current_vel;   
     // 如果加工段允许最大速度为0（倍率为0）
     if(IsEqualTo(homing_tp[axis_type].homing_block->max_vel, 0)) return VP_MAX_VEL_IS_ZERO; 
     if(current_vel > target_vel){
@@ -375,12 +374,12 @@ static GNC_RES abs_homing_tp_init(AXIS_TYPE axis_type){
     GNC_RES res = VP_CAL_SUCCESS;
     if(IsEqualTo(homing_tp[axis_type].max_vel, 0)) return res; // 如果倍率为0，且未开始回零
     double ncu_cycle = (double)par_ncu[PAR_NCU_CYCLE].value.val_uint / TIME_US_2_S;
-    res = vp_cal_vel_profile(T_SHAPE, homing_tp[axis_type].homing_block, homing_tp[axis_type].homing_profile, ncu_cycle); // 速度控制方式：T型、S型、SIN型
     homing_tp[axis_type].interp_cycle = 1;
     homing_tp[axis_type].accum_distance = 0;
     homing_tp[axis_type].remain_distance = homing_tp[axis_type].homing_block->length; // 单个轴的零点距离
     if(par_axis[axis_type][PAR_AX_HOME_CRDS].value.val_real > var_axis[axis_type][VAR_AXIS_CMD_POS_EX].value.f) homing_tp[axis_type].homing_direction = AXIS_HOMING_POSITIVE;  // 回零移动方向
     else homing_tp[axis_type].homing_direction = AXIS_HOMING_NEGATIVE;
+    res = vp_cal_vel_profile(T_SHAPE, homing_tp[axis_type].homing_block, homing_tp[axis_type].homing_profile, ncu_cycle); // 速度控制方式：T型、S型、SIN型
     // if(res != VP_CAL_SUCCESS) LOG(LOG_LEVEL_ERR, "vp cal vel profile fail");
     return res;
 }
@@ -393,14 +392,18 @@ static GNC_RES abs_declining_tp_init(AXIS_TYPE axis_type, double target_vel){
     double ncu_cycle = (double)par_ncu[PAR_NCU_CYCLE].value.val_uint / TIME_US_2_S;
     homing_tp[axis_type].homing_block->end_vel = target_vel;
     homing_tp[axis_type].homing_block->length = vp_cal_decel_dist(T_SHAPE, vs, ve, amax, jmax); // 减速距离
-    // 如果减速距离极小
-    if(IsEqualTo(homing_tp[axis_type].homing_block->length, 0)) return VP_LENGTH_IS_ZERO;
-    res = vp_cal_vel_profile(T_SHAPE, homing_tp[axis_type].homing_block, homing_tp[axis_type].homing_profile, ncu_cycle); // 速度控制方式：T型、S型、SIN型
     homing_tp[axis_type].interp_cycle = 1;
     homing_tp[axis_type].accum_distance = 0;
     homing_tp[axis_type].remain_distance = homing_tp[axis_type].homing_block->length; // 单个轴的零点距离
     if(par_axis[axis_type][PAR_AX_HOME_CRDS].value.val_real > var_axis[axis_type][VAR_AXIS_CMD_POS_EX].value.f) homing_tp[axis_type].homing_direction = AXIS_HOMING_POSITIVE;  // 回零移动方向
     else homing_tp[axis_type].homing_direction = AXIS_HOMING_NEGATIVE;
+    // todo：如果减速距离极小
+    if(IsEqualTo(homing_tp[axis_type].homing_block->length, 0)){
+        homing_tp[axis_type].homing_profile->t_cycle = 0;
+        homing_tp[axis_type].traj_data->v = target_vel;
+        return VP_LENGTH_IS_ZERO;
+    }
+    res = vp_cal_vel_profile(T_SHAPE, homing_tp[axis_type].homing_block, homing_tp[axis_type].homing_profile, ncu_cycle); // 速度控制方式：T型、S型、SIN型
     // if(res != VP_CAL_SUCCESS) LOG(LOG_LEVEL_ERR, "vp cal vel profile fail");
     return res;
 }
