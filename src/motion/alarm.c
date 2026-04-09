@@ -37,7 +37,6 @@ void handle_alarm_cmd(){
         case SYS_EVENT_Z_NEG_PRESS:
         case SYS_EVENT_Z_NEG_RELEASE:
         default:
-            // log_system("[alarm] 报警下不支持操作，请按复位清除报警");
             LOG(LOG_LEVEL_ERR, "报警下不支持操作，请按复位清除报警");
             break;
     }
