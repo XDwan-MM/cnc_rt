@@ -1,5 +1,5 @@
-#ifndef SPINDLE_TEST_H
-#define SPINDLE_TEST_H
+#ifndef SPL_CONTROL_H
+#define SPL_CONTROL_H
 
 #ifdef __cplusplus
 extern "C" {

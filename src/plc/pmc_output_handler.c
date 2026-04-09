@@ -6,7 +6,7 @@
 #include "regdata.h"  /* 引入 RegType 定义 */
 #include "global.h"
 #include <hmisysapi.h>
-#include "spindle_test.h"
+#include "spl_control.h"
 
 /* ==========================================================================
  * 外部函数定义
@@ -16,7 +16,6 @@ static void pmc_output_mode();
 static void pmc_output_home();
 static void pmc_output_auto();
 static void pmc_output_axis_status();
-static void pmc_output_spindle_status();
 
 void pmc_output_feedback() {
     /**
@@ -43,7 +42,6 @@ void pmc_output_feedback() {
     pmc_output_auto();
     pmc_output_home();
     pmc_output_axis_status();
-    pmc_output_spindle_status();
 }
 
 // 自动运行启动中、运行中信号、休止中信号、复位
@@ -216,29 +214,5 @@ static void pmc_output_axis_status()
         {
             clearRegBit(REG_F, 102, i);
         }
-    }
-}
-
-//主轴移动状态输出
-static void pmc_output_spindle_status()
-{
-    switch (spl_data.spl_state) {
-    case SPINDLE_STOP:
-        clearRegBit(REG_F, 10, 3);
-        clearRegBit(REG_F, 10, 4);
-        setRegBit(REG_F, 10, 5);
-        break;
-    case SPINDLE_CW:
-        clearRegBit(REG_F, 10, 4);
-        clearRegBit(REG_F, 10, 5);
-        setRegBit(REG_F, 10, 3);
-        break;
-    case SPINDLE_CCW:
-        clearRegBit(REG_F, 10, 3);
-        clearRegBit(REG_F, 10, 5);
-        setRegBit(REG_F, 10, 4);
-        break;
-    default:
-        break;
     }
 }

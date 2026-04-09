@@ -1,7 +1,7 @@
 #include <parapi.h>
 #include "cnc_math.h"
 #include "rt_data.h"
-#include "spindle_test.h"
+#include "spl_control.h"
 #include <hmisysapi.h>
 #include <alarmapi.h>
 
@@ -23,6 +23,7 @@ void spindle_set_state(){
     if(rt_data->sys_state[SYS_IS_ESTOP_ON] || rt_data->nc_event == SYS_EVENT_RESET)
     {
         spl_data.spl_event = SPINDLE_EVENT_STOP;
+        spl_data.emot_speed = 0;
     }
     // 根据主轴事件设置主轴状态（事件：面板按键和M代码）
     switch (spl_data.spl_event)

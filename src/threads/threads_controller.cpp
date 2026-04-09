@@ -5,7 +5,6 @@
 #include "hal_driver.h"
 #include "task.h"
 #include "emcmot.h"
-#include "spindle.h"
 #include "hal_task.h"
 #include "pmc_a_input_scanner.h"
 #include "pmc_g_input_scanner.h"

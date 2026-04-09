@@ -2,7 +2,7 @@
 #include "mcode_queue.h"
 #include "global.h"
 #include <varapi.h>
-#include "spindle_test.h"
+#include "spl_control.h"
 
 static MCODE_BLOCK* mcode_block;
 
