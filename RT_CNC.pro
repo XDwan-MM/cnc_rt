@@ -114,6 +114,7 @@ HEADERS += \
     src/motion/jog.h \
     src/motion/rapid.h \
     src/motion/simple_tp.h \
+    src/motion/spindle/spl_control.h \
     src/motion/stored_stroke_check.h \
     src/plc/ctimer.h \
     src/plc/cyclescanning.h \
@@ -126,8 +127,6 @@ HEADERS += \
     src/plc/pmc_io_map.h \
     src/plc/pmc_output_handler.h \
     src/plc/signal_utils.h \
-    src/motion/spindle/spindle.h \
-    src/motion/spindle/spindlestatus.h \
     src/task/task.h \
     src/threads/threads_api.h \
     src/threads/thread_manager.h \
@@ -162,13 +161,13 @@ SOURCES += \
     src/motion/jog.c \
     src/motion/rapid.c \
     src/motion/simple_tp.c \
+    src/motion/spindle/spl_control.c \
     src/motion/stored_stroke_check.c \
     src/plc/hal_task.cpp \
     src/plc/cyclescanning.cpp \
     src/plc/pmc_a_input_scanner.c \
     src/plc/pmc_g_input_scanner.c \
     src/plc/pmc_output_handler.c \
-    src/motion/spindle/spindle.c \
     src/task/task.c \
     src/threads/thread_manager.cpp \
     src/threads/threads.cpp \
@@ -191,3 +190,4 @@ INCLUDEPATH += \
     src/utils \
     src/utils/math \
     lib/kinematic/include \
+

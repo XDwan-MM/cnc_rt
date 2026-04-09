@@ -258,12 +258,17 @@ void Master_Run()
                 spindle.state = DRV_STATE_OPERATION_ENABLED;
                 CHECK_FUNC(GM_RxPdoEntry_Write(ControlWord[0], 0x1f));
             }
+//            if(spindle.state != DRV_STATE_SWITCHED_ON)
+//            {
+//                sp_start_sem = 0;
+//            }
         }
         else
         {
             if(spindle.state != DRV_STATE_NOT_READY)
             {
                 CHECK_FUNC(GM_RxPdoEntry_Write(ControlWord[0], 0x00));
+                sp_start_sem = false;
             }
         }
 

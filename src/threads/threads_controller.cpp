@@ -5,7 +5,6 @@
 #include "hal_driver.h"
 #include "task.h"
 #include "emcmot.h"
-#include "spindle.h"
 #include "hal_task.h"
 #include "pmc_a_input_scanner.h"
 #include "pmc_g_input_scanner.h"
@@ -76,18 +75,6 @@ void* motion_controller_thread_func(void*) {
         start = get_ns();
         Hal_Driver_Update_All(true, false);
         task_mq_proc();
-        // todo：修改此处写法
-        if (rt_data->nc_event == SYS_EVENT_RESET || RESET || rt_data->sys_state[SYS_IS_ESTOP_ON]) 
-        {
-            RESET = true;
-            sp_sign = 0;
-            if (sp_sign == 0 && !sp_stop_sem) {
-                Spindle_Stop();
-            }
-            if (spindle.mode == DRV_MODE_DISABLED) {
-                RESET = false;
-            }
-        }
         emcmotTrajPlan();
         pmc_output_feedback();
         Hal_Driver_Update_All(false, true);

@@ -6,6 +6,7 @@
 #include "regdata.h"  /* 引入 RegType 定义 */
 #include "global.h"
 #include <hmisysapi.h>
+#include "spl_control.h"
 
 /* ==========================================================================
  * 外部函数定义

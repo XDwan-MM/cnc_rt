@@ -6,14 +6,13 @@
 #include "ferror_control.h"
 #include "pathplan.h"
 #include "rt_sem.h"
-#include "spindle.h"
 #include "alarm.h"
 #include "rapid.h"
 #include "jog.h"
 #include "handwheel.h"
 #include "homing.h"
 #include "mem.h"
-#include "spindle.h"
+#include "spl_control.h"
 #include "stored_stroke_check.h"
 #include "parser.h"
 #include "hmisysapi.h"
@@ -204,20 +203,10 @@ static void set_operating_mode() {
 
 // 主轴控制
 static void spindle_control(){
-    // if(rt_data->sys_state[SYS_IS_ESTOP_ON]) return;
-    switch (rt_data->current_mode){
-        case MODE_JOG:
-        case MODE_MPG:
-        case MODE_EDIT:
-            emcSpindleControl();
-            break;
-        case MODE_MEM:
-        case MODE_MDI:
-        case MODE_DNC:
-            emcmcodedeal();
-            break;
-        default:
-            break;
+    spindle_set_state();
+    if(spindle.mode != DRV_MODE_DISABLED)
+    {
+        spindle_cal_speed();
     }
 }
 
