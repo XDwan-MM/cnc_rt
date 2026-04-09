@@ -190,7 +190,6 @@ void Master_Run()
             if ((statis[0] & 0x0f) != 0x08 && (statis[1] & 0x0f) != 0x08 && (statis[2] & 0x0f) != 0x08 && (statis[3] & 0x0f) != 0x08)
             {
                 feed_start_sem = false;
-                sp_start_sem = false;
                 reset_sem = false;
             }
         }
@@ -232,7 +231,8 @@ void Master_Run()
             }
         }
         //主轴上电
-        if(spindle.mode != DRV_MODE_DISABLED)        {
+        if(spindle.mode != DRV_MODE_DISABLED)
+        {
             CHECK_FUNC(GM_TxPdoEntry_Read(StatusWord[0], &statis[0] , 2));// 获取状态字
             //根据状态字设置控制字
             if(((statis[0] & 0x4f) == 0x40))
@@ -258,7 +258,6 @@ void Master_Run()
             {
                 spindle.state = DRV_STATE_OPERATION_ENABLED;
                 CHECK_FUNC(GM_RxPdoEntry_Write(ControlWord[0], 0x1f));
-                sp_start_sem = true;
             }
         }
         else
@@ -266,7 +265,6 @@ void Master_Run()
             if(spindle.state != DRV_STATE_NOT_READY)
             {
                 CHECK_FUNC(GM_RxPdoEntry_Write(ControlWord[0], 0x00));
-                sp_start_sem = false;
             }
         }
 
@@ -447,6 +445,5 @@ void Master_Error(int code)
 void Master_Reset()
 {
     feed_start_sem = 1;
-    sp_start_sem = 1;
     reset_sem = 1;
 }
