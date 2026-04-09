@@ -52,8 +52,9 @@ typedef struct {
     double last_pos;
     double current_pos;
     bool is_moving;              //是否在运动  1运动　0静止
-    bool direction;               //运动方向　　１正向  0负向
+    bool direction;              //运动方向　　１正向  0负向
     bool is_init;
+    bool is_error;               //驱动器是否报警 １是　0否
 } AxisStatus;
 
 // 目前仅轨迹线程使用

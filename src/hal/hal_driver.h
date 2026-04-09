@@ -64,6 +64,15 @@ typedef struct {
 
 } hal_driver_t;
 
+// 全局驱动器管理器
+typedef struct{
+    hal_driver_t* drivers[MAX_DRIVERS];
+    uint8_t count;
+    bool initialized;
+} driver_manager;
+
+
+extern driver_manager dri_manager;
 extern hal_driver_t spindle;
 extern hal_driver_t x_axis_driver;
 extern hal_driver_t y_axis_driver;
