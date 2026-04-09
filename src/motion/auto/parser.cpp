@@ -62,6 +62,8 @@ GNC_RES parser_init(const char* parser_file_path)
     parser_macro_init();
     ItpCfgGetMacroVarCB(macroVarGetValue);
     ItpCfgSetMacroVarCB(macroVarSetValue);
+    // 是否跳过注释段
+    ItpSetBlockSkipEnable(rt_get_sys_state(SYS_IS_BLOCK_SKIP));
     // 设置机床起点
     double ori_pos_x, ori_pos_y, ori_pos_z;
     getVarAxisDouble(AXIS_X, VAR_AXIS_CMD_POS_EX, &ori_pos_x, 0);
@@ -135,7 +137,7 @@ STATIC GNC_RES parser_handle_gcode(pmc_data* motion_data, NcItpState *itp_state,
     gcode_block.pos.x = motion_data->position.x;
     gcode_block.pos.y = motion_data->position.y;
     gcode_block.pos.z = motion_data->position.z;
-    // LOG(LOG_LEVEL_DEBUG,  "pos %f %f %f", motion_data->position.x, motion_data->position.y, motion_data->position.z);
+    LOG(LOG_LEVEL_DEBUG,  "pos %f %f %f", motion_data->position.x, motion_data->position.y, motion_data->position.z);
     // 模态
     gcode_block.state = *itp_state;
     // 模组
