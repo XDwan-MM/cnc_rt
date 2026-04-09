@@ -51,7 +51,6 @@ void parser_new(){
 GNC_RES parser_init(const char* parser_file_path)
 {   
     if(parser_file_path == NULL) {
-        // log_system("[parser] 译码文件路径不存在");
         LOG(LOG_LEVEL_ERR, "译码文件路径不存在");
         setAlarm(ALARM_CH, ALARM_ERROR, 8);
         return GNC_OPERATOR_ERROR;
@@ -196,15 +195,13 @@ GNC_RES parser_reading(){
     int error_no = ItpError();
     if (error_no >= 0)
     {
-        // log_system("[parser] 译码错误(%d)", error_no);
         setAlarm(ALARM_PS, ALARM_ERROR, error_no);
         LOG(LOG_LEVEL_ERR, "译码错误 %d", error_no);
         return GNC_CAL_ERROR;
     }
     if (parser_data->itp_datas.count <= 0)
     {
-        // log_system("[parser] 译码为空");
-        LOG(LOG_LEVEL_WARN, "译码为空"); // 空包
+        // LOG(LOG_LEVEL_WARN, "译码为空"); // 空包
     }
     else
     {
@@ -273,7 +270,6 @@ GNC_RES parser_waiting_to_end() {
 STATIC bool parser_check_res(GNC_RES res){
     switch(res){
         case GNC_PARSER_OVER:
-            // log_system("[parser] 译码结束");
             LOG(LOG_LEVEL_INFO, "译码结束");
             rt_set_chan_state(0, CHAN_IS_PARSERING, false);
             rt_set_chan_state(0, CHAN_IS_PARSER_RERUN, false);
@@ -307,7 +303,6 @@ STATIC bool parser_check_res(GNC_RES res){
         default:
             parser_data->parser_state = PARSER_IDLE;
             // todo：译码出错让运动暂停后报警，而不是直接进入报警
-            // log_system("[parser] 译码报警(%d)", res);
             LOG(LOG_LEVEL_ERR, "译码报警 %d", res);
             setAlarm(ALARM_CH, ALARM_ERROR, 2);
             parser_reset();

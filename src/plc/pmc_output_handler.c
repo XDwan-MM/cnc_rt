@@ -81,7 +81,7 @@ static void pmc_output_auto(){
 
 // 各轴返回零点完成、参考点建立
 static void pmc_output_home(){
-    for (int i = 0; i < var_sys[VAR_SYS_CHAN_NUM].value.i; i++){
+    for (int i = 0; i < SYS_AXES_NUM; i++){
         if(var_axis[i][VAR_AXIS_IS_HOMEF].value.i){
             setRegBit(REG_F, 94, i);
             setRegBit(REG_F, 120, i);

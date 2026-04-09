@@ -41,7 +41,7 @@ static void block_cal_lookahead_vel(PLAN_BLOCK* current_block);
 
 // G指令执行流程：处理开始和暂停 → 计算插补距离 → 计算插补空间坐标
 void execute_gcode(){
-    double current_vel = var_chan[0][VAR_CHAN_ACT_FEEDRATE].value.f / TIME_MINUS_2_S;
+    double current_vel = var_chan[0][VAR_CHAN_CMD_FEEDRATE].value.f / TIME_MINUS_2_S;
     POS current_pos = {.x = var_axis[AXIS_X][VAR_AXIS_CMD_POS_EX].value.f, .y = var_axis[AXIS_Y][VAR_AXIS_CMD_POS_EX].value.f, .z = var_axis[AXIS_Z][VAR_AXIS_CMD_POS_EX].value.f};
     int velplan_mode = par_chan[0][PAR_CH_VPLAN_MODE].value.val_int;
     double ncu_cycle = (double)par_ncu[PAR_NCU_CYCLE].value.val_uint / TIME_US_2_S;
@@ -85,7 +85,6 @@ static void mem_set_state(){
             break;
 
         case SYS_EVENT_RESET:
-            // log_system("[mem] 记忆模式处理复位");
             LOG(LOG_LEVEL_INFO, "记忆模式处理复位");
             if(cycle_tp->mem_exec_state == EXEC_RUNNING){
                 cycle_tp->mem_exec_state = EXEC_PAUSING;
@@ -99,7 +98,6 @@ static void mem_set_state(){
             break;
         
         case SYS_EVENT_RERUN:
-            // log_system("[mem] 记忆模式处理自动运行");
             LOG(LOG_LEVEL_INFO, "记忆模式处理自动运行");
             if(IsEqualTo(var_chan[0][VAR_CHAN_FEED_OVERRIDE].value.f, 0)){
                 setAlarm(ALARM_SY, ALARM_WARNING, 3);
@@ -128,7 +126,6 @@ static void mem_set_state(){
             break;
 
         case SYS_EVENT_FEED_OVERRIDE:
-            // log_system("[mem] 记忆模式处理进给倍率切换");
             LOG(LOG_LEVEL_INFO, "记忆模式处理进给倍率切换");
             if(IsEqualTo(var_chan[0][VAR_CHAN_FEED_OVERRIDE].value.f, 0)){
                 setAlarm(ALARM_SY, ALARM_WARNING, 3);
@@ -145,7 +142,6 @@ static void mem_set_state(){
             break;
 
         case SYS_EVENT_RAPID_OVERRIDE:
-            // log_system("[mem] 记忆模式处理快速倍率切换");
             LOG(LOG_LEVEL_INFO, "记忆模式处理快速倍率切换 %f", var_chan[0][VAR_CHAN_RAPID_OVERRIDE].value.f);
             if(IsEqualTo(var_chan[0][VAR_CHAN_RAPID_OVERRIDE].value.f, 0)){
                 setAlarm(ALARM_SY, ALARM_WARNING, 2);
@@ -162,7 +158,6 @@ static void mem_set_state(){
             break;
         
         case SYS_EVENT_PAUSE:
-            // log_system("[mem] 记忆模式处理暂停");
             LOG(LOG_LEVEL_INFO, "记忆模式处理暂停");
             if(cycle_tp->mem_exec_state == EXEC_RUNNING){
                 cycle_tp->mem_exec_state = EXEC_PAUSING;
@@ -176,7 +171,6 @@ static void mem_set_state(){
         case SYS_EVENT_X_NEG_PRESS:
         case SYS_EVENT_Y_NEG_PRESS:
         case SYS_EVENT_Z_NEG_PRESS:
-            // log_system("[mem] 记忆模式不支持该操作");
             LOG(LOG_LEVEL_WARN, "记忆模式不支持该操作");
             break;
         
@@ -292,19 +286,19 @@ static bool mem_check_res(GNC_RES res){
         setVarChanInt(0, VAR_CHAN_PART_CNTR, var_chan[0][VAR_CHAN_PART_CNTR].value.i + 1, 0);
         LOG(LOG_LEVEL_INFO, "加工计数 %d", var_chan[0][VAR_CHAN_PART_CNTR].value.i);
         mem_handle_reset();
-        // log_system("[mem] 程序运行结束");
         LOG(LOG_LEVEL_INFO, "程序运行结束");
         return false;
 
     case VP_LENGTH_IS_ZERO:
-        if(var_chan[0][VAR_CHAN_IS_RESETTING].value.i){
-            mem_handle_reset();
-            return false;
-        }
-        if(cycle_tp->mem_exec_state == EXEC_PAUSING){
-            return false;
-        }
-        break;
+        // if(var_chan[0][VAR_CHAN_IS_RESETTING].value.i){
+        //     mem_handle_reset();
+        //     return false;
+        // }
+        // if(cycle_tp->mem_exec_state == EXEC_PAUSING){
+        //     return false;
+        // }
+        // break;
+        return false;
 
     case GNC_DATA_NULL:
     case GNC_PARAM_UNVALID:
@@ -313,7 +307,6 @@ static bool mem_check_res(GNC_RES res){
     case VP_FEED_RATE_IS_ZERO:
     case VP_LENGTH_UNVALID:
         mem_handle_estop();
-        // log_system("[mem] 记忆模式报警(%d)", res);
         LOG(LOG_LEVEL_ERR, "记忆模式报警 %d", res);
         setAlarm(ALARM_CH, ALARM_ERROR, 2);
         return false;
@@ -325,7 +318,6 @@ static bool mem_check_res(GNC_RES res){
     case VP_CAL_V_ERROR:
     default:
         mem_handle_estop();
-        // log_system("[mem] 记忆模式报警(%d)", res);
         LOG(LOG_LEVEL_ERR, "记忆模式报警 %d", res);
         setAlarm(ALARM_CH, ALARM_ERROR, 3);
         return false;
@@ -412,7 +404,8 @@ static GNC_RES cycle_tp_update_tp(VELPLAN_TYPE vplan_mode, double ncu_cycle, dou
     res = cycle_tp_update_block(vplan_mode, ncu_cycle, current_vel, current_pos);
     if(res != GNC_CAL_SUCCESS) return res;
     // 如果加工段允许最大速度为0（倍率为0）
-    if(IsEqualTo(cycle_tp->plan_block->max_vel, 0)) return VP_MAX_VEL_IS_ZERO; 
+    if(IsEqualTo(cycle_tp->plan_block->max_vel, 0)) return VP_MAX_VEL_IS_ZERO;
+    // todo：如果加速或减速的距离很小，当前速度 = 目标速度
     res = cycle_tp_update_vp(vplan_mode, ncu_cycle, current_vel, target_vel);
     if(res != GNC_CAL_SUCCESS) return res;
     return res;
@@ -426,7 +419,7 @@ static GNC_RES cycle_tp_update_params(VELPLAN_TYPE velplan_type, double cycle_ti
     cycle_tp->remain_distance = cycle_tp->plan_block->length - cycle_tp->accum_distance;
     cycle_tp->interp_cycle += 1;
     if(IsLessThan(cycle_tp->target_distance, 0)){
-        LOG(LOG_LEVEL_DEBUG, "cycle_tp->target_distance %f", cycle_tp->target_distance);
+        // LOG(LOG_LEVEL_DEBUG, "cycle_tp->target_distance %f", cycle_tp->target_distance);
         return VP_CAL_S_ERROR;
     }
     return GNC_CAL_SUCCESS;
@@ -459,9 +452,6 @@ static GNC_RES cycle_tp_update_block(VELPLAN_TYPE vplan_mode, double ncu_cycle, 
         // LOG(LOG_LEVEL_INFO, "更新当前插补段");
     }
     if(res == GNC_DATA_EMPTY) return GNC_DATA_EMPTY;
-    if(IsLessThan(current_vel, 0)) {
-        return VP_CAL_V_ERROR;
-    }
     if(cycle_tp_look_ahead(vplan_mode, ncu_cycle, current_vel) == GNC_DATA_EMPTY) return GNC_DATA_EMPTY;
     queue_copy_block(plan_queue, 0, cycle_tp->plan_block);
     // 对插补段终点进行行程限位检查
@@ -501,7 +491,7 @@ static GNC_RES plan_block_get_update(double current_vel, POS current_pos){
     setVarChanInt(0, VAR_CHAN_RUN_ROW, head_block->line_number, 0);
     if(IsLessThanOrEqual(head_block->length, MEM_END_TOL)) res = plan_block_get_next();
     return res;
-}
+}  
 
 static GNC_RES cycle_tp_cal_running(VELPLAN_TYPE vplan_mode, double ncu_cycle){
     GNC_RES res = VP_CAL_SUCCESS;
@@ -520,14 +510,18 @@ static GNC_RES cycle_tp_cal_pausing(VELPLAN_TYPE vplan_mode, double ncu_cycle, d
     double remain_s = cycle_tp->plan_block->length;
     double amax = cycle_tp->plan_block->max_acc;
     double jmax = cycle_tp->plan_block->max_jerk;
+    cycle_tp->interp_cycle = 1;
+    cycle_tp->accum_distance = 0;  
+    cycle_tp->remain_distance = cycle_tp->plan_block->length;
+    cycle_tp->current_distance = 0;
+    cycle_tp->target_distance = 0;
     // 计算减速距离
     double decline_s = vp_cal_decel_dist(vplan_mode, vs, ve, amax, jmax);
-    if(IsLessThanOrEqual(decline_s, 0)){
-        cycle_tp->interp_cycle = 1;
+    if(IsLessThanOrEqual(decline_s, 0)){ // 当减速距离非常小
         cycle_tp->vel_profile->t_cycle = 0;
         cycle_tp->traj_data->v = ve;
         cycle_tp->is_paused_inside_block = true;
-        LOG(LOG_LEVEL_DEBUG, "decline_s %f", decline_s);
+        // LOG(LOG_LEVEL_DEBUG, "decline_s %f", decline_s);
         return VP_LENGTH_IS_ZERO;
     }
     if (decline_s > remain_s){ // 在当前段无法减速到ve 
@@ -547,11 +541,6 @@ static GNC_RES cycle_tp_cal_pausing(VELPLAN_TYPE vplan_mode, double ncu_cycle, d
         // LOG(LOG_LEVEL_DEBUG, "vs %f ve %f length %f", vs, ve, cycle_tp->plan_block->length);
         res = vp_cal_vel_profile(vplan_mode, cycle_tp->plan_block, cycle_tp->vel_profile, ncu_cycle);
     }
-    cycle_tp->interp_cycle = 1;
-    cycle_tp->accum_distance = 0;  
-    cycle_tp->remain_distance = cycle_tp->plan_block->length;
-    cycle_tp->current_distance = 0;
-    cycle_tp->target_distance = 0;
     return res;
 }
 
@@ -562,7 +551,10 @@ static bool cycle_block_is_arrived(POS current_pos){
     if((fabs(head_block->end_pos.y - current_pos.y)) > MEM_END_TOL) return false;
     if((fabs(head_block->end_pos.z - current_pos.z)) > MEM_END_TOL) return false;
     // 如果是到位检测模组，发送到位信号
-    if(head_block->mode == PMC_MODE_ARRIVE_CHECK) rt_set_chan_state(0, CHAN_IS_MODE_ARRIVE, true);
+    if(head_block->mode == PMC_MODE_ARRIVE_CHECK){
+        rt_set_chan_state(0, CHAN_IS_MODE_ARRIVE, true);
+        // todo：G27返回参考点检测信号的控制时序
+    }
     if(head_block->mode == PMC_MODE_EXACT_STOP) rt_set_chan_state(0, CHAN_IS_EXACT_STOP, true);
     return true;
 }

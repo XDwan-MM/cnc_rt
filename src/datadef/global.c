@@ -21,16 +21,19 @@ TxEntry_Unit DI0[MAX_IO_MODULES];
 TxEntry_Unit DI1[MAX_IO_MODULES];
 RxEntry_Unit DO0[MAX_IO_MODULES];
 RxEntry_Unit DO1[MAX_IO_MODULES];
+
 TxEntry_Unit StatusWord[MAX_DRIVERS];      // 状态字
-RxEntry_Unit OperationMode[MAX_DRIVERS];   // 操作模式
 TxEntry_Unit CurPos[MAX_DRIVERS];          // 当前位置
 TxEntry_Unit CurVel[MAX_DRIVERS];          // 当前速度
 TxEntry_Unit CurTor[MAX_DRIVERS];          // 当前转矩
+TxEntry_Unit ErrorNumb[MAX_DRIVERS];       // 报警码
+
 RxEntry_Unit ControlWord[MAX_DRIVERS];     // 控制字
 RxEntry_Unit PurPos[MAX_DRIVERS];          // 目标位置
 RxEntry_Unit PurVel[MAX_DRIVERS];          // 目标速度
 RxEntry_Unit PurTor[MAX_DRIVERS];          // 目标转矩
-RxEntry_Unit ErrorNumb[MAX_DRIVERS];       // 报警码
+RxEntry_Unit OperationMode[MAX_DRIVERS];   // 操作模式
+
 TxEntry_Unit MCPDI[11];
 RxEntry_Unit MCPDO[7];
 

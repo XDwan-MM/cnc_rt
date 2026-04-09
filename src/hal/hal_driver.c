@@ -14,17 +14,11 @@ static uint16_t id_x = 1;
 static uint16_t id_y = 2;
 static uint16_t id_z = 3;
 
+driver_manager dri_manager;
 hal_driver_t spindle;
 hal_driver_t x_axis_driver;
 hal_driver_t y_axis_driver;
 hal_driver_t z_axis_driver;
-
-// 全局驱动器管理器
-static struct {
-    hal_driver_t* drivers[MAX_DRIVERS];
-    uint8_t count;
-    bool initialized;
-} driver_manager;
 
 
 // 初始化驱动器管理器
@@ -32,44 +26,44 @@ hal_retcode_t Hal_Driver_Manager_Init(void)
 {
     for (int i = 0; i < MAX_DRIVERS; i++)
     {
-        driver_manager.drivers[i] = NULL;
+        dri_manager.drivers[i] = NULL;
     }
-    driver_manager.count = 0;
-    driver_manager.initialized = true;
+    dri_manager.count = 0;
+    dri_manager.initialized = true;
     return HAL_DRIVER_SUCCESS;
 }
 // 注册驱动器到管理器
 hal_retcode_t Hal_Driver_Register(hal_driver_t* drv)
 {
-    if (!driver_manager.initialized || drv == NULL)
+    if (!dri_manager.initialized || drv == NULL)
     {
         return HAL_DRIVER_ERR_INVALID_PARAM;
     }
 
-    if (driver_manager.count >= MAX_DRIVERS)
+    if (dri_manager.count >= MAX_DRIVERS)
     {
         return HAL_DRIVER_ERR_MAX_NUMB_OVER;
     }
 
     // 检查是否已注册
-    for (int i = 0; i < driver_manager.count; i++)
+    for (int i = 0; i < dri_manager.count; i++)
     {
-        if (driver_manager.drivers[i] == drv)
+        if (dri_manager.drivers[i] == drv)
         {
             return HAL_DRIVER_SUCCESS;
         }
     }
 
     // 注册新驱动器
-    driver_manager.drivers[driver_manager.count] = drv;
-    driver_manager.count++;
+    dri_manager.drivers[dri_manager.count] = drv;
+    dri_manager.count++;
     return HAL_DRIVER_SUCCESS;
 }
 
 // 获取已注册的驱动器数量
 uint8_t Hal_Driver_Get_Count(void)
 {
-    return driver_manager.count;
+    return dri_manager.count;
 }
 
 // 初始化驱动器
@@ -198,14 +192,14 @@ hal_retcode_t Hal_Driver_Update(hal_driver_t* drv, bool read, bool write)
 // 更新所有已注册的驱动器
 hal_retcode_t Hal_Driver_Update_All(bool read, bool write)
 {
-    if (!driver_manager.initialized)
+    if (!dri_manager.initialized)
     {
         return HAL_DRIVER_ERROR;
     }
     hal_retcode_t result = HAL_DRIVER_SUCCESS;
-    for (int i = 0; i < driver_manager.count; i++)
+    for (int i = 0; i < dri_manager.count; i++)
     {
-        hal_driver_t* drv = driver_manager.drivers[i];
+        hal_driver_t* drv = dri_manager.drivers[i];
         if (drv != NULL)
         {
             result = Hal_Driver_Update(drv, read, write);
