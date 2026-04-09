@@ -13,6 +13,8 @@ extern void ItpSetContent(const char *content, int startLine = 0);
 
 extern void ItpSetOriginMacPos(double x, double y, double z, double a);
 
+extern void ItpSetBlockSkipEnable(bool enable);     // 设置跳行
+
 extern void ItpNextLine();
 
 extern bool ItpIsOver();
