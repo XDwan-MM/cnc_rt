@@ -13,7 +13,7 @@
 
 // todo：配置两个测试平台的宏定义，在此处选择
 // 如果为测试平台2，请注释该定义（靠墙机器）
-// #define PLATFORM_1 
+#define PLATFORM_1
 
 // ===============错误检查宏=================
 #define CHECK_RC(rc,info,label) \
@@ -128,7 +128,6 @@ void Master_Run()
         CHECK_FUNC(GM_RxPdoEntry_Get_By_Pos(&ControlWord[i], slave_list, i + drivers_slave_bias, 0, 0));     // 获取控制字entry信息
         CHECK_FUNC(GM_RxPdoEntry_Get_By_Pos(&OperationMode[i], slave_list, i + drivers_slave_bias, 1, 1));   // 获取操作模式entry信息
         CHECK_FUNC(GM_RxPdoEntry_Get_By_Pos(&PurPos[i], slave_list, i + drivers_slave_bias, 0, 1));
-        CHECK_FUNC(GM_RxPdoEntry_Get_By_Pos(&ErrorNumb[i], slave_list, i + drivers_slave_bias, 2, 0));
 
         CHECK_FUNC(GM_TxPdoEntry_Get_By_Pos(&StatusWord[i], slave_list, i + drivers_slave_bias, 0, 0));      // 获取状态字entry信息
         CHECK_FUNC(GM_TxPdoEntry_Get_By_Pos(&CurPos[i], slave_list, i + drivers_slave_bias, 0, 1));          // 获取当前位置entry信息
@@ -172,6 +171,8 @@ void Master_Run()
         sem_post(&motion_sem);
         sem_post(&path_plan_sem);
         sem_wait(&moton_sem_exec_done);
+        op_flag = 1;
+
 
         //复位清除驱动器报警
         if(reset_sem)
@@ -231,8 +232,7 @@ void Master_Run()
             }
         }
         //主轴上电
-        if(!sp_start_sem)
-        {
+        if(spindle.mode != DRV_MODE_DISABLED)        {
             CHECK_FUNC(GM_TxPdoEntry_Read(StatusWord[0], &statis[0] , 2));// 获取状态字
             //根据状态字设置控制字
             if(((statis[0] & 0x4f) == 0x40))
@@ -254,29 +254,26 @@ void Master_Run()
                 spindle.state = DRV_STATE_SWITCHED_ON;
                 CHECK_FUNC(GM_RxPdoEntry_Write(ControlWord[0], 0x0f));
             }
-            else if((statis[0] & 0x27f) == 0x237 && (spindle.state = DRV_STATE_SWITCHED_ON))
+            else if((statis[0] & 0x27f) == 0x237 && (spindle.state == DRV_STATE_SWITCHED_ON))
             {
                 spindle.state = DRV_STATE_OPERATION_ENABLED;
                 CHECK_FUNC(GM_RxPdoEntry_Write(ControlWord[0], 0x1f));
-                sp_start_sem = 1;
-            }
-            if(spindle.state != DRV_STATE_SWITCHED_ON)
-            {
-                sp_start_sem = 0;
+                sp_start_sem = true;
             }
         }
-        if(spindle.mode == DRV_MODE_DISABLED)
+        else
         {
             if(spindle.state != DRV_STATE_NOT_READY)
             {
                 CHECK_FUNC(GM_RxPdoEntry_Write(ControlWord[0], 0x00));
+                sp_start_sem = false;
             }
         }
 
         //读取驱动器警报
         for (int i = 0; i < 4; i++)
         {
-            CHECK_FUNC(GM_TxPdoEntry_Read(StatusWord[i], &error_code[i] , 2));// 获取状态字
+            CHECK_FUNC(GM_TxPdoEntry_Read(ErrorNumb[i], &error_code[i] , 2));// 获取状态字
             if(error_code[i] != 0)
             {
                 dri_manager.drivers[i]->state = DRV_STATE_FAULT;
