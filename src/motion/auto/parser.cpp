@@ -137,7 +137,7 @@ STATIC GNC_RES parser_handle_gcode(pmc_data* motion_data, NcItpState *itp_state,
     gcode_block.pos.x = motion_data->position.x;
     gcode_block.pos.y = motion_data->position.y;
     gcode_block.pos.z = motion_data->position.z;
-    LOG(LOG_LEVEL_DEBUG,  "pos %f %f %f", motion_data->position.x, motion_data->position.y, motion_data->position.z);
+    // LOG(LOG_LEVEL_DEBUG,  "pos %f %f %f", motion_data->position.x, motion_data->position.y, motion_data->position.z);
     // 模态
     gcode_block.state = *itp_state;
     // 模组

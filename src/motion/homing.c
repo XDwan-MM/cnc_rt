@@ -209,7 +209,7 @@ static double abs_homing_tp_pinc(AXIS_TYPE axis_type){
                 // 检查是否回零
                 if(abs_homing_is_axis_homed(axis_type)){
                     homing_tp[axis_type].homing_state = ABS_EXEC_IDLE;
-                    setVarAxisInt(0, VAR_AXIS_IS_HOMEF, 1, 0);
+                    setVarAxisInt(axis_type, VAR_AXIS_IS_HOMEF, 1, 0);
                     LOG(LOG_LEVEL_INFO, "轴%d完成回零", axis_type);
                     break;
                 }

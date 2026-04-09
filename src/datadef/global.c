@@ -215,25 +215,21 @@ GNC_RES shm_var_update(){
         getVarAxisDouble(i, VAR_AXIS_REAL_ZERO_EX, &real_zero, 0);
         double real = var_axis[i][VAR_AXIS_ACT_POS_EX].value.f - real_zero;
         setVarAxisDouble(i, VAR_AXIS_ACT_POS_RCS_EX, real, 0);
+        // 判断各轴零点
+        if(fabs(par_axis[i][PAR_AX_HOME_CRDS].value.val_real - var_axis[i][VAR_AXIS_CMD_POS_EX].value.f) > HOMEF_TOL){
+            setVarAxisInt(i, VAR_AXIS_IS_HOMEF, 0, 0);
+        }
     }
     for (int i = 0; i < SYS_CHAN_NUM; i++)
     {
         // 运行模式
         setVarChanInt(0, VAR_CHAN_MODE, rt_data->current_mode, 0);
         // 主轴转速
-//        setVarChanDouble(i, VAR_CHAN_S_CODE, var_chan[i][VAR_CHAN_CMD_SPDL_SPEED].value.f, 0);
-//        setVarChanDouble(i, VAR_CHAN_CMD_SPDL_SPEED, var_chan[i][VAR_CHAN_CMD_SPDL_SPEED].value.f, 0);
         setVarChanDouble(i, VAR_CHAN_ACT_SPDL_SPEED, var_chan[i][VAR_CHAN_ACT_SPDL_SPEED].value.f, 0);
         // 通道速度等参数
         setVarChanDouble(i, VAR_CHAN_ACT_FEEDRATE, var_chan[i][VAR_CHAN_CMD_FEEDRATE].value.f, 0);
         rt_data->chan_data[i].act_acc = rt_data->chan_data[i].cmd_acc;
         rt_data->chan_data[i].act_jk = rt_data->chan_data[i].cmd_jk;
-    }
-    // 判断各轴零点
-    for (int i = 0; i < var_sys[VAR_SYS_CHAN_NUM].value.i; i++){
-        if(fabs(par_axis[i][PAR_AX_HOME_CRDS].value.val_real - var_axis[i][VAR_AXIS_CMD_POS_EX].value.f) > HOMEF_TOL){
-            setVarAxisInt(0, VAR_AXIS_IS_HOMEF, 0, 0);
-        }
     }
 }
 
