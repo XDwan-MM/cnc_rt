@@ -75,8 +75,8 @@ void execute_gcode(){
 }
 
 static void mem_set_state(){
-    // 处理报警，减速停止
-    if(rt_data->sys_state[SYS_IS_ALARMING]){
+    // 报警或切换模式，减速停止
+    if(rt_data->sys_state[SYS_IS_ALARMING] || rt_data->sys_state[SYS_IS_SWITCHING_MODE]){
         mem_handle_alarm();
         return;
     }
@@ -290,14 +290,6 @@ static bool mem_check_res(GNC_RES res){
         return false;
 
     case VP_LENGTH_IS_ZERO:
-        // if(var_chan[0][VAR_CHAN_IS_RESETTING].value.i){
-        //     mem_handle_reset();
-        //     return false;
-        // }
-        // if(cycle_tp->mem_exec_state == EXEC_PAUSING){
-        //     return false;
-        // }
-        // break;
         return false;
 
     case GNC_DATA_NULL:
@@ -355,7 +347,6 @@ static void mem_handle_alarm(){
         }else if(cycle_tp->mem_exec_state == EXEC_PAUSING){
             setVarChanInt(0, VAR_CHAN_IS_RESETTING, 1, 0);
         }
-        LOG(LOG_LEVEL_WARN, "自动下报警，开始制动");
     }
     rt_set_chan_state(0, CHAN_IS_PARSER_RESET, true);
 }

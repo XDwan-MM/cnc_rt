@@ -124,6 +124,7 @@ static void set_operating_mode() {
         rt_data->sys_state[SYS_IS_SWITCHING_MODE] = false;
         return;
     }
+    rt_data->sys_state[SYS_IS_SWITCHING_MODE] = true;
     // 根据切换的加工模式和当前加工模式，判断是否可以切换
     switch (rt_data->current_mode) {
         case MODE_IDLE:
@@ -166,34 +167,16 @@ static void set_operating_mode() {
                 rt_data->current_mode = rt_data->target_mode;
                 rt_data->sys_state[SYS_IS_SWITCHING_MODE] = false;
                 LOG(LOG_LEVEL_INFO, "系统模式切换为 %s", mode_names[rt_data->current_mode]);
-                break;
-            }else{
-                // 回零中切换模式不能生效
-                rt_data->target_mode = rt_data->current_mode;
-                setAlarm(ALARM_SY, ALARM_WARNING, 0);
-                LOG(LOG_LEVEL_WARN, "回零中不能切换模式，请先按复位后切换");
-                break;
             }
-            rt_data->sys_state[SYS_IS_SWITCHING_MODE] = true;
             break;
-
         case MODE_MDI:
         case MODE_MEM:
         case MODE_DNC:
-            // 除了插补G指令，需判断其他G和M指令是否完成，才能切换模式
-            if (!var_chan[0][VAR_CHAN_IS_RUNNING].value.i) {
+            if(!var_chan[0][VAR_CHAN_IS_RUNNING].value.i){
                 rt_data->current_mode = rt_data->target_mode;
                 rt_data->sys_state[SYS_IS_SWITCHING_MODE] = false;
                 LOG(LOG_LEVEL_INFO, "系统模式切换为 %s", mode_names[rt_data->current_mode]);
-                break;
-            } else{
-                // 加工下切换模式不能生效
-                rt_data->target_mode = rt_data->current_mode;
-                setAlarm(ALARM_SY, ALARM_WARNING, 1);
-                LOG(LOG_LEVEL_WARN, "自动加工下不能切换模式，请先按复位后切换");
-                break;
             }
-            rt_data->sys_state[SYS_IS_SWITCHING_MODE] = true;
             break;
         default:
             break;
