@@ -1,19 +1,22 @@
 #ifndef PMC_IO_MAP_H
 #define PMC_IO_MAP_H
 
+#include "regdata.h"
+
 /**
  * @brief CNC 运行模式枚举
  * 映射逻辑：基于 MD1(bit0), MD2(bit1), MD4(bit2), DNCI(bit5), ZRN(bit7) 的组合
  */
 typedef enum {
-    CNC_MODE_EDIT = 0,    /**< 编辑 (MD1=0, MD2=0, MD4=0) */
-    CNC_MODE_MEM  = 1,    /**< 存储器 (MD1=1, MD2=0, MD4=0) */
-    CNC_MODE_MDI  = 2,    /**< MDI (MD1=0, MD2=1, MD4=0) */
-    CNC_MODE_JOG  = 3,    /**< JOG (MD1=1, MD2=1, MD4=0) */
-    CNC_MODE_MPG  = 4,    /**< 手轮 (MD1=0, MD2=0, MD4=1) */
-    CNC_MODE_ZRN  = 5,    /**< 回零 (ZRN=1) */
-    CNC_MODE_DNC  = 6,    /**< DNC运行 (DNCI=1) */
-    CNC_MODE_INVALID = 7  /**< 无效模式 */
+    CNC_MODE_INVALID = 0,  /**< 无效模式 */
+    CNC_MODE_EDIT = 1,    /**< 编辑 */
+    CNC_MODE_MEM  = 2,    /**< 存储器 */
+    CNC_MODE_MDI  = 3,    /**< MDI */
+    CNC_MODE_JOG  = 4,    /**< JOG */
+    CNC_MODE_MPG  = 5,    /**< 手轮 */
+    CNC_MODE_ZRN  = 6,    /**< 回零 */
+    CNC_MODE_DNC  = 7,    /**< DNC运行 */
+    CNC_MODE_RAPID = 8,   /**< RAPID */
 } CNC_MODE_INDEX;
 
 /**
@@ -25,10 +28,9 @@ typedef enum {
     EV_MSG_MODE,        /**< 模式切换 (参数1: 模式索引) */
     EV_MSG_FEEDAXIS_KEY,/**< 进给轴按键事件 (参数1: 轴号, 参数2: 方向) */
     EV_MSG_SPINDLE,     /**< 主轴控制 (参数1: 方向) */
-    EV_MSG_OVERRIDE,    /**< 倍率调节 (参数1: 类型, 参数2: 数值) */
+    EV_MSG_OVERRIDE,    /**< 倍率调节 (参数1: 倍率类型, 参数2: 数值) */
     EV_MSG_AUTO_RUN,    /**< 运行控制 (参数1: 启动/中止) */
     EV_MSG_RESET,       /**< 系统复位 */
-    EV_MSG_ESP,         /**< 紧急停止 (参数1: 拍下/拉起) */
 } PMC_EVENT_ID;
 
 // 各个PMC事件对应的参数结构体定义（子结构体）, 六种事件类型对应六个参数结构体
@@ -64,11 +66,6 @@ typedef struct {
     int reset_state;
 } EV_MSG_RESET_PAYLOAD;
 
-/* 7、*/
-typedef struct {
-    int esp_state;
-} EV_MSG_ESP_PAYLOAD;
-
 /**
  * @brief CNC 事件通用结构
  * 用于在内存中统一事件格式，方便解析
@@ -82,26 +79,29 @@ typedef struct {
         EV_MSG_OVERRIDE_PAYLOAD override_payload;
         EV_MSG_AUTO_RUN_PAYLOAD run_payload;
         EV_MSG_RESET_PAYLOAD reset_payload;
-        EV_MSG_ESP_PAYLOAD esp_payload;
     };
 } PMC_EVENT;
 
 #pragma pack(push, 1)
 /**
  * @brief G 变量本地快照映射
- * 严格对应 regdata.h 中的 regG 寄存器偏移
+ * 采用数组方式管理。
+ * g_regs 明确指代 PMC 中的 G 寄存器数据 (PMC -> CNC)。
+ * 索引值即为 G 寄存器的偏移量，例如 g_regs[12] 对应 G0012。
+ * REG_G_NUM: 共享内存支持的最大G寄存器索引大小
  */
 typedef struct {
-    char G0007; /**< 循环启动信号 */
-    char G0008; /**< 中止与复位信号 */
-    char G0012; /**< 进给倍率 */
-    char G0014; /**< 快速倍率 */
-    char G0029; /**< 主轴停止 */
-    char G0030; /**< 主轴倍率 */
-    char G0043; /**< 模式选择 */ /**< 模式控制字节: bit0:MD1, bit1:MD2, bit2:MD4, bit5:DNCI, bit7:ZRN */
-    char G0070; /**< 主轴方向控制 */
-    char G0100; /**< 正向轴选 (JOG+) */
-    char G0102; /**< 负向轴选 (JOG-) */
+    char g_regs[REG_G_NUM];
+    // char G0007; /**< 循环启动信号 */
+    // char G0008; /**< 中止与复位信号 */
+    // char G0012; /**< 进给倍率 */
+    // char G0014; /**< 快速倍率 */
+    // char G0029; /**< 主轴停止 */
+    // char G0030; /**< 主轴倍率 */
+    // char G0043; /**< 模式选择 */ /**< 模式控制字节: bit0:MD1, bit1:MD2, bit2:MD4, bit5:DNCI, bit7:ZRN */
+    // char G0070; /**< 主轴方向控制 */
+    // char G0100; /**< 正向轴选 (JOG+) */
+    // char G0102; /**< 负向轴选 (JOG-) */
 } G_INPUT_MAP;
 #pragma pack(pop)
 

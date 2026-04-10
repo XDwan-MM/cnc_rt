@@ -622,6 +622,18 @@ static void DEC_run(int NO)
     }
 }
 
+static void NEG_run(int NO)
+{
+    long a,b;
+    if((ST&0x1) ==0x1)
+    {
+        a=get_para_reg(NO);
+        b=~a;
+        set_para_reg(NO,b);
+    }
+}
+
+
 static void F_signal() {
     for (int i = 0; i < 128; ++i) {
         char value;
@@ -871,6 +883,7 @@ static void plc_run_init() {
 //    array[OP_WAND] = WAND_run;
 //    array[OP_WOR] = WOR_run;
 //    array[OP_WXOR] = WXOR_run;
+   array[OP_NEG] = NEG_run;
 //    array[OP_SHL] = SHL_run;
 //    array[OP_SHR] = SHR_run;
 //    array[OP_ROL] = ROL_run;

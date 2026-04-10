@@ -5,6 +5,25 @@
 #include "signal_utils.h" /**< 边沿检测宏定义 */
 #include <string.h>
 
+/**
+ * @brief 寄存器自动扫描注册表
+ * * 作用：
+ * 1. 集中管理所有需要从共享内存抓取到本地快照的 G 寄存器地址。
+ * 2. 只有在此数组中注册过的索引，其对应的 g_regs[i] 才会包含有效的 共享内存G寄存器 数据。
+ * 3. 以后若想增加 G19 或 G32，只需在此数组末尾添加数字 19, 32 即可，无需改动获取数据的函数。
+ */
+static const int SCAN_G_REGS[] =
+    {
+        4, 5, 6, 7, 8, 12, 14, 19, 29, 30, 32, 43, 44, 45, 61, 62, 70, 100, 102, 130, 132, 134 /* 已有信号的地址 */
+                                                                                       /* <--- 您想新增的信号地址 */
+};
+
+/** 计算注册表中元素的个数，用于驱动循环扫描 */
+#define SCAN_G_REGS_COUNT (sizeof(SCAN_G_REGS) / sizeof(SCAN_G_REGS[0]))
+
+static G_INPUT_MAP
+    last_g; /**< 上一周期快照（是指任务控制器线程，上一周期的快照） */
+
 /* ==========================================================================
  * 1. 内部函数声明 (Private Prototypes)
  * ========================================================================== */
@@ -19,63 +38,81 @@ static void pmc_dispatch_event(PMC_EVENT_ID id, int p1, int p2);
  * @brief 模式解析逻辑实现
  * 涉及 MD1, MD2, MD4 (bit 0,1,2), DNCI (bit 5), ZRN (bit 7)
  */
-static void process_mode_selection(char g43);
+static void process_mode_selection(char g43, char g19);
 
 /* ==========================================================================
  * 2. 外部函数定义 (Public Definitions)
  * ========================================================================== */
 
-static G_INPUT_MAP
-    last_g; /**< 上一周期快照（是指任务控制器线程，上一周期的快照） */
-
 /**
  * @brief 周期性扫描任务
  * 建议 1ms 周期调用。内部完成：拉取寄存器 -> 逻辑判断 -> 推送队列
  */
-void pmc_input_scan_cycle(void)
+void pmc_g_input_scan_cycle(void)
 {
     if (event_queue == NULL)
         return;
 
     G_INPUT_MAP curr_g;
-    /* 1. 抓取寄存器快照 */
+    memset(&curr_g, 0, sizeof(G_INPUT_MAP)); /* 初始化清零，防止脏数据 */
+    /* step1. 抓取寄存器快照 */
     pmc_input_fetch_snapshot(&curr_g);
 
-    /* 2. 模式检测：调用内部解析函数处理复合位 (MD1, MD2, MD4, DNCI, ZRN),
-     * 输出模式 */
-    if (curr_g.G0043 != last_g.G0043)
+    /* step2. G信号检测 */
+
+    /* G8.4紧急停止检测 (下降沿或常开逻辑触发)  G08.4 = 0急停拍下，G08.4 = 1急停拉起 */
+    // 急停不推入事件队列，直接响应，防止事件堆积不能及时处理急停，造成隐患。
+    // 检测急停按下 1->0（下降沿，如果常开逻辑触发会造成事件堆积。）
+    if (SIGNAL_FALLING(curr_g.g_regs[8], last_g.g_regs[8], 4))
     {
-        process_mode_selection(curr_g.G0043);
+        // 急停拍下
+        rt_data->sys_state[SYS_IS_ESTOP_ON] = true;
+        LOG(LOG_LEVEL_INFO, "扫描到急停: 拍下");
+        // pmc_dispatch_event(EV_MSG_ESP, 1, 0);
+    }
+    // 检测急停释放 0->1（上升沿）
+    if (SIGNAL_RISING(curr_g.g_regs[8], last_g.g_regs[8], 4))
+    {
+        // 急停释放
+        rt_data->sys_state[SYS_IS_ESTOP_ON] = false;
+        LOG(LOG_LEVEL_INFO, "扫描到急停: 释放");
+        // pmc_dispatch_event(EV_MSG_ESP, 0, 0);
+    }
+    /* G43模式检测：调用内部解析函数处理复合位 (MD1, MD2, MD4, DNCI, ZRN), * 输出模式 */
+    if (SIGNAL_BYTE_CHANGED(curr_g.g_regs[43], last_g.g_regs[43]) ||
+        SIGNAL_BIT_CHANGED(curr_g.g_regs[19], last_g.g_regs[19], 7))
+    {
+        process_mode_selection(curr_g.g_regs[43], curr_g.g_regs[19]);
     }
 
-    /* 3. 进给轴按键检测 (G100/G102) - 支持多轴同时扫描 */
+    /* (G100/G102)进给轴按键检测  - 支持多轴同时扫描 */
     for (int i = 0; i < 3; i++)
     {
-        /* 正向轴选按键检测 */
+        /* G100 正向轴选按键检测 */
         // 检测按下(上升沿)
-        if (SIGNAL_RISING(curr_g.G0100, last_g.G0100, i))
+        if (SIGNAL_RISING(curr_g.g_regs[100], last_g.g_regs[100], i))
         {
             // i = 0, 1, 2  对应这个G100变量的第0, 1,
             // 2位。SIGNAL_RISING()为真时，发生上升沿，表示对应进给轴按钮被按下。
             pmc_dispatch_event(EV_MSG_FEEDAXIS_KEY, i, 1);
         }
         // 检测释放(下降沿)
-        if (SIGNAL_FALLING(curr_g.G0100, last_g.G0100, i))
+        if (SIGNAL_FALLING(curr_g.g_regs[100], last_g.g_regs[100], i))
         {
             // i = 0, 1, 2  对应这个G100变量的第0, 1,
             // 2位。SIGNAL_FALLING()为真时，发生下降沿，表示对应进给轴按钮被释放。
             pmc_dispatch_event(EV_MSG_FEEDAXIS_KEY, i, 0);
         }
-        /* 负向轴选按键检测 */
+        /* G102 负向轴选按键检测 */
         // 检测按下(上升沿)
-        if (SIGNAL_RISING(curr_g.G0102, last_g.G0102, i))
+        if (SIGNAL_RISING(curr_g.g_regs[102], last_g.g_regs[102], i))
         {
-            // i = 0, 1, 2  对应这个G102变量的第0, 1,
-            // 2位。SIGNAL_RISING()为真时，发生上升沿，表示对应进给轴按钮被按下。
+            // i = 0, 1, 2  对应这个G102变量的第0, 1, 2位。
+            // SIGNAL_RISING()为真时，发生上升沿，表示对应进给轴按钮被按下。
             pmc_dispatch_event(EV_MSG_FEEDAXIS_KEY, i, -1);
         }
         // 检测释放(下降沿)
-        if (SIGNAL_FALLING(curr_g.G0102, last_g.G0102, i))
+        if (SIGNAL_FALLING(curr_g.g_regs[102], last_g.g_regs[102], i))
         {
             // i = 0, 1, 2  对应这个G102变量的第0, 1,
             // 2位。SIGNAL_FALLING()为真时，发生下降沿，表示对应进给轴按钮被释放。
@@ -83,45 +120,45 @@ void pmc_input_scan_cycle(void)
         }
     }
 
-    /* 4. 倍率检测 (G12/G14) */
+    /* (G12/G14) 倍率检测 */
     // 进给倍率变化检测G12
-    if (curr_g.G0012 != last_g.G0012)
+    if (SIGNAL_BYTE_CHANGED(curr_g.g_regs[12], last_g.g_regs[12]))
     {
-        // // 1、共享内存有符号版本代码逻辑
-        // int feed_override = 0;
+        // 1、共享内存有符号版本代码逻辑
+        int feed_override = 0;
 
-        // /* 核心修正：强制转换为无符号字节，避免符号位干扰位运算 */
-        // unsigned char raw_val = (unsigned char)curr_g.G0012;
+        /* 核心修正：强制转换为无符号字节，避免符号位干扰位运算 */
+        unsigned char raw_val = (unsigned char)curr_g.g_regs[12];
 
-        // /* * 倍率值 = (2^i * Vi)累加 [%]，i从0到7。
-        //  * 根据文档原理：FVi为'1'时 Vi=0；FVi为'0'时 Vi=1。FVi对应G12变量中的第i位。
-        //  * 这在逻辑上等同于对这 8 个位进行按位取反。
-        //  */
-        // unsigned char inverted_val = (unsigned char)(~raw_val);
+        /* * 倍率值 = (2^i * Vi)累加 [%]，i从0到7。
+         * 根据文档原理：FVi为'1'时 Vi=0；FVi为'0'时 Vi=1。FVi对应G12变量中的第i位。
+         * 这在逻辑上等同于对这 8 个位进行按位取反。
+         */
+        unsigned char inverted_val = (unsigned char)(~raw_val);
 
-        // /* * 特殊逻辑判断:
-        //  * 1. 所有信号为 '0' (0x00) 时，视为 0%。
-        //  * 2. 所有信号为 '1' (0xFF) 时，取反后为 0，自然也是 0%。
-        //  */
-        // if (raw_val == 0x00 || raw_val == 0xFF)
-        // {
-        //     feed_override = 0;
-        // }
-        // else
-        // {
-        //     /* * 此时 inverted_val 的数值直接对应 1%~254% 的倍率。
-        //      * 例如：若信号为 0b11111010 (0xFA)，取反后为 0b00000101 (5)，即 5%。
-        //      */
-        //     feed_override = (int)inverted_val;
-        // }
-        // /* p1=0 代表进给倍率类型 (EV_MSG_OVERRIDE) */
-        // pmc_dispatch_event(EV_MSG_OVERRIDE, 0, feed_override);
+        /* * 特殊逻辑判断:
+         * 1. 所有信号为 '0' (0x00) 时，视为 0%。
+         * 2. 所有信号为 '1' (0xFF) 时，取反后为 0，自然也是 0%。
+         */
+        if (raw_val == 0x00 || raw_val == 0xFF)
+        {
+            feed_override = 0;
+        }
+        else
+        {
+            /* * 此时 inverted_val 的数值直接对应 1%~254% 的倍率。
+             * 例如：若信号为 0b11111010 (0xFA)，取反后为 0b00000101 (5)，即 5%。
+             */
+            feed_override = (int)inverted_val;
+        }
+        /* p1=0 代表进给倍率类型 (EV_MSG_OVERRIDE) */
+        pmc_dispatch_event(EV_MSG_OVERRIDE, 0, feed_override);
 
-        // 2、共享内存无符号版本的代码逻辑
-        pmc_dispatch_event(EV_MSG_OVERRIDE, 0, (int)curr_g.G0012);
+        // // 2、共享内存无符号版本的代码逻辑
+        // pmc_dispatch_event(EV_MSG_OVERRIDE, 0, (int)curr_g.g_regs[12]);
     }
     // 快速进给倍率检测G14
-    if ((curr_g.G0014 & 0x03) != (last_g.G0014 & 0x03))
+    if ((curr_g.g_regs[14] & 0x03) != (last_g.g_regs[14] & 0x03))
     {
         int rapid_lut[] = {100, 50, 25, 0}; /* 映射到实际百分比 */
         // curr_g.G0014 & 0x03 取低两位，G14.1 G14.0组合确定快速倍率
@@ -129,66 +166,80 @@ void pmc_input_scan_cycle(void)
         // G14.1 = 0, G14.0 = 1；50%   (curr_g.G0014 & 0x03) == 1
         // G14.1 = 1, G14.0 = 0；25%   (curr_g.G0014 & 0x03) == 2
         // G14.1 = 1, G14.0 = 1；0%    (curr_g.G0014 & 0x03) == 3  NOTE：暂定20260313
-        pmc_dispatch_event(EV_MSG_OVERRIDE, 1, rapid_lut[curr_g.G0014 & 0x03]);
+        pmc_dispatch_event(EV_MSG_OVERRIDE, 1, rapid_lut[curr_g.g_regs[14] & 0x03]);
     }
     // 主轴倍率检测G30
-    if (curr_g.G0030 != last_g.G0030)
+    if (SIGNAL_BYTE_CHANGED(curr_g.g_regs[30], last_g.g_regs[30]))
     {
         /* p1=2 代表主轴倍率类型 */
-        pmc_dispatch_event(EV_MSG_OVERRIDE, 2, (int)curr_g.G0030);
+        pmc_dispatch_event(EV_MSG_OVERRIDE, 2, (int)curr_g.g_regs[30]);
     }
 
-    /* 5. 自动运行控制 (G7.2 启动, G8.5 中止, G8.7 复位) */
+    /* 自动运行控制 (G7.2 启动, G8.5 中止, G8.7 复位) */
     // 启动检测 (G7.2 上升沿 【暂定上升沿触发】)
-    if (SIGNAL_RISING(curr_g.G0007, last_g.G0007, 2))
+    if (SIGNAL_RISING(curr_g.g_regs[7], last_g.g_regs[7], 2))
     {
         // G7.2 产生上升沿，开始自动运行
         pmc_dispatch_event(EV_MSG_AUTO_RUN, 1, 0);
     }
     // 中止检测 (G8.5 上升沿 中止，发送暂停事件；为0时，继续运行))
-    if (SIGNAL_RISING(curr_g.G0008, last_g.G0008, 5))
+    if (SIGNAL_RISING(curr_g.g_regs[8], last_g.g_regs[8], 5))
     {
         pmc_dispatch_event(EV_MSG_AUTO_RUN, 0, 0);
     }
 
-    /* 6. 复位 (G8.7 复位 上升沿触发) */
+    /* 复位 (G8.7 复位 上升沿触发) */
     // 复位检测 (G8.7 上升沿)
-    if (SIGNAL_RISING(curr_g.G0008, last_g.G0008, 7))
+    if (SIGNAL_RISING(curr_g.g_regs[8], last_g.g_regs[8], 7))
     {
         pmc_dispatch_event(EV_MSG_RESET, 1, 0);
     }
 
-    /* 7. 主轴正反信号检测(上升沿)  (G70.4 主轴反转信号, G70.5 主轴正转信号,
-     * G29.6 主轴停止信号) */
-    if (SIGNAL_RISING(curr_g.G0070, last_g.G0070, 4))
+    /* 主轴正反信号检测 (G70.4 主轴反转, G70.5 主轴正转, G29.6 主轴停止信号) */
+    if (SIGNAL_RISING(curr_g.g_regs[70], last_g.g_regs[70], 4))
     {
         // 产生主轴反转事件 入队
         pmc_dispatch_event(EV_MSG_SPINDLE, -1, 0);
     }
-    if (SIGNAL_RISING(curr_g.G0070, last_g.G0070, 5))
+    if (SIGNAL_RISING(curr_g.g_regs[70], last_g.g_regs[70], 5))
     {
         // 产生主轴正转事件 入队
         pmc_dispatch_event(EV_MSG_SPINDLE, 1, 0);
     }
-    if (SIGNAL_RISING(curr_g.G0029, last_g.G0029, 6))
+    if (SIGNAL_FALLING(curr_g.g_regs[29], last_g.g_regs[29], 6))
     {
         // 产生主轴停止事件 入队
         pmc_dispatch_event(EV_MSG_SPINDLE, 0, 0);
     }
 
-    /* 8.紧急停止检测(下降沿或常开逻辑触发)  G08.4 = 0急停拍下，G08.4 = 1急停拉起 */
-    // 检测急停按下 1->0（下降沿，如果常开逻辑触发会造成事件堆积。）
-    if (SIGNAL_FALLING(curr_g.G0008, last_g.G0008, 4))
+    /* 主轴定向 G70.6 */ 
+    if (SIGNAL_RISING(curr_g.g_regs[70], last_g.g_regs[70], 6))
     {
-        pmc_dispatch_event(EV_MSG_ESP, 1, 0);
+        LOG(LOG_LEVEL_INFO, "扫描到G70.6 发生上升沿");
     }
-    // 检测急停释放 0->1（上升沿）
-    if (SIGNAL_RISING(curr_g.G0008, last_g.G0008, 4))
+    /* G4.3 */
+    if (SIGNAL_RISING(curr_g.g_regs[4], last_g.g_regs[4], 3))
     {
-        pmc_dispatch_event(EV_MSG_ESP, 0, 0);
+        LOG(LOG_LEVEL_INFO, "扫描到G4.3 发生上升沿");
+    }
+    /* G44.0 */
+    if (SIGNAL_RISING(curr_g.g_regs[44], last_g.g_regs[44], 0))
+    {
+        LOG(LOG_LEVEL_INFO, "扫描到G44.0 发生上升沿");
+    }
+    /* G45发生变化 */
+    if (SIGNAL_BYTE_CHANGED(curr_g.g_regs[45], last_g.g_regs[45]))
+    {
+        for (int i = 0; i < 8; i++)
+        {
+            if (SIGNAL_RISING(curr_g.g_regs[45], last_g.g_regs[45], i))
+            {
+                LOG(LOG_LEVEL_INFO, "扫描到G45.%d 发生上升沿", i);
+            }
+        }
     }
 
-    /* 更新快照供下一周期使用 */
+    /*step3 更新快照供下一周期使用 */
     last_g = curr_g;
 }
 
@@ -196,22 +247,20 @@ void pmc_input_scan_cycle(void)
  * 3. 内部函数实现 (Private Implementations)
  * ========================================================================== */
 
-/** @brief 从寄存器系统同步数据到本地结构体 */
+/** @brief 从寄存器系统同步数据到本地结构体
+ * 遍历注册表，集中抓取数据，数据安全且无遗漏。
+ */
 static void pmc_input_fetch_snapshot(G_INPUT_MAP *local_snap)
 {
-    /* 逐个抓取 G 寄存器字节 */
-    getRegValue8(REG_G, 7, &local_snap->G0007);  // 获取共享内存G7变量的值
-    getRegValue8(REG_G, 8, &local_snap->G0008);  // 获取共享内存G8变量的值
-    getRegValue8(REG_G, 12, &local_snap->G0012); // 获取共享内存G12变量的值
-    getRegValue8(REG_G, 14, &local_snap->G0014); // 获取共享内存G14变量的值
-    getRegValue8(REG_G, 29, &local_snap->G0029); // 获取共享内存G29变量的值
-    getRegValue8(REG_G, 30, &local_snap->G0030); // 获取共享内存G30变量的值
-    getRegValue8(REG_G, 43, &local_snap->G0043); // 获取共享内存G43变量的值
-    getRegValue8(REG_G, 70, &local_snap->G0070); // 获取共享内存G70变量的值
-    getRegValue8(REG_G, 100,
-                 &local_snap->G0100); // 获取共享内存G100变量的值
-    getRegValue8(REG_G, 102,
-                 &local_snap->G0102); // 获取共享内存G102变量的值
+    /* 遍历注册表中的每一个索引 */
+    for (int i = 0; i < SCAN_G_REGS_COUNT; i++)
+    {
+        // 1. 从数组中取出寄存器号（例如 i=0 时，G寄存器注册表数组SCAN_G_REGS[0]=7，reg_idx=7）
+        int reg_idx = SCAN_G_REGS[i];
+        // 2. 调用底层 API 获取该地址的值，并存入本地数组的对应位置
+        // 注意：local_snap->g_regs[7] 对应 G0007
+        getRegValue8(REG_G, reg_idx, &local_snap->g_regs[reg_idx]);
+    }
 }
 
 /** @brief 将解析出的逻辑打包为 PMC_EVENT 并入队 */
@@ -235,7 +284,7 @@ static void pmc_dispatch_event(PMC_EVENT_ID id, int p1, int p2)
         event.feedaxis_key_payload.axis_num = p1;
         event.feedaxis_key_payload.direction = p2;
         LOG(LOG_LEVEL_INFO, "扫描到手动 feedaxis_key: %d, axis: %d, action: %d",
-                   event.id, p1, p2);
+            event.id, p1, p2);
         break;
     }
     case EV_MSG_SPINDLE:
@@ -251,7 +300,7 @@ static void pmc_dispatch_event(PMC_EVENT_ID id, int p1, int p2)
         event.override_payload.override_type = p1;
         event.override_payload.val = p2;
         LOG(LOG_LEVEL_INFO, "扫描到倍率切换 type: %d, override_type: %d, val: %d",
-                   event.id, p1, p2);
+            event.id, p1, p2);
         break;
     }
     case EV_MSG_AUTO_RUN:
@@ -268,13 +317,6 @@ static void pmc_dispatch_event(PMC_EVENT_ID id, int p1, int p2)
         LOG(LOG_LEVEL_INFO, "扫描到复位: %d, reset_state: %d", event.id, p1);
         break;
     }
-    case EV_MSG_ESP:
-    {
-        event.id = id;
-        event.esp_payload.esp_state = p1;
-        LOG(LOG_LEVEL_INFO, "扫描到急停: %d, esp_state: %d", event.id, p1);
-        break;
-    }
     default:
         break;
     }
@@ -286,11 +328,11 @@ static void pmc_dispatch_event(PMC_EVENT_ID id, int p1, int p2)
  * @brief 模式解析逻辑实现
  * 涉及 MD1, MD2, MD4 (bit 0,1,2), DNCI (bit 5), ZRN (bit 7)
  */
-static void process_mode_selection(char g43)
+static void process_mode_selection(char g43, char g19)
 {
     CNC_MODE_INDEX target_mode = CNC_MODE_INVALID; // 默认无效模式
 
-    // 1. 判定高优先级信号 
+    // 1. 判定高优先级信号
     if (GET_BIT(g43, 7)) // 判断第7位
     {
         target_mode = CNC_MODE_ZRN; // ZRN 置位进入回零模式
@@ -298,6 +340,10 @@ static void process_mode_selection(char g43)
     else if (GET_BIT(g43, 5)) // 判断第5位
     {
         target_mode = CNC_MODE_DNC; // DNCI 置位
+    }
+    else if (GET_BIT(g19, 7))
+    {
+        target_mode = CNC_MODE_RAPID; // 进入 RAPID 模式
     }
     else
     {
@@ -326,5 +372,9 @@ static void process_mode_selection(char g43)
         }
     }
 
-    pmc_dispatch_event(EV_MSG_MODE, (int)target_mode, 0);
+    /* 如果解析出有效模式，则发送事件 */
+    if (target_mode != CNC_MODE_INVALID)
+    {
+        pmc_dispatch_event(EV_MSG_MODE, (int)target_mode, 0);
+    }
 }

@@ -19,11 +19,11 @@ void execute_mcode(){
      // 根据M指令类型处理
      switch (mcode_block->m_code)
      {
-     case M00: // 停止主轴，关冷却液，指向下一程序段，并停止做进一步处理，按”循环启动“程序继续执行
+     case M00: // 暂停
          spl_data.spl_event = SPINDLE_EVENT_STOP;
          spl_data.mcode_feedback = false;
          break;
-     case M02: // 停主轴，关冷却液，消除G93坐标偏置和刀具偏置，返回到起始程序段。系统将切换到基准工件坐标系。
+     case M02: // 复位
          spl_data.spl_event = SPINDLE_EVENT_STOP;
          spl_data.mcode_feedback = false;
          break;
