@@ -51,7 +51,7 @@ static void homing_cal_fv(){
 
 static void homing_set_state(){
     // 处理报警，减速停止
-    if(rt_data->sys_state[SYS_IS_ALARMING]){
+    if(rt_data->sys_state[SYS_IS_ALARMING] || rt_data->sys_state[SYS_IS_SWITCHING_MODE]){
         homing_handle_alarm();
         return;
     }
@@ -186,7 +186,7 @@ static void homing_handle_alarm(){
         if(homing_tp[i].homing_state == ABS_EXEC_HOMING){
             homing_tp[i].is_event_trigger = true;
             homing_tp[i].homing_state = ABS_EXEC_RESETTING;
-            LOG(LOG_LEVEL_WARN, "回零下报警，开始制动");
+            LOG(LOG_LEVEL_WARN, "开始制动");
         }
     }
 }
