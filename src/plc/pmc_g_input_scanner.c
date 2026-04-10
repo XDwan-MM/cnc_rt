@@ -370,6 +370,28 @@ static void process_mode_selection(char g43, char g19)
             target_mode = CNC_MODE_INVALID;
             break;
         }
+        // todo：856梯形图，fanuc
+        // switch (md_bits)
+        // {
+        // case 0x01:
+        //     target_mode = CNC_MODE_MEM;
+        //     break; // 001
+        // case 0x00:
+        //     target_mode = CNC_MODE_MDI;
+        //     break; // 000
+        // case 0x03:
+        //     target_mode = CNC_MODE_EDIT;
+        //     break; // 011
+        // case 0x04:
+        //     target_mode = CNC_MODE_MPG;
+        //     break; // 100
+        // case 0x05:
+        //     target_mode = CNC_MODE_JOG;
+        //     break; // 101
+        // default:
+        //     target_mode = CNC_MODE_INVALID;
+        //     break;
+        // }
     }
 
     /* 如果解析出有效模式，则发送事件 */
