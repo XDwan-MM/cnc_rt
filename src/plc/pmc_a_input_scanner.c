@@ -53,7 +53,7 @@ void pmc_a_input_scan_cycle(void)
             {
                 if(alarm_no == 1)
                 {
-                printf("jiting baojing \n");
+                // printf("jiting baojing \n");
                 }
                 setAlarm(ALARM_PC, ALARM_ERROR, alarm_no);
             }
@@ -62,7 +62,7 @@ void pmc_a_input_scan_cycle(void)
             {
                 if(alarm_no == 1)
                 {
-                printf("jiting baojing xiaochu\n");
+                // printf("jiting baojing xiaochu\n");
                 }
                 delAlarm(ALARM_PC, ALARM_ERROR, alarm_no);
             }

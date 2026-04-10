@@ -105,6 +105,7 @@ HEADERS += \
     src/motion/auto/mem_gcode.h \
     src/motion/auto/parser.h \
     src/motion/auto/pathplan.h \
+    src/motion/spindle/spl_control.h \
     src/motion/alarm.h \
     src/motion/egear_ratio.h \
     src/motion/emcmot.h \
@@ -150,6 +151,7 @@ SOURCES += \
     src/motion/auto/mem_gcode.c \
     src/motion/auto/parser.cpp \
     src/motion/auto/pathplan.c \
+    src/motion/spindle/spl_control.c \
     src/motion/alarm.c \
     src/motion/egear_ratio.c \
     src/motion/emcmot.cpp \

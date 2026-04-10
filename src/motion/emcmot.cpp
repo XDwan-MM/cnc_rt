@@ -68,7 +68,7 @@ void emcmotTrajPlan() {
         // 判断运动模式
         set_operating_mode();
 
-        // 临时：主轴控制
+        // 主轴控制
         spindle_control();
 
         // 根据运动模式计算运动位置
@@ -240,18 +240,7 @@ static void get_cmd_pos() {
 
 static void check_for_fault() {
     if(rt_data->sys_state[SYS_IS_ESTOP_ON]){
-        setAlarm(ALARM_SY, ALARM_ERROR, 0);
-        // 重置各个模式
-        mem_handle_estop();
-        homing_handle_estop();
-        jog_handle_estop();
-        if(rt_data->nc_event != SYS_EVENT_NONE || rt_data->target_mode != rt_data->current_mode){
-            //　不允许操作
-            rt_data->nc_event = SYS_EVENT_NONE;
-            // 不允许切换模式
-            rt_data->target_mode = rt_data->current_mode;
-            LOG(LOG_LEVEL_ERR, "急停报警下不允许操作，请检查问题！");
-        }
+        handle_estop_cmd();
     }
     //　检查系统报警
     int alarm_count = 0;
