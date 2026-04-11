@@ -25,15 +25,31 @@ typedef struct {
     uint8_t level2_mode; // 第二级模式：0=内部检查，1=外部检查
 } AxisLimitConfig;
 
+// 每轴的限位配置
+typedef enum {
+    No_Limit_Triggered = 0,
+    level1_fwd_limit,   // 第一级正
+    level1_rev_limit,   // 第二级负
+    level2_fwd_limit,   // 第二级正
+    level2_rev_limit,   // 第二级负
+    level3_fwd_limit,   // 第三级正
+    level3_rev_limit    // 第三级负
+} AxisLimitType;
+
+
 // 运行时状态
 typedef struct {
-    AxisLimitConfig config; // 指向配置数据
+    AxisLimitConfig config;  // 指向配置数据
     double current_position; // 当前位置
-    double parser_position; // 译码器位置
-    uint8_t violation_flag; // 违规标志位
-    uint8_t active_levels;  // 当前生效的限位级别
+    double parser_position;  // 译码器位置
+    uint8_t violation_flag;  // 违规标志位
+    uint8_t active_levels;   // 当前生效的限位级别
     AXIS_TYPE axis;
-
+    double limit_pos;
+    bool is_fwd_limit;
+    bool is_rev_limit;
+    AxisLimitType limit_type;
+    int direction ;          //运动方向　　１正向  0负向 -1未报警
 } AxisLimitRuntime;
 
 extern AxisLimitRuntime runtime[SYS_AXES_NUM];
@@ -45,9 +61,9 @@ uint8_t Is_Inside_Limit(float position, LimitLevel limit);
 uint8_t Is_Outside_Limit(float position, LimitLevel limit);
 
 // 单轴限位检查主函数
-uint8_t Check_Axis_Limit_Violation(AxisLimitRuntime runtime ,bool moving);
+uint8_t Check_Axis_Limit_Violation(AxisLimitRuntime runtime , double pos,bool moving);
 
-uint8_t Axis_Limit_Manager_Init(void);
+void Axis_Limit_Manager_Init(void);
 
 void Axis_Status_Update();
 
