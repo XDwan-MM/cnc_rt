@@ -3,14 +3,15 @@ CONFIG += c++17 cmdline
 
 DEFINES += PROJECT_DIR=\\\"$$PWD\\\"
 
-QMAKE_CFLAGS += -fno-pie
-QMAKE_CXXFLAGS += -fno-pie
-QMAKE_LFLAGS += -no-pie
+# QMAKE_CFLAGS += -fno-pie
+# QMAKE_CXXFLAGS += -fno-pie
+# QMAKE_LFLAGS += -no-pie
 
-QMAKE_CXXFLAGS += -fsanitize=address -fno-omit-frame-pointer -g
-QMAKE_CFLAGS   += -fsanitize=address -fno-omit-frame-pointer -g
-QMAKE_LFLAGS   += -fsanitize=address
+# QMAKE_CXXFLAGS += -fsanitize=address -fno-omit-frame-pointer -g
+# QMAKE_CFLAGS   += -fsanitize=address -fno-omit-frame-pointer -g
+# QMAKE_LFLAGS   += -fsanitize=address
 
+QMAKE_CXXFLAGS += -fno-sized-deallocation
 
 # ============ 编译模式配置 ============
 debug_mode {
