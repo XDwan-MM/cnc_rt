@@ -98,7 +98,7 @@
       # 可选：限制只在特定分支，如果不限制，去掉下面的 if 即可
     - if: $CI_COMMIT_BRANCH =~ /^(main|develop|feature\/.*)$/
     # - if: $CI_PIPELINE_SOURCE == "merge_request_event"
-    # - if: $CI_PIPELINE_SOURCE == "web" # 允许手动触发
+    - if: $CI_PIPELINE_SOURCE == "web" # 允许手动触发
   script:
     # 1.添加静态库
     - echo "⏳ Initializing Lib..."
