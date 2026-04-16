@@ -12,7 +12,6 @@ static void check_nc_mend();
 static void nc_deal_new_mcode();
 static void nc_clear_msignal();
 static void nc_output_mend();
-static void nc_reset_mstate();
 static void mcode_data_mend();
 
 static void mcode_set_state(){
@@ -91,6 +90,9 @@ static void nc_deal_new_mcode(){
             mcode_data->mcode_state = MCODE_EXECUTE_RESET;
             cycle_tp->mcode_feedback = false;
             cycle_tp->mcode = M02;
+            spl_data.spl_event = SPINDLE_EVENT_STOP;
+            spl_data.emot_speed = 0;
+            spl_data.mcode_feedback = false;
             LOG(LOG_LEVEL_DEBUG, "1 nc侧输出代码信号M02");
             break;
         case M30: // 复位
@@ -100,6 +102,9 @@ static void nc_deal_new_mcode(){
             mcode_data->mcode_state = MCODE_EXECUTE_RESET;
             cycle_tp->mcode_feedback = false;
             cycle_tp->mcode = M30;
+            spl_data.spl_event = SPINDLE_EVENT_STOP;
+            spl_data.emot_speed = 0;
+            spl_data.mcode_feedback = false;
             LOG(LOG_LEVEL_DEBUG, "1 nc侧输出代码信号M30");
             break;
         case M03: // 主轴正转
@@ -130,15 +135,32 @@ static void nc_deal_new_mcode(){
             spl_data.spl_event = SPINDLE_EVENT_ORIENT;
             LOG(LOG_LEVEL_DEBUG, "1 nc侧输出代码信号M19");
             break;
-        case M20: // 自动门开
-            setRegValue8(REG_F, 10, 0x14); 
-            LOG(LOG_LEVEL_DEBUG, "1 nc侧输出代码信号M20");
-            break;
-        case M21: // 自动门关
-            setRegValue8(REG_F, 10, 0x15); 
-            LOG(LOG_LEVEL_DEBUG, "1 nc侧输出代码信号M21");
-            break;
         default:
+            if(mcode_data->mcode_block[i].m_code < REG_F10){
+                setRegValue8(REG_F, 10, mcode_data->mcode_block[i].m_code);
+                setRegValue8(REG_F, 11, 0);
+                setRegValue8(REG_F, 12, 0);
+                setRegValue8(REG_F, 13, 0);
+            } 
+            else if(mcode_data->mcode_block[i].m_code < REG_F11){
+                setRegValue8(REG_F, 10, mcode_data->mcode_block[i].m_code & 0xFF);          // 低 8 位
+                setRegValue8(REG_F, 11, (mcode_data->mcode_block[i].m_code >> 8) & 0xFF);   // 高 8 位
+                setRegValue8(REG_F, 12, 0);
+                setRegValue8(REG_F, 13, 0);
+            }
+            else if(mcode_data->mcode_block[i].m_code < REG_F12){
+                setRegValue8(REG_F, 10, mcode_data->mcode_block[i].m_code & 0xFF);
+                setRegValue8(REG_F, 11, (mcode_data->mcode_block[i].m_code >> 8) & 0xFF);
+                setRegValue8(REG_F, 12, (mcode_data->mcode_block[i].m_code >> 16) & 0xFF);
+                setRegValue8(REG_F, 13, 0);
+            }
+            else{
+                setRegValue8(REG_F, 10, mcode_data->mcode_block[i].m_code & 0xFF);
+                setRegValue8(REG_F, 11, (mcode_data->mcode_block[i].m_code >> 8) & 0xFF);
+                setRegValue8(REG_F, 12, (mcode_data->mcode_block[i].m_code >> 16) & 0xFF);
+                setRegValue8(REG_F, 13, (mcode_data->mcode_block[i].m_code >> 24) & 0xFF);
+            }
+            LOG(LOG_LEVEL_DEBUG, "1 nc侧输出代码信号M%d", mcode_data->mcode_block[i].m_code);
             break;
         }
         // 分配信号
@@ -239,9 +261,14 @@ static void check_nc_mend(){
         {
         case M00: // 暂停
         case M01: // 选择停
+            if(cycle_tp->mcode_feedback) {
+                mcode_data->mcode_block[i].mcode_end = true;
+                LOG(LOG_LEVEL_DEBUG, "3 nc侧m指令完成");
+            }
+            break;
         case M02: // 复位
         case M30: // 复位
-            if(cycle_tp->mcode_feedback) {
+            if(cycle_tp->mcode_feedback && spl_data.mcode_feedback) {
                 mcode_data->mcode_block[i].mcode_end = true;
                 LOG(LOG_LEVEL_DEBUG, "3 nc侧m指令完成");
             }
@@ -255,10 +282,9 @@ static void check_nc_mend(){
                 LOG(LOG_LEVEL_DEBUG, "3 nc侧m指令完成");
             }
             break;
-        case M20: // 自动门开
-        case M21: // 自动门关
         default:
             mcode_data->mcode_block[0].mcode_end = true;
+            LOG(LOG_LEVEL_DEBUG, "3 nc侧m指令完成");
             break;
         }
     }
@@ -321,10 +347,4 @@ static void mcode_data_mend(){
     mcode_data->pmc_end = true;
     mcode_data->tfin_count = 0;
     rt_set_chan_state(0, CHAN_IS_MCODE_END, true);
-}
-
-static void nc_reset_mstate(){
-    nc_clear_msignal();
-    mcode_data_mend();
-    mcode_data->mcode_state = MCODE_EXECUTE_IDLE;
 }

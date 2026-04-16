@@ -12,7 +12,6 @@
 #include "stored_stroke_check.h"
 #include <alarmapi.h>
 
-
 static void mem_set_state();
 static bool mem_check_res(GNC_RES res);
 static bool mem_check_running();
@@ -51,13 +50,10 @@ void execute_gcode(){
     mem_set_state();
     // 机床锁住，快速显示加工点位
     if(rt_data->sys_state[SYS_IS_MAC_LOCK]){
-        if(gcode_queue_is_empty(gcode_queue)) return;
-        if(gcode_queue_is_empty(gcode_queue)) return;
-        GCODE_BLOCK *block = gcode_queue_peak(gcode_queue);
-        setVarAxisDouble(AXIS_X, VAR_AXIS_CMD_POS_WCS_EX, block->pos.x, 0);
-        setVarAxisDouble(AXIS_Y, VAR_AXIS_CMD_POS_WCS_EX, block->pos.y, 0);
-        setVarAxisDouble(AXIS_Z, VAR_AXIS_CMD_POS_WCS_EX, block->pos.z, 0);
-        gcode_queue_pop(gcode_queue);
+        cycle_tp_add_block();
+        queue_copy_block(plan_queue, 0, cycle_tp->plan_block);
+        shm_var_update_prog();
+        plan_block_get_next();
         return;
     }
     // 计算插补距离
@@ -288,13 +284,6 @@ static bool mem_check_res(GNC_RES res){
             mem_handle_reset();
             return false;
         }
-        // todo：等待中暂停
-        // if(cycle_tp->mem_exec_state == EXEC_PAUSING){
-        //     setVarChanInt(0, VAR_CHAN_IS_MOVING, 0, 0); 
-        //     cycle_tp->is_paused_inside_block = true;
-        //     LOG(LOG_LEVEL_DEBUG, "进入");
-        //     return false;
-        // }
         // 运行中无数据，则进入等待 
         if(mem_check_running()){
             if(queue_is_empty(pretreat_queue) && gcode_queue_is_empty(gcode_queue)){
