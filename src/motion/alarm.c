@@ -25,7 +25,7 @@ void handle_alarm_cmd(){
         case SYS_EVENT_NONE:
             break;
         case SYS_EVENT_RESET:
-            // LOG(LOG_LEVEL_INFO, "报警处理复位");
+            // LOG(LOG_LEVEL_INFO, "报警处理复位");        
             // 清除报警
             cleanAllAlarm(ALARM_TYPE_ALL, ALARM_LEVEL_ALL);
             rt_data->sys_state[SYS_IS_ALARMING] = false;

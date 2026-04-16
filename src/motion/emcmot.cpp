@@ -172,7 +172,7 @@ static void set_operating_mode() {
         case MODE_MDI:
         case MODE_MEM:
         case MODE_DNC:
-            if(!var_chan[0][VAR_CHAN_IS_RUNNING].value.i){
+            if(!var_chan[0][VAR_CHAN_IS_RUNNING].value.i && mcode_data->mcode_state == MCODE_EXECUTE_IDLE){
                 rt_data->current_mode = rt_data->target_mode;
                 rt_data->sys_state[SYS_IS_SWITCHING_MODE] = false;
                 LOG(LOG_LEVEL_INFO, "系统模式切换为 %s", mode_names[rt_data->current_mode]);

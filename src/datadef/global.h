@@ -103,6 +103,7 @@ extern PLAN_QUEUE *plan_queue;          // 插补队列
 extern EVENT_QUEUE* event_queue;        // 事件队列
 extern COORD_TP *cycle_tp;              // 循环轨迹规划
 extern HOMING_TP *homing_tp;            // 回零轨迹规划
+extern MCODE_DATA *mcode_data;
 
 // 读写共享内存锁
 extern pthread_mutex_t shm_mutex;
