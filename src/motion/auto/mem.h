@@ -12,6 +12,7 @@
 #define __MEM_H__
 
 #include "mem_gcode.h"
+#include "mem_mst.h"
 
 #ifdef __cplusplus
 extern "C" {

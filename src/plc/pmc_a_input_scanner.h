@@ -4,7 +4,7 @@
 #include "pmc_io_map.h"
 
 #define A_START_ADDR 0
-#define A_BYTE_COUNT 25  // 模拟 A0-A24
+#define A_BYTE_COUNT 64  // 修改此处：支持 A0 - A63 共 64 个字节
 
 #ifdef __cplusplus
 extern "C" {

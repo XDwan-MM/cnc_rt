@@ -59,7 +59,7 @@ void* soft_plc_thread_func(void*) {
         hal_keyboard_minitor();
         #else
         hal_task();
-        pmc_input_scan_cycle();
+        pmc_g_input_scan_cycle();
         pmc_a_input_scan_cycle();
         #endif
     }

@@ -12,7 +12,7 @@ extern "C" {
  * @brief 周期性扫描任务
  * 建议 1ms 周期调用。内部完成：拉取寄存器 -> 逻辑判断 -> 推送队列
  */
-void pmc_input_scan_cycle(void);
+void pmc_g_input_scan_cycle(void);
 
 #ifdef __cplusplus
 }

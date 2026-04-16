@@ -138,7 +138,6 @@ static void Spindle_Ccw(SPINDLE_DATA *spl_data)
 static void spindle_mcode_feedback(){
     // 只在完成M指令后执行一次
     if(!spl_data.mcode_feedback){
-        rt_set_chan_state(0, CHAN_IS_MCODE_END, true);
         spl_data.mcode_feedback = true;
     }
 }

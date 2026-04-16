@@ -105,6 +105,7 @@ HEADERS += \
     src/motion/auto/mem_gcode.h \
     src/motion/auto/parser.h \
     src/motion/auto/pathplan.h \
+    src/motion/spindle/spl_control.h \
     src/motion/alarm.h \
     src/motion/egear_ratio.h \
     src/motion/emcmot.h \
@@ -112,16 +113,8 @@ HEADERS += \
     src/motion/handwheel.h \
     src/motion/homing.h \
     src/motion/jog.h \
-    src/motion/rapid.h \
-    src/motion/simple_tp.h \
-    src/motion/spindle/spl_control.h \
+    src/motion/jog_planner.h \
     src/motion/stored_stroke_check.h \
-    src/plc/ctimer.h \
-    src/plc/cyclescanning.h \
-    src/plc/hal_task.h \
-    src/plc/mt_data.h \
-    src/plc/nc_data.h \
-    src/plc/plcdatatype.h \
     src/plc/pmc_a_input_scanner.h \
     src/plc/pmc_g_input_scanner.h \
     src/plc/pmc_io_map.h \
@@ -133,7 +126,13 @@ HEADERS += \
     src/threads/rt_sem.h \
     src/threads/threads_config.h \
     src/threads/threads_controller.h \
-    src/utils/math/cnc_math.h
+    src/utils/math/cnc_math.h \
+    lib/plc/src/ctimer.h \
+    lib/plc/src/cyclescanning.h \
+    lib/plc/src/hal_task.h \
+    lib/plc/src/mt_data.h \
+    lib/plc/src/nc_data.h \
+    lib/plc/src/plcdatatype.h \
 
 SOURCES += \
     main.cpp \
@@ -152,6 +151,7 @@ SOURCES += \
     src/motion/auto/mem_gcode.c \
     src/motion/auto/parser.cpp \
     src/motion/auto/pathplan.c \
+    src/motion/spindle/spl_control.c \
     src/motion/alarm.c \
     src/motion/egear_ratio.c \
     src/motion/emcmot.cpp \
@@ -159,12 +159,8 @@ SOURCES += \
     src/motion/handwheel.c \
     src/motion/homing.c \
     src/motion/jog.c \
-    src/motion/rapid.c \
-    src/motion/simple_tp.c \
-    src/motion/spindle/spl_control.c \
+    src/motion/jog_planner.c \
     src/motion/stored_stroke_check.c \
-    src/plc/hal_task.cpp \
-    src/plc/cyclescanning.cpp \
     src/plc/pmc_a_input_scanner.c \
     src/plc/pmc_g_input_scanner.c \
     src/plc/pmc_output_handler.c \
@@ -173,7 +169,9 @@ SOURCES += \
     src/threads/threads.cpp \
     src/threads/rt_sem.c \
     src/threads/threads_controller.cpp \
-    src/utils/math/cnc_math.c
+    src/utils/math/cnc_math.c \
+    lib/plc/src/hal_task.cpp \
+    lib/plc/src/cyclescanning.cpp \
 
 INCLUDEPATH += \
     src/common \
@@ -190,4 +188,5 @@ INCLUDEPATH += \
     src/utils \
     src/utils/math \
     lib/kinematic/include \
+    lib/plc/src \
 

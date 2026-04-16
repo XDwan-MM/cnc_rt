@@ -11,10 +11,32 @@
 #ifndef __MEM_MCODE_H__
 #define __MEM_MCODE_H__
 
+#include "mcode_queue.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
 
+#define POST_TIME 16
+
+typedef enum mcode_state{
+    MCODE_EXECUTE_IDLE = 0,
+    MCODE_EXECUTE_RUNNING,
+    MCODE_EXECUTE_PAUSING,
+    MCODE_EXECUTE_RESET,
+}MCODE_STATE;
+
+typedef struct{
+    MCODE_STATE mcode_state;
+    MCODE_BLOCK mcode_block[5]; // 单程序段多个M指令
+    int mcode_size;
+    bool signal_den;        // 分配结束信号
+    bool signal_fin;        // 结束信号
+    bool pmc_end;           // pmc侧动作完成
+    int tfin_count;         // 完成信号计数
+}MCODE_DATA;
+
+GNC_RES mcode_data_init();
 void execute_mcode();
 
 #ifdef __cplusplus

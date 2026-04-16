@@ -13,19 +13,24 @@
 #include "datatype.h"
 #include "ncitpdatadef.h"
 #include <pthread.h>
+#include <stdbool.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-#define DCD_BUF_SIZE 200
+#define M_BUF_SIZE 5        // 单个程序段多个M指令（5个）
 
 // 解释器译码结果
 typedef struct mcode_block{
     pmc_mode mode;
-    int m_code;
-    pmc_spindle spindle;     //主轴
-    NcItpState state;   // 模态
-    int line_number;    // 运行行号
+    NcItpState state;       // 模态
+    int m_code;             // 代码信号 M00~M31
+    int line_number;        // 运行行号
+    pmc_spindle spindle;    // 主轴
+    bool signal_mf;         // 选通信号
+    int tmf_count;          // 脉冲选通延时计数
+    bool mcode_end;         // nc侧单个动作完成
 }MCODE_BLOCK;
 
 typedef struct
@@ -49,6 +54,8 @@ MCODE_BLOCK* mcode_queue_peak(const MCODE_QUEUE* queue);
 
 // 以head为起始，向后偏移为index
 MCODE_BLOCK* mcode_queue_get_block(const MCODE_QUEUE* queue, int index);
+
+void mcode_queue_copy_block(const MCODE_QUEUE* queue, int index, MCODE_BLOCK* copy_block);
 
 int mcode_queue_get_size(const MCODE_QUEUE* queue);
 

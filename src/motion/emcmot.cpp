@@ -7,7 +7,6 @@
 #include "pathplan.h"
 #include "rt_sem.h"
 #include "alarm.h"
-#include "rapid.h"
 #include "jog.h"
 #include "handwheel.h"
 #include "homing.h"
@@ -68,7 +67,7 @@ void emcmotTrajPlan() {
         // 判断运动模式
         set_operating_mode();
 
-        // 临时：主轴控制
+        // 主轴控制
         spindle_control();
 
         // 根据运动模式计算运动位置
@@ -128,6 +127,7 @@ static void set_operating_mode() {
         rt_data->sys_state[SYS_IS_SWITCHING_MODE] = false;
         return;
     }
+    rt_data->sys_state[SYS_IS_SWITCHING_MODE] = true;
     // 根据切换的加工模式和当前加工模式，判断是否可以切换
     switch (rt_data->current_mode) {
         case MODE_IDLE:
@@ -135,9 +135,9 @@ static void set_operating_mode() {
             break;
         case MODE_JOG:
             // 当前点动速度为零,才能切模式成功
-            if (fabs(jog_tp[AXIS_X].curr_vel - 0.0) < SPEED_THRESHOLD
-            && fabs(jog_tp[AXIS_Y].curr_vel - 0.0) < SPEED_THRESHOLD
-            && fabs(jog_tp[AXIS_Z].curr_vel - 0.0) < SPEED_THRESHOLD)
+            if (fabs(jog_tp[AXIS_X].curr_vel) < SPEED_THRESHOLD
+            && fabs(jog_tp[AXIS_Y].curr_vel) < SPEED_THRESHOLD
+            && fabs(jog_tp[AXIS_Z].curr_vel) < SPEED_THRESHOLD)
             {
                 rt_data->current_mode = rt_data->target_mode;
                 rt_data->sys_state[SYS_IS_SWITCHING_MODE] = false;
@@ -153,9 +153,9 @@ static void set_operating_mode() {
             break;
         case MODE_RAPID_JOG:
             // 当前快速点动速度为零,才能切模式成功
-            if (fabs(jog_tp[AXIS_X].curr_vel - 0.0) < SPEED_THRESHOLD
-            && fabs(jog_tp[AXIS_Y].curr_vel - 0.0) < SPEED_THRESHOLD
-            && fabs(jog_tp[AXIS_Z].curr_vel - 0.0) < SPEED_THRESHOLD)
+            if (fabs(rapid_jog_tp[AXIS_X].curr_vel) < SPEED_THRESHOLD
+            && fabs(rapid_jog_tp[AXIS_Y].curr_vel) < SPEED_THRESHOLD
+            && fabs(rapid_jog_tp[AXIS_Z].curr_vel) < SPEED_THRESHOLD)
             {
                 rt_data->current_mode = rt_data->target_mode;
                 rt_data->sys_state[SYS_IS_SWITCHING_MODE] = false;
@@ -170,34 +170,16 @@ static void set_operating_mode() {
                 rt_data->current_mode = rt_data->target_mode;
                 rt_data->sys_state[SYS_IS_SWITCHING_MODE] = false;
                 LOG(LOG_LEVEL_INFO, "系统模式切换为 %s", mode_names[rt_data->current_mode]);
-                break;
-            }else{
-                // 回零中切换模式不能生效
-                rt_data->target_mode = rt_data->current_mode;
-                setAlarm(ALARM_SY, ALARM_WARNING, 0);
-                LOG(LOG_LEVEL_WARN, "回零中不能切换模式，请先按复位后切换");
-                break;
             }
-            rt_data->sys_state[SYS_IS_SWITCHING_MODE] = true;
             break;
-
         case MODE_MDI:
         case MODE_MEM:
         case MODE_DNC:
-            // 除了插补G指令，需判断其他G和M指令是否完成，才能切换模式
-            if (!var_chan[0][VAR_CHAN_IS_RUNNING].value.i) {
+            if(!var_chan[0][VAR_CHAN_IS_RUNNING].value.i && mcode_data->mcode_state == MCODE_EXECUTE_IDLE){
                 rt_data->current_mode = rt_data->target_mode;
                 rt_data->sys_state[SYS_IS_SWITCHING_MODE] = false;
                 LOG(LOG_LEVEL_INFO, "系统模式切换为 %s", mode_names[rt_data->current_mode]);
-                break;
-            } else{
-                // 加工下切换模式不能生效
-                rt_data->target_mode = rt_data->current_mode;
-                setAlarm(ALARM_SY, ALARM_WARNING, 1);
-                LOG(LOG_LEVEL_WARN, "自动加工下不能切换模式，请先按复位后切换");
-                break;
             }
-            rt_data->sys_state[SYS_IS_SWITCHING_MODE] = true;
             break;
         default:
             break;
@@ -232,7 +214,7 @@ static void get_cmd_pos() {
             handle_jog_cmd();
             break;
         case MODE_RAPID_JOG: // 快速点动
-            handle_jog_rapid_cmd();
+            handle_rapid_jog_cmd();
             break;
         case MODE_MPG: // 手轮
             handle_mpg_cmd();
@@ -244,17 +226,7 @@ static void get_cmd_pos() {
 
 static void check_for_fault() {
     if(rt_data->sys_state[SYS_IS_ESTOP_ON]){
-        // 重置各个模式
-        mem_handle_estop();
-        homing_handle_estop();
-        jog_handle_estop();
-        if(rt_data->nc_event != SYS_EVENT_NONE || rt_data->target_mode != rt_data->current_mode){
-            //　不允许操作
-            rt_data->nc_event = SYS_EVENT_NONE;
-            // 不允许切换模式
-            rt_data->target_mode = rt_data->current_mode;
-            LOG(LOG_LEVEL_ERR, "急停报警下不允许操作，请检查问题！");
-        }
+        handle_estop_cmd();
     }
     //　检查系统报警
     int alarm_count = 0;
