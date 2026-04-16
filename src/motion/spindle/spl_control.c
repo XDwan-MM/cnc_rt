@@ -103,6 +103,7 @@ static void Spindle_Stop(SPINDLE_DATA *spl_data)
         {
             spindle.mode = DRV_MODE_DISABLED;
         }
+        spindle_mcode_feedback();
     }
 }
 // 主轴正转，输入参数d_speed 主轴转速 unit 转/分钟
