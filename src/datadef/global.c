@@ -64,6 +64,7 @@ PLAN_QUEUE *pretreat_queue;     // 预处理队列
 PLAN_QUEUE *plan_queue;         // 插补队列
 COORD_TP *cycle_tp;             // 循环轨迹规划
 HOMING_TP *homing_tp;           // 回零轨迹规划
+MCODE_DATA *mcode_data;
 
 // 读写共享内存锁（路径规划读时加锁）
 pthread_mutex_t shm_mutex;
@@ -167,11 +168,10 @@ static GNC_RES tp_init(){
     GNC_RES res = GNC_OPERATOR_SUCCESS;
     homing_tp_init();
     cycle_tp_init();
+    res = mcode_data_init();
+    if(res != GNC_OPERATOR_SUCCESS) return res;
     gcode_queue = (GCODE_QUEUE*)malloc(sizeof(GCODE_QUEUE));
     res = gcode_queue_init(gcode_queue);
-    if(res != GNC_OPERATOR_SUCCESS) return res;
-    mcode_queue = (MCODE_QUEUE*)malloc(sizeof(MCODE_QUEUE));
-    res = mcode_queue_init(mcode_queue);
     if(res != GNC_OPERATOR_SUCCESS) return res;
     pretreat_queue = (PLAN_QUEUE*)malloc(sizeof(PLAN_QUEUE));
     res = queue_init(pretreat_queue);

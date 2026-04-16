@@ -21,6 +21,8 @@ GNC_RES chan_add_block(){
 
     if(gcode_queue_is_empty(gcode_queue)) return GNC_DATA_EMPTY;
 
+    LOG(LOG_LEVEL_DEBUG, "获取到Ｇ指令");
+
     // 译码第一段类型为g00，起点为当前机床位置
     if(rt_get_chan_state(0, CHAN_IS_FIRST_RUN)){
         // todo：var变量在路径线程中被读取，存在数据竞争风险，需加锁保护
