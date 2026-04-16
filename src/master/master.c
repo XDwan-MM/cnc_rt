@@ -34,6 +34,8 @@ bool sp_start_sem = false;
 bool feed_start_sem = false;
 int master_error_code = 0;
 bool reset_sem = 0;
+static char* drv_names[] = {"主","X","Y","Z"};
+
 
 int Master_Start() {
     char eni_path[512];
@@ -281,6 +283,10 @@ void Master_Run()
                 dri_manager.drivers[i]->state = DRV_STATE_FAULT;
                 rt_data->axis_data[i].axis_status.is_error = 1;
             }
+            else
+            {
+                rt_data->axis_data[i].axis_status.is_error = 0;
+            }
         }
         debug("=============================发送主站周期数据==============================\n");
         rc = GM_Master_Send(1);
@@ -450,4 +456,35 @@ void Master_Reset()
 {
     feed_start_sem = 1;
     reset_sem = 1;
+}
+
+void Check_Driver_Error()
+{
+    for (int i = 0; i < 4; i++)
+    {
+        if(rt_data->axis_data[i].axis_status.is_error)
+        {
+            int res = setAlarm(ALARM_AX, ALARM_ERROR, 30 + i);
+            if(res != -8) 
+            LOG(LOG_LEVEL_ERR, "%s 轴驱动器报错",drv_names[i]);
+        }   
+        if(!rt_data->axis_data[i].axis_status.is_error)
+        {
+            int res = delAlarm(ALARM_AX, ALARM_ERROR, 30 + i);
+            if(res == 0)
+            LOG(LOG_LEVEL_INFO, "%s 轴驱动器报错已清除",drv_names[i]);
+        }  
+    }
+}
+void Clean_Driver_Error()
+{
+    for (int i = 0; i < 4; i++)
+    {  
+        if(!rt_data->axis_data[i].axis_status.is_error)
+        {
+            int res = delAlarm(ALARM_AX, ALARM_ERROR, 30 + i);
+            if(res == -3)
+            LOG(LOG_LEVEL_INFO, "%s 轴驱动器报错已清除",drv_names[i]);
+        } 
+    }
 }

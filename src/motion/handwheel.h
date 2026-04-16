@@ -49,6 +49,7 @@ typedef struct{
     double curr_vel;    /* current velocity - 当前速度 */
     int active;         /* non-zero if motion in progress */
     int first_pass;
+    AXIS_TYPE axis;
 } simple_tp_t_handwheel;
 
 extern int32_t ratio;

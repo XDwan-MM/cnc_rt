@@ -14,6 +14,11 @@ void handle_alarm_cmd(){
             // 清除报警
             cleanAllAlarm(ALARM_TYPE_ALL, ALARM_LEVEL_ALL);
             rt_data->sys_state[SYS_IS_ALARMING] = false;
+
+            #ifndef DEBUG_MODE_ENABLED
+            Master_Reset();
+            #endif
+
             // 状态复位、数据重置
             tp_reset();
             // 重置事件

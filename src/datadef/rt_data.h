@@ -55,6 +55,9 @@ typedef struct {
     bool direction;              //运动方向　　１正向  0负向
     bool is_init;
     bool is_error;               //驱动器是否报警 １是　0否
+    bool is_decel_done;          //报警减速是否完成
+    bool is_fwd_limit;           //手动正方向限制
+    bool is_rev_limit;           //手动负方向限制
 } AxisStatus;
 
 // 目前仅轨迹线程使用

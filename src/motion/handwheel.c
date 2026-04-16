@@ -63,6 +63,12 @@ void Handlewheels_Motion(simple_tp_t_handwheel *tp)
     {
         return;
     }
+
+    if((delta > 0 && rt_data->axis_data[tp->axis].axis_status.is_fwd_limit) || 
+        (delta < 0 && rt_data->axis_data[tp->axis].axis_status.is_rev_limit))
+    {
+        return;
+    }
     /* 计算点动距离 */
     distance = (delta / 4.0) * tp->joint.rate * 0.001 ;
     /* 计算点动目标位置 */
@@ -100,11 +106,19 @@ void Simple_Tp_Update(simple_tp_t_handwheel *tp)
     if (pos_err > tiny_dp)
     {
         vel_req = -max_dv + sqrt(2.0 * tp->max_acc * pos_err + max_dv * max_dv);
-    } else if (pos_err < -tiny_dp)
+        // rt_data->axis_data[tp->axis].axis_status.is_decel_done = 0;
+
+    } 
+    else if (pos_err < -tiny_dp)
     {
         vel_req =  max_dv - sqrt(-2.0 * tp->max_acc * pos_err + max_dv * max_dv);
-    } else
+    } 
+    else
     {
+        if(rt_data->axis_data[tp->axis].axis_status.is_fwd_limit || rt_data->axis_data[tp->axis].axis_status.is_rev_limit)
+        {
+            rt_data->axis_data[tp->axis].axis_status.is_decel_done = 1;
+        }
         vel_req = 0.0;
     }
     /* 限制速度请求 */
@@ -142,42 +156,26 @@ void handle_mpg_cmd() {
     axis = (axisandrate >> 3) & 0b11111;
     axis = Get_Axis_Switch(axis);
 
-    if (axis == -1 || (last_axis != axis) || (last_rate != rate)) {
-        for (int i = 0; i < 5; ++i) {
+    if (axis == -1 || (last_axis != axis) || (last_rate != rate)) 
+    {
+        for (int i = 0; i < 5; ++i) 
+        {
             simple_tp[i].first_pass = 1;
         }
         mpg_statis = true;
-    } else if (axis >= 0 && axis < 5) {
+    } 
+    else if (axis >= 0 && axis < 5) 
+    {
         simple_tp[axis].joint.count = current_count;
         simple_tp[axis].joint.rate = rate;
-        if (axis == 0) {
-            //            simple_tp[axis].joint.drivers_data = pos_act[axis];
-            //假定加减速参数
-            simple_tp[0].joint.vel_limit = par_axis[AXIS_X][PAR_AX_MPG_SPD].value.val_real;
-            simple_tp[0].joint.jaccel_limit = par_axis[AXIS_X][PAR_AX_RAPID_ACC].value.val_real;
-        }
-        if (axis == 1) {
-            //假定加减速参数
-            simple_tp[1].joint.vel_limit = par_axis[AXIS_Y][PAR_AX_MPG_SPD].value.val_real;
-            simple_tp[1].joint.jaccel_limit = par_axis[AXIS_Y][PAR_AX_RAPID_ACC].value.val_real;
-        }
-        if (axis == 2) {
-            //假定加减速参数
-            simple_tp[2].joint.vel_limit = par_axis[AXIS_Z][PAR_AX_MPG_SPD].value.val_real;
-            simple_tp[2].joint.jaccel_limit = par_axis[AXIS_Z][PAR_AX_RAPID_ACC].value.val_real;
-        }
+        simple_tp[axis].axis = axis;
+
+        simple_tp[axis].joint.vel_limit = par_axis[axis][PAR_AX_MPG_SPD].value.val_real;
+        simple_tp[axis].joint.jaccel_limit = par_axis[axis][PAR_AX_RAPID_ACC].value.val_real;
 
         //初始化
         if (mpg_statis) {
-            if (axis == 0) {
-                simple_tp[axis].joint.pos_cmd = simple_tp[axis].pos_cmd = simple_tp[axis].curr_pos = var_axis[AXIS_X][VAR_AXIS_CMD_POS_EX].value.f;
-            }
-            if (axis == 1) {
-                simple_tp[axis].joint.pos_cmd = simple_tp[axis].pos_cmd = simple_tp[axis].curr_pos = var_axis[AXIS_Y][VAR_AXIS_CMD_POS_EX].value.f;
-            }
-            if (axis == 2) {
-                simple_tp[axis].joint.pos_cmd = simple_tp[axis].pos_cmd = simple_tp[axis].curr_pos = var_axis[AXIS_Z][VAR_AXIS_CMD_POS_EX].value.f;
-            }
+            simple_tp[axis].joint.pos_cmd = simple_tp[axis].pos_cmd = simple_tp[axis].curr_pos = var_axis[axis][VAR_AXIS_CMD_POS_EX].value.f;
             simple_tp[axis].curr_vel = 0;
             mpg_statis = false;
         }
@@ -186,7 +184,6 @@ void handle_mpg_cmd() {
         Simple_Tp_Update(&simple_tp[axis]);
         
         simple_tp[axis].joint.pos_cmd = simple_tp[axis].curr_pos;
-        // printf("当前手轮计数：%u, 轴选：%d, 倍率：%d，手轮规划位置： %f  电机位置：%d\n", current_count, axis, rate,simple_tp[axis - 1].pos_cmd,pos_act);
     }
     if (!mpg_statis) {
         setVarAxisDouble(axis, VAR_AXIS_CMD_POS_EX, simple_tp[axis].joint.pos_cmd, 0);
@@ -195,6 +192,4 @@ void handle_mpg_cmd() {
     }
     last_axis = axis;
     last_rate = rate;
-    // hal write
-    //   Hal_Driver_Update_All(false,true);
 }
