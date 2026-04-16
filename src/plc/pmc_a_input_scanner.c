@@ -4,6 +4,8 @@
 #include "signal_utils.h" /**< 边沿检测宏定义 */
 #include "alarmapi.h"
 #include <string.h>
+#include "rt_data.h"
+#include "global.h"
 
 // 静态存储 A0-A63 的上次状态
 static char last_a_status[A_BYTE_COUNT] = {0}; // 上次快照数据
@@ -51,19 +53,13 @@ void pmc_a_input_scan_cycle(void)
             // 检测上升沿 (0 -> 1): 产生报警
             if (SIGNAL_RISING(current_a_status[i], last_a_status[i], bit))
             {
-                if(alarm_no == 1)
-                {
-                // printf("jiting baojing \n");
-                }
+                rt_set_sys_state(SYS_IS_ESTOP_ON, 1);
                 setAlarm(ALARM_PC, ALARM_ERROR, alarm_no);
             }
             // 检测下降沿 (1 -> 0): 消除报警
             else if (SIGNAL_FALLING(current_a_status[i], last_a_status[i], bit))
             {
-                if(alarm_no == 1)
-                {
-                // printf("jiting baojing xiaochu\n");
-                }
+                rt_set_sys_state(SYS_IS_ESTOP_ON, 0);
                 delAlarm(ALARM_PC, ALARM_ERROR, alarm_no);
             }
         }

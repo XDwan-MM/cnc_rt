@@ -146,7 +146,7 @@ static bool is_spd_vel(SPINDLE_DATA *spl_data)
 {
     if(!spl_data->mcp_target_speed)
     {
-        int res = setAlarm(ALARM_AX, ALARM_ERROR, 123);
+        int res = setAlarm(ALARM_AX, ALARM_ERROR, 20);
         if(res == -8) return false;
         LOG(LOG_LEVEL_ERR, "主轴速度值缺省");
     }

@@ -47,14 +47,13 @@ void emcmotTrajPlan() {
         
         if(rt_data->nc_event == SYS_EVENT_RESET)
         {
-            #ifndef DEBUG_MODE_ENABLED
-            Master_Reset();
-            #endif
             // 复位生效参数
             Axis_Limit_Manager_Init();
             // 清除警告
             cleanAllAlarm(ALARM_TYPE_ALL, ALARM_WARNING);
         }
+        //检查驱动器是否存在报警
+        Check_Driver_Error();
 
         // 当前活动通道
         setVarSysInt(VAR_SYS_ACTIVE_CHAN, i, 0);
@@ -77,8 +76,12 @@ void emcmotTrajPlan() {
         // 误差补偿
         compute_screw_comp();
 
+        //更新轴状态
+        Axis_Status_Update();
+
         // 预先检查插补位置是否超软限位
         check_for_soft_limit();
+
 
         // 检查跟随误差
         check_ferror_fault();
@@ -363,17 +366,76 @@ static void compute_screw_comp() {
 }
 
 static void check_for_soft_limit() {
-    runtime[0].current_position = rt_data->axis_data[AXIS_X].motor_cmd_pos;
-    runtime[1].current_position = rt_data->axis_data[AXIS_Y].motor_cmd_pos;
-    runtime[2].current_position = rt_data->axis_data[AXIS_Z].motor_cmd_pos;
-    runtime[0].active_levels = Check_Axis_Limit_Violation(runtime[0], true);
-    runtime[1].active_levels = Check_Axis_Limit_Violation(runtime[1], true);
-    runtime[2].active_levels = Check_Axis_Limit_Violation(runtime[2], true);
+    for (int var = 0; var < 3; ++var)
+    {
+        if(runtime[var].is_first_run)
+        {
+            int levels = Check_Axis_Limit_Violation(&runtime[var], rt_data->axis_data[var].motor_cmd_pos, RESET_CHEAK_USED);
+            runtime[var].temp_config = runtime[var].config;
+            runtime[var].limit_pos = rt_data->axis_data[var].motor_cmd_pos;
+            if(!levels)
+            {
+                runtime[var].limit_type = NO_LIMIT_TRIGGERED;
+            }
+            runtime[var].is_first_run = 0;
+        }
+
+        if(rt_data->axis_data[var].axis_status.is_moving)
+        {
+            if((runtime[var].limit_type == 0) ||
+               (!rt_data->axis_data[var].axis_status.is_decel_done))
+            {
+                runtime[var].active_levels = Check_Axis_Limit_Violation(&runtime[var], rt_data->axis_data[var].motor_cmd_pos, SOFT_CHEAK_USED);
+                runtime[var].limit_pos = rt_data->axis_data[var].motor_cmd_pos;
+            }
+            switch (runtime[var].limit_type)
+            {
+            case LEVEL1_FWD_LIMIT:
+                runtime[var].temp_config.level1.positive_limit = runtime[var].limit_pos;
+                runtime[var].active_levels = Check_Axis_Limit_Violation(&runtime[var], rt_data->axis_data[var].motor_cmd_pos, ALARM_CHEAK_USED);                    break;
+            case LEVEL1_REV_LIMIT:
+                runtime[var].temp_config.level1.negative_limit = runtime[var].limit_pos;
+                runtime[var].active_levels = Check_Axis_Limit_Violation(&runtime[var], rt_data->axis_data[var].motor_cmd_pos, ALARM_CHEAK_USED);
+                break;
+            case LEVEL2_FWD_LIMIT:
+                if (runtime[var].config.level2_mode == 0)
+                {
+                    runtime[var].temp_config.level2.positive_limit = runtime[var].limit_pos;
+                }
+                else
+                {
+                    runtime[var].temp_config.level2.negative_limit = runtime[var].limit_pos;
+                }
+                runtime[var].active_levels = Check_Axis_Limit_Violation(&runtime[var], rt_data->axis_data[var].motor_cmd_pos, ALARM_CHEAK_USED);
+                break;
+            case LEVEL2_REV_LIMIT:
+                if (runtime[var].config.level2_mode == 0)
+                {
+                    runtime[var].temp_config.level2.negative_limit = runtime[var].limit_pos;
+                }
+                else
+                {
+                    runtime[var].temp_config.level2.positive_limit = runtime[var].limit_pos;
+                }
+                runtime[var].active_levels = Check_Axis_Limit_Violation(&runtime[var], rt_data->axis_data[var].motor_cmd_pos, ALARM_CHEAK_USED);
+                break;
+            case LEVEL3_FWD_LIMIT:
+                runtime[var].temp_config.level3.negative_limit = runtime[var].limit_pos;
+                runtime[var].active_levels = Check_Axis_Limit_Violation(&runtime[var], rt_data->axis_data[var].motor_cmd_pos, ALARM_CHEAK_USED);
+                break;
+            case LEVEL3_REV_LIMIT:
+                runtime[var].temp_config.level3.positive_limit = runtime[var].limit_pos;
+                runtime[var].active_levels = Check_Axis_Limit_Violation(&runtime[var], rt_data->axis_data[var].motor_cmd_pos, ALARM_CHEAK_USED);
+                break;
+            default:
+                break;
+                }
+        }
+    }
 }
 
 // 更新运动状态数据
 static void update_status() {
-    Axis_Status_Update();
     shm_var_update();
 }
 

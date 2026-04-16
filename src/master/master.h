@@ -11,6 +11,7 @@ int Master_Start();
 void Master_Run();
 void Master_Error(int code);
 void Master_Reset();
+void Check_Driver_Error();
 
 #ifdef __cplusplus
 }
