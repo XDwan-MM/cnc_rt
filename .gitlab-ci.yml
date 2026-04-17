@@ -93,13 +93,10 @@
   stage: build
   tags:
     - hmi_v3
-  rules:
-    # - if: $CI_PIPELINE_SOURCE == "push"
-      # 可选：限制只在特定分支，如果不限制，去掉下面的 if 即可
-    - if: $CI_COMMIT_BRANCH =~ /^(main|develop|feature\/.*)$/
-    # - if: $CI_PIPELINE_SOURCE == "merge_request_event"
-    - if: $CI_PIPELINE_SOURCE == "web" # 允许手动触发
   script:
+    # 0.检查环境
+    - export PATH="$PATH:/home/gree/Qt5.15.16/5.15.16/gcc_64/bin"
+    - qmake --version
     # 1.添加静态库
     - echo "⏳ Initializing Lib..."
     - mkdir -p lib/PLC/bin
@@ -130,7 +127,7 @@
     - ls
     # 4.添加版本号信息
     - *tag-change
-    - tar -cvJf cnc_rt_1.0.0.$SUM_B.tar bin/rt_cnc
+    - tar -cvJf cnc_rt_1.0.0.$SUM_B.tar bin/rt_cnc config lib
     - curl -uly_35b717:AP38qFMP2jfnFYm5gav4KV2EyXV -T cnc_rt_1.0.0.$SUM_B.tar  "http://10.2.30.32:8081/artifactory/hmi_cnc/${CI_COMMIT_REF_NAME}/"
 
 远程编译:
@@ -138,6 +135,9 @@
   tags:
     - hmi_v3
   script:
+    # 0.检查环境
+    - export PATH="$PATH:/home/gree/Qt5.15.16/5.15.16/gcc_64/bin"
+    - qmake --version
     # 1.添加静态库
     - echo "⏳ Initializing Lib..."
     - mkdir -p lib/PLC/bin
@@ -168,7 +168,7 @@
     - ls
     # 4.添加版本号信息
     - *tag-change
-    - tar -cvJf cnc_rt_1.0.0.$SUM_B.tar bin/rt_cnc
+    - tar -cvJf cnc_rt_1.0.0.$SUM_B.tar bin/rt_cnc config lib
     - curl -uly_35b717:AP38qFMP2jfnFYm5gav4KV2EyXV -T cnc_rt_1.0.0.$SUM_B.tar  "http://10.2.30.32:8081/artifactory/hmi_cnc/${CI_COMMIT_REF_NAME}/"
   # when: manual
   needs: [编译监听]

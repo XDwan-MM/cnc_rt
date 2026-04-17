@@ -17,6 +17,7 @@
     # 0.检查环境
     - export PATH="$PATH:/home/gree/Qt5.15.16/5.15.16/gcc_64/bin"
     - qmake --version
+    # 1.获取三级仓库
     # 2.编译子模块
     - ./build.sh clean
     - echo "⏳ Initializing Submodules..."
@@ -35,5 +36,5 @@
     - ls
     # 4.添加版本号信息
     - *tag-change
-    - tar -cvJf cnc_rt_1.0.0.$SUM_B.tar bin/rt_cnc
+    - tar -cvJf cnc_rt_1.0.0.$SUM_B.tar bin/rt_cnc config lib
     - curl -uly_35b717:AP38qFMP2jfnFYm5gav4KV2EyXV -T cnc_rt_1.0.0.$SUM_B.tar  "http://10.2.30.32:8081/artifactory/hmi_cnc/${CI_COMMIT_REF_NAME}/"
