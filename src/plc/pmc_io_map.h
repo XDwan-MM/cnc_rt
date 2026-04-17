@@ -31,7 +31,20 @@ typedef enum {
     EV_MSG_OVERRIDE,    /**< 倍率调节 (参数1: 倍率类型, 参数2: 数值) */
     EV_MSG_AUTO_RUN,    /**< 运行控制 (参数1: 启动/中止) */
     EV_MSG_RESET,       /**< 系统复位 */
+    EV_MSG_ENANLE,
 } PMC_EVENT_ID;
+
+typedef enum{
+    MSBT_LOCK = 0,       // 辅助功能锁住
+    DRY_RUN,             // 空运行
+    SINGLE_BLOCK,        // 单段
+    BLOCK_SKIP = 3,      // 程序段跳过（1~9）    
+    MAC_LOCK = 12,       // 所有轴机床锁住（MLK,MLK1~4)
+    MAC_LOCK1,           // 各轴轴机床锁住   
+    MAC_LOCK2,
+    MAC_LOCK3,
+    MAC_LOCK4,
+}ENABLE_KEY;
 
 // 各个PMC事件对应的参数结构体定义（子结构体）, 六种事件类型对应六个参数结构体
 /* 1、*/
@@ -52,7 +65,7 @@ typedef struct {
 
 /* 4、*/
 typedef struct {
-    int override_type;;
+    int override_type;
     int val;
 } EV_MSG_OVERRIDE_PAYLOAD;
 
@@ -65,6 +78,11 @@ typedef struct {
 typedef struct {
     int reset_state;
 } EV_MSG_RESET_PAYLOAD;
+
+typedef struct {
+    int enable_key;
+    int enable_state;
+} EV_MSG_ENABLE_PAYLOAD;
 
 /**
  * @brief CNC 事件通用结构
@@ -79,6 +97,7 @@ typedef struct {
         EV_MSG_OVERRIDE_PAYLOAD override_payload;
         EV_MSG_AUTO_RUN_PAYLOAD run_payload;
         EV_MSG_RESET_PAYLOAD reset_payload;
+        EV_MSG_ENABLE_PAYLOAD enable_payload;
     };
 } PMC_EVENT;
 

@@ -32,7 +32,6 @@ typedef enum{
     SYS_IS_DRY_RUN,             // 空运行
     SYS_IS_BLOCK_SKIP,          // 程序段跳过（路径和轨迹线程使用）
     SYS_IS_SINGLE_BLOCK,        // 单段
-    SYS_IS_OPT_STOP,            // 选择停
     SYS_IS_MSBT_LOCK,           // 辅助功能锁住
 } SysStateIndex;
 

@@ -78,9 +78,9 @@ static void nc_deal_new_mcode(){
         case M01: // 选择停
             setRegValue8(REG_F, 10, 0x01); 
             setRegBit(REG_F, 9, 6); 
-            rt_data->nc_event = SYS_EVENT_PAUSE;
-            mcode_data->mcode_state = MCODE_EXECUTE_PAUSING;
-            cycle_tp->mcode_feedback = false;
+            // rt_data->nc_event = SYS_EVENT_PAUSE;
+            // mcode_data->mcode_state = MCODE_EXECUTE_PAUSING;
+            // cycle_tp->mcode_feedback = false;
             LOG(LOG_LEVEL_DEBUG, "1 nc侧输出代码信号M01");
             break;
         case M02: // 复位
