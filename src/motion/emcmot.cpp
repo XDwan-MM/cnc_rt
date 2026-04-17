@@ -51,9 +51,16 @@ void emcmotTrajPlan() {
             Axis_Limit_Manager_Init();
             // 清除警告
             cleanAllAlarm(ALARM_TYPE_ALL, ALARM_WARNING);
+            // todo：调试使用
+            #ifndef DEBUG_MODE_ENABLED
+            Master_Reset();
+            #endif
         }
+        
+        #ifndef DEBUG_MODE_ENABLED
         //检查驱动器是否存在报警
         Check_Driver_Error();
+        #endif
 
         // 当前活动通道
         setVarSysInt(VAR_SYS_ACTIVE_CHAN, i, 0);
@@ -76,12 +83,13 @@ void emcmotTrajPlan() {
         // 误差补偿
         compute_screw_comp();
 
+        #ifndef DEBUG_MODE_ENABLED
         //更新轴状态
         Axis_Status_Update();
+        #endif
 
         // 预先检查插补位置是否超软限位
         check_for_soft_limit();
-
 
         // 检查跟随误差
         check_ferror_fault();
@@ -234,7 +242,7 @@ static void check_for_fault() {
     if(alarm_count > 0){
         rt_data->sys_state[SYS_IS_ALARMING] = true;
         handle_alarm_cmd();
-    }
+    }else rt_data->sys_state[SYS_IS_ALARMING] = false;
 }
 
 // 检查轴跟随误差错误

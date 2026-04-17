@@ -7,7 +7,6 @@
 #include "global.h"
 #include "spl_control.h"
 
-
 static PMC_EVENT event_data;
 static GNC_RES task_handle_pmc_event(PMC_EVENT* event_data);
 
@@ -76,7 +75,6 @@ static GNC_RES task_handle_pmc_event(PMC_EVENT* event_data)
             rt_data->target_mode = MODE_IDLE;
             break; // wcf: 我不太确定
         }
-        // log_system("[task] 处理模式切换事件(%d)", rt_data->target_mode);
         LOG(LOG_LEVEL_INFO, "处理模式切换事件 %d", rt_data->target_mode);
         break;
     }
@@ -145,7 +143,6 @@ static GNC_RES task_handle_pmc_event(PMC_EVENT* event_data)
                     LOG(LOG_LEVEL_INFO, "处理Z释放事件");
                 }
             }
-            // log_system("[task] 处理进给轴按键事件 Axis %d action %d under mode %d", axis, direction, rt_data->current_mode);
             LOG(LOG_LEVEL_INFO, "处理进给轴按键事件 Axis %d action %d under mode %d", axis, direction, rt_data->current_mode);
         }
         break;
@@ -179,7 +176,6 @@ static GNC_RES task_handle_pmc_event(PMC_EVENT* event_data)
         {
             setVarChanDouble(0, VAR_CHAN_FEED_OVERRIDE, (double)event_data->override_payload.val, 0);
             rt_data->nc_event = SYS_EVENT_FEED_OVERRIDE;
-            // log_system("[task] 处理进给倍率事件");
             LOG(LOG_LEVEL_INFO, "处理进给倍率事件 %d", event_data->override_payload.val);
         }
         // 2.快速进给倍率
@@ -187,7 +183,6 @@ static GNC_RES task_handle_pmc_event(PMC_EVENT* event_data)
         {
             setVarChanDouble(0, VAR_CHAN_RAPID_OVERRIDE, (double)event_data->override_payload.val, 0);
             rt_data->nc_event = SYS_EVENT_RAPID_OVERRIDE;
-            // log_system("[task] 处理快速进给倍率事件");
             LOG(LOG_LEVEL_INFO, "处理快速进给倍率事件 %d", event_data->override_payload.val);
         }
         // 3.主轴倍率
@@ -195,7 +190,6 @@ static GNC_RES task_handle_pmc_event(PMC_EVENT* event_data)
         {
             setVarChanDouble(0, VAR_CHAN_SPDL_OVERRIDE, (double)event_data->override_payload.val, 0);
             rt_data->nc_event = SYS_EVENT_SPDL_OVERRIDE;
-            // log_system("[task] 处理主轴倍率事件");
             LOG(LOG_LEVEL_INFO, "处理主轴倍率事件");
         }
         break;
@@ -208,7 +202,6 @@ static GNC_RES task_handle_pmc_event(PMC_EVENT* event_data)
             {
                 // 循环启动
                 rt_data->nc_event = SYS_EVENT_RERUN;
-                // log_system("[task] 处理循环启动事件");
                 LOG(LOG_LEVEL_INFO, "处理循环启动事件");
             }
         }
@@ -218,7 +211,6 @@ static GNC_RES task_handle_pmc_event(PMC_EVENT* event_data)
             {
                 // 进给保持
                 rt_data->nc_event = SYS_EVENT_PAUSE;
-                // log_system("[task] 处理进给保持事件");
                 LOG(LOG_LEVEL_INFO, "处理进给保持事件");
             }
         }
@@ -229,12 +221,32 @@ static GNC_RES task_handle_pmc_event(PMC_EVENT* event_data)
         if (event_data->reset_payload.reset_state == 1)
         {
             rt_data->nc_event = SYS_EVENT_RESET;
-            // log_system("[task] 处理复位事件");
             LOG(LOG_LEVEL_INFO, "处理复位事件");
             setRegBit(REG_F, 1, 1);
         }
         break;
     }
+    case EV_MSG_ENANLE:
+        switch(event_data->enable_payload.enable_key){
+            case BLOCK_SKIP:
+                rt_data->sys_state[SYS_IS_BLOCK_SKIP] = event_data->enable_payload.enable_state;
+                break;
+            case SINGLE_BLOCK:
+                rt_data->sys_state[SYS_IS_BLOCK_SKIP] = event_data->enable_payload.enable_state;
+                break;
+            case DRY_RUN:
+                rt_data->sys_state[SYS_IS_SINGLE_BLOCK] = event_data->enable_payload.enable_state;
+                break;
+            case MAC_LOCK:
+                rt_data->sys_state[SYS_IS_MAC_LOCK] = event_data->enable_payload.enable_state;
+                break;
+            case MSBT_LOCK:
+                rt_data->sys_state[SYS_IS_MSBT_LOCK] = event_data->enable_payload.enable_state;
+                break;   
+            default:
+                break; 
+        }
+        break;
     default:
         break;
     }

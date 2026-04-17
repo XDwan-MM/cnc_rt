@@ -1,4 +1,17 @@
 
+### 制品库
+
+０　创建分支推送，可参考 template-ci.yml，创建流水线，在制品库下载对应压缩包
+
+１ 文件包括　bin config lib
+
+２ 执行方式，在 cnc_rt_x.x.xxxx/bin 打开终端运行
+
+sudo -E LD_LIBRARY_PATH=../lib/cncshm/bin ./rt_cnc
+
+解释：以root权限，指定动态库在指定路径查找，执行rt_cnc
+
+
 ### 使用方法
 
 0、更新子模块（如共享内存）

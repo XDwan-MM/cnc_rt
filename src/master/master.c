@@ -4,6 +4,8 @@
 #include "global.h"
 #include <hmisysapi.h>
 #include <alarmapi.h>
+#include <stdio.h>
+#include <unistd.h>
 
 #ifdef __DeveloperMode__
 #define debug printf
@@ -38,11 +40,25 @@ static char* drv_names[] = {"主","X","Y","Z"};
 
 
 int Master_Start() {
+    char cwd[1024];
     char eni_path[512];
     #ifdef PLATFORM_1
-    snprintf(eni_path, sizeof(eni_path), "%s/%s", PROJECT_DIR, "config/ENI/speed.xml");
+    if(getcwd(cwd, sizeof(cwd)) != NULL){
+        char* last_slash = strrchr(cwd, '/');
+        if(last_slash != NULL){
+            *last_slash = '\0';
+            snprintf(eni_path, sizeof(eni_path), "%s/%s", cwd, "config/ENI/speed.xml");
+        }
+    }
     #else
-    snprintf(eni_path, sizeof(eni_path), "%s/%s", PROJECT_DIR, "config/ENI/gugao_io.xml");
+    if(getcwd(cwd, sizeof(cwd)) != NULL){
+        char* last_slash = strrchr(cwd, '/');
+        if(last_slash != NULL){
+            *last_slash = '\0';
+            snprintf(eni_path, sizeof(eni_path), "%s/%s", cwd, "config/ENI/gugao_io.xml");
+        }
+    }
+    // snprintf(eni_path, sizeof(eni_path), "%s/%s", PROJECT_DIR, "config/ENI/gugao_io.xml");
     #endif
     master_error_code = ethercat_init(eni_path);
     if ( master_error_code < 0) {
