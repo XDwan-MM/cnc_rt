@@ -242,7 +242,7 @@ static void check_for_fault() {
     if(alarm_count > 0){
         rt_data->sys_state[SYS_IS_ALARMING] = true;
         handle_alarm_cmd();
-    }
+    }else rt_data->sys_state[SYS_IS_ALARMING] = false;
 }
 
 // 检查轴跟随误差错误
