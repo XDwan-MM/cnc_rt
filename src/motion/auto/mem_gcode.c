@@ -104,10 +104,14 @@ static void mem_set_state(){
             if(IsEqualTo(var_chan[0][VAR_CHAN_FEED_OVERRIDE].value.f, 0)){
                 setAlarm(ALARM_SY, ALARM_WARNING, 3);
                 LOG(LOG_LEVEL_WARN, "进给倍率为0");
+            }else{
+                delAlarm(ALARM_SY, ALARM_WARNING, 3);
             }
             if(IsEqualTo(var_chan[0][VAR_CHAN_RAPID_OVERRIDE].value.f, 0)){
                 setAlarm(ALARM_SY, ALARM_WARNING, 2);
                 LOG(LOG_LEVEL_WARN, "快速倍率为0");
+            }else{
+                delAlarm(ALARM_SY, ALARM_WARNING, 2);
             }
             if(cycle_tp->mem_exec_state == EXEC_IDLE){
                 cycle_tp->mem_exec_state = EXEC_RUNNING;
@@ -139,6 +143,8 @@ static void mem_set_state(){
             if(IsEqualTo(var_chan[0][VAR_CHAN_FEED_OVERRIDE].value.f, 0)){
                 setAlarm(ALARM_SY, ALARM_WARNING, 3);
                 LOG(LOG_LEVEL_WARN, "进给倍率为0");
+            }else{
+                delAlarm(ALARM_SY, ALARM_WARNING, 3);
             }
             if(cycle_tp->mem_exec_state == EXEC_RUNNING){
                 if(!queue_is_empty(plan_queue)){
@@ -155,6 +161,8 @@ static void mem_set_state(){
             if(IsEqualTo(var_chan[0][VAR_CHAN_RAPID_OVERRIDE].value.f, 0)){
                 setAlarm(ALARM_SY, ALARM_WARNING, 2);
                 LOG(LOG_LEVEL_WARN, "快速倍率为0");
+            }else{
+                delAlarm(ALARM_SY, ALARM_WARNING, 2);
             }
             if(cycle_tp->mem_exec_state == EXEC_RUNNING){
                 if(!queue_is_empty(plan_queue)){

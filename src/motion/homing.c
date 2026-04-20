@@ -74,6 +74,8 @@ static void homing_set_state(){
             if(IsEqualTo(var_chan[0][VAR_CHAN_RAPID_OVERRIDE].value.f, 0)){
                 setAlarm(ALARM_SY, ALARM_WARNING, 2);
                 LOG(LOG_LEVEL_WARN, "快速倍率为0");
+            }else{
+                delAlarm(ALARM_SY, ALARM_WARNING, 2);
             }
             if(rt_data->sys_state[SYS_IS_SWITCHING_MODE]) break; // 换挡模式下，不允许操作
             if(homing_tp[AXIS_X].homing_state == ABS_EXEC_IDLE){
@@ -87,6 +89,8 @@ static void homing_set_state(){
             if(IsEqualTo(var_chan[0][VAR_CHAN_RAPID_OVERRIDE].value.f, 0)){
                 setAlarm(ALARM_SY, ALARM_WARNING, 2);
                 LOG(LOG_LEVEL_WARN, "快速倍率为0");
+            }else{
+                delAlarm(ALARM_SY, ALARM_WARNING, 2);
             }
             if(rt_data->sys_state[SYS_IS_SWITCHING_MODE]) break;
             if(homing_tp[AXIS_Y].homing_state == ABS_EXEC_IDLE){
@@ -100,6 +104,8 @@ static void homing_set_state(){
             if(IsEqualTo(var_chan[0][VAR_CHAN_RAPID_OVERRIDE].value.f, 0)){
                 setAlarm(ALARM_SY, ALARM_WARNING, 2);
                 LOG(LOG_LEVEL_WARN, "快速倍率为0");
+            }else{
+                delAlarm(ALARM_SY, ALARM_WARNING, 2);
             }
             if(rt_data->sys_state[SYS_IS_SWITCHING_MODE]) break;
             if(homing_tp[AXIS_Z].homing_state == ABS_EXEC_IDLE){
