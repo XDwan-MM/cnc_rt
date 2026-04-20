@@ -47,6 +47,8 @@ void emcmotTrajPlan() {
         
         if(rt_data->nc_event == SYS_EVENT_RESET)
         {
+            // 复位状态：2.外部复位信号ERS 4.按下MDI上的RESET键
+            setVarChanInt(0, VAR_CHAN_IS_RESETTING, 1, 0);
             // 复位生效参数
             Axis_Limit_Manager_Init();
             // 清除警告

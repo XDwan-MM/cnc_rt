@@ -86,7 +86,7 @@ static void nc_deal_new_mcode(){
         case M02: // 复位
             setRegValue8(REG_F, 10, 0x02); 
             setRegBit(REG_F, 9, 5);  
-            rt_data->nc_event = SYS_EVENT_RESET;
+            // rt_data->nc_event = SYS_EVENT_RESET;
             mcode_data->mcode_state = MCODE_EXECUTE_RESET;
             cycle_tp->mcode_feedback = false;
             cycle_tp->mcode = M02;
@@ -98,7 +98,7 @@ static void nc_deal_new_mcode(){
         case M30: // 复位
             setRegValue8(REG_F, 10, 0x1e); 
             setRegBit(REG_F, 9, 4);  
-            rt_data->nc_event = SYS_EVENT_RESET;
+            // rt_data->nc_event = SYS_EVENT_RESET;
             mcode_data->mcode_state = MCODE_EXECUTE_RESET;
             cycle_tp->mcode_feedback = false;
             cycle_tp->mcode = M30;

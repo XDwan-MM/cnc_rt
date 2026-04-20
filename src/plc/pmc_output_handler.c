@@ -15,6 +15,7 @@
 static void pmc_output_mode();
 static void pmc_output_home();
 static void pmc_output_auto();
+static void pmc_output_reset();
 static void pmc_output_axis_status();
 
 void pmc_output_feedback() {
@@ -41,13 +42,12 @@ void pmc_output_feedback() {
     pmc_output_mode();
     pmc_output_auto();
     pmc_output_home();
+    pmc_output_reset();
     pmc_output_axis_status();
 }
 
 // 自动运行启动中、运行中信号、休止中信号、复位
 static void pmc_output_auto(){
-    static bool last_reset_state = false;
-    static int reset_tic = 0;
     // OP：运行中信号
     if(var_chan[0][VAR_CHAN_IS_RUNNING].value.i) setRegBit(REG_F, 0, 7); 
     else clearRegBit(REG_F, 0, 7);
@@ -57,6 +57,24 @@ static void pmc_output_auto(){
     // SPL：休止中
     if(cycle_tp->mem_exec_state == EXEC_PAUSING) setRegBit(REG_F, 0, 4); 
     else clearRegBit(REG_F, 0, 4);
+}
+
+// 各轴返回零点完成、参考点建立
+static void pmc_output_home(){
+    for (int i = 0; i < SYS_AXES_NUM; i++){
+        if(var_axis[i][VAR_AXIS_IS_HOMEF].value.i){
+            setRegBit(REG_F, 94, i);
+            setRegBit(REG_F, 120, i);
+        } 
+        else{
+            clearRegBit(REG_F, 94, i);
+        }
+    }
+}
+
+static void pmc_output_reset(){
+    static bool last_reset_state = false;
+    static int reset_tic = 0;
     // RST：复位
     if(var_chan[0][VAR_CHAN_IS_RESETTING].value.i){
         setRegBit(REG_F, 1, 1);
@@ -73,19 +91,6 @@ static void pmc_output_auto(){
             clearRegBit(REG_F, 1, 1);
             last_reset_state = false;
             reset_tic = 0;   
-        }
-    }
-}
-
-// 各轴返回零点完成、参考点建立
-static void pmc_output_home(){
-    for (int i = 0; i < SYS_AXES_NUM; i++){
-        if(var_axis[i][VAR_AXIS_IS_HOMEF].value.i){
-            setRegBit(REG_F, 94, i);
-            setRegBit(REG_F, 120, i);
-        } 
-        else{
-            clearRegBit(REG_F, 94, i);
         }
     }
 }

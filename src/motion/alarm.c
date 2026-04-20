@@ -5,7 +5,8 @@
 
 // 急停处理逻辑
 void handle_estop_cmd(){
-    setAlarm(ALARM_SY, ALARM_ERROR, 0);
+    // 复位状态：1.急停信号ESP
+    setVarChanInt(0, VAR_CHAN_IS_RESETTING, 1, 0);
     // 重置各个模式
     mem_handle_estop();
     homing_handle_estop();
