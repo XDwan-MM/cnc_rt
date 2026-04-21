@@ -85,8 +85,6 @@ void handle_jog_cmd()
  */
 void handle_rapid_jog_cmd()
 {
-    // printf("jog_para vel%f acc%f override%f \n", par_axis[0][PAR_AX_JOG_FASTSPD].value.val_real, par_axis[0][PAR_AX_RAPID_ACC].value.val_real, var_chan[0][VAR_CHAN_FEED_OVERRIDE].value.f);
-
     for (int i = 0; i < SYS_AXES_NUM_JOG; i++)
     {
         /* 1. 静态同步：IDLE状态下强制同步位置，防止从JOG切入其他模式时位置突跳 */
@@ -97,11 +95,8 @@ void handle_rapid_jog_cmd()
             rapid_jog_tp[i].enable = 0;
         }
 
-        printf("rapid_jog_ctrls before %d %d %d \n", rapid_jog_ctrls[0].state, rapid_jog_ctrls[1].state, rapid_jog_ctrls[2].state);
         /* 2. 处理按键信号与状态机切换 */
         update_axis_state(i, &rapid_jog_ctrls[i]);
-
-        printf("rapid_jog_ctrls after %d %d %d \n", rapid_jog_ctrls[0].state, rapid_jog_ctrls[1].state, rapid_jog_ctrls[2].state);
 
         /* 4. 执行快速JOG运动计算逻辑 */
         execute_axis_logic(i, &rapid_jog_ctrls[i], &rapid_jog_tp[i], true);
@@ -118,6 +113,19 @@ void handle_rapid_jog_cmd()
         f_sq += (rapid_jog_tp[i].curr_vel * rapid_jog_tp[i].curr_vel);
     }
     setVarChanDouble(0, VAR_CHAN_CMD_FEEDRATE, sqrt(f_sq) * 60.0, 0);
+
+    // 减速完成信号赋值
+    for (int i = 0; i < SYS_AXES_NUM_JOG; i++)
+    {
+        if (fabs(var_axis[i][VAR_AXIS_CMD_POS_EX].value.f) < SPEED_THRESHOLD)
+        {
+            rt_data->axis_data[i].axis_status.is_decel_done = 1;
+        }
+        else
+        {
+            rt_data->axis_data[i].axis_status.is_decel_done = 0;
+        }
+    }
 
     // 无动作时将通道事件全局变量置为NONE事件
     if (check_all_axes_idle_rapid_jog())
@@ -183,11 +191,8 @@ static void update_axis_state(int i, JOG_AXIS_CTRL *jog_axis_ctrl)
     /* 1. 处理复位,切模式：强制停止所有运动 */
     if (event == SYS_EVENT_RESET || rt_data->sys_state[SYS_IS_SWITCHING_MODE])
     {
-        if (jog_axis_ctrl->state != JOG_STATE_IDLE)
-        {
-            // 切换至减速停止状态
-            jog_axis_ctrl->state = JOG_STATE_STOPPING;
-        }
+        // 切换至减速停止状态
+        jog_axis_ctrl->state = JOG_STATE_STOPPING;
         return;
     }
 
@@ -195,17 +200,18 @@ static void update_axis_state(int i, JOG_AXIS_CTRL *jog_axis_ctrl)
      * 如果系统发生了报警，且该轴【并未处于限位状态】，说明发生了其他严重报警（如跟随误差、驱动器异常）。
      * 或者虽然处于限位状态，但报警数量 > 1 (意味着除了限位还有别的故障)。
      */
-    if (rt_data->sys_state[SYS_IS_ALARMING])
-    {
-        // 简单严谨的逻辑：如果当前轴没有触发任何限位，但系统却在报警，说明是致命报警
-        // 或者你可以调用报警 API 检查是否有排除限位 ID 以外的报警
-        if (!is_fwd_limit && !is_rev_limit)
-        {
-            if (jog_axis_ctrl->state != JOG_STATE_IDLE)
-                jog_axis_ctrl->state = JOG_STATE_STOPPING;
-            return;
-        }
-    }
+    // 待解决，Ｘ轴发生限位报警时，其他轴会动不了
+    // if (rt_data->sys_state[SYS_IS_ALARMING])
+    // {
+    //     // 简单严谨的逻辑：如果当前轴没有触发任何限位，但系统却在报警，说明是致命报警
+    //     // 或者你可以调用报警 API 检查是否有排除限位 ID 以外的报警
+    //     if (!is_fwd_limit && !is_rev_limit)
+    //     {
+    //         if (jog_axis_ctrl->state != JOG_STATE_IDLE)
+    //             jog_axis_ctrl->state = JOG_STATE_STOPPING;
+    //         return;
+    //     }
+    // }
 
     /* 2. 状态机切换逻辑改写 */
     switch (jog_axis_ctrl->state)
@@ -250,19 +256,6 @@ static void update_axis_state(int i, JOG_AXIS_CTRL *jog_axis_ctrl)
         }
 
         /* 2. 捕捉按键释放（核心修复：只响应与当前运行方向匹配的释放事件） */
-        // bool is_release = false;
-        // if (i == AXIS_X && ((event == SYS_EVENT_X_POS_RELEASE) || (event == SYS_EVENT_X_NEG_RELEASE)))
-        // {
-        //     is_release = true;
-        // }
-        // else if (i == AXIS_Y && ((event == SYS_EVENT_Y_POS_RELEASE) || (event == SYS_EVENT_Y_NEG_RELEASE)))
-        // {
-        //     is_release = true;
-        // }
-        // else if (i == AXIS_Z && ((event == SYS_EVENT_Z_POS_RELEASE) || (event == SYS_EVENT_Z_NEG_RELEASE)))
-        // {
-        //     is_release = true;
-        // }
         if (is_release)
         {
             jog_axis_ctrl->state = JOG_STATE_STOPPING;
@@ -320,8 +313,8 @@ static void execute_axis_logic(int i, JOG_AXIS_CTRL *jog_axis_ctrl, jog_planner_
             double decel = axis_jog_tp->max_acc;
 
             // 计算理论刹车距离，乘以 1.05 作为安全余量，防止浮点累加误差导致轻微越界
-            // 减小1.05系数，就可以超过限位
-            double stop_dist = (curr_v * curr_v) / (2.0 * decel) * 1.05;
+            // 减小系数，就可以超过限位
+            double stop_dist = (curr_v * curr_v) / (2.0 * decel) * 0.9999;
 
             bool is_limit = false;
             if (jog_axis_ctrl->direction == JOG_DIR_POSITIVE)

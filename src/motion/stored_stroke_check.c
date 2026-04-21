@@ -12,7 +12,7 @@ static void Data_Log_Alarm(AXIS_TYPE axis ,Level level);
 static uint8_t Is_Inside_Limit(float position, LimitLevel limit);
 // 检查位置是否在限位区域外部
 static uint8_t Is_Outside_Limit(float position, LimitLevel limit);
-static void Outside_Alarm(float position, LimitLevel limit , int premove_id, Level level, AxisLimitType *type);
+static void Outside_Alarm(float position, LimitLevel limit , int premove_id, Level level, AxisLimitRuntime *runtime);
 static void Inside_Alarm(AxisLimitRuntime *runtime, int premove_id ,Level level);
 
 
@@ -82,7 +82,11 @@ uint8_t Check_Axis_Limit_Violation(AxisLimitRuntime *runtime, double pos,AxisLim
         break;
     }
     runtime->direction = rt_data->axis_data[runtime->axis].axis_status.direction;
-
+    // printf("config: %f %f %f %f %f %f %d %d %d %f\n",config.level1.negative_limit,config.level1.positive_limit
+    //         ,config.level2.negative_limit,config.level2.positive_limit
+    //         ,config.level3.negative_limit,config.level3.positive_limit
+    //         ,rt_data->axis_data[runtime->axis].axis_status.is_fwd_limit
+    //         ,rt_data->axis_data[runtime->axis].axis_status.is_rev_limit,type,pos);
     // 第一级检查：必须在区域内部运动
     if (runtime->config.level1.is_enabled && Is_Outside_Limit(pos, config.level1))
     {
@@ -96,7 +100,7 @@ uint8_t Check_Axis_Limit_Violation(AxisLimitRuntime *runtime, double pos,AxisLim
         case RESET_CHEAK_USED:     
         case ALARM_CHEAK_USED:
         case SOFT_CHEAK_USED:
-            Outside_Alarm(pos, config.level1, 0, LEVEL1, &runtime->limit_type);
+            Outside_Alarm(pos, config.level1, 0, LEVEL1, runtime);
             break;
         default:
             break;
@@ -142,7 +146,7 @@ uint8_t Check_Axis_Limit_Violation(AxisLimitRuntime *runtime, double pos,AxisLim
                 case RESET_CHEAK_USED:     
                 case ALARM_CHEAK_USED:
                 case SOFT_CHEAK_USED:
-                    Outside_Alarm(pos, config.level2, 2, LEVEL2, &runtime->limit_type);
+                    Outside_Alarm(pos, config.level2, 2, LEVEL2, runtime);
                     break;
                 default:
                     break;
@@ -224,22 +228,23 @@ void Axis_Status_Update()
         }
     }
 }
-static void Outside_Alarm(float position, LimitLevel limit , int premove_id, Level level, AxisLimitType *type)
+static void Outside_Alarm(float position, LimitLevel limit , int premove_id, Level level,AxisLimitRuntime *runtime)
 {
+    // printf("axis%d \n",runtime->axis);
     if (position < limit.negative_limit)
     {
         rt_data->axis_data[runtime->axis].axis_status.is_rev_limit = 1;
         if(level == 1)
         {
-            *type = LEVEL1_REV_LIMIT;
+            runtime->limit_type = LEVEL1_REV_LIMIT;
         }
         else
         {
-            *type = LEVEL2_REV_LIMIT;
+            runtime->limit_type = LEVEL2_REV_LIMIT;
         }
         int res = setAlarm(ALARM_AX, ALARM_ERROR, premove_id + 6 * runtime->axis + 1);
         if(res == -8) return 1;
-        LOG(LOG_LEVEL_ERR, "%s 轴朝负方向移动超过了存储行程检查%d", axis_names[runtime->axis],level);
+        LOG(LOG_LEVEL_ERR, "%s 轴朝负方向移动超过了存储行程检查%d", axis_names[runtime->axis],runtime->axis);
         return 1;
     }
     else if(position > limit.positive_limit)
@@ -247,15 +252,15 @@ static void Outside_Alarm(float position, LimitLevel limit , int premove_id, Lev
         rt_data->axis_data[runtime->axis].axis_status.is_fwd_limit = 1;
         if(level == 1)
         {
-            *type = LEVEL1_FWD_LIMIT;
+            runtime->limit_type = LEVEL1_FWD_LIMIT;
         }
         else
         {
-            *type = LEVEL2_FWD_LIMIT;
+            runtime->limit_type = LEVEL2_FWD_LIMIT;
         }
         int res = setAlarm(ALARM_AX, ALARM_ERROR, premove_id + 6 * runtime->axis);
         if(res == -8) return 1;
-        LOG(LOG_LEVEL_ERR, "%s 轴朝正方向移动超过了存储行程检查%d", axis_names[runtime->axis],level);
+        LOG(LOG_LEVEL_ERR, "%s 轴朝正方向移动超过了存储行程检查%d", axis_names[runtime->axis],runtime->axis);
         return 1;
     }
     else

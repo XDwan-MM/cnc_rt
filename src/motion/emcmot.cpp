@@ -171,7 +171,6 @@ static void set_operating_mode() {
                 break;
             }
             rt_data->sys_state[SYS_IS_SWITCHING_MODE] = true;
-            rt_data->current_mode = rt_data->target_mode;
             break;
         case MODE_HOMING:
             if (!var_chan[0][VAR_CHAN_IS_HOMING].value.i) {

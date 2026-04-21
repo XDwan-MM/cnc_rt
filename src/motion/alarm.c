@@ -61,5 +61,5 @@ void handle_alarm_cmd(){
             LOG(LOG_LEVEL_ERR, "报警下不支持操作，请按复位清除报警");
             break;
     }
-    rt_data->nc_event = SYS_EVENT_NONE;
+    // rt_data->nc_event = SYS_EVENT_NONE;
 }

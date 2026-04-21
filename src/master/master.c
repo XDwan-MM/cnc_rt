@@ -14,7 +14,7 @@
 #endif
 
 // 如果为测试平台2，请注释该定义（靠墙机器）
-#define PLATFORM_1
+// #define PLATFORM_1
 
 // ===============错误检查宏=================
 #define CHECK_RC(rc,info,label) \
