@@ -42,7 +42,6 @@ void handle_jog_cmd()
         /* 2. 处理按键信号与状态机切换 */
         update_axis_state(i, &jog_ctrls[i]);
 
-
         /* 4. 执行普通JOG运动计算逻辑 */
         execute_axis_logic(i, &jog_ctrls[i], &jog_tp[i], false);
 
@@ -60,6 +59,19 @@ void handle_jog_cmd()
         f_sq += (jog_tp[i].curr_vel * jog_tp[i].curr_vel);
     }
     setVarChanDouble(0, VAR_CHAN_CMD_FEEDRATE, sqrt(f_sq) * 60.0, 0);
+
+    // 减速完成信号赋值
+    for (int i = 0; i < SYS_AXES_NUM_JOG; i++)
+    {
+        if (fabs(var_axis[i][VAR_AXIS_CMD_POS_EX].value.f) < SPEED_THRESHOLD)
+        {
+            rt_data->axis_data[i].axis_status.is_decel_done = 1;
+        }
+        else
+        {
+            rt_data->axis_data[i].axis_status.is_decel_done = 0;
+        }
+    }
 
     // 无动作时将通道事件全局变量置为NONE事件
     if (check_all_axes_idle_jog())
@@ -140,8 +152,36 @@ static void update_axis_state(int i, JOG_AXIS_CTRL *jog_axis_ctrl)
     // 获取当前通道的系统事件（从全局变量获取）
     SYS_EVENT event = rt_data->nc_event;
 
-    /* 1. 处理复位,报警,切模式：强制停止所有运动 */
-    if (event == SYS_EVENT_RESET || rt_data->sys_state[SYS_IS_ALARMING] || rt_data->sys_state[SYS_IS_SWITCHING_MODE])
+    /* 获取当前轴的限位状态 （从全局变量获取）*/
+    bool is_fwd_limit = rt_data->axis_data[i].axis_status.is_fwd_limit;
+    bool is_rev_limit = rt_data->axis_data[i].axis_status.is_rev_limit;
+
+    /* 解析当前轴的按键意图方向 */
+    bool press_pos = false;
+    bool press_neg = false;
+    bool is_release = false;
+
+    if (i == AXIS_X)
+    {
+        press_pos = (event == SYS_EVENT_X_POS_PRESS);
+        press_neg = (event == SYS_EVENT_X_NEG_PRESS);
+        is_release = (event == SYS_EVENT_X_POS_RELEASE || event == SYS_EVENT_X_NEG_RELEASE);
+    }
+    else if (i == AXIS_Y)
+    {
+        press_pos = (event == SYS_EVENT_Y_POS_PRESS);
+        press_neg = (event == SYS_EVENT_Y_NEG_PRESS);
+        is_release = (event == SYS_EVENT_Y_POS_RELEASE || event == SYS_EVENT_Y_NEG_RELEASE);
+    }
+    else if (i == AXIS_Z)
+    {
+        press_pos = (event == SYS_EVENT_Z_POS_PRESS);
+        press_neg = (event == SYS_EVENT_Z_NEG_PRESS);
+        is_release = (event == SYS_EVENT_Z_POS_RELEASE || event == SYS_EVENT_Z_NEG_RELEASE);
+    }
+
+    /* 1. 处理复位,切模式：强制停止所有运动 */
+    if (event == SYS_EVENT_RESET || rt_data->sys_state[SYS_IS_SWITCHING_MODE])
     {
         if (jog_axis_ctrl->state != JOG_STATE_IDLE)
         {
@@ -151,23 +191,35 @@ static void update_axis_state(int i, JOG_AXIS_CTRL *jog_axis_ctrl)
         return;
     }
 
+    /* * 4. 关键改进：处理严重报警拦截
+     * 如果系统发生了报警，且该轴【并未处于限位状态】，说明发生了其他严重报警（如跟随误差、驱动器异常）。
+     * 或者虽然处于限位状态，但报警数量 > 1 (意味着除了限位还有别的故障)。
+     */
+    if (rt_data->sys_state[SYS_IS_ALARMING])
+    {
+        // 简单严谨的逻辑：如果当前轴没有触发任何限位，但系统却在报警，说明是致命报警
+        // 或者你可以调用报警 API 检查是否有排除限位 ID 以外的报警
+        if (!is_fwd_limit && !is_rev_limit)
+        {
+            if (jog_axis_ctrl->state != JOG_STATE_IDLE)
+                jog_axis_ctrl->state = JOG_STATE_STOPPING;
+            return;
+        }
+    }
+
     /* 2. 状态机切换逻辑改写 */
     switch (jog_axis_ctrl->state)
     {
     case JOG_STATE_IDLE:
     {
         // 捕捉【正向按键按下】
-        if ((i == AXIS_X && event == SYS_EVENT_X_POS_PRESS) ||
-            (i == AXIS_Y && event == SYS_EVENT_Y_POS_PRESS) ||
-            (i == AXIS_Z && event == SYS_EVENT_Z_POS_PRESS))
+        if (press_pos && !is_fwd_limit)
         {
             jog_axis_ctrl->state = JOG_STATE_RUNNING;
             jog_axis_ctrl->direction = JOG_DIR_POSITIVE;
         }
         // 捕捉【负向按键按下】
-        else if ((i == AXIS_X && event == SYS_EVENT_X_NEG_PRESS) ||
-                 (i == AXIS_Y && event == SYS_EVENT_Y_NEG_PRESS) ||
-                 (i == AXIS_Z && event == SYS_EVENT_Z_NEG_PRESS))
+        else if (press_neg && !is_rev_limit)
         {
             jog_axis_ctrl->state = JOG_STATE_RUNNING;
             jog_axis_ctrl->direction = JOG_DIR_NEGATIVE;
@@ -176,35 +228,41 @@ static void update_axis_state(int i, JOG_AXIS_CTRL *jog_axis_ctrl)
     }
     case JOG_STATE_RUNNING:
     {
-        /* 1. 捕捉运行过程中的反向按键（或重复按下），直接切换目标方向 */
+        /* 运行中如果后台限位状态突然变为触发，立即刹车 */
+        /* 情况 A: 撞到了运动方向的限位 -> 停止
+         * 情况 B: 运动过程中发生了严重报警 (由步骤 4 拦截，此处作为冗余保护)*/
+        if ((jog_axis_ctrl->direction == JOG_DIR_POSITIVE && is_fwd_limit) ||
+            (jog_axis_ctrl->direction == JOG_DIR_NEGATIVE && is_rev_limit))
+        {
+            jog_axis_ctrl->state = JOG_STATE_STOPPING;
+            break;
+        }
+
+        /* 捕捉运行过程中的反向按键（或重复按下），直接切换目标方向 */
         /* 规划器会自动处理减速过零并反向加速的平滑过渡 */
-        if ((i == AXIS_X && event == SYS_EVENT_X_POS_PRESS) ||
-            (i == AXIS_Y && event == SYS_EVENT_Y_POS_PRESS) ||
-            (i == AXIS_Z && event == SYS_EVENT_Z_POS_PRESS))
+        if (press_pos && !is_fwd_limit)
         {
             jog_axis_ctrl->direction = JOG_DIR_POSITIVE;
         }
-        else if ((i == AXIS_X && event == SYS_EVENT_X_NEG_PRESS) ||
-                 (i == AXIS_Y && event == SYS_EVENT_Y_NEG_PRESS) ||
-                 (i == AXIS_Z && event == SYS_EVENT_Z_NEG_PRESS))
+        else if (press_neg && !is_rev_limit)
         {
             jog_axis_ctrl->direction = JOG_DIR_NEGATIVE;
         }
 
         /* 2. 捕捉按键释放（核心修复：只响应与当前运行方向匹配的释放事件） */
-        bool is_release = false;
-        if (i == AXIS_X && ((event == SYS_EVENT_X_POS_RELEASE) || (event == SYS_EVENT_X_NEG_RELEASE)))
-        {
-            is_release = true;
-        }
-        else if (i == AXIS_Y && ((event == SYS_EVENT_Y_POS_RELEASE) || (event == SYS_EVENT_Y_NEG_RELEASE)))
-        {
-            is_release = true;
-        }
-        else if (i == AXIS_Z && ((event == SYS_EVENT_Z_POS_RELEASE) || (event == SYS_EVENT_Z_NEG_RELEASE)))
-        {
-            is_release = true;
-        }
+        // bool is_release = false;
+        // if (i == AXIS_X && ((event == SYS_EVENT_X_POS_RELEASE) || (event == SYS_EVENT_X_NEG_RELEASE)))
+        // {
+        //     is_release = true;
+        // }
+        // else if (i == AXIS_Y && ((event == SYS_EVENT_Y_POS_RELEASE) || (event == SYS_EVENT_Y_NEG_RELEASE)))
+        // {
+        //     is_release = true;
+        // }
+        // else if (i == AXIS_Z && ((event == SYS_EVENT_Z_POS_RELEASE) || (event == SYS_EVENT_Z_NEG_RELEASE)))
+        // {
+        //     is_release = true;
+        // }
         if (is_release)
         {
             jog_axis_ctrl->state = JOG_STATE_STOPPING;
@@ -215,18 +273,14 @@ static void update_axis_state(int i, JOG_AXIS_CTRL *jog_axis_ctrl)
     case JOG_STATE_STOPPING:
     {
         /* 核心逻辑：在减速过程中，如果按键再次按下，立即恢复 RUNNING */
-        // 捕捉【正向按键再次按下】
-        if ((i == AXIS_X && event == SYS_EVENT_X_POS_PRESS) ||
-            (i == AXIS_Y && event == SYS_EVENT_Y_POS_PRESS) ||
-            (i == AXIS_Z && event == SYS_EVENT_Z_POS_PRESS))
+        // 捕捉【正向按键再次按下】，且未触发正向限位才允许运行
+        if (press_pos && !is_fwd_limit)
         {
             jog_axis_ctrl->state = JOG_STATE_RUNNING;
             jog_axis_ctrl->direction = JOG_DIR_POSITIVE;
         }
-        // 捕捉【负向按键再次按下】
-        else if ((i == AXIS_X && event == SYS_EVENT_X_NEG_PRESS) ||
-                 (i == AXIS_Y && event == SYS_EVENT_Y_NEG_PRESS) ||
-                 (i == AXIS_Z && event == SYS_EVENT_Z_NEG_PRESS))
+        // 捕捉【负向按键再次按下】，且未触发负向限位才允许运行
+        else if (press_neg && !is_rev_limit)
         {
             jog_axis_ctrl->state = JOG_STATE_RUNNING;
             jog_axis_ctrl->direction = JOG_DIR_NEGATIVE;

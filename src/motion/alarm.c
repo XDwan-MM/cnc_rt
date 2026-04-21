@@ -5,7 +5,7 @@
 
 // 急停处理逻辑
 void handle_estop_cmd(){
-    setAlarm(ALARM_SY, ALARM_ERROR, 0);
+    // setAlarm(ALARM_SY, ALARM_ERROR, 0);
     // 重置各个模式
     mem_handle_estop();
     homing_handle_estop();
