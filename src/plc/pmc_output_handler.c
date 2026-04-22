@@ -202,11 +202,11 @@ static void pmc_output_axis_status()
         {
             if(rt_data->axis_data[i].axis_status.direction)
             {
-                setRegBit(REG_F, 106, i);
+                clearRegBit(REG_F, 106, i);
             }
             else
             {
-                clearRegBit(REG_F, 106, i);
+                setRegBit(REG_F, 106, i);
             }
             setRegBit(REG_F, 102, i);
         }

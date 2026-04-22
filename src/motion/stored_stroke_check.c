@@ -12,7 +12,7 @@ static void Data_Log_Alarm(AXIS_TYPE axis ,Level level);
 static uint8_t Is_Inside_Limit(float position, LimitLevel limit);
 // 检查位置是否在限位区域外部
 static uint8_t Is_Outside_Limit(float position, LimitLevel limit);
-static void Outside_Alarm(float position, LimitLevel limit , int premove_id, Level level, AxisLimitType *type);
+static void Outside_Alarm(float position, LimitLevel limit , int premove_id, Level level, AxisLimitRuntime *runtime);
 static void Inside_Alarm(AxisLimitRuntime *runtime, int premove_id ,Level level);
 
 
@@ -30,15 +30,15 @@ void Axis_Limit_Manager_Init(void)
     runtime[AXIS_Z].config.level1.positive_limit = par_axis[AXIS_Z][PAR_AX_PLMT].value.val_real;
     runtime[AXIS_Z].config.level1.negative_limit = par_axis[AXIS_Z][PAR_AX_NLMT].value.val_real;
     //level 2
-    runtime[AXIS_X].config.level2.is_enabled = 0;
+    runtime[AXIS_X].config.level2.is_enabled = 1;
     runtime[AXIS_X].config.level2_mode = 0;
     runtime[AXIS_X].config.level2.positive_limit = par_axis[AXIS_X][PAR_AX_PLMT2].value.val_real;
     runtime[AXIS_X].config.level2.negative_limit = par_axis[AXIS_X][PAR_AX_NLMT2].value.val_real;
-    runtime[AXIS_Y].config.level2.is_enabled = 0;
+    runtime[AXIS_Y].config.level2.is_enabled = 1;
     runtime[AXIS_Y].config.level2_mode = 0;
     runtime[AXIS_Y].config.level2.positive_limit = par_axis[AXIS_Y][PAR_AX_PLMT2].value.val_real;
     runtime[AXIS_Y].config.level2.negative_limit = par_axis[AXIS_Y][PAR_AX_NLMT2].value.val_real;
-    runtime[AXIS_Z].config.level2.is_enabled = 0;
+    runtime[AXIS_Z].config.level2.is_enabled = 1;
     runtime[AXIS_Z].config.level2_mode = 0;
     runtime[AXIS_Z].config.level2.positive_limit = par_axis[AXIS_Z][PAR_AX_PLMT2].value.val_real;
     runtime[AXIS_Z].config.level2.negative_limit = par_axis[AXIS_Z][PAR_AX_NLMT2].value.val_real;
@@ -96,7 +96,7 @@ uint8_t Check_Axis_Limit_Violation(AxisLimitRuntime *runtime, double pos,AxisLim
         case RESET_CHEAK_USED:     
         case ALARM_CHEAK_USED:
         case SOFT_CHEAK_USED:
-            Outside_Alarm(pos, config.level1, 0, LEVEL1, &runtime->limit_type);
+            Outside_Alarm(pos, config.level1, 0, LEVEL1, runtime);
             break;
         default:
             break;
@@ -142,7 +142,7 @@ uint8_t Check_Axis_Limit_Violation(AxisLimitRuntime *runtime, double pos,AxisLim
                 case RESET_CHEAK_USED:     
                 case ALARM_CHEAK_USED:
                 case SOFT_CHEAK_USED:
-                    Outside_Alarm(pos, config.level2, 2, LEVEL2, &runtime->limit_type);
+                    Outside_Alarm(pos, config.level2, 2, LEVEL2, runtime);
                     break;
                 default:
                     break;
@@ -224,18 +224,19 @@ void Axis_Status_Update()
         }
     }
 }
-static void Outside_Alarm(float position, LimitLevel limit , int premove_id, Level level, AxisLimitType *type)
+static void Outside_Alarm(float position, LimitLevel limit , int premove_id, Level level,AxisLimitRuntime *runtime)
 {
+    // printf("axis%d \n",runtime->axis);
     if (position < limit.negative_limit)
     {
         rt_data->axis_data[runtime->axis].axis_status.is_rev_limit = 1;
         if(level == 1)
         {
-            *type = LEVEL1_REV_LIMIT;
+            runtime->limit_type = LEVEL1_REV_LIMIT;
         }
         else
         {
-            *type = LEVEL2_REV_LIMIT;
+            runtime->limit_type = LEVEL2_REV_LIMIT;
         }
         int res = setAlarm(ALARM_AX, ALARM_ERROR, premove_id + 6 * runtime->axis + 1);
         if(res == -8) return 1;
@@ -247,11 +248,11 @@ static void Outside_Alarm(float position, LimitLevel limit , int premove_id, Lev
         rt_data->axis_data[runtime->axis].axis_status.is_fwd_limit = 1;
         if(level == 1)
         {
-            *type = LEVEL1_FWD_LIMIT;
+            runtime->limit_type = LEVEL1_FWD_LIMIT;
         }
         else
         {
-            *type = LEVEL2_FWD_LIMIT;
+            runtime->limit_type = LEVEL2_FWD_LIMIT;
         }
         int res = setAlarm(ALARM_AX, ALARM_ERROR, premove_id + 6 * runtime->axis);
         if(res == -8) return 1;

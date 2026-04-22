@@ -234,6 +234,14 @@ static double mem_cal_pinc(VELPLAN_TYPE velplan_mode, double ncu_cycle, double c
                     if(var_chan[0][VAR_CHAN_IS_RESETTING].value.i){
                         mem_handle_reset();
                         LOG(LOG_LEVEL_DEBUG, "完成复位");
+                        for(int i = 0; i < SYS_AXES_NUM; i++){
+                            if(runtime[i].active_levels) {
+                                if(rt_data->axis_data[i].axis_status.is_fwd_limit || rt_data->axis_data[i].axis_status.is_rev_limit)
+                                {
+                                    rt_data->axis_data[i].axis_status.is_decel_done = 1;
+                                }
+                            }
+                        }
                     }else{
                         setVarChanInt(0, VAR_CHAN_IS_MOVING, 0, 0); 
                         // LOG(LOG_LEVEL_DEBUG, "进入");                    
