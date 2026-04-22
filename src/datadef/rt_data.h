@@ -81,9 +81,17 @@ typedef struct
     double cmd_jk;
 }RT_CHAN;
 
+typedef struct 
+{
+    bool is_resetting;
+    bool is_resetted;
+    bool is_reset_delaying;
+    int reset_tic;
+}SYS_RESET;
+
 typedef struct {
     SYS_EVENT nc_event;
-    SYS_EVENT record_nc_event;
+    SYS_RESET nc_reset;
     NC_MODE target_mode; 
     NC_MODE current_mode; 
     bool sys_state[SYS_STATE_NUM];
@@ -99,6 +107,8 @@ void rt_set_sys_state(SysStateIndex state, bool value);
 bool rt_get_sys_state(SysStateIndex state);
 void rt_set_chan_state(int chan_index, ChanStateIndex state, bool value);
 bool rt_get_chan_state(int chan_index, ChanStateIndex state);
+void nc_set_resetting();
+void nc_set_resetted();
 
 #ifdef __cplusplus
 }

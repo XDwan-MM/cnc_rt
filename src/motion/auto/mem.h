@@ -19,6 +19,7 @@ extern "C" {
 #endif
 
 void handle_run_cmd();
+void mem_handle_estop();
 
 #ifdef __cplusplus
 }

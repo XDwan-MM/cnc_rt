@@ -15,6 +15,7 @@
 static void pmc_output_mode();
 static void pmc_output_home();
 static void pmc_output_auto();
+static void pmc_output_reset();
 static void pmc_output_axis_status();
 
 void pmc_output_feedback() {
@@ -30,9 +31,9 @@ void pmc_output_feedback() {
     setRegValue8(REG_F, 1, is_estop);
 
     // 急停报警中
-    if(rt_data->sys_state[SYS_IS_ESTOP_ON]){
-        setRegBit(REG_F, 1, 1); //主轴状态重置 
-    }
+    // if(rt_data->sys_state[SYS_IS_ESTOP_ON]){
+    //     setRegBit(REG_F, 1, 1); //主轴状态重置 
+    // }
 
     // 报警中
     if(rt_data->sys_state[SYS_IS_ALARMING]) setRegBit(REG_F, 1, 0); 
@@ -41,13 +42,12 @@ void pmc_output_feedback() {
     pmc_output_mode();
     pmc_output_auto();
     pmc_output_home();
+    pmc_output_reset();
     pmc_output_axis_status();
 }
 
 // 自动运行启动中、运行中信号、休止中信号、复位
 static void pmc_output_auto(){
-    static bool last_reset_state = false;
-    static int reset_tic = 0;
     // OP：运行中信号
     if(var_chan[0][VAR_CHAN_IS_RUNNING].value.i) setRegBit(REG_F, 0, 7); 
     else clearRegBit(REG_F, 0, 7);
@@ -57,28 +57,17 @@ static void pmc_output_auto(){
     // SPL：休止中
     if(cycle_tp->mem_exec_state == EXEC_PAUSING) setRegBit(REG_F, 0, 4); 
     else clearRegBit(REG_F, 0, 4);
-    // RST：复位
-    if(var_chan[0][VAR_CHAN_IS_RESETTING].value.i){
-        setRegBit(REG_F, 1, 1);
-        last_reset_state = true;
-    }
-    // 复位减速后延时
-    if(last_reset_state && !var_chan[0][VAR_CHAN_IS_RESETTING].value.i){
-        if(reset_tic < par_mac[PAR_MAC_HARD_RESET_DELAY].value.val_int){
-            reset_tic++;
-            setRegBit(REG_F, 1, 1);
-            // LOG(LOG_LEVEL_DEBUG, "复位减速后延时 %d", reset_tic);
-        }
-        else{
-            clearRegBit(REG_F, 1, 1);
-            last_reset_state = false;
-            reset_tic = 0;   
-        }
-    }
 }
 
 // 各轴返回零点完成、参考点建立
 static void pmc_output_home(){
+    // 急停后清除回参考点建立
+    if(rt_data->sys_state[SYS_IS_ESTOP_ON]){
+        for (int i = 0; i < SYS_AXES_NUM; i++){
+            clearRegBit(REG_F, 120, i);
+        }
+        return;
+    }
     for (int i = 0; i < SYS_AXES_NUM; i++){
         if(var_axis[i][VAR_AXIS_IS_HOMEF].value.i){
             setRegBit(REG_F, 94, i);
@@ -86,6 +75,31 @@ static void pmc_output_home(){
         } 
         else{
             clearRegBit(REG_F, 94, i);
+        }
+    }
+}
+
+static void pmc_output_reset(){
+    // RST：复位
+    if(rt_data->nc_reset.is_resetting){
+        setRegBit(REG_F, 1, 1);
+    }
+    if(rt_data->nc_reset.is_resetted){
+        rt_data->nc_reset.is_resetting = 0;
+        rt_data->nc_reset.is_resetted = 0;
+        rt_data->nc_reset.is_reset_delaying = 1;
+    }
+    // 复位减速后延时
+    if(rt_data->nc_reset.is_reset_delaying){
+        if(rt_data->nc_reset.reset_tic < par_mac[PAR_MAC_HARD_RESET_DELAY].value.val_int){
+            rt_data->nc_reset.reset_tic++;
+            setRegBit(REG_F, 1, 1);
+            // LOG(LOG_LEVEL_DEBUG, "复位减速后延时 %d", rt_data->nc_reset.reset_tic);
+        }
+        else{
+            clearRegBit(REG_F, 1, 1);
+            rt_data->nc_reset.is_reset_delaying = false;
+            rt_data->nc_reset.reset_tic = 0;   
         }
     }
 }

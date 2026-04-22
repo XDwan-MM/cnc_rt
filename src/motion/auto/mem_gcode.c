@@ -68,10 +68,6 @@ void execute_gcode(){
     rt_data->chan_data[0].cmd_acc = cycle_tp->traj_data->a;
     rt_data->chan_data[0].cmd_jk = cycle_tp->traj_data->j;
     mem_cal_axis_vel(&current_pos, &interp_pos, interp_pinc, cycle_tp->traj_data->v);
-    // mcode反馈
-    if(!cycle_tp->mcode_feedback && !var_chan[0][VAR_CHAN_IS_MOVING].value.i) {
-        cycle_tp->mcode_feedback = true;
-    }
 }
 
 static void mem_set_state(){
@@ -89,9 +85,9 @@ static void mem_set_state(){
                     if(cycle_tp->mcode == M02) cycle_tp->run_row_reset = false;
                     else cycle_tp->run_row_reset = true;
                 }else cycle_tp->run_row_reset = true;
-                setVarChanInt(0, VAR_CHAN_IS_RESETTING, 1, 0);
+                cycle_tp->is_resetting = 1;
             }else if(cycle_tp->mem_exec_state == EXEC_PAUSING){
-                setVarChanInt(0, VAR_CHAN_IS_RESETTING, 1, 0);
+                cycle_tp->is_resetting = 1;
             }else if(cycle_tp->mem_exec_state == EXEC_IDLE){
                 setVarChanInt(0, VAR_CHAN_RUN_ROW, 0, 0);
             }
@@ -104,10 +100,14 @@ static void mem_set_state(){
             if(IsEqualTo(var_chan[0][VAR_CHAN_FEED_OVERRIDE].value.f, 0)){
                 setAlarm(ALARM_SY, ALARM_WARNING, 3);
                 LOG(LOG_LEVEL_WARN, "进给倍率为0");
+            }else{
+                delAlarm(ALARM_SY, ALARM_WARNING, 3);
             }
             if(IsEqualTo(var_chan[0][VAR_CHAN_RAPID_OVERRIDE].value.f, 0)){
                 setAlarm(ALARM_SY, ALARM_WARNING, 2);
                 LOG(LOG_LEVEL_WARN, "快速倍率为0");
+            }else{
+                delAlarm(ALARM_SY, ALARM_WARNING, 2);
             }
             if(cycle_tp->mem_exec_state == EXEC_IDLE){
                 cycle_tp->mem_exec_state = EXEC_RUNNING;
@@ -125,7 +125,7 @@ static void mem_set_state(){
                 rt_set_chan_state(0, CHAN_IS_PARSERING, true);
                 setVarChanInt(0, VAR_CHAN_RUN_ROW, 0, 0);
             }
-            else if(cycle_tp->mem_exec_state == EXEC_PAUSING && !var_chan[0][VAR_CHAN_IS_RESETTING].value.i){
+            else if(cycle_tp->mem_exec_state == EXEC_PAUSING && !cycle_tp->is_resetting){
                 cycle_tp->mem_exec_state = EXEC_RUNNING;
                 cycle_tp->is_event_trigger = true;
                 cycle_tp->run_row_reset = true;
@@ -139,6 +139,8 @@ static void mem_set_state(){
             if(IsEqualTo(var_chan[0][VAR_CHAN_FEED_OVERRIDE].value.f, 0)){
                 setAlarm(ALARM_SY, ALARM_WARNING, 3);
                 LOG(LOG_LEVEL_WARN, "进给倍率为0");
+            }else{
+                delAlarm(ALARM_SY, ALARM_WARNING, 3);
             }
             if(cycle_tp->mem_exec_state == EXEC_RUNNING){
                 if(!queue_is_empty(plan_queue)){
@@ -155,6 +157,8 @@ static void mem_set_state(){
             if(IsEqualTo(var_chan[0][VAR_CHAN_RAPID_OVERRIDE].value.f, 0)){
                 setAlarm(ALARM_SY, ALARM_WARNING, 2);
                 LOG(LOG_LEVEL_WARN, "快速倍率为0");
+            }else{
+                delAlarm(ALARM_SY, ALARM_WARNING, 2);
             }
             if(cycle_tp->mem_exec_state == EXEC_RUNNING){
                 if(!queue_is_empty(plan_queue)){
@@ -231,7 +235,7 @@ static double mem_cal_pinc(VELPLAN_TYPE velplan_mode, double ncu_cycle, double c
                 // 如果段内完成暂停         
                 if(cycle_tp_is_finished() && cycle_tp->is_paused_inside_block){                     
                     // 复位
-                    if(var_chan[0][VAR_CHAN_IS_RESETTING].value.i){
+                    if(cycle_tp->is_resetting){
                         mem_handle_reset();
                         LOG(LOG_LEVEL_DEBUG, "完成复位");
                         for(int i = 0; i < SYS_AXES_NUM; i++){
@@ -243,9 +247,12 @@ static double mem_cal_pinc(VELPLAN_TYPE velplan_mode, double ncu_cycle, double c
                             }
                         }
                     }else{
-                        setVarChanInt(0, VAR_CHAN_IS_MOVING, 0, 0); 
-                        // LOG(LOG_LEVEL_DEBUG, "进入");                    
-                    }                                 
+                        // mcode反馈
+                        if(!cycle_tp->mcode_feedback) {
+                            cycle_tp->mcode_feedback = true;
+                        }
+                        setVarChanInt(0, VAR_CHAN_IS_MOVING, 0, 0);               
+                    }                             
                     break;
                 }else{ 
                     res = cycle_tp_update_tp(velplan_mode, ncu_cycle, current_vel, current_pos, 0);
@@ -276,7 +283,7 @@ static bool mem_check_res(GNC_RES res){
         return true;
     
     case VP_MAX_VEL_IS_ZERO:
-        if(var_chan[0][VAR_CHAN_IS_RESETTING].value.i){
+        if(cycle_tp->is_resetting){
             mem_handle_reset();
             return false;
         }
@@ -288,7 +295,7 @@ static bool mem_check_res(GNC_RES res){
         break;
 
     case GNC_DATA_EMPTY:
-        if(var_chan[0][VAR_CHAN_IS_RESETTING].value.i){
+        if(cycle_tp->is_resetting){
             mem_handle_reset();
             return false;
         }
@@ -315,7 +322,7 @@ static bool mem_check_res(GNC_RES res){
     case VP_PARAM_UNVALID:
     case VP_FEED_RATE_IS_ZERO:
     case VP_LENGTH_UNVALID:
-        mem_handle_estop();
+        gcode_handle_estop();
         LOG(LOG_LEVEL_ERR, "记忆模式报警 %d", res);
         setAlarm(ALARM_CH, ALARM_ERROR, 2);
         return false;
@@ -326,21 +333,20 @@ static bool mem_check_res(GNC_RES res){
     case VP_CAL_S_ERROR:
     case VP_CAL_V_ERROR:
     default:
-        mem_handle_estop();
+        gcode_handle_estop();
         LOG(LOG_LEVEL_ERR, "记忆模式报警 %d", res);
         setAlarm(ALARM_CH, ALARM_ERROR, 3);
         return false;
     }
 }
 
-void mem_handle_estop(){
+void gcode_handle_estop(){
     cycle_tp_reset();
     queue_reset(plan_queue);
     queue_reset(pretreat_queue);
     gcode_queue_reset(gcode_queue);
     setVarChanInt(0, VAR_CHAN_IS_RUNNING, 0, 0);
     setVarChanInt(0, VAR_CHAN_IS_MOVING, 0, 0);
-    setVarChanInt(0, VAR_CHAN_IS_RESETTING, 0, 0);
     setVarChanInt(0, VAR_CHAN_IS_PROGEND, 1, 0);   
     setVarChanInt(0, VAR_CHAN_RUN_ROW, 0, 0);
     rt_set_chan_state(0, CHAN_IS_PARSERING, false);
@@ -351,20 +357,23 @@ static void mem_handle_reset(){
     cycle_tp_reset();
     setVarChanInt(0, VAR_CHAN_IS_RUNNING, 0, 0);
     setVarChanInt(0, VAR_CHAN_IS_MOVING, 0, 0);
-    setVarChanInt(0, VAR_CHAN_IS_RESETTING, 0, 0);
     setVarChanInt(0, VAR_CHAN_IS_PROGEND, 1, 0);   
-    if(cycle_tp->run_row_reset) setVarChanInt(0, VAR_CHAN_RUN_ROW, 0, 0);
     rt_set_chan_state(0, CHAN_IS_PARSERING, false);
     rt_set_chan_state(0, CHAN_IS_GCODE_END, true);
+    if(cycle_tp->run_row_reset) setVarChanInt(0, VAR_CHAN_RUN_ROW, 0, 0);
+    // mcode反馈
+    if(!cycle_tp->mcode_feedback) {
+        cycle_tp->mcode_feedback = true;
+    }
 }
 
 static void mem_handle_alarm(){
     if(cycle_tp->mem_exec_state == EXEC_RUNNING){
         cycle_tp->mem_exec_state = EXEC_PAUSING;
         cycle_tp->is_event_trigger = true;
-        setVarChanInt(0, VAR_CHAN_IS_RESETTING, 1, 0);
+        cycle_tp->is_resetting = 1;
     }else if(cycle_tp->mem_exec_state == EXEC_PAUSING){
-        setVarChanInt(0, VAR_CHAN_IS_RESETTING, 1, 0);
+        cycle_tp->is_resetting = 1;
     }
     rt_set_chan_state(0, CHAN_IS_PARSER_RESET, true);
 }
@@ -402,6 +411,7 @@ void cycle_tp_reset(){
     memset(cycle_tp->traj_data, 0, sizeof(TRAJ_PARAMS));
     cycle_tp->is_event_trigger = false;
     cycle_tp->is_paused_inside_block = true;
+    cycle_tp->is_resetting = 0;
 }
 
 static GNC_RES cycle_tp_update_tp(VELPLAN_TYPE vplan_mode, double ncu_cycle, double current_vel, POS current_pos, double target_vel){

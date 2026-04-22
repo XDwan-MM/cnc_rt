@@ -45,8 +45,13 @@ void emcmotTrajPlan() {
     // 遍历每个通道
     for (int i = 0; i < var_sys[VAR_SYS_CHAN_NUM].value.i; i++) {
         
+        // 当前活动通道
+        setVarSysInt(VAR_SYS_ACTIVE_CHAN, i, 0);
+        
         if(rt_data->nc_event == SYS_EVENT_RESET)
         {
+            // 复位状态：2.外部复位信号ERS 4.按下MDI上的RESET键
+            nc_set_resetting();
             // 复位生效参数
             Axis_Limit_Manager_Init();
             // 清除警告
@@ -62,9 +67,6 @@ void emcmotTrajPlan() {
         Check_Driver_Error();
         #endif
 
-        // 当前活动通道
-        setVarSysInt(VAR_SYS_ACTIVE_CHAN, i, 0);
-
         // 检查系统是否有异常
         check_for_fault();
 
@@ -74,11 +76,11 @@ void emcmotTrajPlan() {
         // 判断运动模式
         set_operating_mode();
 
-        // 主轴控制
-        spindle_control();
-
         // 根据运动模式计算运动位置
         get_cmd_pos();
+
+        // 主轴控制
+        spindle_control();
 
         // 误差补偿
         compute_screw_comp();
@@ -206,17 +208,13 @@ static void spindle_control(){
 // 不同加工模式的运动控制
 static void get_cmd_pos() {
     switch (rt_data->current_mode) {
-        case MODE_IDLE: // 空闲状态
-            break;
-        case MODE_EDIT: // 编辑
-            break;
-        case MODE_HOMING: // 回零
-            handle_homing_cmd();
-            break;
         case MODE_MDI: // MDI
         case MODE_MEM: // 记忆
         case MODE_DNC:
             handle_run_cmd();
+            break;
+        case MODE_HOMING: // 回零
+            handle_homing_cmd();
             break;
         case MODE_JOG: // 点动
             handle_jog_cmd();
@@ -227,6 +225,8 @@ static void get_cmd_pos() {
         case MODE_MPG: // 手轮
             handle_mpg_cmd();
             break;
+        case MODE_IDLE: // 空闲状态
+        case MODE_EDIT: // 编辑
         default: // error
             break;
     }
@@ -444,6 +444,9 @@ static void check_for_soft_limit() {
 
 // 更新运动状态数据
 static void update_status() {
+    // 更新var变量
     shm_var_update();
+    // 更新复位状态
+    nc_set_resetted();
 }
 
