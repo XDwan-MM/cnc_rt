@@ -89,9 +89,9 @@ static void mem_set_state(){
                     if(cycle_tp->mcode == M02) cycle_tp->run_row_reset = false;
                     else cycle_tp->run_row_reset = true;
                 }else cycle_tp->run_row_reset = true;
-                setVarChanInt(0, VAR_CHAN_IS_RESETTING, 1, 0);
+                cycle_tp->is_resetting = 1;
             }else if(cycle_tp->mem_exec_state == EXEC_PAUSING){
-                setVarChanInt(0, VAR_CHAN_IS_RESETTING, 1, 0);
+                cycle_tp->is_resetting = 1;
             }else if(cycle_tp->mem_exec_state == EXEC_IDLE){
                 setVarChanInt(0, VAR_CHAN_RUN_ROW, 0, 0);
             }
@@ -129,7 +129,7 @@ static void mem_set_state(){
                 rt_set_chan_state(0, CHAN_IS_PARSERING, true);
                 setVarChanInt(0, VAR_CHAN_RUN_ROW, 0, 0);
             }
-            else if(cycle_tp->mem_exec_state == EXEC_PAUSING && !var_chan[0][VAR_CHAN_IS_RESETTING].value.i){
+            else if(cycle_tp->mem_exec_state == EXEC_PAUSING && !cycle_tp->is_resetting){
                 cycle_tp->mem_exec_state = EXEC_RUNNING;
                 cycle_tp->is_event_trigger = true;
                 cycle_tp->run_row_reset = true;
@@ -239,7 +239,7 @@ static double mem_cal_pinc(VELPLAN_TYPE velplan_mode, double ncu_cycle, double c
                 // 如果段内完成暂停         
                 if(cycle_tp_is_finished() && cycle_tp->is_paused_inside_block){                     
                     // 复位
-                    if(var_chan[0][VAR_CHAN_IS_RESETTING].value.i){
+                    if(cycle_tp->is_resetting){
                         mem_handle_reset();
                         LOG(LOG_LEVEL_DEBUG, "完成复位");
                         for(int i = 0; i < SYS_AXES_NUM; i++){
@@ -284,7 +284,7 @@ static bool mem_check_res(GNC_RES res){
         return true;
     
     case VP_MAX_VEL_IS_ZERO:
-        if(var_chan[0][VAR_CHAN_IS_RESETTING].value.i){
+        if(cycle_tp->is_resetting){
             mem_handle_reset();
             return false;
         }
@@ -296,7 +296,7 @@ static bool mem_check_res(GNC_RES res){
         break;
 
     case GNC_DATA_EMPTY:
-        if(var_chan[0][VAR_CHAN_IS_RESETTING].value.i){
+        if(cycle_tp->is_resetting){
             mem_handle_reset();
             return false;
         }
@@ -323,7 +323,7 @@ static bool mem_check_res(GNC_RES res){
     case VP_PARAM_UNVALID:
     case VP_FEED_RATE_IS_ZERO:
     case VP_LENGTH_UNVALID:
-        mem_handle_estop();
+        gcode_handle_estop();
         LOG(LOG_LEVEL_ERR, "记忆模式报警 %d", res);
         setAlarm(ALARM_CH, ALARM_ERROR, 2);
         return false;
@@ -334,21 +334,20 @@ static bool mem_check_res(GNC_RES res){
     case VP_CAL_S_ERROR:
     case VP_CAL_V_ERROR:
     default:
-        mem_handle_estop();
+        gcode_handle_estop();
         LOG(LOG_LEVEL_ERR, "记忆模式报警 %d", res);
         setAlarm(ALARM_CH, ALARM_ERROR, 3);
         return false;
     }
 }
 
-void mem_handle_estop(){
+void gcode_handle_estop(){
     cycle_tp_reset();
     queue_reset(plan_queue);
     queue_reset(pretreat_queue);
     gcode_queue_reset(gcode_queue);
     setVarChanInt(0, VAR_CHAN_IS_RUNNING, 0, 0);
     setVarChanInt(0, VAR_CHAN_IS_MOVING, 0, 0);
-    setVarChanInt(0, VAR_CHAN_IS_RESETTING, 0, 0);
     setVarChanInt(0, VAR_CHAN_IS_PROGEND, 1, 0);   
     setVarChanInt(0, VAR_CHAN_RUN_ROW, 0, 0);
     rt_set_chan_state(0, CHAN_IS_PARSERING, false);
@@ -359,20 +358,19 @@ static void mem_handle_reset(){
     cycle_tp_reset();
     setVarChanInt(0, VAR_CHAN_IS_RUNNING, 0, 0);
     setVarChanInt(0, VAR_CHAN_IS_MOVING, 0, 0);
-    setVarChanInt(0, VAR_CHAN_IS_RESETTING, 0, 0);
     setVarChanInt(0, VAR_CHAN_IS_PROGEND, 1, 0);   
-    if(cycle_tp->run_row_reset) setVarChanInt(0, VAR_CHAN_RUN_ROW, 0, 0);
     rt_set_chan_state(0, CHAN_IS_PARSERING, false);
     rt_set_chan_state(0, CHAN_IS_GCODE_END, true);
+    if(cycle_tp->run_row_reset) setVarChanInt(0, VAR_CHAN_RUN_ROW, 0, 0);
 }
 
 static void mem_handle_alarm(){
     if(cycle_tp->mem_exec_state == EXEC_RUNNING){
         cycle_tp->mem_exec_state = EXEC_PAUSING;
         cycle_tp->is_event_trigger = true;
-        setVarChanInt(0, VAR_CHAN_IS_RESETTING, 1, 0);
+        cycle_tp->is_resetting = 1;
     }else if(cycle_tp->mem_exec_state == EXEC_PAUSING){
-        setVarChanInt(0, VAR_CHAN_IS_RESETTING, 1, 0);
+        cycle_tp->is_resetting = 1;
     }
     rt_set_chan_state(0, CHAN_IS_PARSER_RESET, true);
 }

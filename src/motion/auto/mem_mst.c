@@ -348,3 +348,8 @@ static void mcode_data_mend(){
     mcode_data->tfin_count = 0;
     rt_set_chan_state(0, CHAN_IS_MCODE_END, true);
 }
+
+void mcode_handle_estop(){
+    mcode_data_mend();
+    mcode_data->mcode_state = MCODE_EXECUTE_IDLE;
+}

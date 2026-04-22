@@ -41,7 +41,7 @@ void handle_homing_cmd(){
     }
     homing_cal_fv();
     homing_is_all_homed();
-    homing_is_resetting();
+    // homing_is_resetting();
 }
 
 static void homing_cal_fv(){
@@ -177,14 +177,12 @@ void homing_handle_estop(){
     homing_tp_reset();
     setVarChanInt(0, VAR_CHAN_IS_HOMING, 0, 0);
     setVarChanInt(0, VAR_CHAN_IS_MOVING, 0, 0);
-    setVarChanInt(0, VAR_CHAN_IS_RESETTING, 0, 0);
 }
 
 static void homing_handle_reset(){
     homing_tp_reset();
     setVarChanInt(0, VAR_CHAN_IS_HOMING, 0, 0);
     setVarChanInt(0, VAR_CHAN_IS_MOVING, 0, 0);
-    setVarChanInt(0, VAR_CHAN_IS_RESETTING, 0, 0);
 }
 
 static void homing_handle_alarm(){

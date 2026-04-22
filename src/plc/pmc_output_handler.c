@@ -80,24 +80,26 @@ static void pmc_output_home(){
 }
 
 static void pmc_output_reset(){
-    static bool last_reset_state = false;
-    static int reset_tic = 0;
     // RST：复位
-    if(var_chan[0][VAR_CHAN_IS_RESETTING].value.i){
+    if(rt_data->nc_reset.is_resetting){
         setRegBit(REG_F, 1, 1);
-        last_reset_state = true;
+    }
+    if(rt_data->nc_reset.is_resetted){
+        rt_data->nc_reset.is_resetting = 0;
+        rt_data->nc_reset.is_resetted = 0;
+        rt_data->nc_reset.is_reset_delaying = 1;
     }
     // 复位减速后延时
-    if(last_reset_state && !var_chan[0][VAR_CHAN_IS_RESETTING].value.i){
-        if(reset_tic < par_mac[PAR_MAC_HARD_RESET_DELAY].value.val_int){
-            reset_tic++;
+    if(rt_data->nc_reset.is_reset_delaying){
+        if(rt_data->nc_reset.reset_tic < par_mac[PAR_MAC_HARD_RESET_DELAY].value.val_int){
+            rt_data->nc_reset.reset_tic++;
             setRegBit(REG_F, 1, 1);
-            // LOG(LOG_LEVEL_DEBUG, "复位减速后延时 %d", reset_tic);
+            // LOG(LOG_LEVEL_DEBUG, "复位减速后延时 %d", rt_data->nc_reset.reset_tic);
         }
         else{
             clearRegBit(REG_F, 1, 1);
-            last_reset_state = false;
-            reset_tic = 0;   
+            rt_data->nc_reset.is_reset_delaying = false;
+            rt_data->nc_reset.reset_tic = 0;   
         }
     }
 }

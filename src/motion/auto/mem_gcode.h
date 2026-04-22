@@ -43,15 +43,16 @@ typedef struct{
     double max_vel;                 // 最大允许速度
     bool is_paused_inside_block;    // 在当段减速到0
     bool is_event_trigger;          // 触发重新计算
+    bool is_resetting;
     int mcode;
     bool mcode_feedback;
     bool run_row_reset;
 }COORD_TP;
 
-extern void cycle_tp_init();
-extern void cycle_tp_reset();
-extern void execute_gcode();
-extern void mem_handle_estop();
+void cycle_tp_init();
+void cycle_tp_reset();
+void execute_gcode();
+void gcode_handle_estop();
 
 #ifdef __cplusplus
 }
