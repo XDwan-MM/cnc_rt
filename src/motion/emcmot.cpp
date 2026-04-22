@@ -76,11 +76,11 @@ void emcmotTrajPlan() {
         // 判断运动模式
         set_operating_mode();
 
-        // 主轴控制
-        spindle_control();
-
         // 根据运动模式计算运动位置
         get_cmd_pos();
+
+        // 主轴控制
+        spindle_control();
 
         // 误差补偿
         compute_screw_comp();

@@ -17,7 +17,6 @@
 extern "C" {
 #endif
 
-#define POST_TIME 16
 #define REG_F10 256
 #define REG_F11 65536
 #define REG_F12 4294967296

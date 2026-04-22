@@ -78,33 +78,27 @@ static void nc_deal_new_mcode(){
         case M01: // 选择停
             setRegValue8(REG_F, 10, 0x01); 
             setRegBit(REG_F, 9, 6); 
-            // rt_data->nc_event = SYS_EVENT_PAUSE;
-            // mcode_data->mcode_state = MCODE_EXECUTE_PAUSING;
-            // cycle_tp->mcode_feedback = false;
+            rt_data->nc_event = SYS_EVENT_PAUSE;
+            mcode_data->mcode_state = MCODE_EXECUTE_PAUSING;
+            cycle_tp->mcode_feedback = false;
             LOG(LOG_LEVEL_DEBUG, "1 nc侧输出代码信号M01");
             break;
         case M02: // 复位
             setRegValue8(REG_F, 10, 0x02); 
             setRegBit(REG_F, 9, 5);  
-            // rt_data->nc_event = SYS_EVENT_RESET;
+            rt_data->nc_event = SYS_EVENT_RESET;
             mcode_data->mcode_state = MCODE_EXECUTE_RESET;
             cycle_tp->mcode_feedback = false;
             cycle_tp->mcode = M02;
-            spl_data.spl_event = SPINDLE_EVENT_STOP;
-            spl_data.emot_speed = 0;
-            spl_data.mcode_feedback = false;
             LOG(LOG_LEVEL_DEBUG, "1 nc侧输出代码信号M02");
             break;
         case M30: // 复位
             setRegValue8(REG_F, 10, 0x1e); 
             setRegBit(REG_F, 9, 4);  
-            // rt_data->nc_event = SYS_EVENT_RESET;
+            rt_data->nc_event = SYS_EVENT_RESET;
             mcode_data->mcode_state = MCODE_EXECUTE_RESET;
             cycle_tp->mcode_feedback = false;
             cycle_tp->mcode = M30;
-            spl_data.spl_event = SPINDLE_EVENT_STOP;
-            spl_data.emot_speed = 0;
-            spl_data.mcode_feedback = false;
             LOG(LOG_LEVEL_DEBUG, "1 nc侧输出代码信号M30");
             break;
         case M03: // 主轴正转
@@ -184,8 +178,8 @@ static void check_pmc_mend(){
         // MF信号 F7.0
         getRegBit(REG_F, 7, 0, &mcode_data->mcode_block[0].signal_mf);
         if(mcode_data->signal_den){
-            // todo：脉冲选通信号延时时间，缺省值16ms
-            if(mcode_data->mcode_block[0].tmf_count >= POST_TIME) setRegBit(REG_F, 7, 0);
+            // 脉冲选通信号延时时间，缺省值2ms
+            if(mcode_data->mcode_block[0].tmf_count >= par_chan[0][PAR_CH_TMF_DELAY].value.val_int) setRegBit(REG_F, 7, 0);
             else mcode_data->mcode_block[0].tmf_count ++;
         }
         break;
@@ -193,9 +187,9 @@ static void check_pmc_mend(){
         getRegBit(REG_F, 7, 0, &mcode_data->mcode_block[0].signal_mf);
         getRegBit(REG_F, 8, 4, &mcode_data->mcode_block[1].signal_mf);
         if(mcode_data->signal_den){
-            if(mcode_data->mcode_block[0].tmf_count >= POST_TIME) setRegBit(REG_F, 7, 0);
+            if(mcode_data->mcode_block[0].tmf_count >= par_chan[0][PAR_CH_TMF_DELAY].value.val_int) setRegBit(REG_F, 7, 0);
             else mcode_data->mcode_block[0].tmf_count ++;
-            if(mcode_data->mcode_block[1].tmf_count >= POST_TIME) setRegBit(REG_F, 8, 4);
+            if(mcode_data->mcode_block[1].tmf_count >= par_chan[0][PAR_CH_TMF_DELAY].value.val_int) setRegBit(REG_F, 8, 4);
             else mcode_data->mcode_block[1].tmf_count ++;
         }
         break;
@@ -203,11 +197,11 @@ static void check_pmc_mend(){
         getRegBit(REG_F, 7, 0, &mcode_data->mcode_block[0].signal_mf);
         getRegBit(REG_F, 8, 4, &mcode_data->mcode_block[1].signal_mf);
         getRegBit(REG_F, 8, 5, &mcode_data->mcode_block[2].signal_mf);
-        if(mcode_data->mcode_block[0].tmf_count >= POST_TIME) setRegBit(REG_F, 7, 0);
+        if(mcode_data->mcode_block[0].tmf_count >= par_chan[0][PAR_CH_TMF_DELAY].value.val_int) setRegBit(REG_F, 7, 0);
         else mcode_data->mcode_block[0].tmf_count ++;
-        if(mcode_data->mcode_block[1].tmf_count >= POST_TIME) setRegBit(REG_F, 8, 4);
+        if(mcode_data->mcode_block[1].tmf_count >= par_chan[0][PAR_CH_TMF_DELAY].value.val_int) setRegBit(REG_F, 8, 4);
         else mcode_data->mcode_block[1].tmf_count ++;
-        if(mcode_data->mcode_block[2].tmf_count >= POST_TIME) setRegBit(REG_F, 8, 5);
+        if(mcode_data->mcode_block[2].tmf_count >= par_chan[0][PAR_CH_TMF_DELAY].value.val_int) setRegBit(REG_F, 8, 5);
         else mcode_data->mcode_block[2].tmf_count ++;
     default:
         break;
@@ -219,8 +213,8 @@ static void check_pmc_mend(){
     // *******调试*******
     // FIN为1时，nc侧将MF选通信号置为0
     if(mcode_data->signal_fin){
-        // todo：完成信号宽幅时间，缺省值16ms
-        if(mcode_data->tfin_count >= POST_TIME){
+        // 完成信号宽幅时间，缺省值2ms
+        if(mcode_data->tfin_count >= par_chan[0][PAR_CH_TFIN_DELEY].value.val_int){
             clearRegBit(REG_F, 7, 0);
             clearRegBit(REG_F, 8, 4);
             clearRegBit(REG_F, 8, 5);
@@ -268,7 +262,7 @@ static void check_nc_mend(){
             break;
         case M02: // 复位
         case M30: // 复位
-            if(cycle_tp->mcode_feedback && spl_data.mcode_feedback) {
+            if(cycle_tp->mcode_feedback) {
                 mcode_data->mcode_block[i].mcode_end = true;
                 LOG(LOG_LEVEL_DEBUG, "3 nc侧m指令完成");
             }

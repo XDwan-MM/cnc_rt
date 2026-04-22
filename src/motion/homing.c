@@ -300,7 +300,7 @@ static bool abs_homing_is_tp_finished(AXIS_TYPE axis_type){
 static bool abs_homing_is_axis_homed(AXIS_TYPE axis_type){
     double home_crds = par_axis[axis_type][PAR_AX_HOME_CRDS].value.val_real;
     double current_pos = var_axis[axis_type][VAR_AXIS_CMD_POS_EX].value.f;
-    if (fabs(home_crds - current_pos) < HOME_TOL) return true;
+    if (fabs(home_crds - current_pos) < par_chan[0][PAR_CH_HOMED_ANG].value.val_real) return true;
     return false;
 }
 

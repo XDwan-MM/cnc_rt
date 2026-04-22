@@ -68,10 +68,6 @@ void execute_gcode(){
     rt_data->chan_data[0].cmd_acc = cycle_tp->traj_data->a;
     rt_data->chan_data[0].cmd_jk = cycle_tp->traj_data->j;
     mem_cal_axis_vel(&current_pos, &interp_pos, interp_pinc, cycle_tp->traj_data->v);
-    // mcode反馈
-    if(!cycle_tp->mcode_feedback && !var_chan[0][VAR_CHAN_IS_MOVING].value.i) {
-        cycle_tp->mcode_feedback = true;
-    }
 }
 
 static void mem_set_state(){
@@ -251,9 +247,12 @@ static double mem_cal_pinc(VELPLAN_TYPE velplan_mode, double ncu_cycle, double c
                             }
                         }
                     }else{
-                        setVarChanInt(0, VAR_CHAN_IS_MOVING, 0, 0); 
-                        // LOG(LOG_LEVEL_DEBUG, "进入");                    
-                    }                                 
+                        // mcode反馈
+                        if(!cycle_tp->mcode_feedback) {
+                            cycle_tp->mcode_feedback = true;
+                        }
+                        setVarChanInt(0, VAR_CHAN_IS_MOVING, 0, 0);               
+                    }                             
                     break;
                 }else{ 
                     res = cycle_tp_update_tp(velplan_mode, ncu_cycle, current_vel, current_pos, 0);
@@ -362,6 +361,10 @@ static void mem_handle_reset(){
     rt_set_chan_state(0, CHAN_IS_PARSERING, false);
     rt_set_chan_state(0, CHAN_IS_GCODE_END, true);
     if(cycle_tp->run_row_reset) setVarChanInt(0, VAR_CHAN_RUN_ROW, 0, 0);
+    // mcode反馈
+    if(!cycle_tp->mcode_feedback) {
+        cycle_tp->mcode_feedback = true;
+    }
 }
 
 static void mem_handle_alarm(){
@@ -408,6 +411,7 @@ void cycle_tp_reset(){
     memset(cycle_tp->traj_data, 0, sizeof(TRAJ_PARAMS));
     cycle_tp->is_event_trigger = false;
     cycle_tp->is_paused_inside_block = true;
+    cycle_tp->is_resetting = 0;
 }
 
 static GNC_RES cycle_tp_update_tp(VELPLAN_TYPE vplan_mode, double ncu_cycle, double current_vel, POS current_pos, double target_vel){

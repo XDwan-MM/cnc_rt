@@ -82,7 +82,11 @@ uint8_t Check_Axis_Limit_Violation(AxisLimitRuntime *runtime, double pos,AxisLim
         break;
     }
     runtime->direction = rt_data->axis_data[runtime->axis].axis_status.direction;
-
+//    printf("config: %f %f %f %f %f %f %d %d %d\n",config.level1.negative_limit,config.level1.positive_limit
+//             ,config.level2.negative_limit,config.level2.positive_limit
+//             ,config.level3.negative_limit,config.level3.positive_limit
+//             ,rt_data->axis_data[runtime->axis].axis_status.is_fwd_limit
+//             ,rt_data->axis_data[runtime->axis].axis_status.is_rev_limit,type);
     // 第一级检查：必须在区域内部运动
     if (runtime->config.level1.is_enabled && Is_Outside_Limit(pos, config.level1))
     {
