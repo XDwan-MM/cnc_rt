@@ -39,6 +39,7 @@ extern void updata_axis_ferror(ferror_control_t *axis_ferrorCtrl,
                         double pos_cmd,
                         double pos_fb,
                         double vel_cmd);
+extern void reset_ferror_control(void);
 
 #ifdef __cplusplus
 }

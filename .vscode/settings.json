@@ -6,6 +6,7 @@
         "log.h": "c",
         "thread": "c",
         "logapi.h": "c",
-        "cnc_math.h": "c"
+        "cnc_math.h": "c",
+        "rt_data.h": "c"
     }
 }

@@ -182,8 +182,8 @@ void pmc_g_input_scan_cycle(void)
         // G7.2 产生上升沿，开始自动运行
         pmc_dispatch_event(EV_MSG_AUTO_RUN, 1, 0);
     }
-    // 中止检测 (G8.5 上升沿 中止，发送暂停事件；为0时，继续运行))
-    if (SIGNAL_RISING(curr_g.g_regs[8], last_g.g_regs[8], 5))
+    // 中止检测 (G8.5 下降沿 中止，发送暂停事件；)
+    if (SIGNAL_FALLING(curr_g.g_regs[8], last_g.g_regs[8], 5))
     {
         pmc_dispatch_event(EV_MSG_AUTO_RUN, 0, 0);
     }

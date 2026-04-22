@@ -41,6 +41,8 @@ void handle_alarm_cmd(){
             #endif
             // 复位生效参数
             Axis_Limit_Manager_Init();
+            // 复位清除跟随误差报警标志
+            reset_ferror_control();
             LOG(LOG_LEVEL_INFO, "报警已清除");
             break;
         case SYS_EVENT_RERUN:

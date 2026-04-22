@@ -230,7 +230,7 @@ static void update_axis_state(int i, JOG_AXIS_CTRL *jog_axis_ctrl)
             if (rt_data->axis_data[j].axis_status.is_error || ferror_control[j].error_flag)
             {
                 any_axis_fatal = true;
-                break; // 只要找到一个致命报警，就无需继续判断
+                // break; // 只要找到一个致命报警，就无需继续判断
             }
             if (rt_data->axis_data[j].axis_status.is_fwd_limit || rt_data->axis_data[j].axis_status.is_rev_limit)
             {

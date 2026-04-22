@@ -44,3 +44,13 @@ void updata_axis_ferror(ferror_control_t *axis_ferrorCtrl,
         axis_ferrorCtrl->error_flag = 0;
     }
 }
+
+void reset_ferror_control(void)
+{
+    for (int i = 0; i < 3; i++)
+    {
+        ferror_control[i].error_flag = 0;
+        /* code */
+    }
+    
+}
