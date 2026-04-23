@@ -82,7 +82,7 @@ void pmc_g_input_scan_cycle(void)
         // pmc_dispatch_event(EV_MSG_ESP, 0, 0);
     }
     /* G43模式检测：调用内部解析函数处理复合位 (MD1, MD2, MD4, DNCI, ZRN), * 输出模式 */
-    if (is_first_scan || (curr_g.g_regs[43], last_g.g_regs[43]) ||
+    if (is_first_scan || SIGNAL_BYTE_CHANGED(curr_g.g_regs[43], last_g.g_regs[43]) ||
         SIGNAL_BIT_CHANGED(curr_g.g_regs[19], last_g.g_regs[19], 7))
     {
         process_mode_selection(curr_g.g_regs[43], curr_g.g_regs[19]);
@@ -125,7 +125,7 @@ void pmc_g_input_scan_cycle(void)
 
     /* (G12/G14) 倍率检测 */
     // 进给倍率变化检测G12
-    if (is_first_scan || (curr_g.g_regs[12], last_g.g_regs[12]))
+    if (is_first_scan || SIGNAL_BYTE_CHANGED(curr_g.g_regs[12], last_g.g_regs[12]))
     {
         // 1、共享内存有符号版本代码逻辑
         int feed_override = 0;
