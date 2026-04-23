@@ -344,7 +344,7 @@ static void execute_axis_logic(int i, JOG_AXIS_CTRL *jog_axis_ctrl, jog_planner_
         /* 使能规划器 */
         axis_jog_tp->enable = 1; // 保持使能开启
         // 获取倍率
-        double current_override = var_chan[0][VAR_CHAN_FEED_OVERRIDE].value.f / 100.0;
+        double current_override = is_rapid ? (var_chan[0][VAR_CHAN_RAPID_OVERRIDE].value.f / 100.0) : (var_chan[0][VAR_CHAN_FEED_OVERRIDE].value.f / 100.0);
 
         /* 1. 更新目标速度 */
         prepare_jog_params(i, jog_axis_ctrl->direction, current_override, axis_jog_tp, is_rapid);
