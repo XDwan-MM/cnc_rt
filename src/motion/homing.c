@@ -46,7 +46,7 @@ void handle_homing_cmd(){
 
 static void homing_cal_fv(){
     double fv = sqrt(pow(homing_tp[0].traj_data->v, 2) + pow(homing_tp[1].traj_data->v, 2) + pow(homing_tp[2].traj_data->v, 2));
-    setVarChanDouble(0, VAR_CHAN_CMD_FEEDRATE, fv * TIME_MINUS_2_S, 0);
+    setVarChanDouble(0, VAR_CHAN_CMD_FEEDRATE, fv, 0);
 }
 
 static void homing_set_state(){
@@ -204,6 +204,7 @@ static double abs_homing_tp_pinc(AXIS_TYPE axis_type){
     double s = 0;
     switch(homing_tp[axis_type].homing_state){
         case ABS_EXEC_IDLE:
+            homing_tp[axis_type].traj_data->v = 0;
             break; 
 
         case ABS_EXEC_HOMING:
