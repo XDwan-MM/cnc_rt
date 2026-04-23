@@ -19,42 +19,22 @@ static void Inside_Alarm(AxisLimitRuntime *runtime, int premove_id ,Level level)
 
 void Axis_Limit_Manager_Init(void)
 {
-    //level 1
-    runtime[AXIS_X].config.level1.is_enabled = 1;
-    runtime[AXIS_X].config.level1.positive_limit = par_axis[AXIS_X][PAR_AX_PLMT].value.val_real;
-    runtime[AXIS_X].config.level1.negative_limit = par_axis[AXIS_X][PAR_AX_NLMT].value.val_real;
-    runtime[AXIS_Y].config.level1.is_enabled = 1;
-    runtime[AXIS_Y].config.level1.positive_limit = par_axis[AXIS_Y][PAR_AX_PLMT].value.val_real;
-    runtime[AXIS_Y].config.level1.negative_limit = par_axis[AXIS_Y][PAR_AX_NLMT].value.val_real;
-    runtime[AXIS_Z].config.level1.is_enabled = 1;
-    runtime[AXIS_Z].config.level1.positive_limit = par_axis[AXIS_Z][PAR_AX_PLMT].value.val_real;
-    runtime[AXIS_Z].config.level1.negative_limit = par_axis[AXIS_Z][PAR_AX_NLMT].value.val_real;
-    //level 2
-    runtime[AXIS_X].config.level2.is_enabled = 1;
-    runtime[AXIS_X].config.level2_mode = 0;
-    runtime[AXIS_X].config.level2.positive_limit = par_axis[AXIS_X][PAR_AX_PLMT2].value.val_real;
-    runtime[AXIS_X].config.level2.negative_limit = par_axis[AXIS_X][PAR_AX_NLMT2].value.val_real;
-    runtime[AXIS_Y].config.level2.is_enabled = 1;
-    runtime[AXIS_Y].config.level2_mode = 0;
-    runtime[AXIS_Y].config.level2.positive_limit = par_axis[AXIS_Y][PAR_AX_PLMT2].value.val_real;
-    runtime[AXIS_Y].config.level2.negative_limit = par_axis[AXIS_Y][PAR_AX_NLMT2].value.val_real;
-    runtime[AXIS_Z].config.level2.is_enabled = 1;
-    runtime[AXIS_Z].config.level2_mode = 0;
-    runtime[AXIS_Z].config.level2.positive_limit = par_axis[AXIS_Z][PAR_AX_PLMT2].value.val_real;
-    runtime[AXIS_Z].config.level2.negative_limit = par_axis[AXIS_Z][PAR_AX_NLMT2].value.val_real;
-    //level 3
-    runtime[AXIS_X].config.level3.is_enabled = 1;
-    runtime[AXIS_X].config.level3.positive_limit = -1500;
-    runtime[AXIS_X].config.level3.negative_limit = -2000;
-    runtime[AXIS_Y].config.level3.is_enabled = 1;
-    runtime[AXIS_Y].config.level3.positive_limit = -1500;
-    runtime[AXIS_Y].config.level3.negative_limit = -2000;
-    runtime[AXIS_Z].config.level3.is_enabled = 1;
-    runtime[AXIS_Z].config.level3.positive_limit = -1500;
-    runtime[AXIS_Z].config.level3.negative_limit = -2000;
-
-    for (int i = 0; i < 3; i++)
+       for (int i = 0; i < 3; i++)
     {
+        //level 1
+        runtime[i].config.level1.is_enabled = 1;
+        runtime[i].config.level1.positive_limit = par_axis[i][PAR_AX_PLMT].value.val_real;
+        runtime[i].config.level1.negative_limit = par_axis[i][PAR_AX_NLMT].value.val_real;
+        //level 2
+        runtime[i].config.level2.is_enabled = par_axis[i][100503].value.val_int;
+        runtime[i].config.level2_mode = par_axis[i][100502].value.val_int;
+        runtime[i].config.level2.positive_limit = par_axis[i][PAR_AX_PLMT2].value.val_real;
+        runtime[i].config.level2.negative_limit = par_axis[i][PAR_AX_NLMT2].value.val_real;
+        //level 3
+        runtime[AXIS_X].config.level3.is_enabled = par_axis[i][100504].value.val_int;
+        runtime[AXIS_X].config.level3.positive_limit = par_axis[i][100500].value.val_real;
+        runtime[AXIS_X].config.level3.negative_limit = par_axis[i][100501].value.val_real;
+
         rt_data->axis_data[i].axis_status.is_fwd_limit = 0;
         rt_data->axis_data[i].axis_status.is_rev_limit = 0;
         rt_data->axis_data[i].axis_status.is_decel_done = 0;
