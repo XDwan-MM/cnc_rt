@@ -244,7 +244,7 @@ static void Outside_Alarm(float position, LimitLevel limit , int premove_id, Lev
         }
         int res = setAlarm(ALARM_AX, ALARM_ERROR, premove_id + 6 * runtime->axis + 1);
         if(res == -8) return 1;
-        LOG(LOG_LEVEL_ERR, "%s 轴朝负方向移动超过了存储行程检查%d", axis_names[runtime->axis],level);
+        LOG(LOG_LEVEL_ERR, "%s 轴朝负方向移动超过了存储行程检查%d", axis_names[runtime->axis],runtime->axis);
         return 1;
     }
     else if(position > limit.positive_limit)
@@ -260,7 +260,7 @@ static void Outside_Alarm(float position, LimitLevel limit , int premove_id, Lev
         }
         int res = setAlarm(ALARM_AX, ALARM_ERROR, premove_id + 6 * runtime->axis);
         if(res == -8) return 1;
-        LOG(LOG_LEVEL_ERR, "%s 轴朝正方向移动超过了存储行程检查%d", axis_names[runtime->axis],level);
+        LOG(LOG_LEVEL_ERR, "%s 轴朝正方向移动超过了存储行程检查%d", axis_names[runtime->axis],runtime->axis);
         return 1;
     }
     else

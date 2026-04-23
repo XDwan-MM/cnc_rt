@@ -15,7 +15,7 @@
 static const int SCAN_G_REGS[] =
     {
         4, 5, 6, 7, 8, 12, 14, 19, 29, 30, 32, 43, 44, 45, 61, 62, 70, 100, 102, 130, 132, 134 /* 已有信号的地址 */
-                                                                                       /* <--- 您想新增的信号地址 */
+                                                                                               /* <--- 您想新增的信号地址 */
 };
 
 /** 计算注册表中元素的个数，用于驱动循环扫描 */
@@ -23,6 +23,9 @@ static const int SCAN_G_REGS[] =
 
 static G_INPUT_MAP
     last_g; /**< 上一周期快照（是指任务控制器线程，上一周期的快照） */
+
+/* 首次扫描标志 */
+static bool is_first_scan = true;
 
 /* ==========================================================================
  * 1. 内部函数声明 (Private Prototypes)
@@ -79,7 +82,7 @@ void pmc_g_input_scan_cycle(void)
         // pmc_dispatch_event(EV_MSG_ESP, 0, 0);
     }
     /* G43模式检测：调用内部解析函数处理复合位 (MD1, MD2, MD4, DNCI, ZRN), * 输出模式 */
-    if (SIGNAL_BYTE_CHANGED(curr_g.g_regs[43], last_g.g_regs[43]) ||
+    if (is_first_scan || (curr_g.g_regs[43], last_g.g_regs[43]) ||
         SIGNAL_BIT_CHANGED(curr_g.g_regs[19], last_g.g_regs[19], 7))
     {
         process_mode_selection(curr_g.g_regs[43], curr_g.g_regs[19]);
@@ -122,7 +125,7 @@ void pmc_g_input_scan_cycle(void)
 
     /* (G12/G14) 倍率检测 */
     // 进给倍率变化检测G12
-    if (SIGNAL_BYTE_CHANGED(curr_g.g_regs[12], last_g.g_regs[12]))
+    if (is_first_scan || (curr_g.g_regs[12], last_g.g_regs[12]))
     {
         // 1、共享内存有符号版本代码逻辑
         int feed_override = 0;
@@ -158,7 +161,7 @@ void pmc_g_input_scan_cycle(void)
         // pmc_dispatch_event(EV_MSG_OVERRIDE, 0, (int)curr_g.g_regs[12]);
     }
     // 快速进给倍率检测G14
-    if ((curr_g.g_regs[14] & 0x03) != (last_g.g_regs[14] & 0x03))
+    if (is_first_scan || ((curr_g.g_regs[14] & 0x03) != (last_g.g_regs[14] & 0x03)))
     {
         int rapid_lut[] = {100, 50, 25, 0}; /* 映射到实际百分比 */
         // curr_g.G0014 & 0x03 取低两位，G14.1 G14.0组合确定快速倍率
@@ -169,7 +172,7 @@ void pmc_g_input_scan_cycle(void)
         pmc_dispatch_event(EV_MSG_OVERRIDE, 1, rapid_lut[curr_g.g_regs[14] & 0x03]);
     }
     // 主轴倍率检测G30
-    if (SIGNAL_BYTE_CHANGED(curr_g.g_regs[30], last_g.g_regs[30]))
+    if (is_first_scan || SIGNAL_BYTE_CHANGED(curr_g.g_regs[30], last_g.g_regs[30]))
     {
         /* p1=2 代表主轴倍率类型 */
         pmc_dispatch_event(EV_MSG_OVERRIDE, 2, (int)curr_g.g_regs[30]);
@@ -182,8 +185,8 @@ void pmc_g_input_scan_cycle(void)
         // G7.2 产生上升沿，开始自动运行
         pmc_dispatch_event(EV_MSG_AUTO_RUN, 1, 0);
     }
-    // 中止检测 (G8.5 上升沿 中止，发送暂停事件；为0时，继续运行))
-    if (SIGNAL_RISING(curr_g.g_regs[8], last_g.g_regs[8], 5))
+    // 中止检测 (G8.5 下降沿 中止，发送暂停事件；)
+    if (SIGNAL_FALLING(curr_g.g_regs[8], last_g.g_regs[8], 5))
     {
         pmc_dispatch_event(EV_MSG_AUTO_RUN, 0, 0);
     }
@@ -211,7 +214,7 @@ void pmc_g_input_scan_cycle(void)
         // 产生主轴停止事件 入队
         pmc_dispatch_event(EV_MSG_SPINDLE, 0, 0);
     }
-    /* 主轴定向 G70.6 */ 
+    /* 主轴定向 G70.6 */
     if (SIGNAL_RISING(curr_g.g_regs[70], last_g.g_regs[70], 6))
     {
         LOG(LOG_LEVEL_INFO, "扫描到G70.6 发生上升沿");
@@ -319,6 +322,9 @@ void pmc_g_input_scan_cycle(void)
 
     /*step3 更新快照供下一周期使用 */
     last_g = curr_g;
+
+    /* 首次扫描结束，清除标志位 */
+    is_first_scan = false;
 }
 
 /* ==========================================================================

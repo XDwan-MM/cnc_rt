@@ -173,7 +173,6 @@ static void set_operating_mode() {
                 break;
             }
             rt_data->sys_state[SYS_IS_SWITCHING_MODE] = true;
-            rt_data->current_mode = rt_data->target_mode;
             break;
         case MODE_HOMING:
             if (!var_chan[0][VAR_CHAN_IS_HOMING].value.i) {
@@ -256,7 +255,7 @@ static void check_ferror_fault()
     }
     /* 指令速度不为0时，检测跟随误差 */
     // x轴
-    if (fabs(var_axis[AXIS_X][VAR_AXIS_CMD_VEL].value.f - 0.0) > SPEED_THRESHOLD)
+    if (fabs(var_axis[AXIS_X][VAR_AXIS_CMD_VEL].value.f) > SPEED_THRESHOLD)
     {
         // 指令速度 指令位置 反馈位置
         double vel_cmd_x = var_axis[AXIS_X][VAR_AXIS_CMD_VEL].value.f;
@@ -275,7 +274,7 @@ static void check_ferror_fault()
         }
     }
     // y轴
-    if (fabs(var_axis[AXIS_Y][VAR_AXIS_CMD_VEL].value.f - 0.0) > SPEED_THRESHOLD)
+    if (fabs(var_axis[AXIS_Y][VAR_AXIS_CMD_VEL].value.f) > SPEED_THRESHOLD)
     {
         // 指令速度 指令位置 反馈位置
         double vel_cmd_y = var_axis[AXIS_Y][VAR_AXIS_CMD_VEL].value.f;
@@ -293,7 +292,7 @@ static void check_ferror_fault()
         }
     }
     // z轴
-    if (fabs(var_axis[AXIS_Z][VAR_AXIS_CMD_VEL].value.f - 0.0) > SPEED_THRESHOLD)
+    if (fabs(var_axis[AXIS_Z][VAR_AXIS_CMD_VEL].value.f) > SPEED_THRESHOLD)
     {
         // 指令速度 指令位置 反馈位置
         double vel_cmd_z = var_axis[AXIS_Z][VAR_AXIS_CMD_VEL].value.f;
