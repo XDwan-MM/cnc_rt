@@ -1,4 +1,5 @@
 #include "rt_data.h"
+#include "global.h"
 
 extern RT_DATA* rt_data;
 
@@ -63,4 +64,41 @@ bool rt_get_chan_state(int chan_index, ChanStateIndex state){
     bool value = rt_data->chan_state[chan_index][state];
     pthread_mutex_unlock(&rt_data->mutex);
     return value;
+}
+
+void nc_set_resetting(){
+    setVarChanInt(0, VAR_CHAN_IS_RESETTING, 1, 0);
+    rt_data->nc_reset.is_resetting = 1;
+}
+
+void nc_set_resetted(){
+    switch (rt_data->current_mode) {
+        case MODE_MDI: // MDI
+        case MODE_MEM: // 记忆
+        case MODE_DNC:
+            if(rt_data->nc_reset.is_resetting){
+                if(cycle_tp->mem_exec_state == EXEC_IDLE && mcode_data->mcode_state == MCODE_EXECUTE_IDLE){
+                    setVarChanInt(0, VAR_CHAN_IS_RESETTING, 0, 0);
+                    rt_data->nc_reset.is_resetted = 1;
+                }
+            }
+            break;
+        case MODE_HOMING: // 回零
+            if(rt_data->nc_reset.is_resetting && !var_chan[0][VAR_CHAN_IS_HOMING].value.i){
+                setVarChanInt(0, VAR_CHAN_IS_RESETTING, 0, 0);
+                rt_data->nc_reset.is_resetted = 1;
+            }
+            break;
+        case MODE_JOG: // 点动
+        case MODE_RAPID_JOG: // 快速点动
+        case MODE_MPG: // 手轮
+        case MODE_IDLE: // 空闲状态
+        case MODE_EDIT: // 编辑
+        default: // error
+            if(rt_data->nc_reset.is_resetting){
+                setVarChanInt(0, VAR_CHAN_IS_RESETTING, 0, 0);
+                rt_data->nc_reset.is_resetted = 1;
+            }
+            break;
+    }
 }

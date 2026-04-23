@@ -41,7 +41,7 @@ void handle_homing_cmd(){
     }
     homing_cal_fv();
     homing_is_all_homed();
-    homing_is_resetting();
+    // homing_is_resetting();
 }
 
 static void homing_cal_fv(){
@@ -74,6 +74,8 @@ static void homing_set_state(){
             if(IsEqualTo(var_chan[0][VAR_CHAN_RAPID_OVERRIDE].value.f, 0)){
                 setAlarm(ALARM_SY, ALARM_WARNING, 2);
                 LOG(LOG_LEVEL_WARN, "快速倍率为0");
+            }else{
+                delAlarm(ALARM_SY, ALARM_WARNING, 2);
             }
             if(rt_data->sys_state[SYS_IS_SWITCHING_MODE]) break; // 换挡模式下，不允许操作
             if(homing_tp[AXIS_X].homing_state == ABS_EXEC_IDLE){
@@ -87,6 +89,8 @@ static void homing_set_state(){
             if(IsEqualTo(var_chan[0][VAR_CHAN_RAPID_OVERRIDE].value.f, 0)){
                 setAlarm(ALARM_SY, ALARM_WARNING, 2);
                 LOG(LOG_LEVEL_WARN, "快速倍率为0");
+            }else{
+                delAlarm(ALARM_SY, ALARM_WARNING, 2);
             }
             if(rt_data->sys_state[SYS_IS_SWITCHING_MODE]) break;
             if(homing_tp[AXIS_Y].homing_state == ABS_EXEC_IDLE){
@@ -100,6 +104,8 @@ static void homing_set_state(){
             if(IsEqualTo(var_chan[0][VAR_CHAN_RAPID_OVERRIDE].value.f, 0)){
                 setAlarm(ALARM_SY, ALARM_WARNING, 2);
                 LOG(LOG_LEVEL_WARN, "快速倍率为0");
+            }else{
+                delAlarm(ALARM_SY, ALARM_WARNING, 2);
             }
             if(rt_data->sys_state[SYS_IS_SWITCHING_MODE]) break;
             if(homing_tp[AXIS_Z].homing_state == ABS_EXEC_IDLE){
@@ -171,14 +177,12 @@ void homing_handle_estop(){
     homing_tp_reset();
     setVarChanInt(0, VAR_CHAN_IS_HOMING, 0, 0);
     setVarChanInt(0, VAR_CHAN_IS_MOVING, 0, 0);
-    setVarChanInt(0, VAR_CHAN_IS_RESETTING, 0, 0);
 }
 
 static void homing_handle_reset(){
     homing_tp_reset();
     setVarChanInt(0, VAR_CHAN_IS_HOMING, 0, 0);
     setVarChanInt(0, VAR_CHAN_IS_MOVING, 0, 0);
-    setVarChanInt(0, VAR_CHAN_IS_RESETTING, 0, 0);
 }
 
 static void homing_handle_alarm(){
@@ -239,6 +243,10 @@ static double abs_homing_tp_pinc(AXIS_TYPE axis_type){
             if(abs_homing_is_tp_finished(axis_type)){
                 homing_tp[axis_type].homing_state = ABS_EXEC_IDLE;
                 homing_tp[axis_type].is_resetting = false;
+                if(rt_data->axis_data[axis_type].axis_status.is_fwd_limit || rt_data->axis_data[axis_type].axis_status.is_rev_limit)
+                {
+                    rt_data->axis_data[axis_type].axis_status.is_decel_done = 1;
+                }
                 break;
             }
             // 进行回零 
@@ -292,7 +300,7 @@ static bool abs_homing_is_tp_finished(AXIS_TYPE axis_type){
 static bool abs_homing_is_axis_homed(AXIS_TYPE axis_type){
     double home_crds = par_axis[axis_type][PAR_AX_HOME_CRDS].value.val_real;
     double current_pos = var_axis[axis_type][VAR_AXIS_CMD_POS_EX].value.f;
-    if (fabs(home_crds - current_pos) < HOME_TOL) return true;
+    if (fabs(home_crds - current_pos) < par_chan[0][PAR_CH_HOMED_ANG].value.val_real) return true;
     return false;
 }
 

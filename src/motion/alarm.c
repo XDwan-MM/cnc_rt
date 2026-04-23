@@ -5,7 +5,8 @@
 
 // 急停处理逻辑
 void handle_estop_cmd(){
-    // setAlarm(ALARM_SY, ALARM_ERROR, 0);
+    // 复位状态：1.急停信号ESP
+    nc_set_resetting();
     // 重置各个模式
     mem_handle_estop();
     homing_handle_estop();
@@ -63,5 +64,4 @@ void handle_alarm_cmd(){
             LOG(LOG_LEVEL_ERR, "报警下不支持操作，请按复位清除报警");
             break;
     }
-    // rt_data->nc_event = SYS_EVENT_NONE;
 }

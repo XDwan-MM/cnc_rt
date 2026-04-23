@@ -217,7 +217,7 @@ GNC_RES parser_reading(){
     }
     if (ItpIsOver())
     {
-        LOG(LOG_LEVEL_WARN, "译码结束");
+        // LOG(LOG_LEVEL_WARN, "译码结束");
         if (res == GNC_CAL_SUCCESS || res == GNC_OPERATOR_SUCCESS)
         {
             return GNC_PARSER_OVER;

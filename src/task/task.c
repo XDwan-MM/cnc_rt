@@ -190,7 +190,7 @@ static GNC_RES task_handle_pmc_event(PMC_EVENT* event_data)
         {
             setVarChanDouble(0, VAR_CHAN_SPDL_OVERRIDE, (double)event_data->override_payload.val, 0);
             rt_data->nc_event = SYS_EVENT_SPDL_OVERRIDE;
-            LOG(LOG_LEVEL_INFO, "处理主轴倍率事件");
+            LOG(LOG_LEVEL_INFO, "处理主轴倍率事件 %d", event_data->override_payload.val);
         }
         break;
     }

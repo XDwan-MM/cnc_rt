@@ -30,15 +30,15 @@ void Axis_Limit_Manager_Init(void)
     runtime[AXIS_Z].config.level1.positive_limit = par_axis[AXIS_Z][PAR_AX_PLMT].value.val_real;
     runtime[AXIS_Z].config.level1.negative_limit = par_axis[AXIS_Z][PAR_AX_NLMT].value.val_real;
     //level 2
-    runtime[AXIS_X].config.level2.is_enabled = 0;
+    runtime[AXIS_X].config.level2.is_enabled = 1;
     runtime[AXIS_X].config.level2_mode = 0;
     runtime[AXIS_X].config.level2.positive_limit = par_axis[AXIS_X][PAR_AX_PLMT2].value.val_real;
     runtime[AXIS_X].config.level2.negative_limit = par_axis[AXIS_X][PAR_AX_NLMT2].value.val_real;
-    runtime[AXIS_Y].config.level2.is_enabled = 0;
+    runtime[AXIS_Y].config.level2.is_enabled = 1;
     runtime[AXIS_Y].config.level2_mode = 0;
     runtime[AXIS_Y].config.level2.positive_limit = par_axis[AXIS_Y][PAR_AX_PLMT2].value.val_real;
     runtime[AXIS_Y].config.level2.negative_limit = par_axis[AXIS_Y][PAR_AX_NLMT2].value.val_real;
-    runtime[AXIS_Z].config.level2.is_enabled = 0;
+    runtime[AXIS_Z].config.level2.is_enabled = 1;
     runtime[AXIS_Z].config.level2_mode = 0;
     runtime[AXIS_Z].config.level2.positive_limit = par_axis[AXIS_Z][PAR_AX_PLMT2].value.val_real;
     runtime[AXIS_Z].config.level2.negative_limit = par_axis[AXIS_Z][PAR_AX_NLMT2].value.val_real;
@@ -82,11 +82,11 @@ uint8_t Check_Axis_Limit_Violation(AxisLimitRuntime *runtime, double pos,AxisLim
         break;
     }
     runtime->direction = rt_data->axis_data[runtime->axis].axis_status.direction;
-    // printf("config: %f %f %f %f %f %f %d %d %d %f\n",config.level1.negative_limit,config.level1.positive_limit
-    //         ,config.level2.negative_limit,config.level2.positive_limit
-    //         ,config.level3.negative_limit,config.level3.positive_limit
-    //         ,rt_data->axis_data[runtime->axis].axis_status.is_fwd_limit
-    //         ,rt_data->axis_data[runtime->axis].axis_status.is_rev_limit,type,pos);
+//    printf("config: %f %f %f %f %f %f %d %d %d\n",config.level1.negative_limit,config.level1.positive_limit
+//             ,config.level2.negative_limit,config.level2.positive_limit
+//             ,config.level3.negative_limit,config.level3.positive_limit
+//             ,rt_data->axis_data[runtime->axis].axis_status.is_fwd_limit
+//             ,rt_data->axis_data[runtime->axis].axis_status.is_rev_limit,type);
     // 第一级检查：必须在区域内部运动
     if (runtime->config.level1.is_enabled && Is_Outside_Limit(pos, config.level1))
     {

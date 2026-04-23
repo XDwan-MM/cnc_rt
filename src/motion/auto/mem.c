@@ -11,3 +11,8 @@ void handle_run_cmd(){
     execute_mcode();
     execute_gcode();
 }
+
+void mem_handle_estop(){
+    mcode_handle_estop();
+    gcode_handle_estop();
+}

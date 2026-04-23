@@ -38,3 +38,4 @@
     - *tag-change
     - tar -cvJf cnc_rt_1.0.0.$SUM_B.tar bin/rt_cnc config lib
     - curl -uly_35b717:AP38qFMP2jfnFYm5gav4KV2EyXV -T cnc_rt_1.0.0.$SUM_B.tar  "http://10.2.30.32:8081/artifactory/hmi_cnc/${CI_COMMIT_REF_NAME}/"
+  when: manual
