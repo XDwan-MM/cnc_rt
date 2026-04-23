@@ -173,6 +173,10 @@ static void mem_set_state(){
         case SYS_EVENT_PAUSE:
             LOG(LOG_LEVEL_INFO, "记忆模式处理暂停");
             if(cycle_tp->mem_exec_state == EXEC_RUNNING){
+                // 攻丝方式下进给暂停无效
+                if(!queue_is_empty(plan_queue)){
+                    if(cycle_tp->plan_block->mode == PMC_MODE_TAP) break;
+                }
                 cycle_tp->mem_exec_state = EXEC_PAUSING;
                 cycle_tp->is_event_trigger = true;
             }

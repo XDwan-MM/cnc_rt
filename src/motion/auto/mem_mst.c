@@ -207,9 +207,11 @@ static void check_pmc_mend(){
         break;
     }
     // *******调试*******
-    nc_clear_msignal();
-    mcode_data->pmc_end = true;
-    return;
+    if(mcode_data->mcode_block[0].m_code == M00 || mcode_data->mcode_block[0].m_code == M01 || mcode_data->mcode_block[0].m_code == M02 || mcode_data->mcode_block[0].m_code == M30){
+        nc_clear_msignal();
+        mcode_data->pmc_end = true;
+        return;
+    }
     // *******调试*******
     // FIN为1时，nc侧将MF选通信号置为0
     if(mcode_data->signal_fin){
