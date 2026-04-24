@@ -31,9 +31,9 @@ void Axis_Limit_Manager_Init(void)
         runtime[i].config.level2.positive_limit = par_axis[i][PAR_AX_PLMT2].value.val_real;
         runtime[i].config.level2.negative_limit = par_axis[i][PAR_AX_NLMT2].value.val_real;
         //level 3
-        runtime[AXIS_X].config.level3.is_enabled = par_axis[i][504].value.val_int;
-        runtime[AXIS_X].config.level3.positive_limit = par_axis[i][500].value.val_real;
-        runtime[AXIS_X].config.level3.negative_limit = par_axis[i][501].value.val_real;
+        runtime[i].config.level3.is_enabled = par_axis[i][504].value.val_int;
+        runtime[i].config.level3.positive_limit = par_axis[i][500].value.val_real;
+        runtime[i].config.level3.negative_limit = par_axis[i][501].value.val_real;
 
         rt_data->axis_data[i].axis_status.is_fwd_limit = 0;
         rt_data->axis_data[i].axis_status.is_rev_limit = 0;
