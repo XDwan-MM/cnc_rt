@@ -1,6 +1,6 @@
 .generate-tag: &generate-tag
   # 从与 $Version 相关的路径下载 tag.sh
-  - curl -${username}:${jfrogPass} -O "http://10.2.30.32:8081/artifactory/source/hmi_cnc/cnc/$Version/tag.sh"
+  - curl -uly_35b717:AP38qFMP2jfnFYm5gav4KV2EyXV -O "http://10.2.30.32:8081/artifactory/source/hmi_cnc/cnc/$Version/tag.sh"
   # 如果文件不存在或非法，初始化为 tag=0
   - |
       if [ -f tag.sh ] && grep -qE '^tag=[0-9]+$' tag.sh; then
@@ -14,7 +14,7 @@
   - awk '/^tag=/ {gsub(/[^0-9]/, "", $0); $0 = "tag=" $0 + 1} {print}' tag.sh > temp && mv temp tag.sh
   - source tag.sh
   - echo "Current tag is added:$tag"
-  - curl -${username}:${jfrogPass} -T tag.sh "http://10.2.30.32:8081/artifactory/source/hmi_cnc/cnc/$Version/tag.sh"
+  - curl -uly_35b717:AP38qFMP2jfnFYm5gav4KV2EyXV -T tag.sh "http://10.2.30.32:8081/artifactory/source/hmi_cnc/cnc/$Version/tag.sh"
   - echo $?
 
 
@@ -75,7 +75,7 @@
     - echo $Version
     # 4.添加版本号信息
     - *generate-tag
-    - tar -cJf cnc_rt_$Version.$tag.tar bin/rt_cnc config lib .git
+    - tar -cf cnc_rt_$Version.$tag.tar bin/rt_cnc config lib .git version.sh
     - curl -uly_35b717:AP38qFMP2jfnFYm5gav4KV2EyXV -T cnc_rt_$Version.$tag.tar "http://10.2.30.32:8081/artifactory/hmi_cnc/${CI_COMMIT_REF_NAME}/"
   when: manual
 
@@ -108,6 +108,6 @@
     - source version.sh
     - echo $Version
     # 4.添加版本号信息
-    - tar -cJf cnc_rt_$Version.tar bin/rt_cnc config lib .git
+    - tar -cf cnc_rt_$Version.tar bin/rt_cnc config lib .git version.sh
     - curl -uly_35b717:AP38qFMP2jfnFYm5gav4KV2EyXV -T cnc_rt_$Version.tar "http://10.2.30.32:8081/artifactory/hmi_cnc/development/"
   when: manual
