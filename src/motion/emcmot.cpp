@@ -56,10 +56,10 @@ void emcmotTrajPlan() {
             Axis_Limit_Manager_Init();
             // 清除警告
             cleanAllAlarm(ALARM_TYPE_ALL, ALARM_WARNING);
-            // todo：调试使用
-            #ifndef DEBUG_MODE_ENABLED
-            Master_Reset();
-            #endif
+            // 调试：调试使用
+            // #ifndef DEBUG_MODE_ENABLED
+            // Master_Reset();
+            // #endif
         }
         
         #ifndef DEBUG_MODE_ENABLED
