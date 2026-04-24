@@ -26,10 +26,10 @@ void pmc_output_feedback()
      * F0001.0 (第1字节第0位) -> 报警状态反馈
      */
     unsigned char is_running = var_chan[0][VAR_CHAN_IS_RUNNING].value.i ? 0x01 : 0x00;
-    unsigned char is_estop = rt_data->sys_state[SYS_IS_ESTOP_ON] ? 0x01 : 0x00;
+    // unsigned char is_estop = rt_data->sys_state[SYS_IS_ESTOP_ON] ? 0x01 : 0x00;
     /* 使用底层 API 写入 F 寄存器区 */
     setRegValue8(REG_F, 0, is_running); /* REG_F 定义见 regdata.h */
-    setRegValue8(REG_F, 1, is_estop);
+    // setRegValue8(REG_F, 1, is_estop);
 
     // 急停报警中
     // if(rt_data->sys_state[SYS_IS_ESTOP_ON]){

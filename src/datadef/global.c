@@ -160,6 +160,8 @@ static GNC_RES shm_par_init(){
         par_chan[i][PAR_CH_MAX_ECEN_ACC].value.val_real = 1000.0;
         par_chan[i][PAR_CH_LOOKAHEAD_NUM].value.val_uint = 200;
         par_chan[i][PAR_CH_HOMED_ANG].value.val_real = 0.0001;
+        par_chan[i][PAR_CH_TMF_DELAY].value.val_int = 2;
+        par_chan[0][PAR_CH_TFIN_DELEY].value.val_int = 2;
     }
     #endif
     return GNC_OPERATOR_SUCCESS;

@@ -70,16 +70,16 @@ static void nc_deal_new_mcode(){
         case M00: // 暂停
             setRegValue8(REG_F, 10, 0x00); 
             setRegBit(REG_F, 9, 7);
-            rt_data->nc_event = SYS_EVENT_PAUSE;
-            mcode_data->mcode_state = MCODE_EXECUTE_PAUSING;
+            // rt_data->nc_event = SYS_EVENT_PAUSE;
+            // mcode_data->mcode_state = MCODE_EXECUTE_PAUSING;
             cycle_tp->mcode_feedback = false;
             LOG(LOG_LEVEL_DEBUG, "1 nc侧输出代码信号M00");
             break;
         case M01: // 选择停
             setRegValue8(REG_F, 10, 0x01); 
             setRegBit(REG_F, 9, 6); 
-            rt_data->nc_event = SYS_EVENT_PAUSE;
-            mcode_data->mcode_state = MCODE_EXECUTE_PAUSING;
+            // rt_data->nc_event = SYS_EVENT_PAUSE;
+            // mcode_data->mcode_state = MCODE_EXECUTE_PAUSING;
             cycle_tp->mcode_feedback = false;
             LOG(LOG_LEVEL_DEBUG, "1 nc侧输出代码信号M01");
             break;
@@ -158,7 +158,8 @@ static void nc_deal_new_mcode(){
             break;
         }
         // 分配信号
-        setRegBit(REG_F, 1, 3);    
+        setRegBit(REG_F, 1, 3);   
+        mcode_data->signal_den = true; 
         mcode_data->mcode_block[i].mcode_end = false;
     }
     mcode_queue_reset(mcode_queue);
@@ -170,7 +171,7 @@ static void check_pmc_mend(){
     // FIN信号 G4.3
     getRegBit(REG_G, 4, 3, &mcode_data->signal_fin);
     // DEN信号 F1.3
-    getRegBit(REG_F, 1, 3, &mcode_data->signal_den);
+    // getRegBit(REG_F, 1, 3, &mcode_data->signal_den);
     // 设定TMF后，将MF信号置为1
     switch (mcode_data->mcode_size)
     {
@@ -179,7 +180,9 @@ static void check_pmc_mend(){
         getRegBit(REG_F, 7, 0, &mcode_data->mcode_block[0].signal_mf);
         if(mcode_data->signal_den){
             // 脉冲选通信号延时时间，缺省值2ms
-            if(mcode_data->mcode_block[0].tmf_count >= par_chan[0][PAR_CH_TMF_DELAY].value.val_int) setRegBit(REG_F, 7, 0);
+            if(mcode_data->mcode_block[0].tmf_count >= par_chan[0][PAR_CH_TMF_DELAY].value.val_int){
+                setRegBit(REG_F, 7, 0);
+            }
             else mcode_data->mcode_block[0].tmf_count ++;
         }
         break;
@@ -197,22 +200,24 @@ static void check_pmc_mend(){
         getRegBit(REG_F, 7, 0, &mcode_data->mcode_block[0].signal_mf);
         getRegBit(REG_F, 8, 4, &mcode_data->mcode_block[1].signal_mf);
         getRegBit(REG_F, 8, 5, &mcode_data->mcode_block[2].signal_mf);
-        if(mcode_data->mcode_block[0].tmf_count >= par_chan[0][PAR_CH_TMF_DELAY].value.val_int) setRegBit(REG_F, 7, 0);
-        else mcode_data->mcode_block[0].tmf_count ++;
-        if(mcode_data->mcode_block[1].tmf_count >= par_chan[0][PAR_CH_TMF_DELAY].value.val_int) setRegBit(REG_F, 8, 4);
-        else mcode_data->mcode_block[1].tmf_count ++;
-        if(mcode_data->mcode_block[2].tmf_count >= par_chan[0][PAR_CH_TMF_DELAY].value.val_int) setRegBit(REG_F, 8, 5);
-        else mcode_data->mcode_block[2].tmf_count ++;
+        if(mcode_data->signal_den){
+            if(mcode_data->mcode_block[0].tmf_count >= par_chan[0][PAR_CH_TMF_DELAY].value.val_int) setRegBit(REG_F, 7, 0);
+            else mcode_data->mcode_block[0].tmf_count ++;
+            if(mcode_data->mcode_block[1].tmf_count >= par_chan[0][PAR_CH_TMF_DELAY].value.val_int) setRegBit(REG_F, 8, 4);
+            else mcode_data->mcode_block[1].tmf_count ++;
+            if(mcode_data->mcode_block[2].tmf_count >= par_chan[0][PAR_CH_TMF_DELAY].value.val_int) setRegBit(REG_F, 8, 5);
+            else mcode_data->mcode_block[2].tmf_count ++;
+        }
     default:
         break;
     }
     // *******调试*******
-    nc_clear_msignal();
-    clearRegBit(REG_F, 7, 0);
-    clearRegBit(REG_F, 8, 4);
-    clearRegBit(REG_F, 8, 5);
-    mcode_data->pmc_end = true;
-    return;
+    // nc_clear_msignal();
+    // clearRegBit(REG_F, 7, 0);
+    // clearRegBit(REG_F, 8, 4);
+    // clearRegBit(REG_F, 8, 5);
+    // mcode_data->pmc_end = true;
+    // return;
     // if(mcode_data->mcode_block[0].m_code == M00 || mcode_data->mcode_block[0].m_code == M01 || mcode_data->mcode_block[0].m_code == M02 || mcode_data->mcode_block[0].m_code == M30){
     //     nc_clear_msignal();
     //     clearRegBit(REG_F, 7, 0);
@@ -223,6 +228,7 @@ static void check_pmc_mend(){
     // }
     // *******调试*******
     // FIN为1时，nc侧将MF选通信号置为0
+
     if(mcode_data->signal_fin){
         // 完成信号宽幅时间，缺省值2ms
         if(mcode_data->tfin_count >= par_chan[0][PAR_CH_TFIN_DELEY].value.val_int){
