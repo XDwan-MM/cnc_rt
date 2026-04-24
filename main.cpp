@@ -14,9 +14,14 @@
 #include <hmisysapi.h>
 #include "stored_stroke_check.h"
 #include "master.h"
+#include <QFile>
+#include <QTextStream>
 #ifdef DEBUG_MODE_ENABLED
 #include "keyboard.h"
 #endif
+
+static char* get_version_path();
+static int get_hmi_version(char *version, size_t version_size);
 
 // Ctrl + C 终止程序触发
 void sigint_handler([[maybe_unused]] int sig) {
@@ -38,6 +43,9 @@ void printMode() {
 int main() {
     // 打印当前模式
     printMode();
+    // 打印版本信息
+    char version[64];
+    get_hmi_version(version, sizeof(version));
     // 初始化共享内存
     if(!shmInit()) {
         printf("[start] 共享内存初始化失败\n");
@@ -98,4 +106,73 @@ int main() {
     }
     printf("[exit] 程序正常退出\n");
     return 0;
+}
+
+static char* get_version_path() {
+    char cwd[1024];
+    char path[512];
+    if(getcwd(cwd, sizeof(cwd)) != NULL){
+        char* last_slash = strrchr(cwd, '/');
+        if(last_slash != NULL){
+            *last_slash = '\0';
+            snprintf(path, sizeof(path), "%s/%s", cwd, "version.sh");
+        }
+    }
+    return strdup(path); // 无斜杠则返回当前目录
+}
+
+static int get_hmi_version(char *version, size_t version_size) {
+    // 1. 打开文件
+    const char *file_path = get_version_path();
+    FILE *file = fopen(file_path, "r"); 
+
+    if (file == NULL) {
+        fprintf(stderr, "无法打开 %s 文件\n", file_path);
+        return -1;
+    }
+    // 2. 读取第一行
+    char buffer[256];
+    if (fgets(buffer, sizeof(buffer), file) == NULL) {
+        fprintf(stderr, "读取文件内容失败或文件为空\n");
+        fclose(file);
+        // 如果文件存在但读不到内容，视情况决定返回什么，这里返回错误
+        return -1; 
+    }
+    fclose(file);
+    // 3. 检查行首是否为 "Version="
+    // "Version=" 长度为 8
+    if (strncmp(buffer, "Version=", 8) == 0) {
+        // 4. 提取版本号
+        // buffer + 8 指向版本号起始位置
+        // 去除可能存在的换行符 (\n)
+        char *start_ptr = buffer + 8;
+        
+        // 移除末尾的换行符 (如果存在)
+        size_t len = strlen(start_ptr);
+        if (len > 0 && start_ptr[len-1] == '\n') {
+            start_ptr[len-1] = '\0';
+            len--;
+        }
+        // 移除末尾的回车符 (\r)，防止 Windows 格式文件导致的问题
+        if (len > 0 && start_ptr[len-1] == '\r') {
+            start_ptr[len-1] = '\0';
+            len--;
+        }
+        // 5. 安全拷贝到输出参数
+        if (len >= version_size) {
+            fprintf(stderr, "警告：版本号过长，已截断\n");
+            strncpy(version, start_ptr, version_size - 1);
+            version[version_size - 1] = '\0';
+        } else {
+            strcpy(version, start_ptr);
+        }
+        printf("软件版本号：%s\n", version);
+        return 0;
+    } else {
+        // 6. 处理错误情况
+        strncpy(version, "(版本号错误)", version_size - 1);
+        version[version_size - 1] = '\0';
+        printf("软件版本号：%s\n", version);
+        return 0; // 虽然内容错误，但函数执行流程完成，返回 0 表示逻辑走完了，或者根据需求返回 -1
+    }
 }
