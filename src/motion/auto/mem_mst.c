@@ -182,7 +182,7 @@ static void check_pmc_mend(){
             if(mcode_data->mcode_block[0].tmf_count >= par_chan[0][PAR_CH_TMF_DELAY].value.val_int){
                 setRegBit(REG_F, 7, 0);
                 mcode_data->mcode_block[0].signal_mf = true;
-                LOG(LOG_LEVEL_DEBUG, "2 nc侧mf信号完成");
+                // LOG(LOG_LEVEL_DEBUG, "2 nc侧mf信号完成");
             }
             else mcode_data->mcode_block[0].tmf_count ++;
         }
@@ -223,17 +223,17 @@ static void check_pmc_mend(){
         break;
     }
     // *******调试*******
-    if(mcode_data->mcode_block[0].m_code == M00 || mcode_data->mcode_block[0].m_code == M01 || mcode_data->mcode_block[0].m_code == M02 || mcode_data->mcode_block[0].m_code == M30){
-        nc_clear_msignal();
-        clearRegBit(REG_F, 7, 0);
-        clearRegBit(REG_F, 8, 4);
-        clearRegBit(REG_F, 8, 5);
-        mcode_data->mcode_block[0].signal_mf = false;
-        mcode_data->mcode_block[1].signal_mf = false;
-        mcode_data->mcode_block[2].signal_mf = false;
-        mcode_data->pmc_end = true;
-        return;
-    }
+    // if(mcode_data->mcode_block[0].m_code == M00 || mcode_data->mcode_block[0].m_code == M01 || mcode_data->mcode_block[0].m_code == M02 || mcode_data->mcode_block[0].m_code == M30){
+    //     nc_clear_msignal();
+    //     clearRegBit(REG_F, 7, 0);
+    //     clearRegBit(REG_F, 8, 4);
+    //     clearRegBit(REG_F, 8, 5);
+    //     mcode_data->mcode_block[0].signal_mf = false;
+    //     mcode_data->mcode_block[1].signal_mf = false;
+    //     mcode_data->mcode_block[2].signal_mf = false;
+    //     mcode_data->pmc_end = true;
+    //     return;
+    // }
     // mcode_data->signal_fin = true;
     // char f;
     // getRegValue8(REG_F, 10, &f); 
@@ -243,6 +243,7 @@ static void check_pmc_mend(){
     if(mcode_data->signal_fin){
         // 完成信号宽幅时间，缺省值2ms
         if(mcode_data->tfin_count >= par_chan[0][PAR_CH_TFIN_DELEY].value.val_int){
+            mcode_data->signal_fin_delay = true;
             clearRegBit(REG_F, 7, 0);
             clearRegBit(REG_F, 8, 4);
             clearRegBit(REG_F, 8, 5);
@@ -257,24 +258,25 @@ static void check_pmc_mend(){
     switch (mcode_data->mcode_size)
     {
     case 1:
-        if(!mcode_data->mcode_block[0].signal_mf && mcode_data->signal_fin) {
+        if(!mcode_data->mcode_block[0].signal_mf && mcode_data->signal_fin_delay) {
+            LOG(LOG_LEVEL_DEBUG, "4 pmc侧m指令完成");
             nc_clear_msignal();
             mcode_data->pmc_end = true;
-            LOG(LOG_LEVEL_DEBUG, "4 pmc侧m指令完成");
         }
         break;
     case 2:
-        if(!mcode_data->mcode_block[0].signal_mf && !mcode_data->mcode_block[1].signal_mf && mcode_data->signal_fin) {
+        if(!mcode_data->mcode_block[0].signal_mf && !mcode_data->mcode_block[1].signal_mf && mcode_data->signal_fin_delay) {
+            LOG(LOG_LEVEL_DEBUG, "4 pmc侧m指令完成");
             nc_clear_msignal();
             mcode_data->pmc_end = true;
-            LOG(LOG_LEVEL_DEBUG, "4 pmc侧m指令完成");
+            
         }
         break;
     case 3:
-        if(!mcode_data->mcode_block[0].signal_mf && !mcode_data->mcode_block[1].signal_mf && !mcode_data->mcode_block[2].signal_mf && mcode_data->signal_fin) {
+        if(!mcode_data->mcode_block[0].signal_mf && !mcode_data->mcode_block[1].signal_mf && !mcode_data->mcode_block[2].signal_mf && mcode_data->signal_fin_delay) {
+            LOG(LOG_LEVEL_DEBUG, "4 pmc侧m指令完成");
             nc_clear_msignal();
             mcode_data->pmc_end = true;
-            LOG(LOG_LEVEL_DEBUG, "4 pmc侧m指令完成");
         }
         break;
     default:
@@ -291,14 +293,14 @@ static void check_nc_mend(){
         case M01: // 选择停
             if(cycle_tp->mcode_feedback) {
                 mcode_data->mcode_block[i].mcode_end = true;
-                LOG(LOG_LEVEL_DEBUG, "5 nc侧m指令完成");
+                // LOG(LOG_LEVEL_DEBUG, "5 nc侧m指令完成");
             }
             break;
         case M02: // 复位
         case M30: // 复位
             if(cycle_tp->mcode_feedback) {
                 mcode_data->mcode_block[i].mcode_end = true;
-                LOG(LOG_LEVEL_DEBUG, "5 nc侧m指令完成");
+                // LOG(LOG_LEVEL_DEBUG, "5 nc侧m指令完成");
             }
             break;
         case M03: // 主轴正转
@@ -307,12 +309,12 @@ static void check_nc_mend(){
         case M19: // 主轴定位
             if(spl_data.mcode_feedback) {
                 mcode_data->mcode_block[i].mcode_end = true;
-                LOG(LOG_LEVEL_DEBUG, "5 nc侧m指令完成");
+                // LOG(LOG_LEVEL_DEBUG, "5 nc侧m指令完成");
             }
             break;
         default:
             mcode_data->mcode_block[0].mcode_end = true;
-            LOG(LOG_LEVEL_DEBUG, "5 nc侧m指令完成");
+            // LOG(LOG_LEVEL_DEBUG, "5 nc侧m指令完成");
             break;
         }
     }
@@ -345,6 +347,7 @@ static void nc_output_mend(){
 
 // 当FIN信号后，nc侧将代码信号置为0
 static void nc_clear_msignal(){
+    LOG(LOG_LEVEL_DEBUG, "当FIN信号后, nc侧将代码信号置为0");
     setRegValue8(REG_F, 10, 0x00);     // 代码信号
     setRegValue8(REG_F, 11, 0x00);
     setRegValue8(REG_F, 12, 0x00);
@@ -354,6 +357,11 @@ static void nc_clear_msignal(){
     clearRegBit(REG_F, 9, 5);
     clearRegBit(REG_F, 9, 4);
     clearRegBit(REG_F, 1, 3);          // 分配结束信号
+    clearRegBit(REG_F, 7, 0);
+    clearRegBit(REG_F, 8, 4);
+    clearRegBit(REG_F, 8, 5);
+    mcode_data->signal_den = false;
+    mcode_data->signal_fin_delay = false;
 }
 
 GNC_RES mcode_data_init(){
