@@ -359,6 +359,9 @@ void gcode_handle_estop(){
 
 static void mem_handle_reset(){
     cycle_tp_reset();
+    queue_reset(plan_queue);
+    queue_reset(pretreat_queue);
+    gcode_queue_reset(gcode_queue);
     setVarChanInt(0, VAR_CHAN_IS_RUNNING, 0, 0);
     setVarChanInt(0, VAR_CHAN_IS_MOVING, 0, 0);
     setVarChanInt(0, VAR_CHAN_IS_PROGEND, 1, 0);   

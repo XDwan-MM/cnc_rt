@@ -34,6 +34,7 @@ typedef struct{
     int mcode_size;
     bool signal_den;        // 分配结束信号
     bool signal_fin;        // 结束信号
+    bool signal_fin_delay;  // 结束信号达到宽幅
     bool pmc_end;           // pmc侧动作完成
     int tfin_count;         // 完成信号计数
 }MCODE_DATA;

@@ -160,6 +160,8 @@ static GNC_RES shm_par_init(){
         par_chan[i][PAR_CH_MAX_ECEN_ACC].value.val_real = 1000.0;
         par_chan[i][PAR_CH_LOOKAHEAD_NUM].value.val_uint = 200;
         par_chan[i][PAR_CH_HOMED_ANG].value.val_real = 0.0001;
+        par_chan[i][PAR_CH_TMF_DELAY].value.val_int = 2;
+        par_chan[0][PAR_CH_TFIN_DELEY].value.val_int = 2;
     }
     #endif
     return GNC_OPERATOR_SUCCESS;
@@ -199,8 +201,30 @@ GNC_RES shm_var_update(){
     double act_pos_wcs_ex = 0.0;
     for (int i = 0; i < SYS_AXES_NUM; i++)
     {
-        // 剩余移动量
-        crds_remain = var_axis[i][VAR_AXIS_PROG_POS_EX].value.f - var_axis[i][VAR_AXIS_ACT_POS_EX].value.f;
+        if(rt_data->current_mode == MODE_MEM || rt_data->current_mode == MODE_MDI || rt_data->current_mode == MODE_DNC){
+            // 剩余移动量
+            crds_remain = var_axis[i][VAR_AXIS_PROG_POS_EX].value.f - var_axis[i][VAR_AXIS_ACT_POS_EX].value.f;
+            // 运行模态
+            VarUnion set_modal;
+            set_modal.type = 0;
+            for (int i = 0; i < MODAL_GROUP; ++i)
+            {
+                set_modal.value.i = cycle_tp->plan_block->state.modal[i];
+                setVarChanValue(0, VAR_CHAN_MODAL, i, &set_modal, 0);
+            }
+            // 机床指令位置
+            if(queue_is_empty(plan_queue)){
+                setVarAxisDouble(AXIS_X, VAR_AXIS_PROG_POS_EX, var_axis[0][VAR_AXIS_ACT_POS_EX].value.f, 0);
+                setVarAxisDouble(AXIS_Y, VAR_AXIS_PROG_POS_EX, var_axis[1][VAR_AXIS_ACT_POS_EX].value.f, 0);
+                setVarAxisDouble(AXIS_Z, VAR_AXIS_PROG_POS_EX, var_axis[2][VAR_AXIS_ACT_POS_EX].value.f, 0);
+            }else{
+                setVarAxisDouble(AXIS_X, VAR_AXIS_PROG_POS_EX, cycle_tp->plan_block->end_pos.x, 0);
+                setVarAxisDouble(AXIS_Y, VAR_AXIS_PROG_POS_EX, cycle_tp->plan_block->end_pos.y, 0);
+                setVarAxisDouble(AXIS_Z, VAR_AXIS_PROG_POS_EX, cycle_tp->plan_block->end_pos.z, 0);
+            }
+        }else{
+            crds_remain = 0;
+        }
         setVarAxisDouble(i, VAR_AXIS_LEFT_TOGO_EX, crds_remain, 0);
         // 工件坐标
         getVarChanValue(0, VAR_CHAN_MODAL, 14, &crds_type_var, 0);
@@ -235,18 +259,6 @@ GNC_RES shm_var_update(){
 }
 
 GNC_RES shm_var_update_prog(){
-    // 运行模态
-    VarUnion set_modal;
-    set_modal.type = 0;
-    for (int i = 0; i < MODAL_GROUP; ++i)
-    {
-        set_modal.value.i = cycle_tp->plan_block->state.modal[i];
-        setVarChanValue(0, VAR_CHAN_MODAL, i, &set_modal, 0);
-    }
-    // 机床指令位置，旧值 VAR_AXIS_CMD_POS_EX
-    setVarAxisDouble(AXIS_X, VAR_AXIS_PROG_POS_EX, cycle_tp->plan_block->end_pos.x, 0);
-    setVarAxisDouble(AXIS_Y, VAR_AXIS_PROG_POS_EX, cycle_tp->plan_block->end_pos.y, 0);
-    setVarAxisDouble(AXIS_Z, VAR_AXIS_PROG_POS_EX, cycle_tp->plan_block->end_pos.z, 0);
     // 运行行号
     setVarChanInt(0, VAR_CHAN_RUN_ROW, cycle_tp->plan_block->line_number, 0);
     return GNC_OPERATOR_SUCCESS;

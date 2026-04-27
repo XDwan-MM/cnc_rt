@@ -165,27 +165,27 @@ static void scan_key_to_event(int key) {
     switch(key){
         case KEY_EV_EDIT:
             event.id = EV_MSG_MODE;
-            event.mode_payload.mode = 0;
+            event.mode_payload.mode = 1;
             break;
         case KEY_EV_MEM:
             event.id = EV_MSG_MODE;
-            event.mode_payload.mode = 1;
+            event.mode_payload.mode = 2;
             break;
         case KEY_EV_MDI:
             event.id = EV_MSG_MODE;
-            event.mode_payload.mode = 2;
+            event.mode_payload.mode = 3;
             break;
         case KEY_EV_JOG:
             event.id = EV_MSG_MODE;
-            event.mode_payload.mode = 3;
+            event.mode_payload.mode = 4;
             break;
         case KEY_EV_MPG:
             event.id = EV_MSG_MODE;
-            event.mode_payload.mode = 4;
+            event.mode_payload.mode = 5;
             break;
         case KEY_EV_HOME:
             event.id = EV_MSG_MODE;
-            event.mode_payload.mode = 5;
+            event.mode_payload.mode = 6;
             break; 
         case KEY_EV_RERUN:
             event.id = EV_MSG_AUTO_RUN;
