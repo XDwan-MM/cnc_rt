@@ -56,10 +56,6 @@ void emcmotTrajPlan() {
             Axis_Limit_Manager_Init();
             // 清除警告
             cleanAllAlarm(ALARM_TYPE_ALL, ALARM_WARNING);
-            // 调试：调试使用
-            // #ifndef DEBUG_MODE_ENABLED
-            // Master_Reset();
-            // #endif
         }
         
         #ifndef DEBUG_MODE_ENABLED
@@ -76,11 +72,11 @@ void emcmotTrajPlan() {
         // 判断运动模式
         set_operating_mode();
 
-        // 根据运动模式计算运动位置
-        get_cmd_pos();
-
         // 主轴控制
         spindle_control();
+
+        // 根据运动模式计算运动位置
+        get_cmd_pos();
 
         // 误差补偿
         compute_screw_comp();
