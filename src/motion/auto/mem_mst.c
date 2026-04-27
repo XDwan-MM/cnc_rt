@@ -223,17 +223,17 @@ static void check_pmc_mend(){
         break;
     }
     // *******调试*******
-    // if(mcode_data->mcode_block[0].m_code == M00 || mcode_data->mcode_block[0].m_code == M01 || mcode_data->mcode_block[0].m_code == M02 || mcode_data->mcode_block[0].m_code == M30){
-    //     nc_clear_msignal();
-    //     clearRegBit(REG_F, 7, 0);
-    //     clearRegBit(REG_F, 8, 4);
-    //     clearRegBit(REG_F, 8, 5);
-    //     mcode_data->mcode_block[0].signal_mf = false;
-    //     mcode_data->mcode_block[1].signal_mf = false;
-    //     mcode_data->mcode_block[2].signal_mf = false;
-    //     mcode_data->pmc_end = true;
-    //     return;
-    // }
+    if(mcode_data->mcode_block[0].m_code == M00 || mcode_data->mcode_block[0].m_code == M01 || mcode_data->mcode_block[0].m_code == M02 || mcode_data->mcode_block[0].m_code == M30){
+        nc_clear_msignal();
+        clearRegBit(REG_F, 7, 0);
+        clearRegBit(REG_F, 8, 4);
+        clearRegBit(REG_F, 8, 5);
+        mcode_data->mcode_block[0].signal_mf = false;
+        mcode_data->mcode_block[1].signal_mf = false;
+        mcode_data->mcode_block[2].signal_mf = false;
+        mcode_data->pmc_end = true;
+        return;
+    }
     // mcode_data->signal_fin = true;
     // char f;
     // getRegValue8(REG_F, 10, &f); 
