@@ -17,6 +17,16 @@
   - curl -uly_35b717:AP38qFMP2jfnFYm5gav4KV2EyXV -T tag.sh "http://10.2.30.32:8081/artifactory/source/hmi_cnc/cnc/$Version/tag.sh"
   - echo $?
 
+.tag-change: &tag-change
+  - curl -uly_35b717:AP38qFMP2jfnFYm5gav4KV2EyXV -O  "http://10.2.30.32:8081/artifactory/source/ly/tag_bash/cnc/tag.log"
+  - curl -uly_35b717:AP38qFMP2jfnFYm5gav4KV2EyXV -O  "http://10.2.30.32:8081/artifactory/source/ly/tag_bash/cnc/add_b.sh"
+  - curl -uly_35b717:AP38qFMP2jfnFYm5gav4KV2EyXV -O  "http://10.2.30.32:8081/artifactory/source/ly/tag_bash/cnc/write.sh"
+  - chmod 777 tag.log write.sh
+  - source tag.log
+  - source add_b.sh
+  - export SUM_B
+  - ./write.sh
+  - curl -uly_35b717:AP38qFMP2jfnFYm5gav4KV2EyXV -T tag.log  "http://10.2.30.32:8081/artifactory/source/ly/tag_bash/cnc/tag.log"
 
 合并测试:
   stage: build
@@ -44,6 +54,37 @@
     - echo "✅ Compiled Main Project Success!"
   only:
     - merge_request
+
+生成当前分支固件:
+  stage: deploy
+  tags:
+    - hmi_v3
+  script:
+    # 0.检查环境
+    - export PATH="$PATH:/home/gree/Qt5.15.16/5.15.16/gcc_64/bin"
+    - qmake --version
+    # 1.获取三级仓库
+    # 2.编译子模块
+    - ./build.sh clean
+    - echo "⏳ Initializing Submodules..."
+    - git submodule init && git submodule update --init --recursive
+    - echo "⏳ Compiling Submodule..."
+    - cd ./lib/cncshm
+    - ./build.sh
+    - echo "✅ Compiled Submodules Success!"
+    # 3.编译rt_cnc
+    - cd ../../
+    - echo "⏳ Compiling Main Project..."
+    # - ./build.sh
+    - qmake
+    - make -j$(nproc)
+    - echo "✅ Compiled Main Project Success!"
+    - ls
+    # 4.添加版本号信息
+    - *tag-change
+    - tar -cf cnc_rt_$SUM_B.tar bin/rt_cnc config lib .git version.sh
+    - curl -uly_35b717:AP38qFMP2jfnFYm5gav4KV2EyXV -T cnc_rt_$SUM_B.tar  "http://10.2.30.32:8081/artifactory/hmi_cnc/${CI_COMMIT_REF_NAME}/"
+  when: manual
 
 生成feature固件:
   stage: deploy
