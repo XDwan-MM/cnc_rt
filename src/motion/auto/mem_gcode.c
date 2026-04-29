@@ -582,9 +582,13 @@ static bool cycle_block_is_arrived(POS current_pos){
     // 如果是到位检测模组，发送到位信号
     if(head_block->mode == PMC_MODE_ARRIVE_CHECK){
         rt_set_chan_state(0, CHAN_IS_MODE_ARRIVE, true);
+        LOG(LOG_LEVEL_DEBUG,  "到位检测 pos:%f %f %f vel:%f", head_block->end_pos.x, head_block->end_pos.y, head_block->end_pos.z, head_block->end_vel);
         // todo：G27返回参考点检测信号的控制时序
     }
-    if(head_block->mode == PMC_MODE_EXACT_STOP) rt_set_chan_state(0, CHAN_IS_EXACT_STOP, true);
+    if(head_block->mode == PMC_MODE_EXACT_STOP) {
+        rt_set_chan_state(0, CHAN_IS_EXACT_STOP, true);
+        LOG(LOG_LEVEL_DEBUG,  "精准停 pos:%f %f %f vel:%f", head_block->end_pos.x, head_block->end_pos.y, head_block->end_pos.z, head_block->end_vel);
+    }
     return true;
 }
 
