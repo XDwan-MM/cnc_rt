@@ -10,7 +10,8 @@ SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
 LIB_DIR="$SCRIPT_DIR/lib"
 BUILD_DIR="$SCRIPT_DIR/build"
 BUILD_DIR_DEBUG="$BUILD_DIR/debug"
-BUILD_DIR_RELEASE="$BUILD_DIR/release"
+BUILD_DIR_RELEASE1="$BUILD_DIR/release1"
+BUILD_DIR_RELEASE2="$BUILD_DIR/release2"
 BIN_DIR="$SCRIPT_DIR/bin"
 
 # 颜色定义
@@ -65,7 +66,6 @@ build_shm_lib() {
     fi
 }
 
-
 build_debug() {
     echo -e "${BLUE}========== 编译调试模式 ==========${NC}"
 
@@ -84,31 +84,52 @@ build_debug() {
     fi
 }
 
-build_release() {
+build_release_1() {
     echo -e "${BLUE}========== 编译实时模式 ==========${NC}"
 
-    mkdir -p "$BUILD_DIR_RELEASE"
-    cd "$BUILD_DIR_RELEASE"
+    mkdir -p "$BUILD_DIR_RELEASE1"
+    cd "$BUILD_DIR_RELEASE1"
 
-    qmake "$SCRIPT_DIR/RT_CNC.pro"
+    qmake "$SCRIPT_DIR/RT_CNC.pro" "CONFIG+=release_platform_1"
     make -j$(nproc)
 
     if [ $? -eq 0 ]; then
-        echo -e "${GREEN}[OK] 实时模式编译成功${NC}"
+        echo -e "${GREEN}[OK] 实时模式编译平台1成功${NC}"
         return 0
     else
-        echo -e "${RED}[FAIL] 实时模式编译失败${NC}"
+        echo -e "${RED}[FAIL] 实时模式编译平台1失败${NC}"
+        return 1
+    fi
+}
+
+build_release_2() {
+    echo -e "${BLUE}========== 编译实时模式 ==========${NC}"
+
+    mkdir -p "$BUILD_DIR_RELEASE2"
+    cd "$BUILD_DIR_RELEASE2"
+
+    qmake "$SCRIPT_DIR/RT_CNC.pro" "CONFIG+=release_platform_2"
+    make -j$(nproc)
+
+    if [ $? -eq 0 ]; then
+        echo -e "${GREEN}[OK] 实时模式编译平台2成功${NC}"
+        return 0
+    else
+        echo -e "${RED}[FAIL] 实时模式编译平台2失败${NC}"
         return 1
     fi
 }
 
 build_all() {
     local debug_ok=0
-    local release_ok=0
+    local release1_ok=0
+    local release2_ok=0
 
     build_debug && debug_ok=1
     echo ""
-    build_release && release_ok=1
+    build_release_1 && release1_ok=1
+    echo ""
+    build_release_2 && release2_ok=1
 
     echo ""
     echo -e "${BLUE}========== 编译结果 ==========${NC}"
@@ -119,13 +140,19 @@ build_all() {
         echo -e "  调试版本: ${RED}[FAIL]${NC}"
     fi
 
-    if [ $release_ok -eq 1 ]; then
-        echo -e "  实时版本: ${GREEN}[OK]${NC} $BIN_DIR/rt_cnc"
+    if [ $release1_ok -eq 1 ]; then
+        echo -e "  实时版本平台1: ${GREEN}[OK]${NC} $BIN_DIR/rt_cnc_1"
     else
-        echo -e "  实时版本: ${RED}[FAIL]${NC}"
+        echo -e "  实时版本平台1: ${RED}[FAIL]${NC}"
     fi
 
-    if [ $debug_ok -eq 1 ] && [ $release_ok -eq 1 ]; then
+    if [ $release2_ok -eq 1 ]; then
+        echo -e "  实时版本平台2: ${GREEN}[OK]${NC} $BIN_DIR/rt_cnc_2"
+    else
+        echo -e "  实时版本平台2: ${RED}[FAIL]${NC}"
+    fi
+
+    if [ $debug_ok -eq 1 ] && [ $release1_ok -eq 1 ] && [ $release2_ok -eq 1 ]; then
         echo ""
         echo -e "${GREEN}所有版本编译成功!${NC}"
         return 0
@@ -135,9 +162,15 @@ build_all() {
 }
 
 run() {
-    build_release
+    build_release_1
     cd $BIN_DIR
     sudo ./rt_cnc
+}
+
+run2() {
+    build_release_2
+    cd $BIN_DIR
+    sudo ./rt_cnc_2
 }
 
 run_debug() {
@@ -178,6 +211,14 @@ clean_build() {
         rm -f "$BIN_DIR/rt_cnc"
         echo "  已清理: $BIN_DIR/rt_cnc"
     fi
+    if [ -f "$BIN_DIR/rt_cnc_1" ]; then
+        rm -f "$BIN_DIR/rt_cnc_1"
+        echo "  已清理: $BIN_DIR/rt_cnc_1"
+    fi
+    if [ -f "$BIN_DIR/rt_cnc_2" ]; then
+        rm -f "$BIN_DIR/rt_cnc_2"
+        echo "  已清理: $BIN_DIR/rt_cnc_2"
+    fi
     if [ -f "$BIN_DIR/rt_cnc_d" ]; then
         rm -f "$BIN_DIR/rt_cnc_d"
         echo "  已清理: $BIN_DIR/rt_cnc_d"
@@ -189,19 +230,19 @@ clean_build() {
 # 主逻辑
 case "${1:-all}" in
     debug)
-        build_shm_lib
+        # build_shm_lib
         build_debug
         echo ""
         echo -e "可执行文件: ${YELLOW}$BIN_DIR/rt_cnc_d${NC}"
         ;;
     release)
-        build_shm_lib
+        # build_shm_lib
         build_release
         echo ""
         echo -e "可执行文件: ${YELLOW}$BIN_DIR/rt_cnc${NC}"
         ;;
     all)
-        build_shm_lib
+        # build_shm_lib
         build_all
         ;;
     clean)
@@ -209,6 +250,9 @@ case "${1:-all}" in
         ;;
     run)
         run
+        ;;
+    run2)
+        run2
         ;;
     run_debug)
         run_debug

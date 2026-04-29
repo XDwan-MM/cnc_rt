@@ -80,8 +80,7 @@ build*/
 # cache
 .cache/
 
-bin/rt_cnc
-bin/rt_cnc_d
+bin/
 
 lib/cncshm/bin/
 lib/log/bin/

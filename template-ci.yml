@@ -127,7 +127,43 @@
     - ls
     # 4.添加版本号信息
     - *tag-change
-    - tar -cvJf cnc_rt_1.0.0.$SUM_B.tar bin/rt_cnc config lib
+    - tar -cvJf cnc_rt_1.0.0.$SUM_B.tar bin config lib .git version.sh
     - curl -uly_35b717:AP38qFMP2jfnFYm5gav4KV2EyXV -T cnc_rt_1.0.0.$SUM_B.tar  "http://10.2.30.32:8081/artifactory/hmi_cnc/${CI_COMMIT_REF_NAME}/"
   # when: manual
   needs: [编译监听]
+
+生成PLC固件:
+  stage: build
+  tags:
+    - hmi_v3
+  script:
+    # 0.检查环境
+    - export PATH="$PATH:/home/gree/Qt5.15.16/5.15.16/gcc_64/bin"
+    - qmake --version
+    # 1.获取三级仓库
+    # 2.编译子模块
+    - ./build.sh clean
+    - echo "⏳ Initializing Submodules..."
+    - git submodule init && git submodule update --init --recursive
+    - git submodule init && git submodule update --remote lib/plc
+    - echo "⏳ Compiling Submodule..."
+    - cd ./lib/cncshm
+    - ./build.sh
+    - echo "✅ Compiled Submodules Success!"
+    # 3.编译rt_cnc
+    - cd ../../
+    - echo "⏳ Compiling Main Project..."
+    # - ./build.sh
+    - qmake
+    - make -j$(nproc)
+    - ls -l bin/rt_cnc
+    - echo "✅ Compiled Main Project Success!"
+    # 加载version变量
+    - source version.sh
+    - echo $Version
+    # 4.添加版本号信息
+    - *tag-change
+    - tar -cf cnc_plc_$SUM_B.tar bin config lib .git version.sh
+    - curl -uly_35b717:AP38qFMP2jfnFYm5gav4KV2EyXV -T cnc_plc_$SUM_B.tar "http://10.2.30.32:8081/artifactory/hmi_cnc/${CI_COMMIT_REF_NAME}/"
+  only:
+    - triggers 
