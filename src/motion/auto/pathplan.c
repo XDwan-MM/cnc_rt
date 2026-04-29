@@ -214,7 +214,6 @@ static void block_cal_circle_vector(PLAN_BLOCK* current_block){
 static double block_cal_circle_length(PLAN_BLOCK* current_block){
     VECTOR rs = POS_VECTOR(&current_block->circular_block.center_pos, &current_block->start_pos);
     VECTOR re = POS_VECTOR(&current_block->circular_block.center_pos, &current_block->end_pos);
-
     // 计算切失
     switch(current_block->circular_block.plane){
         case PLANE_XY:
@@ -230,15 +229,14 @@ static double block_cal_circle_length(PLAN_BLOCK* current_block){
             current_block->circular_block.end_rad = atan2(re.z, re.y);
             break;
     }
-
     // 计算弧度
     double angDelta = current_block->circular_block.end_rad - current_block->circular_block.statr_rad;
     switch(current_block->type){
         case CIRCLE_CW:
-            if (angDelta > 0) angDelta -= 2 * PI;
+            if (angDelta >= 0) angDelta -= 2 * PI;
             break;
         case CIRCLE_CCW:
-            if (angDelta < 0) angDelta += 2 * PI;
+            if (angDelta <= 0) angDelta += 2 * PI;
             break;
     }
     current_block->circular_block.rad = fabs(angDelta);
