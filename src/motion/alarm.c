@@ -5,6 +5,9 @@
 
 // 急停处理逻辑
 void handle_estop_cmd(){
+    rt_data->sys_state[SYS_IS_ESTOP_ON] = true;
+    // 人机交互状态栏显示急停报警
+    setVarChanInt(0, VAR_CHAN_IS_ESTOP, 1, 0);
     // 复位状态：1.急停信号ESP
     nc_set_resetting();
     // 重置各个模式
@@ -30,6 +33,8 @@ void handle_alarm_cmd(){
             // 清除报警
             cleanAllAlarm(ALARM_TYPE_ALL, ALARM_LEVEL_ALL);
             rt_data->sys_state[SYS_IS_ALARMING] = false;
+            rt_data->sys_state[SYS_IS_ESTOP_ON] = false;
+            setVarChanInt(0, VAR_CHAN_IS_ESTOP, 0, 0);
             // 状态复位、数据重置
             tp_reset();
             // 重置事件

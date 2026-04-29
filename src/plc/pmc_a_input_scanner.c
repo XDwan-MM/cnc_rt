@@ -50,16 +50,14 @@ void pmc_a_input_scan_cycle(void)
              */
             int alarm_no = 1 + (i * 8) + bit;
 
-            // 检测上升沿 (0 -> 1): 产生报警
+            // 检测上升沿 (0 -> 1): 产生PLC A变量报警给人机交互
             if (SIGNAL_RISING(current_a_status[i], last_a_status[i], bit))
             {
-                rt_set_sys_state(SYS_IS_ESTOP_ON, 1);
                 setAlarm(ALARM_PC, ALARM_ERROR, alarm_no);
             }
-            // 检测下降沿 (1 -> 0): 消除报警
+            // 检测下降沿 (1 -> 0): 消除报警PLC A变量报警
             else if (SIGNAL_FALLING(current_a_status[i], last_a_status[i], bit))
             {
-                rt_set_sys_state(SYS_IS_ESTOP_ON, 0);
                 delAlarm(ALARM_PC, ALARM_ERROR, alarm_no);
             }
         }

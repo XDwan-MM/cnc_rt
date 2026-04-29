@@ -26,6 +26,7 @@ extern "C" {
 // 路径和轨迹线程使用
 typedef enum{
     SYS_IS_ESTOP_ON = 0,        // 是否急停
+    SYS_IS_ESTOP_PRESS,         // 急停按键是否按下
     SYS_IS_ALARMING,            // 是否正在报警中
     SYS_IS_SWITCHING_MODE,      // 是否正在切换模式
     SYS_IS_MAC_LOCK,            // 机床锁住 
