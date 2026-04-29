@@ -64,22 +64,20 @@ void pmc_g_input_scan_cycle(void)
     /* step2. G信号检测 */
 
     /* G8.4紧急停止检测 (下降沿或常开逻辑触发)  G08.4 = 0急停拍下，G08.4 = 1急停拉起 */
-    // 急停不推入事件队列，直接响应，防止事件堆积不能及时处理急停，造成隐患。
     // 检测急停按下 1->0（下降沿，如果常开逻辑触发会造成事件堆积。）
     if (SIGNAL_FALLING(curr_g.g_regs[8], last_g.g_regs[8], 4))
     {
         // 急停拍下
-        rt_data->sys_state[SYS_IS_ESTOP_ON] = true;
+        rt_data->sys_state[SYS_IS_ESTOP_PRESS] = true;
         LOG(LOG_LEVEL_INFO, "扫描到急停: 拍下");
-        // pmc_dispatch_event(EV_MSG_ESP, 1, 0);
     }
     // 检测急停释放 0->1（上升沿）
     if (SIGNAL_RISING(curr_g.g_regs[8], last_g.g_regs[8], 4))
     {
         // 急停释放
-        rt_data->sys_state[SYS_IS_ESTOP_ON] = false;
+        // 复位后实时内部急停标志rt_data->sys_state[SYS_IS_ESTOP_ON]置为false
+        rt_data->sys_state[SYS_IS_ESTOP_PRESS] = false;
         LOG(LOG_LEVEL_INFO, "扫描到急停: 释放");
-        // pmc_dispatch_event(EV_MSG_ESP, 0, 0);
     }
     /* G43模式检测：调用内部解析函数处理复合位 (MD1, MD2, MD4, DNCI, ZRN), * 输出模式 */
     if (is_first_scan || SIGNAL_BYTE_CHANGED(curr_g.g_regs[43], last_g.g_regs[43]) ||

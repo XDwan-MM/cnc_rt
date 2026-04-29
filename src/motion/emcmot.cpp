@@ -228,15 +228,16 @@ static void get_cmd_pos() {
 }
 
 static void check_for_fault() {
-    if(rt_data->sys_state[SYS_IS_ESTOP_ON]){
+    if(rt_data->sys_state[SYS_IS_ESTOP_PRESS]){
         handle_estop_cmd();
     }
     //　检查系统报警
     int alarm_count = 0;
     getAlarmCount(ALARM_TYPE_ALL, ALARM_ERROR, &alarm_count);
-    if(alarm_count > 0){
+    if(alarm_count > 0 || rt_data->sys_state[SYS_IS_ESTOP_ON]){
         rt_data->sys_state[SYS_IS_ALARMING] = true;
         handle_alarm_cmd();
+        // LOG(LOG_LEVEL_ERR, "系统处于报警或急停状态下，请检查问题后按复位恢复！");
     }else rt_data->sys_state[SYS_IS_ALARMING] = false;
 }
 
