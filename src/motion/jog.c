@@ -34,6 +34,13 @@ static void sync_jog_on_mode_entry(int mode_type);
  */
 void handle_jog_cmd()
 {
+    // 内部急停标志触发，立即停止规划，复位规划器
+    if (rt_data->sys_state[SYS_IS_ESTOP_ON])
+    {
+        jog_handle_estop();
+        return;
+    }
+    
     // 【核心逻辑】：
     // 如果 handle_jog_cmd 被调用了，说明系统当前一定是在执行点动逻辑。
     // 如果此时发现 last_sys_mode 还没更新成 MODE_JOG，

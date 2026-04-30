@@ -221,11 +221,10 @@ static void get_cmd_pos() {
 }
 
 static void check_for_fault() {
-    // 检查系统急停按下
     if(rt_data->sys_state[SYS_IS_ESTOP_PRESS]){
         handle_estop_cmd();
     }
-    //　检查系统报警
+    //　检查系统报警和内部急停标志
     int alarm_count = 0;
     getAlarmCount(ALARM_TYPE_ALL, ALARM_ERROR, &alarm_count);
     if(alarm_count > 0 || rt_data->sys_state[SYS_IS_ESTOP_ON]){
