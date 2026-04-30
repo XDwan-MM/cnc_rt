@@ -35,6 +35,11 @@ void printMode() {
     printf("║         调试模式 (DEBUG MODE)            ║\n");
 #else
     printf("║         实时模式 (REALTIME MODE)         ║\n");
+    #ifdef PLATFORM_1
+    printf("║         平台1 (REALTIME MODE)            ║\n");
+    #else
+    printf("║         平台2 (REALTIME MODE)            ║\n");
+    #endif
 #endif
     printf("╚══════════════════════════════════════════╝\n");
     printf("\n");

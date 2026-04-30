@@ -22,13 +22,27 @@ debug_mode {
     QMAKE_CXXFLAGS += -g -O0
     QMAKE_CFLAGS += -g -O0
     TARGET = rt_cnc_d
-} else {
+}
+
+release_platform_1 {
     message("========== 编译实时模式 ==========")
+    message("========== 编译平台1   ==========")
+    CONFIG += debug
+    DEFINES += PLATFORM_1
+    DEFINES += MASTER_RUN_ON
+    QMAKE_CXXFLAGS += -O0
+    QMAKE_CFLAGS += -O0
+    TARGET = rt_cnc_1
+}
+
+release_platform_2{
+    message("========== 编译实时模式 ==========")
+    message("========== 编译平台2   ==========")
     CONFIG += debug
     DEFINES += MASTER_RUN_ON
     QMAKE_CXXFLAGS += -O0
     QMAKE_CFLAGS += -O0
-    TARGET = rt_cnc
+    TARGET = rt_cnc_2
 }
 
 # 检查编译缓存工具 ccache 是否可用

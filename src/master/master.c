@@ -13,9 +13,6 @@
 #define debug(...)
 #endif
 
-// 如果为测试平台2，请注释该定义（靠墙机器）
-#define PLATFORM_1
-
 // ===============错误检查宏=================
 #define CHECK_RC(rc,info,label) \
 do { \
@@ -58,7 +55,6 @@ int Master_Start() {
             snprintf(eni_path, sizeof(eni_path), "%s/%s", cwd, "config/ENI/gugao_io.xml");
         }
     }
-    // snprintf(eni_path, sizeof(eni_path), "%s/%s", PROJECT_DIR, "config/ENI/gugao_io.xml");
     #endif
     master_error_code = ethercat_init(eni_path);
     if ( master_error_code < 0) {

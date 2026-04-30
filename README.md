@@ -16,9 +16,9 @@
 
 ２ 执行方式，在 cnc_rt_x.x.xxxx/bin 打开终端运行
 
-sudo -E LD_LIBRARY_PATH=../lib/cncshm/bin ./rt_cnc
+sudo -E LD_LIBRARY_PATH=../lib/cncshm/bin ./rt_cnc_x（平台1、平台2、调试）
 
-解释：以root权限，指定动态库在指定路径查找，执行rt_cnc
+解释：以root权限，指定动态库在指定路径查找，执行rt_cnc_x
 
 
 ### 使用方法
@@ -49,37 +49,30 @@ git submodule init && git submodule update --remote
 逻辑轴2 的参数 电子齿轮比分母 设置为 100000
 
 
-2、修改主站配置文件
-
-打开 master.c 文件，如果为测试平台2，请注释 #define PLATFORM_1
-
-
-3、编译
+2、编译
 
 清理编译（可选）sudo ./build.sh clean
 
 sudo ./build.sh
 
 
-4、编译并运行
+3、编译并运行
 
 启动人机界面 sudo ./cnc_hmi_v3
 
 编译并运行实时　sudo ./build.sh
 
 
-3、运行实时
+4、运行实时
 
 cd bin
 sudo ./rt_cnc
 
 
-4、调试模式
+5、调试模式
 
 cd bin
 sudo ./rt_cnc_d
-
-
 
 
 ### 不同平台master和ENI文件配置
