@@ -164,7 +164,7 @@ build_all() {
 run() {
     build_release_1
     cd $BIN_DIR
-    sudo ./rt_cnc
+    sudo ./rt_cnc_1
 }
 
 run2() {
@@ -199,6 +199,14 @@ clean_build() {
         rm -rf "$BUILD_DIR_RELEASE"
         echo "  已清理: $BUILD_DIR_RELEASE"
     fi
+    if [ -d "$BUILD_DIR_RELEASE" ]; then
+        rm -rf "$BUILD_DIR_RELEASE1"
+        echo "  已清理: $BUILD_DIR_RELEASE1"
+    fi
+    if [ -d "$BUILD_DIR_RELEASE" ]; then
+        rm -rf "$BUILD_DIR_RELEASE2"
+        echo "  已清理: $BUILD_DIR_RELEASE2"
+    fi
 
     # 如果 build 目录为空则删除
     if [ -d "$BUILD_DIR" ] && [ -z "$(ls -A "$BUILD_DIR" 2>/dev/null)" ]; then
@@ -230,19 +238,20 @@ clean_build() {
 # 主逻辑
 case "${1:-all}" in
     debug)
-        # build_shm_lib
+        build_shm_lib
         build_debug
         echo ""
         echo -e "可执行文件: ${YELLOW}$BIN_DIR/rt_cnc_d${NC}"
         ;;
     release)
         # build_shm_lib
-        build_release
+        build_release_1
+        build_release_2
         echo ""
         echo -e "可执行文件: ${YELLOW}$BIN_DIR/rt_cnc${NC}"
         ;;
     all)
-        # build_shm_lib
+        build_shm_lib
         build_all
         ;;
     clean)

@@ -153,10 +153,8 @@
     # 3.编译rt_cnc
     - cd ../../
     - echo "⏳ Compiling Main Project..."
-    # - ./build.sh
-    - qmake
-    - make -j$(nproc)
-    - ls -l bin/rt_cnc
+    - ./build.sh release
+    - ls -l bin/
     - echo "✅ Compiled Main Project Success!"
     # 加载version变量
     - source version.sh
