@@ -47,6 +47,7 @@ GNC_RES chan_add_block(){
         pretreat_block->mode = gcode_block->mode;
         pretreat_block->state = gcode_block->state;
         pretreat_block->line_number = gcode_block->line_number;
+        pretreat_block->pause_time = gcode_block->pause_time;
 
         // 构造成段
         pretreat_block->type = gcode_block->type;

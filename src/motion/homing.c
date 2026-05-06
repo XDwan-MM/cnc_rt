@@ -244,10 +244,7 @@ static double abs_homing_tp_pinc(AXIS_TYPE axis_type){
             if(abs_homing_is_tp_finished(axis_type)){
                 homing_tp[axis_type].homing_state = ABS_EXEC_IDLE;
                 homing_tp[axis_type].is_resetting = false;
-                if(rt_data->axis_data[axis_type].axis_status.is_fwd_limit || rt_data->axis_data[axis_type].axis_status.is_rev_limit)
-                {
-                    rt_data->axis_data[axis_type].axis_status.is_decel_done = 1;
-                }
+                manual_check_soft_limit_del_done(axis_type);
                 break;
             }
             // 进行回零 

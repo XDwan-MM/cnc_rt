@@ -167,6 +167,24 @@ void lookahead_check_soft_limit(POS *target_pos){
     runtime[2].active_levels = Check_Axis_Limit_Violation(&runtime[2], target_pos->z,LOOKAHEAD_CHECK_USED);
 }
 
+void auto_check_soft_limit_del_done(){
+    for(int i = 0; i < SYS_AXES_NUM; i++){
+        if(runtime[i].active_levels) {
+            if(rt_data->axis_data[i].axis_status.is_fwd_limit || rt_data->axis_data[i].axis_status.is_rev_limit)
+            {
+                rt_data->axis_data[i].axis_status.is_decel_done = 1;
+            }
+        }
+    }
+}
+
+void manual_check_soft_limit_del_done(int axis_type){
+    if(rt_data->axis_data[axis_type].axis_status.is_fwd_limit || rt_data->axis_data[axis_type].axis_status.is_rev_limit)
+    {
+        rt_data->axis_data[axis_type].axis_status.is_decel_done = 1;
+    }
+}
+
 // 检查位置是否在限位区域内部
 uint8_t Is_Inside_Limit(float position, LimitLevel limit)
 {

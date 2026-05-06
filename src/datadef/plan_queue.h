@@ -42,6 +42,7 @@ typedef struct
     pmc_mode mode;      // 模组
     NcItpState state;   // 模态
     int line_number;    // 运行行号
+    int pause_time;     // 暂停时间
     union{              // 块信息
         CIRCULAR_BLOCK circular_block;
     };
