@@ -64,6 +64,11 @@ void execute_mcode(){
 // 处理新的mcode，最多3个
 static void nc_deal_new_mcode(){
     if(mcode_queue_is_empty(mcode_queue)) return;
+    // 辅助功能锁住
+    if(rt_data->sys_state[SYS_IS_MSBT_LOCK]) {
+        mcode_queue_reset(mcode_queue);
+        return;
+    }
     mcode_data->mcode_size = mcode_queue_get_size(mcode_queue);
     for(int i = 0; i < mcode_data->mcode_size; i++){
         mcode_queue_copy_block(mcode_queue, i, &mcode_data->mcode_block[i]);
