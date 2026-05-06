@@ -37,20 +37,21 @@ typedef enum{
 }PARSER_STATE;
 
 typedef struct{
-    // ItpParam itp_parameter;     // 译码参数 todo:调整译码后删除
-    NcItpData itp_datas;        // 译码结果
-    NcItpState itp_state;       // 模态
-    int interp_list_index;      // 译码结果索引
-    int itp_line_no;            // 当前行号
-    char parser_file_path[NCFILEPATH_CHAR_LEN];
-    double cmv[MacroVarCount];        // 宏变量 todo:译码调整
+    // ItpParam itp_parameter;          // 译码参数 todo:调整译码后删除
+    NcItpData itp_datas;                // 译码结果
+    NcItpState itp_state;               // 模态
+    int interp_list_index;              // 译码结果索引
+    int itp_line_no;                    // 当前行号
+    double cmv[MacroVarCount];          // 宏变量 todo:译码调整
     PARSER_STATE parser_state;
+    char parser_file_path[NCFILEPATH_CHAR_LEN];
+    char mdiContent[MDICONTENT_CHAR_LEN];
 }PARSER_DATA;
 
 extern PARSER_DATA* parser_data;
 
 void parser_new();
-GNC_RES parser_init(const char* parser_file_path);
+GNC_RES parser_init(NC_MODE nc_mode);
 GNC_RES parser_reading();
 void parser_reset();
 void parser_run_mode();

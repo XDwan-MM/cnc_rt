@@ -2,6 +2,7 @@
 #include "global.h"
 #include <hmisysapi.h>
 #include <alarmapi.h>
+#include <string.h> 
 
 STATIC void parser_macro_init();
 STATIC GNC_RES parser_handle_recieve(pmc_data* motion_data, NcItpState *itp_state, int *line_no);
@@ -9,6 +10,7 @@ STATIC GNC_RES parser_handle_mcode(pmc_data* motion_data, NcItpState *itp_state,
 STATIC GNC_RES parser_handle_tcode(pmc_data* motion_data, NcItpState *itp_state, int *line_no);
 STATIC GNC_RES parser_handle_scode(pmc_data* motion_data, NcItpState *itp_state, int *line_no);
 STATIC GNC_RES parser_handle_gcode(pmc_data* motion_data, NcItpState *itp_state, int *line_no);
+static GNC_RES parser_set_content(NC_MODE nc_mode);
 STATIC bool parser_check_res(GNC_RES res);
 
 PARSER_DATA* parser_data;
@@ -48,15 +50,10 @@ void parser_new(){
     parser_data->parser_state = PARSER_IDLE;
 }
 
-GNC_RES parser_init(const char* parser_file_path)
+GNC_RES parser_init(NC_MODE nc_mode)
 {   
-    if(parser_file_path == NULL) {
-        LOG(LOG_LEVEL_ERR, "译码文件路径不存在");
-        setAlarm(ALARM_CH, ALARM_ERROR, 8);
-        return GNC_OPERATOR_ERROR;
-    }
+    GNC_RES res = GNC_OPERATOR_SUCCESS;
     ItpReset();
-    memcpy(parser_data->parser_file_path, parser_file_path, sizeof(char) * NCFILEPATH_CHAR_LEN);
     parser_data->parser_state = PARSER_READING;
     // 设置宏定义
     parser_macro_init();
@@ -70,11 +67,55 @@ GNC_RES parser_init(const char* parser_file_path)
     getVarAxisDouble(AXIS_Y, VAR_AXIS_CMD_POS_EX, &ori_pos_y, 0);
     getVarAxisDouble(AXIS_Z, VAR_AXIS_CMD_POS_EX, &ori_pos_z, 0);
     ItpSetOriginMacPos(ori_pos_x, ori_pos_y, ori_pos_z, 0);
-    // 选择NC文件（支持中文路径）
-    ItpSetFile(parser_file_path);
+    // 设置程序段来源
+    res = parser_set_content(nc_mode);
+    if(res != GNC_OPERATOR_SUCCESS) return res;
     // 将GM指令设置为已完成
     rt_set_chan_state(0, CHAN_IS_GCODE_END, true);
     rt_set_chan_state(0, CHAN_IS_MCODE_END, true);
+    return res;
+}
+
+static GNC_RES parser_set_content(NC_MODE nc_mode){
+    // 设置程序段来源
+    switch (nc_mode)
+    {
+    case MODE_MEM:
+        // 选择NC文件
+        #ifdef DEBUG_MODE_ENABLED
+        snprintf(parser_data->parser_file_path, sizeof(parser_data->parser_file_path), "%s/%s", PROJECT_DIR, "config/NC/g04.nc");
+        ItpSetFile(parser_data->parser_file_path);  
+        #else
+        getNcFilePath(parser_data->parser_file_path);
+        #endif
+        // todo：界面增加校验，增加警告
+        if((strlen(parser_data->parser_file_path) == 0)){
+            LOG(LOG_LEVEL_ERR, "译码文件路径不存在");
+            setAlarm(ALARM_CH, ALARM_WARNING, 1);
+            return GNC_OPERATOR_ERROR;
+        }
+        ItpSetFile(parser_data->parser_file_path);
+        LOG(LOG_LEVEL_INFO, "mem程序 %s", parser_data->parser_file_path);
+        break;
+    case MODE_MDI:
+        // 读取MDI内容
+        #ifdef DEBUG_MODE_ENABLED
+        strncpy(parser_data->mdiContent, "G00 X10", MDICONTENT_CHAR_LEN - 1);
+        parser_data->mdiContent[MDICONTENT_CHAR_LEN - 1] = '\0'; 
+        #else
+        getMdiContent(parser_data->mdiContent);
+        #endif
+        if((strlen(parser_data->mdiContent) == 0)){
+            LOG(LOG_LEVEL_ERR, "MDI内容为空");
+            setAlarm(ALARM_CH, ALARM_WARNING, 2);
+            return GNC_OPERATOR_ERROR;
+        }
+        ItpSetContent(parser_data->mdiContent, 0);
+        LOG(LOG_LEVEL_INFO, "mdi程序 %s", parser_data->mdiContent);
+        break;
+    default:
+        break;
+    }
     return GNC_OPERATOR_SUCCESS;
 }
 
