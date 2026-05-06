@@ -13,6 +13,7 @@ static void nc_deal_new_mcode();
 static void nc_clear_msignal();
 static void nc_output_mend();
 static void mcode_data_mend();
+static void mcode_handle_reset();
 
 static void mcode_set_state(){
     switch(rt_data->nc_event){
@@ -48,10 +49,12 @@ void execute_mcode(){
         nc_output_mend();
         break;
     case MCODE_EXECUTE_RESET:
-        check_pmc_mend();
-        check_nc_mend();
-        nc_output_mend();
-        if(mcode_data->mcode_size == 0) mcode_data->mcode_state = MCODE_EXECUTE_IDLE;
+        // check_pmc_mend();
+        // check_nc_mend();
+        // nc_output_mend();
+        // if(mcode_data->mcode_size == 0) mcode_data->mcode_state = MCODE_EXECUTE_IDLE;
+        nc_clear_msignal();
+        mcode_data_mend();
         break;
     case MCODE_EXECUTE_IDLE:
     default:
@@ -343,7 +346,7 @@ static void nc_output_mend(){
 
 // 当FIN信号后，nc侧将代码信号置为0
 static void nc_clear_msignal(){
-    LOG(LOG_LEVEL_DEBUG, "当FIN信号后, nc侧将代码信号置为0");
+    // LOG(LOG_LEVEL_DEBUG, "当FIN信号后, nc侧将代码信号置为0");
     setRegValue8(REG_F, 10, 0x00);     // 代码信号
     setRegValue8(REG_F, 11, 0x00);
     setRegValue8(REG_F, 12, 0x00);
@@ -381,7 +384,14 @@ static void mcode_data_mend(){
     rt_set_chan_state(0, CHAN_IS_MCODE_END, true);
 }
 
+static void mcode_handle_reset(){
+    nc_clear_msignal();
+    mcode_data_mend();
+    mcode_data->mcode_state = MCODE_EXECUTE_IDLE;
+}
+
 void mcode_handle_estop(){
+    nc_clear_msignal();
     mcode_data_mend();
     mcode_data->mcode_state = MCODE_EXECUTE_IDLE;
 }
