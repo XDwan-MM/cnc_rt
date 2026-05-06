@@ -53,8 +53,7 @@ void execute_mcode(){
         // check_nc_mend();
         // nc_output_mend();
         // if(mcode_data->mcode_size == 0) mcode_data->mcode_state = MCODE_EXECUTE_IDLE;
-        nc_clear_msignal();
-        mcode_data_mend();
+        mcode_handle_reset();
         break;
     case MCODE_EXECUTE_IDLE:
     default:
