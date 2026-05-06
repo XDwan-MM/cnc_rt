@@ -10,6 +10,7 @@ SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
 LIB_DIR="$SCRIPT_DIR/lib"
 BUILD_DIR="$SCRIPT_DIR/build"
 BUILD_DIR_DEBUG="$BUILD_DIR/debug"
+BUILD_DIR_RELEASE="$BUILD_DIR/release"
 BUILD_DIR_RELEASE1="$BUILD_DIR/release1"
 BUILD_DIR_RELEASE2="$BUILD_DIR/release2"
 BIN_DIR="$SCRIPT_DIR/bin"
@@ -199,11 +200,11 @@ clean_build() {
         rm -rf "$BUILD_DIR_RELEASE"
         echo "  已清理: $BUILD_DIR_RELEASE"
     fi
-    if [ -d "$BUILD_DIR_RELEASE" ]; then
+    if [ -d "$BUILD_DIR_RELEASE1" ]; then
         rm -rf "$BUILD_DIR_RELEASE1"
         echo "  已清理: $BUILD_DIR_RELEASE1"
     fi
-    if [ -d "$BUILD_DIR_RELEASE" ]; then
+    if [ -d "$BUILD_DIR_RELEASE2" ]; then
         rm -rf "$BUILD_DIR_RELEASE2"
         echo "  已清理: $BUILD_DIR_RELEASE2"
     fi

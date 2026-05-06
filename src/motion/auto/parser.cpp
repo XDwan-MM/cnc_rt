@@ -82,10 +82,11 @@ STATIC GNC_RES parser_handle_recieve(pmc_data* motion_data, NcItpState *itp_stat
     GNC_RES res = GNC_OPERATOR_SUCCESS;
     // 模式
     switch(motion_data->mode){
-        case PMC_MODE_EXACT_STOP:
+        case PMC_MODE_EXACT_STOP: // 精准停模式
         case PMC_MODE_CHOP: // 切削模式
         case PMC_MODE_ARRIVE_CHECK: // 到位检测
         case PMC_MODE_TAP: // 攻丝模式
+        case PMC_MODE_PAUSE: // 暂停模式
             res = parser_handle_gcode(motion_data, itp_state, line_no);
             break; 
         case PMC_MODE_M_CMD: // M指令
@@ -144,6 +145,8 @@ STATIC GNC_RES parser_handle_gcode(pmc_data* motion_data, NcItpState *itp_state,
     gcode_block.mode = motion_data->mode;
     // 行号
     gcode_block.line_number = *line_no;
+    // 暂停时间
+    gcode_block.pause_time = motion_data->pause_time;
     // 加入队列
     if(gcode_queue_is_full(gcode_queue)){
         return GNC_DATA_FULL;
