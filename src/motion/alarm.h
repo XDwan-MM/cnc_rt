@@ -16,6 +16,7 @@
 extern "C" {
 #endif
 
+void handle_estop_press();
 void handle_estop_cmd();
 void handle_alarm_cmd();
 

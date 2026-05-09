@@ -4,10 +4,11 @@
 #include <alarmapi.h>
 
 // 急停处理逻辑
-void handle_estop_cmd(){
+void handle_estop_press(){
     // 按下急停时执行一次
     if(!rt_data->sys_state[SYS_IS_ESTOP_ON])
     {
+        rt_data->sys_state[SYS_IS_ESTOP_ON] = true;
         // 人机交互状态栏显示急停报警
         setVarChanInt(0, VAR_CHAN_IS_ESTOP, 1, 0);
         // 复位状态：1.急停信号ESP
@@ -17,13 +18,14 @@ void handle_estop_cmd(){
         homing_handle_estop();
         jog_handle_estop();
     }
-    rt_data->sys_state[SYS_IS_ESTOP_ON] = true;
-    if(rt_data->nc_event != SYS_EVENT_NONE || rt_data->target_mode != rt_data->current_mode){
-        //　不允许操作
-        rt_data->nc_event = SYS_EVENT_NONE;
+}
+
+// 急停状态下不允许操作
+void handle_estop_cmd(){
+    if(rt_data->target_mode != rt_data->current_mode){
         // 不允许切换模式
         rt_data->target_mode = rt_data->current_mode;
-        LOG(LOG_LEVEL_ERR, "急停报警下不允许操作，请检查问题！");
+        LOG(LOG_LEVEL_ERR, "急停报警不支持操作，请检查问题后按复位清除报警！");
     }
 }
 
@@ -70,7 +72,7 @@ void handle_alarm_cmd(){
         case SYS_EVENT_Z_NEG_PRESS:
         case SYS_EVENT_Z_NEG_RELEASE:
         default:
-            LOG(LOG_LEVEL_ERR, "报警下不支持操作，请按复位清除报警");
+            LOG(LOG_LEVEL_ERR, "报警下不支持操作，请检查问题后按复位清除报警");
             break;
     }
 }
