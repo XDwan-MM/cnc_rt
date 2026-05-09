@@ -90,7 +90,6 @@ void nc_set_resetted(){
             }
             break;
         case MODE_JOG: // 点动
-        case MODE_RAPID_JOG: // 快速点动
         case MODE_MPG: // 手轮
         case MODE_IDLE: // 空闲状态
         case MODE_EDIT: // 编辑

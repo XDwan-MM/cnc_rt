@@ -14,7 +14,7 @@
  */
 static const int SCAN_G_REGS[] =
     {
-        4, 5, 6, 7, 8, 12, 14, 19, 29, 30, 32, 43, 44, 45, 61, 62, 70, 100, 102, 108, 130, 132, 134 /* 已有信号的地址 */
+        4, 5, 6, 7, 8, 12, 14, 19, 29, 30, 32, 43, 44, 45, 54, 55, 56, 61, 62, 70, 100, 102, 108, 130, 132, 134, /* 已有信号的地址 */
                                                                                                /* <--- 您想新增的信号地址 */
 };
 
@@ -41,7 +41,7 @@ static void pmc_dispatch_event(PMC_EVENT_ID id, int p1, int p2);
  * @brief 模式解析逻辑实现
  * 涉及 MD1, MD2, MD4 (bit 0,1,2), DNCI (bit 5), ZRN (bit 7)
  */
-static void process_mode_selection(char g43, char g19);
+static void process_mode_selection(char g43);
 
 /* ==========================================================================
  * 2. 外部函数定义 (Public Definitions)
@@ -67,23 +67,40 @@ void pmc_g_input_scan_cycle(void)
     // 检测急停按下 1->0（下降沿，如果常开逻辑触发会造成事件堆积。）
     if (SIGNAL_FALLING(curr_g.g_regs[8], last_g.g_regs[8], 4))
     {
-        // 急停拍下
+        // 急停按键拍下
         rt_data->sys_state[SYS_IS_ESTOP_PRESS] = true;
-        LOG(LOG_LEVEL_INFO, "扫描到急停: 拍下");
+        LOG(LOG_LEVEL_INFO, "扫描到急停按键: 拍下");
     }
     // 检测急停释放 0->1（上升沿）
     if (SIGNAL_RISING(curr_g.g_regs[8], last_g.g_regs[8], 4))
     {
-        // 急停释放
+        // 急停按键释放
         // 复位后实时内部急停标志rt_data->sys_state[SYS_IS_ESTOP_ON]置为false
         rt_data->sys_state[SYS_IS_ESTOP_PRESS] = false;
-        LOG(LOG_LEVEL_INFO, "扫描到急停: 释放");
+        LOG(LOG_LEVEL_INFO, "扫描到急停按键: 释放");
     }
-    /* G43模式检测：调用内部解析函数处理复合位 (MD1, MD2, MD4, DNCI, ZRN), * 输出模式 */
-    if (is_first_scan || SIGNAL_BYTE_CHANGED(curr_g.g_regs[43], last_g.g_regs[43]) ||
-        SIGNAL_BIT_CHANGED(curr_g.g_regs[19], last_g.g_regs[19], 7))
+
+    /* G19.7 快速按键信号检测，0->1 上升沿有效，1->0 下降沿失效 */
+    if (SIGNAL_RISING(curr_g.g_regs[19], last_g.g_regs[19], 7))
     {
-        process_mode_selection(curr_g.g_regs[43], curr_g.g_regs[19]);
+        // 快速按键按下
+        LOG(LOG_LEVEL_INFO, "扫描到快速按键: 按下");
+        if(rt_data->current_mode == MODE_JOG)
+        {
+            rt_data->sys_state[SYS_IS_RAPID] = true;
+        }
+    }
+    else if (SIGNAL_FALLING(curr_g.g_regs[19], last_g.g_regs[19], 7))
+    {
+        // 快速按键释放
+        LOG(LOG_LEVEL_INFO, "扫描到快速按键: 释放");
+        rt_data->sys_state[SYS_IS_RAPID] = false;
+    }
+
+    /* G43模式检测：调用内部解析函数处理复合位 (MD1, MD2, MD4, DNCI, ZRN), * 输出模式 */
+    if (is_first_scan || SIGNAL_BYTE_CHANGED(curr_g.g_regs[43], last_g.g_regs[43]))
+    {
+        process_mode_selection(curr_g.g_regs[43]);
     }
 
     /* (G100/G102)进给轴按键检测  - 支持多轴同时扫描 */
@@ -300,6 +317,51 @@ void pmc_g_input_scan_cycle(void)
         pmc_dispatch_event(EV_MSG_ENANLE, MAC_LOCK, 0);
         LOG(LOG_LEVEL_INFO, "扫描到G4.1 发生下降沿");
     }
+    /* G54 */
+    if (SIGNAL_BYTE_CHANGED(curr_g.g_regs[54], last_g.g_regs[54]))
+    {
+        for (int i = 0; i < 8; i++)
+        {
+            if (SIGNAL_RISING(curr_g.g_regs[54], last_g.g_regs[54], i))
+            {
+                LOG(LOG_LEVEL_INFO, "扫描到G54.%d 发生上升沿", i);
+            }
+            if (SIGNAL_FALLING(curr_g.g_regs[54], last_g.g_regs[54], i))
+            {
+                LOG(LOG_LEVEL_INFO, "扫描到G54.%d 发生下降沿", i);
+            }
+        }
+    }
+    /* G55 */
+    if (SIGNAL_BYTE_CHANGED(curr_g.g_regs[55], last_g.g_regs[55]))
+    {
+        for (int i = 0; i < 8; i++)
+        {
+            if (SIGNAL_RISING(curr_g.g_regs[55], last_g.g_regs[55], i))
+            {
+                LOG(LOG_LEVEL_INFO, "扫描到G55.%d 发生上升沿", i);
+            }
+            if (SIGNAL_FALLING(curr_g.g_regs[55], last_g.g_regs[55], i))
+            {
+                LOG(LOG_LEVEL_INFO, "扫描到G55.%d 发生下降沿", i);
+            }
+        }
+    }
+    /* G56 */
+    if (SIGNAL_BYTE_CHANGED(curr_g.g_regs[56], last_g.g_regs[56]))
+    {
+        for (int i = 0; i < 8; i++)
+        {
+            if (SIGNAL_RISING(curr_g.g_regs[56], last_g.g_regs[56], i))
+            {
+                LOG(LOG_LEVEL_INFO, "扫描到G56.%d 发生上升沿", i);
+            }
+            if (SIGNAL_FALLING(curr_g.g_regs[56], last_g.g_regs[56], i))
+            {
+                LOG(LOG_LEVEL_INFO, "扫描到G56.%d 发生下降沿", i);
+            }
+        }
+    }
     /* 各轴机床锁住 G108 */
     if (SIGNAL_BYTE_CHANGED(curr_g.g_regs[108], last_g.g_regs[108]))
     {
@@ -416,7 +478,7 @@ static void pmc_dispatch_event(PMC_EVENT_ID id, int p1, int p2)
  * @brief 模式解析逻辑实现
  * 涉及 MD1, MD2, MD4 (bit 0,1,2), DNCI (bit 5), ZRN (bit 7)
  */
-static void process_mode_selection(char g43, char g19)
+static void process_mode_selection(char g43)
 {
     CNC_MODE_INDEX target_mode = CNC_MODE_INVALID; // 默认无效模式
 
@@ -428,10 +490,6 @@ static void process_mode_selection(char g43, char g19)
     else if (GET_BIT(g43, 5)) // 判断第5位
     {
         target_mode = CNC_MODE_DNC; // DNCI 置位
-    }
-    else if (GET_BIT(g19, 7))
-    {
-        target_mode = CNC_MODE_RAPID; // 进入 RAPID 模式
     }
     else
     {

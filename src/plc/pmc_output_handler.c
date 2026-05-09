@@ -235,18 +235,6 @@ static void pmc_output_mode()
         setRegBit(REG_F, 3, 2);
     }
 
-    if (rt_data->current_mode == MODE_RAPID_JOG)
-    {
-        clearRegBit(REG_F, 3, 1);
-        clearRegBit(REG_F, 3, 2);
-        clearRegBit(REG_F, 3, 3);
-        clearRegBit(REG_F, 3, 4);
-        clearRegBit(REG_F, 3, 5);
-        clearRegBit(REG_F, 3, 6);
-        clearRegBit(REG_F, 4, 5);
-        setRegBit(REG_F, 2, 1);
-    }
-
     if (rt_data->current_mode == MODE_HOMING)
     {
         clearRegBit(REG_F, 2, 1);

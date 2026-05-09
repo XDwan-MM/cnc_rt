@@ -16,7 +16,6 @@ typedef enum {
     CNC_MODE_MPG  = 5,    /**< 手轮 */
     CNC_MODE_ZRN  = 6,    /**< 回零 */
     CNC_MODE_DNC  = 7,    /**< DNC运行 */
-    CNC_MODE_RAPID = 8,   /**< RAPID */
 } CNC_MODE_INDEX;
 
 /**
