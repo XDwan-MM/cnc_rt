@@ -221,6 +221,7 @@ static void get_cmd_pos() {
 }
 
 static void check_for_fault() {
+    // 检查系统急停
     if(rt_data->sys_state[SYS_IS_ESTOP_PRESS]){
         handle_estop_cmd();
     }
@@ -229,9 +230,14 @@ static void check_for_fault() {
     getAlarmCount(ALARM_TYPE_ALL, ALARM_ERROR, &alarm_count);
     if(alarm_count > 0 || rt_data->sys_state[SYS_IS_ESTOP_ON]){
         rt_data->sys_state[SYS_IS_ALARMING] = true;
+        // 除急停外的其他报警，取消准备就绪信号
+        if(!rt_data->sys_state[SYS_IS_ESTOP_ON]) rt_set_sys_state(SYS_IS_READY, false);
         handle_alarm_cmd();
-        // LOG(LOG_LEVEL_ERR, "系统处于报警或急停状态下，请检查问题后按复位恢复！");
-    }else rt_data->sys_state[SYS_IS_ALARMING] = false;
+    }
+    if(alarm_count <= 0){
+        rt_data->sys_state[SYS_IS_ALARMING] = false;
+        rt_set_sys_state(SYS_IS_READY, true);
+    }
 }
 
 // 检查轴跟随误差错误
