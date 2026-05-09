@@ -83,7 +83,7 @@ static GNC_RES parser_set_content(NC_MODE nc_mode){
     case MODE_MEM:
         // 选择NC文件
         #ifdef DEBUG_MODE_ENABLED
-        snprintf(parser_data->parser_file_path, sizeof(parser_data->parser_file_path), "%s/%s", PROJECT_DIR, "config/NC/g04.nc");
+        snprintf(parser_data->parser_file_path, sizeof(parser_data->parser_file_path), "%s/%s", PROJECT_DIR, "config/NC/m03.nc");
         ItpSetFile(parser_data->parser_file_path);  
         #else
         getNcFilePath(parser_data->parser_file_path);
