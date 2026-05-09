@@ -223,10 +223,6 @@ static void get_cmd_pos() {
 static void check_for_fault() {
     // 检查系统急停按下
     if(rt_data->sys_state[SYS_IS_ESTOP_PRESS]){
-        handle_estop_press();
-    }
-    // 检查系统急停状态
-    if(rt_data->sys_state[SYS_IS_ESTOP_ON]){
         handle_estop_cmd();
     }
     //　检查系统报警

@@ -4,7 +4,7 @@
 #include <alarmapi.h>
 
 // 急停处理逻辑
-void handle_estop_press(){
+void handle_estop_cmd(){
     // 按下急停时执行一次
     if(!rt_data->sys_state[SYS_IS_ESTOP_ON])
     {
@@ -18,14 +18,12 @@ void handle_estop_press(){
         homing_handle_estop();
         jog_handle_estop();
     }
-}
-
-// 急停状态下不允许操作
-void handle_estop_cmd(){
-    if(rt_data->target_mode != rt_data->current_mode){
+    if(rt_data->nc_event != SYS_EVENT_NONE || rt_data->target_mode != rt_data->current_mode){
+        //　不允许操作
+        rt_data->nc_event = SYS_EVENT_NONE;
         // 不允许切换模式
         rt_data->target_mode = rt_data->current_mode;
-        LOG(LOG_LEVEL_ERR, "急停报警不支持操作，请检查问题后按复位清除报警！");
+        LOG(LOG_LEVEL_ERR, "急停未拔起，不允许操作！");
     }
 }
 
