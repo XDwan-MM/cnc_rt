@@ -39,7 +39,7 @@ void handle_alarm_cmd(){
             // 重置事件
             event_queue_reset(event_queue);
             // 更新cmd_pos位置
-            update_pos_flag = 1;
+            update_pos_flag = 0;
             // 清除驱动器报警
             #ifndef DEBUG_MODE_ENABLED
             Master_Reset();
