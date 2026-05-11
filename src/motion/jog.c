@@ -6,14 +6,9 @@
 
 /* JOG规划器实例 */
 jog_planner_t jog_tp[SYS_AXES_NUM_JOG];
-jog_planner_t rapid_jog_tp[SYS_AXES_NUM_JOG];
 
 /* 控制状态初始化 */
 static JOG_AXIS_CTRL jog_ctrls[SYS_AXES_NUM_JOG] = {
-    {JOG_STATE_IDLE, JOG_DIR_NONE},
-    {JOG_STATE_IDLE, JOG_DIR_NONE},
-    {JOG_STATE_IDLE, JOG_DIR_NONE}};
-static JOG_AXIS_CTRL rapid_jog_ctrls[SYS_AXES_NUM_JOG] = {
     {JOG_STATE_IDLE, JOG_DIR_NONE},
     {JOG_STATE_IDLE, JOG_DIR_NONE},
     {JOG_STATE_IDLE, JOG_DIR_NONE}};
@@ -22,18 +17,23 @@ static JOG_AXIS_CTRL rapid_jog_ctrls[SYS_AXES_NUM_JOG] = {
 static NC_MODE last_sys_mode = MODE_EDIT; // 记录进入当前模式前，上一次的操作模式
 
 /* 内部私有函数声明 */
-static void prepare_jog_params(int i, int direction, double feed_override, jog_planner_t *axis_jog_tp, bool is_rapid);
 static void update_axis_state(int i, JOG_AXIS_CTRL *jog_axis_ctrl);
-static void execute_axis_logic(int i, JOG_AXIS_CTRL *jog_axis_ctrl, jog_planner_t *axis_jog_tp, const bool is_rapid);
-static bool check_all_axes_idle_jog(void);
-static bool check_all_axes_idle_rapid_jog(void);
-static void sync_jog_on_mode_entry(int mode_type);
+static void execute_axis_motion(int i, JOG_AXIS_CTRL *jog_axis_ctrl, jog_planner_t *axis_jog_tp, const bool is_rapid);
+static void sync_jog_on_mode_entry();
+static bool check_all_axes_idle_jog();
 
 /**
  * @brief JOG 任务主循环 (由 1ms 伺服中断调用)
  */
 void handle_jog_cmd()
 {
+    // 内部急停标志触发，立即停止规划，复位规划器
+    if (rt_data->sys_state[SYS_IS_ESTOP_ON])
+    {
+        jog_handle_estop();
+        return;
+    }
+
     // 【核心逻辑】：
     // 如果 handle_jog_cmd 被调用了，说明系统当前一定是在执行点动逻辑。
     // 如果此时发现 last_sys_mode 还没更新成 MODE_JOG，
@@ -41,8 +41,7 @@ void handle_jog_cmd()
     if (last_sys_mode != MODE_JOG)
     {
         // 1. 立即执行同步，把规划器坐标对齐到当前物理位置
-        sync_jog_on_mode_entry(0);
-
+        sync_jog_on_mode_entry();
         // 2. 标记“我已经上班了”，下一毫秒就不会再进这个 if 了
         last_sys_mode = MODE_JOG;
     }
@@ -60,8 +59,8 @@ void handle_jog_cmd()
         /* 2. 处理按键信号与状态机切换 */
         update_axis_state(i, &jog_ctrls[i]);
 
-        /* 3. 执行普通JOG运动计算逻辑 */
-        execute_axis_logic(i, &jog_ctrls[i], &jog_tp[i], false);
+        /* 3. 执行JOG运动计算逻辑 */
+        execute_axis_motion(i, &jog_ctrls[i], &jog_tp[i], rt_data->sys_state[SYS_IS_RAPID]);
 
         /* 4. 指令输出给外部系统变量 */
         var_axis[i][VAR_AXIS_CMD_POS_EX].value.f = jog_tp[i].curr_pos;
@@ -96,79 +95,16 @@ void handle_jog_cmd()
 }
 
 /**
- * @brief 快速JOG 任务主循环 (由 1ms 伺服中断调用)
- */
-void handle_rapid_jog_cmd()
-{
-    if (last_sys_mode != MODE_RAPID_JOG)
-    {
-        sync_jog_on_mode_entry(1);
-        last_sys_mode = MODE_RAPID_JOG;
-    }
-
-    for (int i = 0; i < SYS_AXES_NUM_JOG; i++)
-    {
-        /* 1. 静态同步：IDLE状态下强制同步位置，防止从JOG切入其他模式时位置突跳 */
-        if (rapid_jog_ctrls[i].state == JOG_STATE_IDLE)
-        {
-            rapid_jog_tp[i].curr_pos = var_axis[i][VAR_AXIS_CMD_POS_EX].value.f;
-            rapid_jog_tp[i].curr_vel = 0.0;
-            rapid_jog_tp[i].enable = 0;
-        }
-
-        /* 2. 处理按键信号与状态机切换 */
-        update_axis_state(i, &rapid_jog_ctrls[i]);
-
-        /* 3. 执行快速JOG运动计算逻辑 */
-        execute_axis_logic(i, &rapid_jog_ctrls[i], &rapid_jog_tp[i], true);
-
-        /* 4. 指令输出给外部系统变量 */
-        var_axis[i][VAR_AXIS_CMD_POS_EX].value.f = rapid_jog_tp[i].curr_pos;
-        var_axis[i][VAR_AXIS_CMD_VEL].value.f = rapid_jog_tp[i].curr_vel;
-    }
-
-    /* 计算合成进给速度并更新给人机交互显示 */
-    double f_sq = 0;
-    for (int i = 0; i < 3; i++)
-    {
-        f_sq += (rapid_jog_tp[i].curr_vel * rapid_jog_tp[i].curr_vel);
-    }
-    setVarChanDouble(0, VAR_CHAN_CMD_FEEDRATE, sqrt(f_sq) * 60.0, 0);
-
-    // 减速完成信号赋值
-    for (int i = 0; i < SYS_AXES_NUM_JOG; i++)
-    {
-        if (fabs(var_axis[i][VAR_AXIS_CMD_POS_EX].value.f) < SPEED_THRESHOLD)
-        {
-            if (rt_data->axis_data[i].axis_status.is_fwd_limit || rt_data->axis_data[i].axis_status.is_rev_limit)
-            {
-                rt_data->axis_data[i].axis_status.is_decel_done = 1;
-            }
-        }
-    }
-
-    // 无动作时将通道事件全局变量置为NONE事件
-    if (check_all_axes_idle_rapid_jog())
-    {
-        rt_data->nc_event = SYS_EVENT_NONE;
-    }
-}
-
-/**
  * @brief 处理急停异常情况
  */
 void jog_handle_estop()
 {
     for (int i = 0; i < SYS_AXES_NUM_JOG; i++)
     {
-        // 普通JOG急停复位
+        // JOG急停复位
         jog_ctrls[i].state = JOG_STATE_IDLE;
         jog_ctrls[i].direction = JOG_DIR_NONE;
         memset(&jog_tp[i], 0, sizeof(jog_planner_t));
-        // 快速JOG急停复位
-        rapid_jog_ctrls[i].state = JOG_STATE_IDLE;
-        rapid_jog_ctrls[i].direction = JOG_DIR_NONE;
-        memset(&rapid_jog_tp[i], 0, sizeof(jog_planner_t));
     }
 }
 
@@ -335,7 +271,7 @@ static void update_axis_state(int i, JOG_AXIS_CTRL *jog_axis_ctrl)
  * @brief 轴运动执行逻辑 (带前瞻软限位拦截)
  * 根据快速标志位选择 运动类型：快速JOG/普通JOG。
  */
-static void execute_axis_logic(int i, JOG_AXIS_CTRL *jog_axis_ctrl, jog_planner_t *axis_jog_tp, bool is_rapid)
+static void execute_axis_motion(int i, JOG_AXIS_CTRL *jog_axis_ctrl, jog_planner_t *axis_jog_tp, bool is_rapid)
 {
     switch (jog_axis_ctrl->state)
     {
@@ -343,11 +279,15 @@ static void execute_axis_logic(int i, JOG_AXIS_CTRL *jog_axis_ctrl, jog_planner_
     {
         /* 使能规划器 */
         axis_jog_tp->enable = 1; // 保持使能开启
-        // 获取倍率
-        double current_override = is_rapid ? (var_chan[0][VAR_CHAN_RAPID_OVERRIDE].value.f / 100.0) : (var_chan[0][VAR_CHAN_FEED_OVERRIDE].value.f / 100.0);
 
-        /* 1. 更新目标速度 */
-        prepare_jog_params(i, jog_axis_ctrl->direction, current_override, axis_jog_tp, is_rapid);
+        /* 1. 更新运动参数 */
+        // 根据模式选择速度与加速度参数  普通jog：1）慢速点动速度 2）加工加速度；  快速：1）快速点动速度 2）快速加速度
+        double base_vel = is_rapid ? par_axis[i][PAR_AX_JOG_FASTSPD].value.val_real : par_axis[i][PAR_AX_JOG_LOWSPD].value.val_real;
+        double base_acc = is_rapid ? par_axis[i][PAR_AX_RAPID_ACC].value.val_real : par_axis[i][PAR_AX_FEED_ACC].value.val_real;
+        // 设置目标速度：实时获取倍率，设定带方向的目标速度
+        double current_override = is_rapid ? (var_chan[0][VAR_CHAN_RAPID_OVERRIDE].value.f / 100.0) : (var_chan[0][VAR_CHAN_FEED_OVERRIDE].value.f / 100.0);
+        axis_jog_tp->target_vel = base_vel * current_override * jog_axis_ctrl->direction;
+        axis_jog_tp->max_acc = base_acc;
 
         /* 2. 软限位前瞻拦截预测 */
         double p_limit = par_axis[i][PAR_AX_PLMT].value.val_real;
@@ -411,29 +351,25 @@ static void execute_axis_logic(int i, JOG_AXIS_CTRL *jog_axis_ctrl, jog_planner_
 }
 
 /**
- * @brief 内部函数：准备并更新规划器参数
- * @param i 轴索引
- * @param direction 运动方向
- * @param feed_override 实时倍率 (0.0 - 1.2)
- * @param is_rapid 是否为快速点动模式
+ * @brief 内部同步函数：当检测到模式切换进入点动时，强制对齐所有状态
  */
-static void prepare_jog_params(int i, int direction, double feed_override, jog_planner_t *axis_jog_tp, bool is_rapid)
+static void sync_jog_on_mode_entry()
 {
-    /* 1. 模式参数选择 */
-    // 普通jog：1）慢速点动速度 2）加工加速度
-    // 快速jog：1）快速点动速度 2）快速加速度
-    double base_vel = is_rapid ? par_axis[i][PAR_AX_JOG_FASTSPD].value.val_real : par_axis[i][PAR_AX_JOG_LOWSPD].value.val_real;
-    double base_acc = is_rapid ? par_axis[i][PAR_AX_RAPID_ACC].value.val_real : par_axis[i][PAR_AX_FEED_ACC].value.val_real;
-
-    /* 2. 直接设定带方向的目标速度 */
-    axis_jog_tp->target_vel = base_vel * feed_override * direction;
-    axis_jog_tp->max_acc = base_acc;
+    for (int i = 0; i < SYS_AXES_NUM_JOG; i++)
+    {
+        double actual_pos = var_axis[i][VAR_AXIS_CMD_POS_EX].value.f;
+        jog_ctrls[i].state = JOG_STATE_IDLE;
+        jog_ctrls[i].direction = JOG_DIR_NONE;
+        jog_tp[i].curr_pos = actual_pos;
+        jog_tp[i].curr_vel = 0.0;
+        jog_tp[i].enable = 0;
+    }
 }
 
 /**
  * @brief jog模式下 检查所有轴是否都处于静止空闲状态
  */
-static bool check_all_axes_idle_jog(void)
+static bool check_all_axes_idle_jog()
 {
     for (int i = 0; i < SYS_AXES_NUM_JOG; i++)
     {
@@ -443,48 +379,4 @@ static bool check_all_axes_idle_jog(void)
         }
     }
     return true;
-}
-
-/**
- * @brief 快速jog模式下 检查所有轴是否都处于静止空闲状态
- */
-static bool check_all_axes_idle_rapid_jog(void)
-{
-    for (int i = 0; i < SYS_AXES_NUM_JOG; i++)
-    {
-        if (rapid_jog_ctrls[i].state != JOG_STATE_IDLE)
-        {
-            return false;
-        }
-    }
-    return true;
-}
-
-/**
- * @brief 内部同步函数：当检测到模式切换进入点动时，强制对齐所有状态
- */
-static void sync_jog_on_mode_entry(int mode_type)
-{
-    // mode_type: 0 - 普通JOG, 1 - 快速JOG
-    for (int i = 0; i < SYS_AXES_NUM_JOG; i++)
-    {
-        double actual_pos = var_axis[i][VAR_AXIS_CMD_POS_EX].value.f;
-
-        if (mode_type == 0)
-        {
-            jog_ctrls[i].state = JOG_STATE_IDLE;
-            jog_ctrls[i].direction = JOG_DIR_NONE;
-            jog_tp[i].curr_pos = actual_pos;
-            jog_tp[i].curr_vel = 0.0;
-            jog_tp[i].enable = 0;
-        }
-        else
-        {
-            rapid_jog_ctrls[i].state = JOG_STATE_IDLE;
-            rapid_jog_ctrls[i].direction = JOG_DIR_NONE;
-            rapid_jog_tp[i].curr_pos = actual_pos;
-            rapid_jog_tp[i].curr_vel = 0.0;
-            rapid_jog_tp[i].enable = 0;
-        }
-    }
 }

@@ -33,7 +33,7 @@ static void compute_screw_comp();
 
 static int32_t x_cmd_Pulses, y_cmd_Pulses, z_cmd_Pulses;
 static int32_t x_target_pos, y_target_pos, z_target_pos;
-char* mode_names[] = {"编辑", "AUTO", "MDI", "DNC", "手轮", "手动", "快速点动", "回零", "报警", "空闲"};
+char* mode_names[] = {"编辑", "AUTO", "MDI", "DNC", "手轮", "手动", "回零", "空闲"};
 
 // 轨迹规划
 void emcmotTrajPlan() {
@@ -121,6 +121,8 @@ void emcmotPathPlan() {
 }
 
 static void set_operating_mode() {
+    // 急停拍下时不允许切换模式
+    if (rt_data->sys_state[SYS_IS_ESTOP_PRESS]) return;
     // 如果没有切换，不进行操作
     if (rt_data->current_mode == rt_data->target_mode) {
         rt_data->sys_state[SYS_IS_SWITCHING_MODE] = false;
@@ -141,27 +143,12 @@ static void set_operating_mode() {
                 rt_data->current_mode = rt_data->target_mode;
                 rt_data->sys_state[SYS_IS_SWITCHING_MODE] = false;
                 LOG(LOG_LEVEL_INFO, "系统模式切换为 %s", mode_names[rt_data->current_mode]);
-                break;
             }
-            rt_data->sys_state[SYS_IS_SWITCHING_MODE] = true;
             break;
         case MODE_EDIT:
         case MODE_MPG:
             rt_data->current_mode = rt_data->target_mode;
             LOG(LOG_LEVEL_INFO, "系统模式切换为 %s", mode_names[rt_data->current_mode]);
-            break;
-        case MODE_RAPID_JOG:
-            // 当前快速点动速度为零,才能切模式成功
-            if (fabs(rapid_jog_tp[AXIS_X].curr_vel) < SPEED_THRESHOLD
-            && fabs(rapid_jog_tp[AXIS_Y].curr_vel) < SPEED_THRESHOLD
-            && fabs(rapid_jog_tp[AXIS_Z].curr_vel) < SPEED_THRESHOLD)
-            {
-                rt_data->current_mode = rt_data->target_mode;
-                rt_data->sys_state[SYS_IS_SWITCHING_MODE] = false;
-                LOG(LOG_LEVEL_INFO, "系统模式切换为 %s", mode_names[rt_data->current_mode]);
-                break;
-            }
-            rt_data->sys_state[SYS_IS_SWITCHING_MODE] = true;
             break;
         case MODE_HOMING:
             if (!var_chan[0][VAR_CHAN_IS_HOMING].value.i) {
@@ -207,9 +194,6 @@ static void get_cmd_pos() {
         case MODE_JOG: // 点动
             handle_jog_cmd();
             break;
-        case MODE_RAPID_JOG: // 快速点动
-            handle_rapid_jog_cmd();
-            break;
         case MODE_MPG: // 手轮
             handle_mpg_cmd();
             break;
@@ -221,11 +205,10 @@ static void get_cmd_pos() {
 }
 
 static void check_for_fault() {
-    // 检查系统急停按下
     if(rt_data->sys_state[SYS_IS_ESTOP_PRESS]){
         handle_estop_cmd();
     }
-    //　检查系统报警
+    //　检查系统报警和内部急停标志
     int alarm_count = 0;
     getAlarmCount(ALARM_TYPE_ALL, ALARM_ERROR, &alarm_count);
     if(alarm_count > 0 || rt_data->sys_state[SYS_IS_ESTOP_ON]){

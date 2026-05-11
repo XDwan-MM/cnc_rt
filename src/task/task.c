@@ -68,9 +68,6 @@ static GNC_RES task_handle_pmc_event(PMC_EVENT* event_data)
         case CNC_MODE_DNC:
             rt_data->target_mode = MODE_DNC;
             break; // DNC
-        case CNC_MODE_RAPID:
-            rt_data->target_mode = MODE_RAPID_JOG;
-            break; // RAPID
         default:
             rt_data->target_mode = MODE_IDLE;
             break; // wcf: 我不太确定
@@ -85,7 +82,7 @@ static GNC_RES task_handle_pmc_event(PMC_EVENT* event_data)
         int direction = event_data->feedaxis_key_payload.direction; // 1:正按, -1:负按, 0:松开
 
         // 基于当前系统模式进行逻辑分发
-        if (rt_data->current_mode == MODE_JOG || rt_data->current_mode == MODE_RAPID_JOG || rt_data->current_mode == MODE_HOMING)
+        if (rt_data->current_mode == MODE_JOG || rt_data->current_mode == MODE_HOMING)
         {
             // axis为轴号
             if (axis == AXIS_X)

@@ -19,6 +19,7 @@ void handle_estop_cmd(){
         jog_handle_estop();
         LOG(LOG_LEVEL_INFO, "处理按下急停");
     }
+    if(rt_data->nc_event == SYS_EVENT_RESET) rt_data->nc_event = SYS_EVENT_NONE;
 }
 
 // 报警状态逻辑
@@ -30,6 +31,7 @@ void handle_alarm_cmd(){
             // 清除报警
             cleanAllAlarm(ALARM_TYPE_ALL, ALARM_LEVEL_ALL);
             rt_data->sys_state[SYS_IS_ALARMING] = false;
+            // 清除内部急停标志
             rt_data->sys_state[SYS_IS_ESTOP_ON] = false;
             setVarChanInt(0, VAR_CHAN_IS_ESTOP, 0, 0);
             // 状态复位、数据重置

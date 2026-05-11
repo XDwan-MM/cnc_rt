@@ -124,7 +124,6 @@ typedef enum {
     MODE_DNC,        // DNC
     MODE_MPG,        // 手轮
     MODE_JOG,        // 手动
-    MODE_RAPID_JOG,  // 快速点动
     MODE_HOMING,     // 回零
     MODE_IDLE,       // 空闲
 } NC_MODE;
