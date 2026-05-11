@@ -14,8 +14,33 @@
  */
 static const int SCAN_G_REGS[] =
     {
-        4, 5, 6, 7, 8, 12, 14, 19, 29, 30, 32, 43, 44, 45, 54, 55, 56, 61, 62, 70, 100, 102, 108, 130, 132, 134, /* 已有信号的地址 */
-                                                                                               /* <--- 您想新增的信号地址 */
+        4,
+        5,
+        6,
+        7,
+        8,
+        12,
+        14,
+        19,
+        29,
+        30,
+        32,
+        43,
+        44,
+        45,
+        54,
+        55,
+        56,
+        61,
+        62,
+        70,
+        100,
+        102,
+        108,
+        130,
+        132,
+        134, /* 已有信号的地址 */
+             /* <--- 您想新增的信号地址 */
 };
 
 /** 计算注册表中元素的个数，用于驱动循环扫描 */
@@ -85,7 +110,7 @@ void pmc_g_input_scan_cycle(void)
     {
         // 快速按键按下
         LOG(LOG_LEVEL_INFO, "扫描到快速按键: 按下");
-        if(rt_data->current_mode == MODE_JOG)
+        if (rt_data->current_mode == MODE_JOG)
         {
             rt_data->sys_state[SYS_IS_RAPID] = true;
         }
@@ -497,12 +522,12 @@ static void process_mode_selection(char g43)
         unsigned char md_bits = g43 & 0x07;
         switch (md_bits)
         {
+        case 0x00:
+            target_mode = CNC_MODE_MDI;
+            break; // 000
         case 0x01:
             target_mode = CNC_MODE_MEM;
             break; // 001
-        case 0x02:
-            target_mode = CNC_MODE_MDI;
-            break; // 010
         case 0x03:
             target_mode = CNC_MODE_EDIT;
             break; // 011
@@ -516,28 +541,6 @@ static void process_mode_selection(char g43)
             target_mode = CNC_MODE_INVALID;
             break;
         }
-        // todo：856梯形图，fanuc
-        // switch (md_bits)
-        // {
-        // case 0x01:
-        //     target_mode = CNC_MODE_MEM;
-        //     break; // 001
-        // case 0x00:
-        //     target_mode = CNC_MODE_MDI;
-        //     break; // 000
-        // case 0x03:
-        //     target_mode = CNC_MODE_EDIT;
-        //     break; // 011
-        // case 0x04:
-        //     target_mode = CNC_MODE_MPG;
-        //     break; // 100
-        // case 0x05:
-        //     target_mode = CNC_MODE_JOG;
-        //     break; // 101
-        // default:
-        //     target_mode = CNC_MODE_INVALID;
-        //     break;
-        // }
     }
 
     /* 如果解析出有效模式，则发送事件 */
