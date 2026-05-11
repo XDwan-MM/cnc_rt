@@ -17,13 +17,7 @@ void handle_estop_cmd(){
         mem_handle_estop();
         homing_handle_estop();
         jog_handle_estop();
-    }
-    if(rt_data->nc_event != SYS_EVENT_NONE || rt_data->target_mode != rt_data->current_mode){
-        //　不允许操作
-        rt_data->nc_event = SYS_EVENT_NONE;
-        // 不允许切换模式
-        rt_data->target_mode = rt_data->current_mode;
-        LOG(LOG_LEVEL_ERR, "急停未拔起，不允许操作！");
+        LOG(LOG_LEVEL_INFO, "处理按下急停");
     }
 }
 
@@ -32,8 +26,7 @@ void handle_alarm_cmd(){
     switch(rt_data->nc_event){
         case SYS_EVENT_NONE:
             break;
-        case SYS_EVENT_RESET:
-            // LOG(LOG_LEVEL_INFO, "报警处理复位");        
+        case SYS_EVENT_RESET:       
             // 清除报警
             cleanAllAlarm(ALARM_TYPE_ALL, ALARM_LEVEL_ALL);
             rt_data->sys_state[SYS_IS_ALARMING] = false;
@@ -70,7 +63,8 @@ void handle_alarm_cmd(){
         case SYS_EVENT_Z_NEG_PRESS:
         case SYS_EVENT_Z_NEG_RELEASE:
         default:
-            LOG(LOG_LEVEL_ERR, "报警下不支持操作，请检查问题后按复位清除报警");
+            // todo：报警时由pmc控制面板按键是否可执行，nc侧不约束
+            LOG(LOG_LEVEL_ERR, "报警下操作 %d 按键", rt_data->nc_event);
             break;
     }
 }
