@@ -286,7 +286,7 @@ void pmc_g_input_scan_cycle(void)
     if (SIGNAL_FALLING(curr_g.g_regs[5], last_g.g_regs[5], 6))
     {
         pmc_dispatch_event(EV_MSG_ENANLE, MSBT_LOCK, 0);
-        LOG(LOG_LEVEL_INFO, "扫描到GG5.6 发生下降沿");
+        LOG(LOG_LEVEL_INFO, "扫描到G5.6 发生下降沿");
     }
 
     /* 机床锁住 G4.1 */

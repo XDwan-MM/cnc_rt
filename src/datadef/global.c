@@ -160,7 +160,7 @@ static GNC_RES shm_par_init(){
         par_chan[i][PAR_CH_MAX_ECEN_ACC].value.val_real = 1000.0;
         par_chan[i][PAR_CH_LOOKAHEAD_NUM].value.val_uint = 200;
         par_chan[i][PAR_CH_HOMED_ANG].value.val_real = 0.0001;
-        par_chan[i][PAR_CH_TMF_DELAY].value.val_int = 2;
+        par_chan[i][PAR_CH_TMF_DELAY].value.val_int = 0;
         par_chan[0][PAR_CH_TFIN_DELEY].value.val_int = 2;
     }
     #endif
@@ -225,8 +225,9 @@ GNC_RES shm_var_update(){
         }else{
             crds_remain = 0;
         }
+        // 剩余移动
         setVarAxisDouble(i, VAR_AXIS_LEFT_TOGO_EX, crds_remain, 0);
-        // 工件坐标
+        // 绝对坐标
         getVarChanValue(0, VAR_CHAN_MODAL, 14, &crds_type_var, 0);
         getCrdsValue(CRDS_TYPE_G5X + crds_type_var.value.i - 1, i, &crds_oft);
         act_pos_wcs_ex = var_axis[i][VAR_AXIS_ACT_POS_EX].value.f - crds_oft;
@@ -240,6 +241,10 @@ GNC_RES shm_var_update(){
         getVarAxisDouble(i, VAR_AXIS_REAL_ZERO_EX, &real_zero, 0);
         double real = var_axis[i][VAR_AXIS_ACT_POS_EX].value.f - real_zero;
         setVarAxisDouble(i, VAR_AXIS_ACT_POS_RCS_EX, real, 0);
+        // todo：机械坐标
+        if(rt_data->sys_state[SYS_IS_MAC_LOCK]){
+            // todo：机械锁住时不变
+        }
         // 判断各轴零点
         if(fabs(par_axis[i][PAR_AX_HOME_CRDS].value.val_real - var_axis[i][VAR_AXIS_CMD_POS_EX].value.f) > HOMEF_TOL){
             setVarAxisInt(i, VAR_AXIS_IS_HOMEF, 0, 0);

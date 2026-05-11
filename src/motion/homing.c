@@ -70,7 +70,8 @@ static void homing_set_state(){
             break;
 
         case SYS_EVENT_X_POS_PRESS:
-            LOG(LOG_LEVEL_INFO, "回零处理X+按下");
+        case SYS_EVENT_X_NEG_PRESS:
+            LOG(LOG_LEVEL_INFO, "回零处理X按下");
             if(IsEqualTo(var_chan[0][VAR_CHAN_RAPID_OVERRIDE].value.f, 0)){
                 setAlarm(ALARM_SY, ALARM_WARNING, 2);
                 LOG(LOG_LEVEL_WARN, "快速倍率为0");
@@ -85,7 +86,8 @@ static void homing_set_state(){
             break;
 
         case SYS_EVENT_Y_POS_PRESS:
-            LOG(LOG_LEVEL_INFO, "回零处理Y+按下");
+        case SYS_EVENT_Y_NEG_PRESS:
+            LOG(LOG_LEVEL_INFO, "回零处理Y按下");
             if(IsEqualTo(var_chan[0][VAR_CHAN_RAPID_OVERRIDE].value.f, 0)){
                 setAlarm(ALARM_SY, ALARM_WARNING, 2);
                 LOG(LOG_LEVEL_WARN, "快速倍率为0");
@@ -100,7 +102,8 @@ static void homing_set_state(){
             break;
 
         case SYS_EVENT_Z_POS_PRESS:
-            LOG(LOG_LEVEL_INFO, "回零处理Z+按下");
+        case SYS_EVENT_Z_NEG_PRESS:
+            LOG(LOG_LEVEL_INFO, "回零处理Z按下");
             if(IsEqualTo(var_chan[0][VAR_CHAN_RAPID_OVERRIDE].value.f, 0)){
                 setAlarm(ALARM_SY, ALARM_WARNING, 2);
                 LOG(LOG_LEVEL_WARN, "快速倍率为0");

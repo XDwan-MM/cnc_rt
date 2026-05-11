@@ -8,10 +8,7 @@
 #include <hmisysapi.h>
 #include "spl_control.h"
 
-/* ==========================================================================
- * 外部函数定义
- * ========================================================================== */
-
+static void pmc_output_alarm();
 static void pmc_output_mode();
 static void pmc_output_home();
 static void pmc_output_auto();
@@ -20,28 +17,7 @@ static void pmc_output_axis_status();
 
 void pmc_output_feedback()
 {
-    /**
-     * 映射策略：
-     * F0000.0 (第0字节第0位) -> 运行状态反馈
-     * F0001.0 (第1字节第0位) -> 报警状态反馈
-     */
-    unsigned char is_running = var_chan[0][VAR_CHAN_IS_RUNNING].value.i ? 0x01 : 0x00;
-    // unsigned char is_estop = rt_data->sys_state[SYS_IS_ESTOP_ON] ? 0x01 : 0x00;
-    /* 使用底层 API 写入 F 寄存器区 */
-    setRegValue8(REG_F, 0, is_running); /* REG_F 定义见 regdata.h */
-    // setRegValue8(REG_F, 1, is_estop);
-
-    // 急停报警中
-    // if(rt_data->sys_state[SYS_IS_ESTOP_ON]){
-    //     setRegBit(REG_F, 1, 1); //主轴状态重置
-    // }
-
-    // 报警中
-    if (rt_data->sys_state[SYS_IS_ALARMING])
-        setRegBit(REG_F, 1, 0);
-    else
-        clearRegBit(REG_F, 1, 0);
-
+    pmc_output_alarm();
     pmc_output_mode();
     pmc_output_auto();
     pmc_output_home();
@@ -49,7 +25,20 @@ void pmc_output_feedback()
     pmc_output_axis_status();
 }
 
-// 自动运行启动中、运行中信号、休止中信号、复位
+static void pmc_output_alarm(){
+    // 报警中
+    if (rt_data->sys_state[SYS_IS_ALARMING])
+        setRegBit(REG_F, 1, 0);
+    else
+        clearRegBit(REG_F, 1, 0);
+    // 准备就绪
+    if(rt_get_sys_state(SYS_IS_READY))
+        setRegBit(REG_F, 1, 7);
+    else
+        clearRegBit(REG_F, 1, 7);
+}
+
+// 自动运行启动中、运行中信号、休止中信号
 static void pmc_output_auto()
 {
     // OP：运行中信号
@@ -67,6 +56,38 @@ static void pmc_output_auto()
         setRegBit(REG_F, 0, 4);
     else
         clearRegBit(REG_F, 0, 4);
+    // 切削进给中
+    if(cycle_tp->mem_exec_state == EXEC_RUNNING){
+        if(cycle_tp->plan_block->mode != PMC_MODE_PAUSE) setRegBit(REG_F, 2, 6);
+    }
+    else
+        clearRegBit(REG_F, 2, 6); 
+    // 可选程序段跳过
+    if(rt_get_sys_state(SYS_IS_BLOCK_SKIP)){
+        setRegBit(REG_F, 4, 0);
+    }else{
+        clearRegBit(REG_F, 4, 0);
+    }
+    // 辅助功能锁住
+    if(rt_data->sys_state[SYS_IS_MSBT_LOCK])
+        setRegBit(REG_F, 4, 4);
+    else
+        clearRegBit(REG_F, 4, 4);
+    // 空运行
+    if(rt_data->sys_state[SYS_IS_DRY_RUN])
+        setRegBit(REG_F, 2, 7);
+    else
+        clearRegBit(REG_F, 2, 7);
+    // 机械锁住
+    if(rt_data->sys_state[SYS_IS_MAC_LOCK])
+        setRegBit(REG_F, 4, 1);
+    else
+        clearRegBit(REG_F, 4, 1);
+    // 单程序段
+    if(rt_data->sys_state[SYS_IS_SINGLE_BLOCK])
+        setRegBit(REG_F, 4, 3);
+    else
+        clearRegBit(REG_F, 4, 3);
 }
 
 // 各轴返回零点完成、参考点建立

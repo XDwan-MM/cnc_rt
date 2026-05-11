@@ -51,14 +51,6 @@ void execute_gcode(){
     POS interp_pos = current_pos;
     // 设置自动加工状态
     mem_set_state();
-    // 机床锁住，快速显示加工点位
-    if(rt_data->sys_state[SYS_IS_MAC_LOCK]){
-        cycle_tp_add_block();
-        queue_copy_block(plan_queue, 0, cycle_tp->plan_block);
-        shm_var_update_prog();
-        plan_block_get_next();
-        return;
-    }
     // 计算插补距离
     interp_pinc = mem_cal_pinc(velplan_mode, ncu_cycle, current_vel, current_pos);
     // 根据插补类型计算插补点：快速G00、直线G01、圆弧G02|03……
@@ -79,15 +71,13 @@ static void mem_set_state(){
             break;
 
         case SYS_EVENT_RESET:
-            // LOG(LOG_LEVEL_INFO, "记忆模式处理复位");
+            // LOG(LOG_LEVEL_INFO, "自动模式处理复位");
             if(cycle_tp->mem_exec_state == EXEC_RUNNING){
                 cycle_tp->mem_exec_state = EXEC_PAUSING;
                 cycle_tp->is_event_trigger = true;
                 // 如果为M02或M30
-                if(!cycle_tp->mcode_feedback){
-                    if(cycle_tp->mcode == M02) cycle_tp->run_row_reset = false;
-                    else cycle_tp->run_row_reset = true;
-                }else cycle_tp->run_row_reset = true;
+                if(cycle_tp->mcode == M02) cycle_tp->run_row_reset = false;
+                else cycle_tp->run_row_reset = true;
                 cycle_tp->is_resetting = 1;
             }else if(cycle_tp->mem_exec_state == EXEC_PAUSING){
                 cycle_tp->is_resetting = 1;
@@ -99,7 +89,7 @@ static void mem_set_state(){
             break;
         
         case SYS_EVENT_RERUN:
-            LOG(LOG_LEVEL_INFO, "记忆模式处理自动运行");
+            LOG(LOG_LEVEL_INFO, "自动模式处理自动运行");
             if(IsEqualTo(var_chan[0][VAR_CHAN_FEED_OVERRIDE].value.f, 0)){
                 setAlarm(ALARM_SY, ALARM_WARNING, 3);
                 LOG(LOG_LEVEL_WARN, "进给倍率为0");
@@ -138,7 +128,7 @@ static void mem_set_state(){
             break;
 
         case SYS_EVENT_FEED_OVERRIDE:
-            LOG(LOG_LEVEL_INFO, "记忆模式处理进给倍率切换");
+            LOG(LOG_LEVEL_INFO, "自动模式处理进给倍率切换");
             if(IsEqualTo(var_chan[0][VAR_CHAN_FEED_OVERRIDE].value.f, 0)){
                 setAlarm(ALARM_SY, ALARM_WARNING, 3);
                 LOG(LOG_LEVEL_WARN, "进给倍率为0");
@@ -156,7 +146,7 @@ static void mem_set_state(){
             break;
 
         case SYS_EVENT_RAPID_OVERRIDE:
-            LOG(LOG_LEVEL_INFO, "记忆模式处理快速倍率切换 %f", var_chan[0][VAR_CHAN_RAPID_OVERRIDE].value.f);
+            LOG(LOG_LEVEL_INFO, "自动模式处理快速倍率切换 %f", var_chan[0][VAR_CHAN_RAPID_OVERRIDE].value.f);
             if(IsEqualTo(var_chan[0][VAR_CHAN_RAPID_OVERRIDE].value.f, 0)){
                 setAlarm(ALARM_SY, ALARM_WARNING, 2);
                 LOG(LOG_LEVEL_WARN, "快速倍率为0");
@@ -174,7 +164,7 @@ static void mem_set_state(){
             break;
         
         case SYS_EVENT_PAUSE:
-            LOG(LOG_LEVEL_INFO, "记忆模式处理暂停");
+            LOG(LOG_LEVEL_INFO, "自动模式处理暂停");
             if(cycle_tp->mem_exec_state == EXEC_RUNNING){
                 // 攻丝方式下进给暂停无效
                 if(!queue_is_empty(plan_queue)){
@@ -191,7 +181,7 @@ static void mem_set_state(){
         case SYS_EVENT_X_NEG_PRESS:
         case SYS_EVENT_Y_NEG_PRESS:
         case SYS_EVENT_Z_NEG_PRESS:
-            LOG(LOG_LEVEL_WARN, "记忆模式不支持该操作");
+            LOG(LOG_LEVEL_WARN, "自动模式不支持该操作");
             break;
         
         default:
@@ -247,10 +237,6 @@ static double mem_cal_pinc(VELPLAN_TYPE velplan_mode, double ncu_cycle, double c
                         auto_check_soft_limit_del_done();
                         LOG(LOG_LEVEL_DEBUG, "完成复位");
                     }else{
-                        // mcode反馈
-                        if(!cycle_tp->mcode_feedback) {
-                            cycle_tp->mcode_feedback = true;
-                        }
                         setVarChanInt(0, VAR_CHAN_IS_MOVING, 0, 0);               
                     }                             
                     break;
@@ -323,7 +309,7 @@ static bool mem_check_res(GNC_RES res){
     case VP_FEED_RATE_IS_ZERO:
     case VP_LENGTH_UNVALID:
         gcode_handle_estop();
-        LOG(LOG_LEVEL_ERR, "记忆模式报警 %d", res);
+        LOG(LOG_LEVEL_ERR, "自动模式报警 %d", res);
         setAlarm(ALARM_CH, ALARM_ERROR, 2);
         return false;
 
@@ -334,7 +320,7 @@ static bool mem_check_res(GNC_RES res){
     case VP_CAL_V_ERROR:
     default:
         gcode_handle_estop();
-        LOG(LOG_LEVEL_ERR, "记忆模式报警 %d", res);
+        LOG(LOG_LEVEL_ERR, "自动模式报警 %d", res);
         setAlarm(ALARM_CH, ALARM_ERROR, 3);
         return false;
     }
@@ -364,10 +350,6 @@ static void mem_handle_reset(){
     rt_set_chan_state(0, CHAN_IS_PARSERING, false);
     rt_set_chan_state(0, CHAN_IS_GCODE_END, true);
     if(cycle_tp->run_row_reset) setVarChanInt(0, VAR_CHAN_RUN_ROW, 0, 0);
-    // mcode反馈
-    if(!cycle_tp->mcode_feedback) {
-        cycle_tp->mcode_feedback = true;
-    }
 }
 
 static void mem_handle_alarm(){
@@ -411,7 +393,6 @@ void cycle_tp_init(){
     cycle_tp->plan_block->type = UNKNOWN;
     cycle_tp->is_event_trigger = false;
     cycle_tp->run_row_reset = true;
-    cycle_tp->mcode_feedback = true;
     cycle_tp->interp_cycle = 1;
     cycle_tp->is_paused_inside_block = true;
 }

@@ -30,13 +30,14 @@ typedef enum mcode_state{
 
 typedef struct{
     MCODE_STATE mcode_state;
-    MCODE_BLOCK mcode_block[5]; // 单程序段多个M指令
-    int mcode_size;
+    MCODE_BLOCK mcode_block[M_BUF_SIZE]; // 单程序段多个M指令
+    int mcode_size;         // 多个辅助功能个数
+    bool signal_mf;         // 选通脉冲信号
     bool signal_den;        // 分配结束信号
     bool signal_fin;        // 结束信号
-    bool signal_fin_delay;  // 结束信号达到宽幅
     bool pmc_end;           // pmc侧动作完成
     int tfin_count;         // 完成信号计数
+    int tmf_count;          // 选通脉冲延时计数
 }MCODE_DATA;
 
 GNC_RES mcode_data_init();

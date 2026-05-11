@@ -45,7 +45,6 @@ typedef struct{
     bool is_event_trigger;          // 触发重新计算
     bool is_resetting;
     int mcode;
-    bool mcode_feedback;
     bool run_row_reset;
 }COORD_TP;
 

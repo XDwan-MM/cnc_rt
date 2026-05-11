@@ -11,10 +11,6 @@ GNC_RES mcode_queue_init(MCODE_QUEUE* queue){
     queue->head = 0;
     queue->tail = 0;
     queue->size = 0;
-    for(int i = 0; i < M_BUF_SIZE; i++){
-        queue->block[i].tmf_count = 0;
-        queue->block[i].mcode_end = true;
-    }
     pthread_mutex_init(&queue->mutex, NULL);
     return GNC_OPERATOR_SUCCESS;
 }
@@ -25,10 +21,6 @@ GNC_RES mcode_queue_reset(MCODE_QUEUE* queue){
     queue->head = 0;
     queue->tail = 0;
     queue->size = 0;
-    for(int i = 0; i < M_BUF_SIZE; i++){
-        queue->block[i].tmf_count = 0;
-        queue->block[i].mcode_end = true;
-    }
     pthread_mutex_unlock(&queue->mutex);
     return GNC_OPERATOR_SUCCESS;
 }
