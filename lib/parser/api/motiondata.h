@@ -121,8 +121,6 @@ typedef enum pmc_mcode
     M29,
     M30,
     M31,
-    M32,
-    M33
 }pmc_mcode;
 
 typedef struct pmc_data_t
