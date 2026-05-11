@@ -38,8 +38,6 @@ extern jog_planner_t rapid_jog_tp[SYS_AXES_NUM_JOG];
 /* 1ms 周期调用的主任务函数 */
 extern void handle_jog_cmd();
 
-extern void handle_rapid_jog_cmd();
-
 /* 处理急停、复位、切模式等异常情况 */
 extern void jog_handle_estop();
 

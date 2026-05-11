@@ -9,6 +9,8 @@ void handle_estop_cmd(){
     if(!rt_data->sys_state[SYS_IS_ESTOP_ON])
     {
         rt_data->sys_state[SYS_IS_ESTOP_ON] = true;
+        // 系统事件置为NONE
+        rt_data->nc_event = SYS_EVENT_NONE;
         // 人机交互状态栏显示急停报警
         setVarChanInt(0, VAR_CHAN_IS_ESTOP, 1, 0);
         // 复位状态：1.急停信号ESP
@@ -39,7 +41,7 @@ void handle_alarm_cmd(){
             // 重置事件
             event_queue_reset(event_queue);
             // 更新cmd_pos位置
-            update_pos_flag = 1;
+            update_pos_flag = 0;
             // 清除驱动器报警
             #ifndef DEBUG_MODE_ENABLED
             Master_Reset();
