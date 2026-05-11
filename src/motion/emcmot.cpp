@@ -108,15 +108,8 @@ void emcmotPathPlan() {
     // 遍历多个通道
     for (int i = 0; i < var_sys[VAR_SYS_CHAN_NUM].value.i; i++) {
         if (rt_get_chan_state(i, CHAN_IS_PARSER_RERUN)){
-            HmiSysData hmiSysData;
-            #ifdef DEBUG_MODE_ENABLED
-            char ncFilePath[512];
-            snprintf(ncFilePath, sizeof(ncFilePath), "%s/%s", PROJECT_DIR, "config/NC/g04.nc");
-            parser_init(ncFilePath);
-            #else
-            getHmiSysDataPtr(&hmiSysData);
-            parser_init(hmiSysData.ncFilePath);
-            #endif
+            // LOG(LOG_LEVEL_INFO, "初始化译码器");
+            parser_init(rt_data->current_mode);
             rt_set_chan_state(i, CHAN_IS_FIRST_RUN, true);      // 通知预处理第一次获取pre_pos
             rt_set_chan_state(i, CHAN_IS_PARSER_RERUN, false);
         }
@@ -228,6 +221,7 @@ static void get_cmd_pos() {
 }
 
 static void check_for_fault() {
+    // 检查系统急停按下
     if(rt_data->sys_state[SYS_IS_ESTOP_PRESS]){
         handle_estop_cmd();
     }
@@ -236,9 +230,14 @@ static void check_for_fault() {
     getAlarmCount(ALARM_TYPE_ALL, ALARM_ERROR, &alarm_count);
     if(alarm_count > 0 || rt_data->sys_state[SYS_IS_ESTOP_ON]){
         rt_data->sys_state[SYS_IS_ALARMING] = true;
+        // 除急停外的其他报警，取消准备就绪信号
+        if(!rt_data->sys_state[SYS_IS_ESTOP_ON]) rt_set_sys_state(SYS_IS_READY, false);
         handle_alarm_cmd();
-        // LOG(LOG_LEVEL_ERR, "系统处于报警或急停状态下，请检查问题后按复位恢复！");
-    }else rt_data->sys_state[SYS_IS_ALARMING] = false;
+    }
+    if(alarm_count <= 0){
+        rt_data->sys_state[SYS_IS_ALARMING] = false;
+        rt_set_sys_state(SYS_IS_READY, true);
+    }
 }
 
 // 检查轴跟随误差错误
@@ -332,6 +331,10 @@ static void read_from_hal() {
 }
 
 static void output_to_hal() {
+    // todo：机床锁住时机械坐标不变，不发送给伺服
+    // if(rt_data->sys_state[SYS_IS_MAC_LOCK]){
+    //     return;
+    // }    
     x_cmd_Pulses = position_to_pulses(rt_data->axis_data[AXIS_X].motor_cmd_pos, par_axis[AXIS_X]);
     Hal_Driver_Set_Target_Pos(&x_axis_driver, x_cmd_Pulses);
     y_cmd_Pulses = position_to_pulses(rt_data->axis_data[AXIS_Y].motor_cmd_pos, par_axis[AXIS_Y]);

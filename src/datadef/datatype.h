@@ -119,7 +119,7 @@ typedef enum {
 // NC 运行模式
 typedef enum {
     MODE_EDIT = 0,   // 编辑
-    MODE_MEM,        // AUTO
+    MODE_MEM,        // MEM
     MODE_MDI,        // MDI
     MODE_DNC,        // DNC
     MODE_MPG,        // 手轮

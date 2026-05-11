@@ -28,9 +28,6 @@ typedef struct mcode_block{
     int m_code;             // 代码信号 M00~M31
     int line_number;        // 运行行号
     pmc_spindle spindle;    // 主轴
-    bool signal_mf;         // 选通信号
-    int tmf_count;          // 脉冲选通延时计数
-    bool mcode_end;         // nc侧单个动作完成
 }MCODE_BLOCK;
 
 typedef struct

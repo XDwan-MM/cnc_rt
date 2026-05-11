@@ -198,7 +198,7 @@ static GNC_RES task_handle_pmc_event(PMC_EVENT* event_data)
     {
         if (event_data->run_payload.run_state == 1)
         {
-            if (rt_data->current_mode == MODE_MEM)
+            if (rt_data->current_mode == MODE_MEM || rt_data->current_mode == MODE_MDI)
             {
                 // 循环启动
                 rt_data->nc_event = SYS_EVENT_RERUN;
@@ -207,7 +207,7 @@ static GNC_RES task_handle_pmc_event(PMC_EVENT* event_data)
         }
         if (event_data->run_payload.run_state == 0)
         {
-            if (rt_data->current_mode == MODE_MEM)
+            if (rt_data->current_mode == MODE_MEM || rt_data->current_mode == MODE_MDI)
             {
                 // 进给保持
                 rt_data->nc_event = SYS_EVENT_PAUSE;
