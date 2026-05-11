@@ -121,6 +121,8 @@ void emcmotPathPlan() {
 }
 
 static void set_operating_mode() {
+    // 急停拍下时不允许切换模式
+    if (rt_data->sys_state[SYS_IS_ESTOP_PRESS]) return;
     // 如果没有切换，不进行操作
     if (rt_data->current_mode == rt_data->target_mode) {
         rt_data->sys_state[SYS_IS_SWITCHING_MODE] = false;

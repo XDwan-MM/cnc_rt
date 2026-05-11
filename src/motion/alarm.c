@@ -19,6 +19,7 @@ void handle_estop_cmd(){
         jog_handle_estop();
         LOG(LOG_LEVEL_INFO, "处理按下急停");
     }
+    if(rt_data->nc_event == SYS_EVENT_RESET) rt_data->nc_event = SYS_EVENT_NONE;
 }
 
 // 报警状态逻辑
