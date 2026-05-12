@@ -251,6 +251,11 @@ case "${1:-all}" in
         echo ""
         echo -e "可执行文件: ${YELLOW}$BIN_DIR/rt_cnc${NC}"
         ;;
+    check)
+        build_release_1
+        echo ""
+        echo -e "可执行文件: ${YELLOW}$BIN_DIR/rt_cnc${NC}"
+        ;;
     all)
         build_shm_lib
         build_all
