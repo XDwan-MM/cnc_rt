@@ -219,7 +219,6 @@ static GNC_RES task_handle_pmc_event(PMC_EVENT* event_data)
         {
             rt_data->nc_event = SYS_EVENT_RESET;
             LOG(LOG_LEVEL_INFO, "处理复位事件");
-            setRegBit(REG_F, 1, 1);
         }
         break;
     }
