@@ -83,7 +83,7 @@ static GNC_RES parser_set_content(NC_MODE nc_mode){
     case MODE_MEM:
         // 选择NC文件
         #ifdef DEBUG_MODE_ENABLED
-        snprintf(parser_data->parser_file_path, sizeof(parser_data->parser_file_path), "%s/%s", PROJECT_DIR, "config/NC/m03.nc");
+        snprintf(parser_data->parser_file_path, sizeof(parser_data->parser_file_path), "%s/%s", PROJECT_DIR, "config/NC/g00.nc");
         ItpSetFile(parser_data->parser_file_path);  
         #else
         getNcFilePath(parser_data->parser_file_path);
@@ -179,11 +179,11 @@ STATIC GNC_RES parser_handle_gcode(pmc_data* motion_data, NcItpState *itp_state,
     gcode_block.pos.x = motion_data->position.x;
     gcode_block.pos.y = motion_data->position.y;
     gcode_block.pos.z = motion_data->position.z;
-    // LOG(LOG_LEVEL_DEBUG,  "pos %f %f %f", motion_data->position.x, motion_data->position.y, motion_data->position.z);
     // 模态
     gcode_block.state = *itp_state;
     // 模组
     gcode_block.mode = motion_data->mode;
+    // LOG(LOG_LEVEL_DEBUG,  "pos %f %f %f mode %d", motion_data->position.x, motion_data->position.y, motion_data->position.z, gcode_block.mode);
     // 行号
     gcode_block.line_number = *line_no;
     // 暂停时间

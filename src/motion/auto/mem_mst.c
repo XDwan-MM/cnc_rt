@@ -12,7 +12,6 @@ static void nc_output_mf();
 static void nc_check_fin();
 static void nc_clear_msignal();
 static void mcode_data_mend();
-static void mcode_handle_reset();
 
 static void mcode_set_state(){
     switch(rt_data->nc_event){
@@ -46,7 +45,9 @@ void execute_mcode(){
         nc_check_fin();
         break;
     case MCODE_EXECUTE_RESET:
-        mcode_handle_reset();
+        nc_output_mf();
+        nc_check_fin();
+        if(mcode_data->mcode_size == 0) mcode_data->mcode_state = MCODE_EXECUTE_IDLE;
         break;
     case MCODE_EXECUTE_IDLE:
     default:
@@ -89,21 +90,18 @@ static void nc_deal_mcode(){
             break;
         case M03: // 主轴正转
             setRegValue8(REG_F, 10, 0x03); 
-            spl_data.spl_event = SPINDLE_EVENT_CW;
             spl_data.emot_speed = mcode_data->mcode_block[i].spindle.speed;
             spl_data.mcp_target_speed = mcode_data->mcode_block[i].spindle.speed;
             spl_data.mcode_feedback = false;
             break;
         case M04: // 主轴反转
             setRegValue8(REG_F, 10, 0x04); 
-            spl_data.spl_event = SPINDLE_EVENT_CCW;
             spl_data.emot_speed = -1.0 * mcode_data->mcode_block[i].spindle.speed;
             spl_data.mcp_target_speed = mcode_data->mcode_block[i].spindle.speed;
             spl_data.mcode_feedback = false;
             break;
         case M05: // 主轴停止
-            setRegValue8(REG_F, 10, 0x05); 
-            spl_data.spl_event = SPINDLE_EVENT_STOP;
+            setRegValue8(REG_F, 10, 0x05);
             spl_data.emot_speed = 0;
             spl_data.mcode_feedback = false;
             break;
@@ -261,7 +259,7 @@ static void mcode_data_mend(){
     rt_set_chan_state(0, CHAN_IS_MCODE_END, true);
 }
 
-static void mcode_handle_reset(){
+void mcode_handle_reset(){
     nc_clear_msignal();
     mcode_data_mend();
     mcode_data->mcode_state = MCODE_EXECUTE_IDLE;
