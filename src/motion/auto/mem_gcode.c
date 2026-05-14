@@ -41,6 +41,7 @@ static void block_cal_lookahead_vel(PLAN_BLOCK* current_block);
 static GNC_RES vp_cal_g04_vel_profile(VELPLAN_TYPE velplan_type, PLAN_BLOCK* plan_block, VEL_PROFILE* vel_profile, double cycle_time);
 static GNC_RES vp_cal_g04_pause_profile(VELPLAN_TYPE velplan_type, PLAN_BLOCK* plan_block, VEL_PROFILE* vel_profile, double cycle_time);
 
+
 // G指令执行流程：处理开始和暂停 → 计算插补距离 → 计算插补空间坐标
 void execute_gcode(){
     double current_vel = var_chan[0][VAR_CHAN_CMD_FEEDRATE].value.f / TIME_MINUS_2_S;
@@ -126,6 +127,18 @@ static void mem_set_state(){
                 setVarChanInt(0, VAR_CHAN_IS_MOVING, 1, 0);
             }
             break;
+        
+        case SYS_EVENT_PAUSE:
+            LOG(LOG_LEVEL_INFO, "自动模式处理暂停");
+            if(cycle_tp->mem_exec_state == EXEC_RUNNING){
+                // 攻丝方式下进给暂停无效
+                if(!queue_is_empty(plan_queue)){
+                    if(cycle_tp->plan_block->mode == PMC_MODE_TAP) break;
+                }
+                cycle_tp->mem_exec_state = EXEC_PAUSING;
+                cycle_tp->is_event_trigger = true;
+            }
+            break;
 
         case SYS_EVENT_FEED_OVERRIDE:
             LOG(LOG_LEVEL_INFO, "自动模式处理进给倍率切换");
@@ -137,8 +150,10 @@ static void mem_set_state(){
             }
             if(cycle_tp->mem_exec_state == EXEC_RUNNING){
                 if(!queue_is_empty(plan_queue)){
+                    if(cycle_tp->plan_block->mode == PMC_MODE_PAUSE) break;
                     if(cycle_tp->plan_block->mode != PMC_MODE_TAP && cycle_tp->plan_block->type != RAPID){
-                        cycle_tp->max_vel = cycle_tp->plan_block->feed_vel * var_chan[0][VAR_CHAN_FEED_OVERRIDE].value.f / OVERRIDE_PERCENT;
+                        if(rt_get_sys_state(SYS_IS_DRY_RUN)) cycle_tp->max_vel = par_chan[0][PAR_CH_DRYRUN_SPD].value.val_real * var_chan[0][VAR_CHAN_FEED_OVERRIDE].value.f / OVERRIDE_PERCENT;
+                        else cycle_tp->max_vel = cycle_tp->plan_block->feed_vel * var_chan[0][VAR_CHAN_FEED_OVERRIDE].value.f / OVERRIDE_PERCENT;
                         cycle_tp->is_event_trigger = true;
                     }
                 }
@@ -155,23 +170,58 @@ static void mem_set_state(){
             }
             if(cycle_tp->mem_exec_state == EXEC_RUNNING){
                 if(!queue_is_empty(plan_queue)){
+                    if(cycle_tp->plan_block->mode == PMC_MODE_PAUSE) break;
                     if(cycle_tp->plan_block->mode != PMC_MODE_TAP && cycle_tp->plan_block->type == RAPID){
-                        cycle_tp->max_vel = cycle_tp->plan_block->feed_vel * var_chan[0][VAR_CHAN_RAPID_OVERRIDE].value.f / OVERRIDE_PERCENT;
+                        if(rt_get_sys_state(SYS_IS_DRY_RUN)) cycle_tp->max_vel = par_chan[0][PAR_CH_DRYRUN_SPD].value.val_real * var_chan[0][VAR_CHAN_RAPID_OVERRIDE].value.f / OVERRIDE_PERCENT;
+                        else cycle_tp->max_vel = cycle_tp->plan_block->feed_vel * var_chan[0][VAR_CHAN_RAPID_OVERRIDE].value.f / OVERRIDE_PERCENT;
                         cycle_tp->is_event_trigger = true;
                     };
                 }
             }
             break;
-        
-        case SYS_EVENT_PAUSE:
-            LOG(LOG_LEVEL_INFO, "自动模式处理暂停");
+
+        case SYS_EVENT_DRY_RUN_ON:
+            LOG(LOG_LEVEL_INFO, "自动模式处理开启空运行");
             if(cycle_tp->mem_exec_state == EXEC_RUNNING){
-                // 攻丝方式下进给暂停无效
                 if(!queue_is_empty(plan_queue)){
-                    if(cycle_tp->plan_block->mode == PMC_MODE_TAP) break;
+                    if(cycle_tp->plan_block->mode == PMC_MODE_PAUSE) break;
+                    if(cycle_tp->plan_block->type == RAPID){
+                        cycle_tp->max_vel = par_chan[0][PAR_CH_DRYRUN_SPD].value.val_real * var_chan[0][VAR_CHAN_RAPID_OVERRIDE].value.f / OVERRIDE_PERCENT;                       
+                    }else{
+                        cycle_tp->max_vel = par_chan[0][PAR_CH_DRYRUN_SPD].value.val_real * var_chan[0][VAR_CHAN_FEED_OVERRIDE].value.f / OVERRIDE_PERCENT;
+                    }
+                    cycle_tp->is_event_trigger = true;
                 }
-                cycle_tp->mem_exec_state = EXEC_PAUSING;
-                cycle_tp->is_event_trigger = true;
+            }
+            break;
+
+        // case SYS_EVENT_SINGLE_BLOCK_ON:
+        //     LOG(LOG_LEVEL_INFO, "自动模式处理开启单段");
+        //     cycle_tp->is_ve_zero = false;
+        //     if(cycle_tp->mem_exec_state == EXEC_RUNNING){
+        //         if(!queue_is_empty(plan_queue)){
+        //             if(cycle_tp->plan_block->mode == PMC_MODE_PAUSE) break;
+        //             if(cycle_tp->plan_block->mode != PMC_MODE_TAP){
+        //                 cycle_tp->max_vel = 0;
+        //                 cycle_tp->is_event_trigger = true;
+        //             };
+        //         }
+        //     }
+        //     break;
+        
+        case SYS_EVENT_DRY_RUN_OFF:
+        // case SYS_EVENT_SINGLE_BLOCK_OFF:
+            LOG(LOG_LEVEL_INFO, "自动模式处理关闭空运行");
+            if(cycle_tp->mem_exec_state == EXEC_RUNNING){
+                if(!queue_is_empty(plan_queue)){
+                    if(cycle_tp->plan_block->mode == PMC_MODE_PAUSE) break;
+                    if(cycle_tp->plan_block->type == RAPID){
+                        cycle_tp->max_vel = cycle_tp->plan_block->feed_vel * var_chan[0][VAR_CHAN_RAPID_OVERRIDE].value.f / OVERRIDE_PERCENT;
+                    }else{
+                        cycle_tp->max_vel = cycle_tp->plan_block->feed_vel * var_chan[0][VAR_CHAN_FEED_OVERRIDE].value.f / OVERRIDE_PERCENT;
+                    }
+                    cycle_tp->is_event_trigger = true;
+                }
             }
             break;
 
@@ -211,10 +261,12 @@ static double mem_cal_pinc(VELPLAN_TYPE velplan_mode, double ncu_cycle, double c
             // 完成一段的插补
             if (cycle_tp_is_finished() || cycle_tp->is_event_trigger){
                 // 如果单段使能
-                if(var_chan[0][VAR_CHAN_IS_SBL].value.i){
-                    cycle_tp->mem_exec_state = EXEC_IDLE;
-                    break;
-                }
+                // if(rt_get_sys_state(SYS_IS_SINGLE_BLOCK) && cycle_tp->is_ve_zero){
+                //     cycle_tp->mem_exec_state = EXEC_PAUSING;
+                //     cycle_tp->is_ve_zero = false;
+                //     LOG(LOG_LEVEL_DEBUG, "单段下暂停");
+                //     break;
+                // }
                 res = cycle_tp_update_tp(velplan_mode, ncu_cycle, current_vel, current_pos, cycle_tp->max_vel);
                 CHECK_RES(mem_check_res(res));
                 cycle_tp->is_event_trigger = false; 
@@ -543,6 +595,9 @@ static GNC_RES cycle_tp_cal_running(VELPLAN_TYPE vplan_mode, double ncu_cycle){
     }else{
         res = vp_cal_vel_profile(vplan_mode, cycle_tp->plan_block, cycle_tp->vel_profile, ncu_cycle); // 计算速度曲线
     }
+    // 该段末速度为0
+    if(IsEqualTo(cycle_tp->vel_profile->ve, 0)) cycle_tp->is_ve_zero = true;
+    else cycle_tp->is_ve_zero = false;
     return res;
 }
 
@@ -653,6 +708,9 @@ static GNC_RES cycle_tp_look_ahead(VELPLAN_TYPE vplan_mode, double ncu_cycle, do
     // 判断是否大于最大速度
     if(cur_block->start_vel > cur_block->max_vel) cur_block->max_vel = cur_block->start_vel;
     vp_cal_bid_lookahead(vplan_mode, plan_queue, ncu_cycle);
+    // 如果无法减速到ve
+    double del_vel = vp_cal_decel_vel(vplan_mode, cur_block->start_vel, cur_block->max_acc, cur_block->max_jerk, cur_block->length);
+    if(IsGreaterThan(del_vel, cur_block->end_vel)) cur_block->end_vel = del_vel;
     // LOG(LOG_LEVEL_INFO, "2 %f %f", cur_block->length, cur_block->feed_vel);
     return GNC_CAL_SUCCESS;
 }
@@ -703,7 +761,7 @@ static void block_cal_exact_stop_vel(PLAN_BLOCK* current_block){
             double min_feed = MIN3(par_axis[0][PAR_AX_FEED_SPD].value.val_real, par_axis[1][PAR_AX_FEED_SPD].value.val_real, par_axis[2][PAR_AX_FEED_SPD].value.val_real);
             if (rt_get_sys_state(SYS_IS_DRY_RUN))
             {
-                current_block->max_vel = MIN(par_chan[0][PAR_CH_DRYRUN_SPD].value.val_real * var_chan[0][VAR_CHAN_FEED_OVERRIDE].value.f / OVERRIDE_PERCENT, min_feed);
+                current_block->max_vel = par_chan[0][PAR_CH_DRYRUN_SPD].value.val_real * var_chan[0][VAR_CHAN_FEED_OVERRIDE].value.f / OVERRIDE_PERCENT;
             }
             else{
                 current_block->max_vel = MIN(current_block->feed_vel * var_chan[0][VAR_CHAN_FEED_OVERRIDE].value.f / OVERRIDE_PERCENT, min_feed);
@@ -727,8 +785,7 @@ static void block_cal_tap_vel(PLAN_BLOCK* current_block){
             else{
                 current_block->max_vel = current_block->feed_vel;
             }
-            current_block->start_vel = 0;
-            current_block->end_vel = 0;
+            current_block->start_vel = current_block->end_vel = 0;
             break;
 
         case CIRCLE_CCW:
@@ -741,7 +798,8 @@ static void block_cal_tap_vel(PLAN_BLOCK* current_block){
             else{
                 current_block->max_vel = current_block->feed_vel;
             }
-            current_block->start_vel = current_block->end_vel = current_block->max_vel;
+            if(rt_get_sys_state(SYS_IS_SINGLE_BLOCK)) current_block->start_vel = current_block->end_vel = 0;
+            else current_block->start_vel = current_block->end_vel = current_block->max_vel;    
             break;
         default:
             break;
@@ -759,8 +817,7 @@ static void block_cal_chop_vel(PLAN_BLOCK* current_block){
             else{
                 current_block->max_vel = current_block->feed_vel * var_chan[0][VAR_CHAN_RAPID_OVERRIDE].value.f / OVERRIDE_PERCENT;
             }
-            current_block->start_vel = 0;
-            current_block->end_vel = 0;
+            current_block->start_vel = current_block->end_vel = 0;
             break;
 
         case CIRCLE_CCW:
@@ -769,12 +826,13 @@ static void block_cal_chop_vel(PLAN_BLOCK* current_block){
             double min_feed = MIN3(par_axis[0][PAR_AX_FEED_SPD].value.val_real, par_axis[1][PAR_AX_FEED_SPD].value.val_real, par_axis[2][PAR_AX_FEED_SPD].value.val_real);
             if (rt_get_sys_state(SYS_IS_DRY_RUN))
             {
-                current_block->max_vel = MIN(par_chan[0][PAR_CH_DRYRUN_SPD].value.val_real * var_chan[0][VAR_CHAN_FEED_OVERRIDE].value.f / OVERRIDE_PERCENT, min_feed);
+                current_block->max_vel = par_chan[0][PAR_CH_DRYRUN_SPD].value.val_real * var_chan[0][VAR_CHAN_FEED_OVERRIDE].value.f / OVERRIDE_PERCENT;
             }
             else{
                 current_block->max_vel = MIN(current_block->feed_vel * var_chan[0][VAR_CHAN_FEED_OVERRIDE].value.f / OVERRIDE_PERCENT, min_feed);
             }
-            current_block->start_vel = current_block->end_vel = current_block->max_vel;
+            if(rt_get_sys_state(SYS_IS_SINGLE_BLOCK)) current_block->start_vel = current_block->end_vel = 0;
+            else current_block->start_vel = current_block->end_vel = current_block->max_vel;  
             break;
         default:
             break;

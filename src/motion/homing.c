@@ -3,6 +3,7 @@
 #include "global.h"
 #include <hmisysapi.h>
 #include <alarmapi.h>
+#include "stored_stroke_check.h"
 
 static void homing_set_state();
 static void homing_is_all_homed();
