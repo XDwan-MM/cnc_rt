@@ -2,8 +2,8 @@
  * @file pmc_output_handler.c
  */
 #include "pmc_output_handler.h"
-#include "regapi.h"  /* 引入寄存器访问 API */
-#include "regdata.h" /* 引入 RegType 定义 */
+#include "regapi.h"
+#include "regdata.h"
 #include "global.h"
 #include <hmisysapi.h>
 #include "spl_control.h"

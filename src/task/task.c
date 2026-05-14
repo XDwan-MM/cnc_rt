@@ -3,7 +3,7 @@
 #include <hmisysapi.h>
 #include <alarmapi.h>
 #include <stdlib.h>
-#include "regapi.h"   /* 引入寄存器访问 API */
+#include "regapi.h"
 #include "global.h"
 #include "spl_control.h"
 
@@ -16,12 +16,12 @@ GNC_RES task_mq_init(){
     return event_queue_init(event_queue);
 }
 
-// 消息队列处理（放在任务线程中调用循环）
+// 消息队列处理
 GNC_RES task_mq_proc()
 {
     if(event_queue_is_empty(event_queue)) return GNC_DATA_EMPTY;
     if(event_queue_is_full(event_queue)){
-        // LOG(LOG_LEVEL_ERR, "事件队列已满");
+        LOG(LOG_LEVEL_ERR, "事件队列已满");
         // setAlarm(ALARM_SY, ALARM_ERROR, 0);
         // return GNC_OPERATOR_ERROR;
     }
@@ -29,8 +29,6 @@ GNC_RES task_mq_proc()
     task_handle_pmc_event(&event_data);
     return GNC_OPERATOR_SUCCESS;
 }
-
-const char* mode[] = {"编辑", "记忆", "MDI", "JOG", "手轮", "回零", "DNC", "未知"};
 
 static GNC_RES task_handle_pmc_event(PMC_EVENT* event_data)
 {
@@ -226,18 +224,23 @@ static GNC_RES task_handle_pmc_event(PMC_EVENT* event_data)
         switch(event_data->enable_payload.enable_key){
             case BLOCK_SKIP:
                 rt_data->sys_state[SYS_IS_BLOCK_SKIP] = event_data->enable_payload.enable_state;
+                LOG(LOG_LEVEL_INFO, "处理跳段事件");
                 break;
             case SINGLE_BLOCK:
                 rt_data->sys_state[SYS_IS_BLOCK_SKIP] = event_data->enable_payload.enable_state;
+                LOG(LOG_LEVEL_INFO, "处理单程序段事件");
                 break;
             case DRY_RUN:
                 rt_data->sys_state[SYS_IS_SINGLE_BLOCK] = event_data->enable_payload.enable_state;
+                LOG(LOG_LEVEL_INFO, "处理空运行事件");
                 break;
             case MAC_LOCK:
                 rt_data->sys_state[SYS_IS_MAC_LOCK] = event_data->enable_payload.enable_state;
+                LOG(LOG_LEVEL_INFO, "处理机床锁住事件");
                 break;
             case MSBT_LOCK:
                 rt_data->sys_state[SYS_IS_MSBT_LOCK] = event_data->enable_payload.enable_state;
+                LOG(LOG_LEVEL_INFO, "处理辅助功能锁住事件");
                 break;   
             default:
                 break; 

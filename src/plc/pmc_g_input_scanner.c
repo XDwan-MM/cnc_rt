@@ -260,12 +260,6 @@ void pmc_g_input_scan_cycle(void)
         LOG(LOG_LEVEL_INFO, "扫描到G70.6 发生上升沿");
     }
 
-    /* M代码FIN G4.3 */
-    // if (SIGNAL_RISING(curr_g.g_regs[4], last_g.g_regs[4], 3))
-    // {
-    //     LOG(LOG_LEVEL_INFO, "扫描到G4.3 发生上升沿");
-    // }
-
     /* 可选程序段跳过 G44.0 */
     if (SIGNAL_RISING(curr_g.g_regs[44], last_g.g_regs[44], 0))
     {

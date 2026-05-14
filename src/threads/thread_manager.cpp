@@ -10,6 +10,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <hmisysapi.h>
 
 void print_thread_info(const char* thread_name) {
     pthread_t self = pthread_self();
@@ -87,34 +88,34 @@ int create_managed_thread(managed_thread_t* thread) {
     int ret;
 
     if (!thread || !thread->function) {
-        fprintf(stderr, "错误: 线程配置或函数指针为空。\n");
+        LOG(LOG_LEVEL_ERR, "错误: 线程配置或函数指针为空。\n");
         return -1;
     }
 
     // 初始化线程属性
     ret = pthread_attr_init(&attr);
     if (ret) {
-        fprintf(stderr, "[%s] pthread_attr_init 失败: %s\n", thread->config.thread_name, strerror(ret));
+        LOG(LOG_LEVEL_ERR, "[%s] pthread_attr_init 失败: %s\n", thread->config.thread_name, strerror(ret));
         return -1;
     }
     // 设置调度策略继承方式 (必须显式设置，否则 setschedpolicy 可能无效)
     ret = pthread_attr_setinheritsched(&attr, PTHREAD_EXPLICIT_SCHED);
     if (ret) {
-        fprintf(stderr, "[%s] pthread_attr_setinheritsched 失败: %s\n", thread->config.thread_name, strerror(ret));
+        LOG(LOG_LEVEL_ERR, "[%s] pthread_attr_setinheritsched 失败: %s\n", thread->config.thread_name, strerror(ret));
         goto error_cleanup;
     }
 
     // 设置调度策略
     ret = pthread_attr_setschedpolicy(&attr, thread->config.policy);
     if (ret) {
-        fprintf(stderr, "[%s] pthread_attr_setschedpolicy 失败: %s (提示: 实时策略可能需要 sudo)\n", thread->config.thread_name, strerror(ret));
+        LOG(LOG_LEVEL_ERR, "[%s] pthread_attr_setschedpolicy 失败: %s (提示: 实时策略可能需要 sudo)\n", thread->config.thread_name, strerror(ret));
         goto error_cleanup;
     }
     // 设置优先级
     param.sched_priority = thread->config.priority;
     ret = pthread_attr_setschedparam(&attr, &param);
     if (ret) {
-        fprintf(stderr, "[%s] pthread_attr_setschedparam 失败: %s\n", thread->config.thread_name, strerror(ret));
+        LOG(LOG_LEVEL_ERR, "[%s] pthread_attr_setschedparam 失败: %s\n", thread->config.thread_name, strerror(ret));
         goto error_cleanup;
     }
 
@@ -125,17 +126,17 @@ int create_managed_thread(managed_thread_t* thread) {
         CPU_SET(thread->config.core_id, &cpuset);
         ret = pthread_attr_setaffinity_np(&attr, sizeof(cpu_set_t), &cpuset);
         if (ret) {
-            fprintf(stderr, "[%s] pthread_attr_setaffinity_np 失败: %s\n", thread->config.thread_name, strerror(ret));
+            LOG(LOG_LEVEL_ERR, "[%s] pthread_attr_setaffinity_np 失败: %s\n", thread->config.thread_name, strerror(ret));
             goto error_cleanup;
         }
     }
     // 创建线程
     ret = pthread_create(&thread->id, &attr, thread->function, thread);
     if (ret) {
-        fprintf(stderr, "[%s] pthread_create 失败: %s\n", thread->config.thread_name, strerror(ret));
+        LOG(LOG_LEVEL_ERR, "[%s] pthread_create 失败: %s\n", thread->config.thread_name, strerror(ret));
         goto error_cleanup;
     }
-    printf("[Main] 线程 [%s] 创建成功 -> 核心: %d, 策略: %d, 优先级: %d\n", thread->config.thread_name, thread->config.core_id, thread->config.policy, thread->config.priority);
+    // LOG(LOG_LEVEL_INFO, "创建线程[%s] -> 核心: %d, 策略: %d, 优先级: %d", thread->config.thread_name, thread->config.core_id, thread->config.policy, thread->config.priority);
 
     pthread_attr_destroy(&attr);
     return 0;
