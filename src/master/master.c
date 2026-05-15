@@ -186,7 +186,6 @@ void Master_Run()
         sem_wait(&moton_sem_exec_done);
         op_flag = 1;
 
-
         //复位清除驱动器报警
         if(reset_sem)
         {
@@ -321,7 +320,7 @@ void Master_Run()
 
     }
 err_close:
-    printf("pdo线程不正常退出");
+    LOG(LOG_LEVEL_ERR, "pdo线程不正常退出");
     exit_flag = 1;
 }
 

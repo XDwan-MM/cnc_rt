@@ -16,6 +16,7 @@
 #include "master.h"
 #include <QFile>
 #include <QTextStream>
+#include <hmisysapi.h>
 #ifdef DEBUG_MODE_ENABLED
 #include "keyboard.h"
 #endif
@@ -25,6 +26,7 @@ static int get_hmi_version(char *version, size_t version_size);
 
 // Ctrl + C 终止程序触发
 void sigint_handler([[maybe_unused]] int sig) {
+    LOG(LOG_LEVEL_INFO, "收到 Ctrl + C 按键信号");
     exit_flag = 1;
 }
 
@@ -45,7 +47,7 @@ void printMode() {
     printf("\n");
 }
 
-int main() {
+int main() {  
     // 打印当前模式
     printMode();
     // 打印版本信息
@@ -53,32 +55,37 @@ int main() {
     get_hmi_version(version, sizeof(version));
     // 初始化共享内存
     if(!shmInit()) {
-        printf("[start] 共享内存初始化失败\n");
+        LOG(LOG_LEVEL_ERR, "共享内存初始化失败");
         return -1;
     } else  {
         errno = 0;
+        LOG(LOG_LEVEL_INFO, "启动实时程序");
+        LOG(LOG_LEVEL_INFO, "初始化共享内存");
     }
     // 初始化实时全局变量
     if(rt_global_init() != GNC_OPERATOR_SUCCESS){
-        printf("[start] 全局变量初始化失败\n");
+        LOG(LOG_LEVEL_ERR, "全局变量初始化失败");
         return -1;
     };
+    LOG(LOG_LEVEL_INFO, "初始化全局变量");
     // 初始化译码器
     parser_new();
+    LOG(LOG_LEVEL_INFO, "初始化译码器");
     // 初始化硬件抽象层
     Hal_Driver_Manager_Init();
     Hal_Driver_Array_Init();
     Hal_Io_Array_Init();
+    LOG(LOG_LEVEL_INFO, "初始化硬件抽象层");
     //初始化行程检查功能
     Axis_Limit_Manager_Init();
     signal(SIGINT, sigint_handler);
     // 启动主站
 #ifndef DEBUG_MODE_ENABLED
     if (Master_Start() < 0) {
-        printf("\n[严重错误] EtherCAT 主站启动失败！程序将终止。\n");
-        printf("原因: 可能是 DMA 驱动未加载 (/dev/Gree_DMA0...) 或 XML 路径错误。\n");
+        LOG(LOG_LEVEL_ERR, "EtherCAT主站启动失败，请检查ENI文件是否正确");
         return -1; // 直接退出，不再启动线程
     }
+    LOG(LOG_LEVEL_INFO, "启动EtherCAT主站");
 #else // 模拟时不启动主站
     if (init_keyboard() < 0) {
         fprintf(stderr, "键盘初始化失败\n");
@@ -89,13 +96,14 @@ int main() {
     init_rt_sem();
     // 启动各个线程，pdo线程运行master_run，给各实时线程发送信号量
     if (threads_start()) {
-        printf("\n[start] 线程创建失败，主线程退出。\n");
+        LOG(LOG_LEVEL_ERR, "线程创建失败");
         exit(1);
     }
+    LOG(LOG_LEVEL_INFO, "创建所有线程成功");
     while (!exit_flag) {
         sleep(1);
     }
-    printf("\n[exit] 收到退出信号，正在关闭线程...\n");
+    LOG(LOG_LEVEL_INFO, "收到退出信号，关闭线程");
     // 唤醒所有阻塞在信号量上的线程，让它们能够检查 exit_flag 并退出
     for (int i = 0; i < 3; i++) {
         post_rt_sem_all();
@@ -106,10 +114,10 @@ int main() {
     // 关闭主站
     int error_code = ethercat_close();
     if ( error_code < 0) {
-        printf("[Warning] EtherCAT 关闭失败，错误码为 %d ！\n", error_code);
+        LOG(LOG_LEVEL_ERR, "关闭EtherCAT失败，错误码 %d", error_code);
         return -1;
     }
-    printf("[exit] 程序正常退出\n");
+    LOG(LOG_LEVEL_INFO, "退出实时程序");
     return 0;
 }
 
@@ -171,13 +179,14 @@ static int get_hmi_version(char *version, size_t version_size) {
         } else {
             strcpy(version, start_ptr);
         }
-        printf("软件版本号：%s\n", version);
+        // LOG(LOG_LEVEL_INFO, "实时版本号：%s", version);
+        printf("实时版本号：%s\n", version);
         return 0;
     } else {
         // 6. 处理错误情况
         strncpy(version, "(版本号错误)", version_size - 1);
         version[version_size - 1] = '\0';
-        printf("软件版本号：%s\n", version);
+        printf("实时版本号：%s\n", version);
         return 0; // 虽然内容错误，但函数执行流程完成，返回 0 表示逻辑走完了，或者根据需求返回 -1
     }
 }
