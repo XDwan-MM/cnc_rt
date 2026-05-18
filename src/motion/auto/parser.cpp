@@ -48,6 +48,7 @@ void parser_new(){
     // 设置译码参数
     parser_macro_init();
     parser_data->parser_state = PARSER_IDLE;
+    rt_set_parser_state(-1);
 }
 
 GNC_RES parser_init(NC_MODE nc_mode)
@@ -73,6 +74,7 @@ GNC_RES parser_init(NC_MODE nc_mode)
     // 将GM指令设置为已完成
     rt_set_chan_state(0, CHAN_IS_GCODE_END, true);
     rt_set_chan_state(0, CHAN_IS_MCODE_END, true);
+    rt_set_parser_state(-1);
     return res;
 }
 
@@ -237,13 +239,14 @@ GNC_RES parser_reading(){
     ItpGetMotionData(&parser_data->itp_datas);
     ItpGetState(&parser_data->itp_state);
     ItpGetLineNumber(&parser_data->itp_line_no);
-    if (parser_data->itp_datas.count > PARSER_BUF_SIZE) return GNC_CAL_ERROR;
+    if (parser_data->itp_datas.count > PARSER_BUF_SIZE) return GNC_PARSER_OVER;
     int error_no = ItpError();
+    rt_set_parser_state(error_no);
     if (error_no >= 0)
     {
-        setAlarm(ALARM_PS, ALARM_ERROR, error_no);
-        LOG(LOG_LEVEL_ERR, "译码错误 %d", error_no);
-        return GNC_CAL_ERROR;
+        // setAlarm(ALARM_PS, ALARM_ERROR, error_no);
+        // LOG(LOG_LEVEL_ERR, "译码错误 %d", error_no);
+        return GNC_PARSER_OVER;
     }
     if (parser_data->itp_datas.count <= 0)
     {
@@ -349,8 +352,9 @@ STATIC bool parser_check_res(GNC_RES res){
         default:
             parser_data->parser_state = PARSER_IDLE;
             // todo：译码出错让运动暂停后报警，而不是直接进入报警
-            LOG(LOG_LEVEL_ERR, "译码报警 %d", res);
-            setAlarm(ALARM_CH, ALARM_ERROR, 2);
+            // LOG(LOG_LEVEL_ERR, "译码报警 %d", res);
+            // setAlarm(ALARM_CH, ALARM_ERROR, 2);
+            // rt_set_parser_state(res);
             parser_reset();
             return false;
     }

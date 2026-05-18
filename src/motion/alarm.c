@@ -16,7 +16,7 @@ void handle_estop_cmd(){
         // 复位状态：1.急停信号ESP
         nc_set_resetting();
         // 重置各个模式
-        mem_handle_estop();
+        auto_handle_estop();
         homing_handle_estop();
         jog_handle_estop();
         LOG(LOG_LEVEL_INFO, "处理按下急停");
@@ -50,6 +50,8 @@ void handle_alarm_cmd(){
             Axis_Limit_Manager_Init();
             // 复位清除跟随误差报警标志
             reset_ferror_control();
+            // 清除译码器状态
+            rt_set_parser_state(-1);
             LOG(LOG_LEVEL_INFO, "报警已清除");
             break;
         case SYS_EVENT_RERUN:

@@ -263,12 +263,6 @@ GNC_RES shm_var_update(){
     }
 }
 
-GNC_RES shm_var_update_prog(){
-    // 运行行号
-    setVarChanInt(0, VAR_CHAN_RUN_ROW, cycle_tp->plan_block->line_number, 0);
-    return GNC_OPERATOR_SUCCESS;
-}
-
 // todo：待删除
 // static GNC_RES shm_par_init(){
 //     ParamUnit par_union = {};

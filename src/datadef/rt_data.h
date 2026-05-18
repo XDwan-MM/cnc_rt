@@ -102,10 +102,13 @@ typedef struct {
     RT_AXIS axis_data[SYS_AXES_NUM];
     RT_CHAN chan_data[SYS_CHAN_NUM];
     pthread_mutex_t mutex;
+    int parser_errorno;
 } RT_DATA;
 
 GNC_RES rt_data_init(void);
 GNC_RES rt_data_reset(void);
+void rt_set_parser_state(int value);
+int rt_get_parser_state();
 void rt_set_sys_state(SysStateIndex state, bool value);
 bool rt_get_sys_state(SysStateIndex state);
 void rt_set_chan_state(int chan_index, ChanStateIndex state, bool value);

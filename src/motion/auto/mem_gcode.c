@@ -76,15 +76,13 @@ static void mem_set_state(){
             if(cycle_tp->mem_exec_state == EXEC_RUNNING){
                 cycle_tp->mem_exec_state = EXEC_PAUSING;
                 cycle_tp->is_event_trigger = true;
-                // 如果为M02或M30
-                if(cycle_tp->mcode == M02) cycle_tp->run_row_reset = false;
-                else cycle_tp->run_row_reset = true;
                 cycle_tp->is_resetting = 1;
             }else if(cycle_tp->mem_exec_state == EXEC_PAUSING){
                 cycle_tp->is_resetting = 1;
             }else if(cycle_tp->mem_exec_state == EXEC_IDLE){
                 setVarChanInt(0, VAR_CHAN_RUN_ROW, 0, 0);
             }
+            cycle_tp->run_row_reset = true;
             // 通知译码复位
             rt_set_chan_state(0, CHAN_IS_PARSER_RESET, true);
             break;
@@ -106,7 +104,6 @@ static void mem_set_state(){
             if(cycle_tp->mem_exec_state == EXEC_IDLE){
                 cycle_tp->mem_exec_state = EXEC_RUNNING;
                 cycle_tp->is_event_trigger = true;
-                cycle_tp->run_row_reset = true;
                 setVarChanInt(0, VAR_CHAN_IS_RUNNING, 1, 0);
                 setVarChanInt(0, VAR_CHAN_IS_MOVING, 1, 0);
                 // 重置
@@ -122,10 +119,10 @@ static void mem_set_state(){
             else if(cycle_tp->mem_exec_state == EXEC_PAUSING && !cycle_tp->is_resetting){
                 cycle_tp->mem_exec_state = EXEC_RUNNING;
                 cycle_tp->is_event_trigger = true;
-                cycle_tp->run_row_reset = true;
                 setVarChanInt(0, VAR_CHAN_IS_RUNNING, 1, 0);
                 setVarChanInt(0, VAR_CHAN_IS_MOVING, 1, 0);
             }
+            cycle_tp->run_row_reset = false;
             break;
         
         case SYS_EVENT_PAUSE:
@@ -270,7 +267,6 @@ static double mem_cal_pinc(VELPLAN_TYPE velplan_mode, double ncu_cycle, double c
                 res = cycle_tp_update_tp(velplan_mode, ncu_cycle, current_vel, current_pos, cycle_tp->max_vel);
                 CHECK_RES(mem_check_res(res));
                 cycle_tp->is_event_trigger = false; 
-                shm_var_update_prog();
             }
             res = cycle_tp_update_params(velplan_mode, ncu_cycle);
             CHECK_RES(mem_check_res(res));
@@ -297,7 +293,6 @@ static double mem_cal_pinc(VELPLAN_TYPE velplan_mode, double ncu_cycle, double c
                     CHECK_RES(mem_check_res(res));
                 }
                 cycle_tp->is_event_trigger = false; 
-                shm_var_update_prog();
             }
             res = cycle_tp_update_params(velplan_mode, ncu_cycle);
             CHECK_RES(mem_check_res(res));
@@ -344,9 +339,17 @@ static bool mem_check_res(GNC_RES res){
             }
             return false;
         }
-        // 加工计数
-        setVarChanInt(0, VAR_CHAN_PART_CNTR, var_chan[0][VAR_CHAN_PART_CNTR].value.i + 1, 0);
-        LOG(LOG_LEVEL_INFO, "加工计数 %d", var_chan[0][VAR_CHAN_PART_CNTR].value.i);
+        // 
+        int error_no = rt_get_parser_state();
+        if(error_no >= 0){
+            int res = setAlarm(ALARM_PS, ALARM_ERROR, error_no);
+            if(res == -8) return false;
+            LOG(LOG_LEVEL_ERR, "译码错误 %d", error_no);
+        }else{
+            // 加工计数
+            setVarChanInt(0, VAR_CHAN_PART_CNTR, var_chan[0][VAR_CHAN_PART_CNTR].value.i + 1, 0);
+            LOG(LOG_LEVEL_INFO, "加工计数 %d", var_chan[0][VAR_CHAN_PART_CNTR].value.i);
+        }
         mem_handle_reset();
         LOG(LOG_LEVEL_INFO, "程序运行结束");
         return false;
@@ -534,7 +537,10 @@ static GNC_RES cycle_tp_update_block(VELPLAN_TYPE vplan_mode, double ncu_cycle, 
     }
     if(res == GNC_DATA_EMPTY) return GNC_DATA_EMPTY;
     if(cycle_tp_look_ahead(vplan_mode, ncu_cycle, current_vel) == GNC_DATA_EMPTY) return GNC_DATA_EMPTY;
+    // 更新当前行信息
     queue_copy_block(plan_queue, 0, cycle_tp->plan_block);
+    setVarChanInt(0, VAR_CHAN_RUN_ROW, cycle_tp->plan_block->line_number, 0);
+    LOG(LOG_LEVEL_INFO, "gline: %d", cycle_tp->plan_block->line_number);
     // 对插补段终点进行行程限位检查
     lookahead_check_soft_limit(&cycle_tp->plan_block->end_pos);
     return res;
@@ -575,7 +581,6 @@ static GNC_RES plan_block_get_update(double current_vel, POS current_pos){
     head_block->start_vel = current_vel;
     block_cal_vector(head_block);
     block_cal_length(head_block);
-    setVarChanInt(0, VAR_CHAN_RUN_ROW, head_block->line_number, 0);
     // 如果长度小于阈值
     if(IsLessThanOrEqual(head_block->length, MEM_END_TOL)) res = plan_block_get_next();
     return res;
@@ -666,8 +671,7 @@ static bool cycle_block_is_arrived(POS current_pos){
 
 static GNC_RES cycle_tp_add_block(){
     PLAN_BLOCK* pretreat_block;
-    PLAN_BLOCK* cur_block;
-    PLAN_BLOCK* pre_block;
+    PLAN_BLOCK* plan_block;
     // 拷贝 pretreat_queue 的数据
     for(int i = 0; i < LOOK_AHEAD_SIZE; i++){
         // 如果前瞻队列已满，提前结束
@@ -677,7 +681,10 @@ static GNC_RES cycle_tp_add_block(){
         pretreat_block = queue_peak(pretreat_queue);
         // 如果长度为0，删除该段
         if(IsLessThanOrEqual(pretreat_block->length, 0) && pretreat_block->mode != PMC_MODE_PAUSE) {
-            setVarChanInt(0, VAR_CHAN_RUN_ROW, pretreat_block->line_number, 0);
+            if(!queue_is_empty(plan_queue)) {
+                plan_block = queue_get_block(plan_queue, queue_get_size(plan_queue) - 1);
+                plan_block->line_number = pretreat_block->line_number;
+            }
             queue_pop(pretreat_queue);
             continue;
         }
