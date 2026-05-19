@@ -15,7 +15,6 @@ void handle_run_cmd(){
     }
     execute_mcode();
     execute_gcode();
-    // auto_check_error();
 }
 
 void auto_handle_estop(){

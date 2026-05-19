@@ -82,7 +82,6 @@ static void mem_set_state(){
             }else if(cycle_tp->mem_exec_state == EXEC_IDLE){
                 setVarChanInt(0, VAR_CHAN_RUN_ROW, 0, 0);
             }
-            cycle_tp->run_row_reset = true;
             // 通知译码复位
             rt_set_chan_state(0, CHAN_IS_PARSER_RESET, true);
             break;
@@ -122,7 +121,6 @@ static void mem_set_state(){
                 setVarChanInt(0, VAR_CHAN_IS_RUNNING, 1, 0);
                 setVarChanInt(0, VAR_CHAN_IS_MOVING, 1, 0);
             }
-            cycle_tp->run_row_reset = false;
             break;
         
         case SYS_EVENT_PAUSE:
@@ -404,7 +402,6 @@ static void mem_handle_reset(){
     setVarChanInt(0, VAR_CHAN_IS_PROGEND, 1, 0);   
     rt_set_chan_state(0, CHAN_IS_PARSERING, false);
     rt_set_chan_state(0, CHAN_IS_GCODE_END, true);
-    if(cycle_tp->run_row_reset) setVarChanInt(0, VAR_CHAN_RUN_ROW, 0, 0);
 }
 
 static void mem_handle_alarm(){
@@ -447,7 +444,6 @@ void cycle_tp_init(){
     cycle_tp->traj_data = (TRAJ_PARAMS*)calloc(sizeof(TRAJ_PARAMS), 1);
     cycle_tp->plan_block->type = UNKNOWN;
     cycle_tp->is_event_trigger = false;
-    cycle_tp->run_row_reset = true;
     cycle_tp->interp_cycle = 1;
     cycle_tp->is_paused_inside_block = true;
 }

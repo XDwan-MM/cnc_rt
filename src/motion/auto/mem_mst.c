@@ -82,12 +82,12 @@ static void nc_deal_mcode(){
         case M02: // 复位
             setRegValue8(REG_F, 10, 0x02); 
             setRegBit(REG_F, 9, 5);  
-            cycle_tp->mcode = M02;
+            setVarChanInt(0, VAR_CHAN_RUN_ROW, 0, 0);
             break;
         case M30: // 复位
             setRegValue8(REG_F, 10, 0x1e); 
             setRegBit(REG_F, 9, 4);  
-            cycle_tp->mcode = M30;
+            setVarChanInt(0, VAR_CHAN_RUN_ROW, 0, 0);
             break;
         case M03: // 主轴正转
             setRegValue8(REG_F, 10, 0x03); 
