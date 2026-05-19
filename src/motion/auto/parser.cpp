@@ -185,11 +185,11 @@ STATIC GNC_RES parser_handle_gcode(pmc_data* motion_data, NcItpState *itp_state,
     gcode_block.state = *itp_state;
     // 模组
     gcode_block.mode = motion_data->mode;
-    // LOG(LOG_LEVEL_DEBUG,  "pos %f %f %f mode %d", motion_data->position.x, motion_data->position.y, motion_data->position.z, gcode_block.mode);
     // 行号
     gcode_block.line_number = *line_no;
     // 暂停时间
     gcode_block.pause_time = motion_data->pause_time;
+    // LOG(LOG_LEVEL_DEBUG,  "pos %f %f %f mode %d no %d", motion_data->position.x, motion_data->position.y, motion_data->position.z, gcode_block.mode, gcode_block.line_number);
     // 加入队列
     if(gcode_queue_is_full(gcode_queue)){
         return GNC_DATA_FULL;
