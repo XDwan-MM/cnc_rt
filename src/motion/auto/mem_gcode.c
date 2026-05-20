@@ -538,8 +538,6 @@ static GNC_RES cycle_tp_update_block(VELPLAN_TYPE vplan_mode, double ncu_cycle, 
     if(cycle_tp_look_ahead(vplan_mode, ncu_cycle, current_vel) == GNC_DATA_EMPTY) return GNC_DATA_EMPTY;
     // 更新当前行信息
     queue_copy_block(plan_queue, 0, cycle_tp->plan_block);
-    setVarChanInt(0, VAR_CHAN_RUN_ROW, cycle_tp->plan_block->line_number, 0);
-    LOG(LOG_LEVEL_INFO, "gline: %d", cycle_tp->plan_block->line_number);
     // 对插补段终点进行行程限位检查
     lookahead_check_soft_limit(&cycle_tp->plan_block->end_pos);
     return res;
@@ -563,11 +561,12 @@ static GNC_RES cycle_tp_update_vp(VELPLAN_TYPE vplan_mode, double ncu_cycle, dou
 static GNC_RES plan_block_get_next(){
     PLAN_BLOCK* head_block = NULL;
     while(true){
-        queue_pop(plan_queue);
-        if(queue_is_empty(plan_queue)) return GNC_DATA_EMPTY;
         head_block = queue_peak(plan_queue);
         setVarChanInt(0, VAR_CHAN_RUN_ROW, head_block->line_number, 0);
         LOG(LOG_LEVEL_INFO, "gline: %d", head_block->line_number);
+        queue_pop(plan_queue);
+        if(queue_is_empty(plan_queue)) return GNC_DATA_EMPTY;
+        head_block = queue_peak(plan_queue);
         // 如果长度小于等于0
         if(IsGreaterThan(head_block->length, 0) || head_block->mode == PMC_MODE_PAUSE) return GNC_CAL_SUCCESS;
     }
@@ -587,6 +586,8 @@ static GNC_RES plan_block_get_update(double current_vel, POS current_pos){
     head_block->start_vel = current_vel;
     block_cal_vector(head_block);
     block_cal_length(head_block);
+    setVarChanInt(0, VAR_CHAN_RUN_ROW, head_block->line_number, 0);
+    LOG(LOG_LEVEL_INFO, "gline: %d", head_block->line_number);
     // 如果长度小于阈值
     if(IsLessThanOrEqual(head_block->length, MEM_END_TOL)) res = plan_block_get_next();
     return res;
