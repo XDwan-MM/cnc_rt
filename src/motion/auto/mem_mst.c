@@ -6,31 +6,13 @@
 #include "regapi.h"
 #include <hmisysapi.h>  
 
-static void mcode_set_state();
 static void nc_deal_mcode();
 static void nc_output_mf();
 static void nc_check_fin();
 static void nc_clear_msignal();
 static void mcode_data_mend();
 
-static void mcode_set_state(){
-    switch(rt_data->nc_event){
-        case SYS_EVENT_RESET:
-            mcode_data->mcode_state = MCODE_EXECUTE_RESET;
-            break;
-        case SYS_EVENT_RERUN:
-            mcode_data->mcode_state = MCODE_EXECUTE_RUNNING;
-            break;
-        case SYS_EVENT_PAUSE:
-            mcode_data->mcode_state = MCODE_EXECUTE_PAUSING;
-            break;
-        default:
-            break;
-    }
-}
-
-void execute_mcode(){
-    mcode_set_state();
+void auto_execute_mcode(){
     switch (mcode_data->mcode_state)
     {
     case MCODE_EXECUTE_RUNNING:

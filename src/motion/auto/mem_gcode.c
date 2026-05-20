@@ -12,12 +12,10 @@
 #include "stored_stroke_check.h"
 #include <alarmapi.h>
 
-static void mem_set_state();
 static bool mem_check_res(GNC_RES res);
 static bool mem_check_running();
 static double mem_cal_pinc(VELPLAN_TYPE velplan_mode, double ncu_cycle, double current_vel, POS current_pos);
 static void mem_handle_alarm();
-static void mem_handle_reset();
 static bool cycle_tp_is_finished();
 static void mem_cal_axis_vel(POS *current_pos, POS *target_pos, double interp_pinc, double target_vel);
 
@@ -40,18 +38,16 @@ static void block_cal_lookahead_vel(PLAN_BLOCK* current_block);
 // todo：修改位置
 static GNC_RES vp_cal_g04_vel_profile(VELPLAN_TYPE velplan_type, PLAN_BLOCK* plan_block, VEL_PROFILE* vel_profile, double cycle_time);
 static GNC_RES vp_cal_g04_pause_profile(VELPLAN_TYPE velplan_type, PLAN_BLOCK* plan_block, VEL_PROFILE* vel_profile, double cycle_time);
-
+static void check_traj_data_valid(TRAJ_PARAMS* traj_data);
 
 // G指令执行流程：处理开始和暂停 → 计算插补距离 → 计算插补空间坐标
-void execute_gcode(){
+void auto_execute_gcode(){
     double current_vel = var_chan[0][VAR_CHAN_CMD_FEEDRATE].value.f / TIME_MINUS_2_S;
     POS current_pos = {.x = var_axis[AXIS_X][VAR_AXIS_CMD_POS_EX].value.f, .y = var_axis[AXIS_Y][VAR_AXIS_CMD_POS_EX].value.f, .z = var_axis[AXIS_Z][VAR_AXIS_CMD_POS_EX].value.f};
     int velplan_mode = par_chan[0][PAR_CH_VPLAN_MODE].value.val_int;
     double ncu_cycle = (double)par_ncu[PAR_NCU_CYCLE].value.val_uint / TIME_US_2_S;
     double interp_pinc = 0;
     POS interp_pos = current_pos;
-    // 设置自动加工状态
-    mem_set_state();
     // 计算插补距离
     interp_pinc = mem_cal_pinc(velplan_mode, ncu_cycle, current_vel, current_pos);
     // 根据插补类型计算插补点：快速G00、直线G01、圆弧G02|03……
@@ -64,184 +60,6 @@ void execute_gcode(){
     rt_data->chan_data[0].cmd_acc = cycle_tp->traj_data->a;
     rt_data->chan_data[0].cmd_jk = cycle_tp->traj_data->j;
     mem_cal_axis_vel(&current_pos, &interp_pos, interp_pinc, cycle_tp->traj_data->v);
-}
-
-static void mem_set_state(){
-    switch(rt_data->nc_event){
-        case SYS_EVENT_NONE:
-            break;
-
-        case SYS_EVENT_RESET:
-            // LOG(LOG_LEVEL_INFO, "自动模式处理复位");
-            if(cycle_tp->mem_exec_state == EXEC_RUNNING){
-                cycle_tp->mem_exec_state = EXEC_PAUSING;
-                cycle_tp->is_event_trigger = true;
-                cycle_tp->is_resetting = 1;
-            }else if(cycle_tp->mem_exec_state == EXEC_PAUSING){
-                cycle_tp->is_resetting = 1;
-            }else if(cycle_tp->mem_exec_state == EXEC_IDLE){
-                setVarChanInt(0, VAR_CHAN_RUN_ROW, 0, 0);
-            }
-            // 通知译码复位
-            rt_set_chan_state(0, CHAN_IS_PARSER_RESET, true);
-            break;
-        
-        case SYS_EVENT_RERUN:
-            LOG(LOG_LEVEL_INFO, "自动模式处理自动运行");
-            if(IsEqualTo(var_chan[0][VAR_CHAN_FEED_OVERRIDE].value.f, 0)){
-                setAlarm(ALARM_SY, ALARM_WARNING, 3);
-                LOG(LOG_LEVEL_WARN, "进给倍率为0");
-            }else{
-                delAlarm(ALARM_SY, ALARM_WARNING, 3);
-            }
-            if(IsEqualTo(var_chan[0][VAR_CHAN_RAPID_OVERRIDE].value.f, 0)){
-                setAlarm(ALARM_SY, ALARM_WARNING, 2);
-                LOG(LOG_LEVEL_WARN, "快速倍率为0");
-            }else{
-                delAlarm(ALARM_SY, ALARM_WARNING, 2);
-            }
-            if(cycle_tp->mem_exec_state == EXEC_IDLE){
-                cycle_tp->mem_exec_state = EXEC_RUNNING;
-                cycle_tp->is_event_trigger = true;
-                setVarChanInt(0, VAR_CHAN_IS_RUNNING, 1, 0);
-                setVarChanInt(0, VAR_CHAN_IS_MOVING, 1, 0);
-                // 重置
-                queue_reset(plan_queue);
-                queue_reset(pretreat_queue);
-                gcode_queue_reset(gcode_queue);
-                // mcode_handle_reset();
-                // 通知译码运行，初始化译码器
-                rt_set_chan_state(0, CHAN_IS_PARSER_RERUN, true);
-                // 译码正在运行，译码结束译码器将其置false
-                rt_set_chan_state(0, CHAN_IS_PARSERING, true);
-                setVarChanInt(0, VAR_CHAN_RUN_ROW, 0, 0);
-            }
-            else if(cycle_tp->mem_exec_state == EXEC_PAUSING && !cycle_tp->is_resetting){
-                cycle_tp->mem_exec_state = EXEC_RUNNING;
-                cycle_tp->is_event_trigger = true;
-                setVarChanInt(0, VAR_CHAN_IS_RUNNING, 1, 0);
-                setVarChanInt(0, VAR_CHAN_IS_MOVING, 1, 0);
-            }
-            break;
-        
-        case SYS_EVENT_PAUSE:
-            LOG(LOG_LEVEL_INFO, "自动模式处理暂停");
-            if(cycle_tp->mem_exec_state == EXEC_RUNNING){
-                // 攻丝方式下进给暂停无效
-                if(!queue_is_empty(plan_queue)){
-                    if(cycle_tp->plan_block->mode == PMC_MODE_TAP) break;
-                }
-                cycle_tp->mem_exec_state = EXEC_PAUSING;
-                cycle_tp->is_event_trigger = true;
-            }
-            break;
-
-        case SYS_EVENT_FEED_OVERRIDE:
-            LOG(LOG_LEVEL_INFO, "自动模式处理进给倍率切换");
-            if(IsEqualTo(var_chan[0][VAR_CHAN_FEED_OVERRIDE].value.f, 0)){
-                setAlarm(ALARM_SY, ALARM_WARNING, 3);
-                LOG(LOG_LEVEL_WARN, "进给倍率为0");
-            }else{
-                delAlarm(ALARM_SY, ALARM_WARNING, 3);
-            }
-            if(cycle_tp->mem_exec_state == EXEC_RUNNING){
-                if(!queue_is_empty(plan_queue)){
-                    if(cycle_tp->plan_block->mode == PMC_MODE_PAUSE) break;
-                    if(cycle_tp->plan_block->mode != PMC_MODE_TAP && cycle_tp->plan_block->type != RAPID){
-                        if(rt_get_sys_state(SYS_IS_DRY_RUN)) cycle_tp->max_vel = par_chan[0][PAR_CH_DRYRUN_SPD].value.val_real * var_chan[0][VAR_CHAN_FEED_OVERRIDE].value.f / OVERRIDE_PERCENT;
-                        else cycle_tp->max_vel = cycle_tp->plan_block->feed_vel * var_chan[0][VAR_CHAN_FEED_OVERRIDE].value.f / OVERRIDE_PERCENT;
-                        cycle_tp->is_event_trigger = true;
-                    }
-                }
-            }
-            break;
-
-        case SYS_EVENT_RAPID_OVERRIDE:
-            LOG(LOG_LEVEL_INFO, "自动模式处理快速倍率切换 %f", var_chan[0][VAR_CHAN_RAPID_OVERRIDE].value.f);
-            if(IsEqualTo(var_chan[0][VAR_CHAN_RAPID_OVERRIDE].value.f, 0)){
-                setAlarm(ALARM_SY, ALARM_WARNING, 2);
-                LOG(LOG_LEVEL_WARN, "快速倍率为0");
-            }else{
-                delAlarm(ALARM_SY, ALARM_WARNING, 2);
-            }
-            if(cycle_tp->mem_exec_state == EXEC_RUNNING){
-                if(!queue_is_empty(plan_queue)){
-                    if(cycle_tp->plan_block->mode == PMC_MODE_PAUSE) break;
-                    if(cycle_tp->plan_block->mode != PMC_MODE_TAP && cycle_tp->plan_block->type == RAPID){
-                        if(rt_get_sys_state(SYS_IS_DRY_RUN)) cycle_tp->max_vel = par_chan[0][PAR_CH_DRYRUN_SPD].value.val_real * var_chan[0][VAR_CHAN_RAPID_OVERRIDE].value.f / OVERRIDE_PERCENT;
-                        else cycle_tp->max_vel = cycle_tp->plan_block->feed_vel * var_chan[0][VAR_CHAN_RAPID_OVERRIDE].value.f / OVERRIDE_PERCENT;
-                        cycle_tp->is_event_trigger = true;
-                    };
-                }
-            }
-            break;
-
-        case SYS_EVENT_DRY_RUN_ON:
-            LOG(LOG_LEVEL_INFO, "自动模式处理开启空运行");
-            if(cycle_tp->mem_exec_state == EXEC_RUNNING){
-                if(!queue_is_empty(plan_queue)){
-                    if(cycle_tp->plan_block->mode == PMC_MODE_PAUSE) break;
-                    if(cycle_tp->plan_block->type == RAPID){
-                        cycle_tp->max_vel = par_chan[0][PAR_CH_DRYRUN_SPD].value.val_real * var_chan[0][VAR_CHAN_RAPID_OVERRIDE].value.f / OVERRIDE_PERCENT;                       
-                    }else{
-                        cycle_tp->max_vel = par_chan[0][PAR_CH_DRYRUN_SPD].value.val_real * var_chan[0][VAR_CHAN_FEED_OVERRIDE].value.f / OVERRIDE_PERCENT;
-                    }
-                    cycle_tp->is_event_trigger = true;
-                }
-            }
-            break;
-
-        // case SYS_EVENT_SINGLE_BLOCK_ON:
-        //     LOG(LOG_LEVEL_INFO, "自动模式处理开启单段");
-        //     cycle_tp->is_ve_zero = false;
-        //     if(cycle_tp->mem_exec_state == EXEC_RUNNING){
-        //         if(!queue_is_empty(plan_queue)){
-        //             if(cycle_tp->plan_block->mode == PMC_MODE_PAUSE) break;
-        //             if(cycle_tp->plan_block->mode != PMC_MODE_TAP){
-        //                 cycle_tp->max_vel = 0;
-        //                 cycle_tp->is_event_trigger = true;
-        //             };
-        //         }
-        //     }
-        //     break;
-        
-        case SYS_EVENT_DRY_RUN_OFF:
-        // case SYS_EVENT_SINGLE_BLOCK_OFF:
-            LOG(LOG_LEVEL_INFO, "自动模式处理关闭空运行");
-            if(cycle_tp->mem_exec_state == EXEC_RUNNING){
-                if(!queue_is_empty(plan_queue)){
-                    if(cycle_tp->plan_block->mode == PMC_MODE_PAUSE) break;
-                    if(cycle_tp->plan_block->type == RAPID){
-                        cycle_tp->max_vel = cycle_tp->plan_block->feed_vel * var_chan[0][VAR_CHAN_RAPID_OVERRIDE].value.f / OVERRIDE_PERCENT;
-                    }else{
-                        cycle_tp->max_vel = cycle_tp->plan_block->feed_vel * var_chan[0][VAR_CHAN_FEED_OVERRIDE].value.f / OVERRIDE_PERCENT;
-                    }
-                    cycle_tp->is_event_trigger = true;
-                }
-            }
-            break;
-
-        case SYS_EVENT_X_POS_PRESS:
-        case SYS_EVENT_Y_POS_PRESS:
-        case SYS_EVENT_Z_POS_PRESS:
-        case SYS_EVENT_X_NEG_PRESS:
-        case SYS_EVENT_Y_NEG_PRESS:
-        case SYS_EVENT_Z_NEG_PRESS:
-            LOG(LOG_LEVEL_WARN, "自动模式不支持该操作");
-            break;
-        
-        default:
-            break;
-    }
-}
-
-static void check_traj_data_valid(TRAJ_PARAMS* traj_data){
-    if(IsLessThan(traj_data->s, 0)){
-        traj_data->s = 0;
-    }
-    if(IsLessThan(traj_data->v, 0)){
-        traj_data->v = 0;
-    }
 }
 
 // 计算插补距离
@@ -282,7 +100,7 @@ static double mem_cal_pinc(VELPLAN_TYPE velplan_mode, double ncu_cycle, double c
                 if(cycle_tp_is_finished() && cycle_tp->is_paused_inside_block){                     
                     // 复位
                     if(cycle_tp->is_resetting){
-                        mem_handle_reset();
+                        gcode_handle_reset();
                         auto_check_soft_limit_del_done();
                         LOG(LOG_LEVEL_DEBUG, "完成复位");
                     }else{
@@ -318,7 +136,7 @@ static bool mem_check_res(GNC_RES res){
     
     case VP_MAX_VEL_IS_ZERO:
         if(cycle_tp->is_resetting){
-            mem_handle_reset();
+            gcode_handle_reset();
             return false;
         }
         // 如果进给倍率为0
@@ -330,7 +148,7 @@ static bool mem_check_res(GNC_RES res){
 
     case GNC_DATA_EMPTY:
         if(cycle_tp->is_resetting){
-            mem_handle_reset();
+            gcode_handle_reset();
             return false;
         }
         // 运行中无数据，则进入等待 
@@ -339,19 +157,6 @@ static bool mem_check_res(GNC_RES res){
                 rt_set_chan_state(0, CHAN_IS_GCODE_END, true);
             }
             return false;
-        }
-        // 
-        int error_no = rt_get_parser_state();
-        if(error_no >= 0){
-            int res = setAlarm(ALARM_PS, ALARM_ERROR, error_no);
-            if(res == -8) return false;
-            LOG(LOG_LEVEL_ERR, "译码错误 %d", error_no);
-        }else{
-            // 加工计数
-            setVarChanInt(0, VAR_CHAN_PART_CNTR, var_chan[0][VAR_CHAN_PART_CNTR].value.i + 1, 0);
-            LOG(LOG_LEVEL_INFO, "加工计数 %d", var_chan[0][VAR_CHAN_PART_CNTR].value.i);
-            mem_handle_reset();
-            LOG(LOG_LEVEL_INFO, "程序运行结束");
         }
         return false;
 
@@ -395,7 +200,7 @@ void gcode_handle_estop(){
     rt_set_chan_state(0, CHAN_IS_GCODE_END, true);
 }
 
-static void mem_handle_reset(){
+void gcode_handle_reset(){
     cycle_tp_reset();
     queue_reset(plan_queue);
     queue_reset(pretreat_queue);
@@ -407,16 +212,16 @@ static void mem_handle_reset(){
     rt_set_chan_state(0, CHAN_IS_GCODE_END, true);
 }
 
-static void mem_handle_alarm(){
-    if(cycle_tp->mem_exec_state == EXEC_RUNNING){
-        cycle_tp->mem_exec_state = EXEC_PAUSING;
-        cycle_tp->is_event_trigger = true;
-        cycle_tp->is_resetting = 1;
-    }else if(cycle_tp->mem_exec_state == EXEC_PAUSING){
-        cycle_tp->is_resetting = 1;
-    }
-    rt_set_chan_state(0, CHAN_IS_PARSER_RESET, true);
-}
+// static void mem_handle_alarm(){
+//     if(cycle_tp->mem_exec_state == EXEC_RUNNING){
+//         cycle_tp->mem_exec_state = EXEC_PAUSING;
+//         cycle_tp->is_event_trigger = true;
+//         cycle_tp->is_resetting = 1;
+//     }else if(cycle_tp->mem_exec_state == EXEC_PAUSING){
+//         cycle_tp->is_resetting = 1;
+//     }
+//     rt_set_chan_state(0, CHAN_IS_PARSER_RESET, true);
+// }
 
 static bool mem_check_running(){
     if(rt_get_chan_state(0, CHAN_IS_PARSERING)) return true;
@@ -538,6 +343,8 @@ static GNC_RES cycle_tp_update_block(VELPLAN_TYPE vplan_mode, double ncu_cycle, 
     if(cycle_tp_look_ahead(vplan_mode, ncu_cycle, current_vel) == GNC_DATA_EMPTY) return GNC_DATA_EMPTY;
     // 更新当前行信息
     queue_copy_block(plan_queue, 0, cycle_tp->plan_block);
+    setVarChanInt(0, VAR_CHAN_RUN_ROW, cycle_tp->plan_block->line_number, 0);
+    LOG(LOG_LEVEL_INFO, "gline: %d", cycle_tp->plan_block->line_number);
     // 对插补段终点进行行程限位检查
     lookahead_check_soft_limit(&cycle_tp->plan_block->end_pos);
     return res;
@@ -586,8 +393,6 @@ static GNC_RES plan_block_get_update(double current_vel, POS current_pos){
     head_block->start_vel = current_vel;
     block_cal_vector(head_block);
     block_cal_length(head_block);
-    setVarChanInt(0, VAR_CHAN_RUN_ROW, head_block->line_number, 0);
-    LOG(LOG_LEVEL_INFO, "gline: %d", head_block->line_number);
     // 如果长度小于阈值
     if(IsLessThanOrEqual(head_block->length, MEM_END_TOL)) res = plan_block_get_next();
     return res;
@@ -938,4 +743,13 @@ static GNC_RES vp_cal_g04_pause_profile(VELPLAN_TYPE velplan_type, PLAN_BLOCK* p
         break;
     }
     return res;
+}
+
+static void check_traj_data_valid(TRAJ_PARAMS* traj_data){
+    if(IsLessThan(traj_data->s, 0)){
+        traj_data->s = 0;
+    }
+    if(IsLessThan(traj_data->v, 0)){
+        traj_data->v = 0;
+    }
 }

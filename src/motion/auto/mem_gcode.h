@@ -49,8 +49,9 @@ typedef struct{
 
 void cycle_tp_init();
 void cycle_tp_reset();
-void execute_gcode();
+void auto_execute_gcode();
 void gcode_handle_estop();
+void gcode_handle_reset();
 
 #ifdef __cplusplus
 }
