@@ -109,6 +109,7 @@ static void mem_set_state(){
                 queue_reset(plan_queue);
                 queue_reset(pretreat_queue);
                 gcode_queue_reset(gcode_queue);
+                // mcode_handle_reset();
                 // 通知译码运行，初始化译码器
                 rt_set_chan_state(0, CHAN_IS_PARSER_RERUN, true);
                 // 译码正在运行，译码结束译码器将其置false
@@ -269,6 +270,8 @@ static double mem_cal_pinc(VELPLAN_TYPE velplan_mode, double ncu_cycle, double c
             res = cycle_tp_update_params(velplan_mode, ncu_cycle);
             CHECK_RES(mem_check_res(res));
             interp_distance = cycle_tp->accum_distance;
+            // setVarChanInt(0, VAR_CHAN_RUN_ROW, cycle_tp->plan_block->line_number, 0);
+            // LOG(LOG_LEVEL_INFO, "gline: %d", cycle_tp->plan_block->line_number);
             break;
 
         // 执行暂停中
@@ -347,9 +350,9 @@ static bool mem_check_res(GNC_RES res){
             // 加工计数
             setVarChanInt(0, VAR_CHAN_PART_CNTR, var_chan[0][VAR_CHAN_PART_CNTR].value.i + 1, 0);
             LOG(LOG_LEVEL_INFO, "加工计数 %d", var_chan[0][VAR_CHAN_PART_CNTR].value.i);
+            mem_handle_reset();
+            LOG(LOG_LEVEL_INFO, "程序运行结束");
         }
-        mem_handle_reset();
-        LOG(LOG_LEVEL_INFO, "程序运行结束");
         return false;
 
     case VP_LENGTH_IS_ZERO:
@@ -535,6 +538,8 @@ static GNC_RES cycle_tp_update_block(VELPLAN_TYPE vplan_mode, double ncu_cycle, 
     if(cycle_tp_look_ahead(vplan_mode, ncu_cycle, current_vel) == GNC_DATA_EMPTY) return GNC_DATA_EMPTY;
     // 更新当前行信息
     queue_copy_block(plan_queue, 0, cycle_tp->plan_block);
+    setVarChanInt(0, VAR_CHAN_RUN_ROW, cycle_tp->plan_block->line_number, 0);
+    LOG(LOG_LEVEL_INFO, "gline: %d", cycle_tp->plan_block->line_number);
     // 对插补段终点进行行程限位检查
     lookahead_check_soft_limit(&cycle_tp->plan_block->end_pos);
     return res;
@@ -582,8 +587,6 @@ static GNC_RES plan_block_get_update(double current_vel, POS current_pos){
     head_block->start_vel = current_vel;
     block_cal_vector(head_block);
     block_cal_length(head_block);
-    setVarChanInt(0, VAR_CHAN_RUN_ROW, cycle_tp->plan_block->line_number, 0);
-    LOG(LOG_LEVEL_INFO, "gline: %d", cycle_tp->plan_block->line_number);
     // 如果长度小于阈值
     if(IsLessThanOrEqual(head_block->length, MEM_END_TOL)) res = plan_block_get_next();
     return res;

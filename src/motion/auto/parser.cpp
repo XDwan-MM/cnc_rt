@@ -6,6 +6,9 @@
 
 STATIC void parser_macro_init();
 STATIC GNC_RES parser_handle_recieve(pmc_data* motion_data, NcItpState *itp_state, int *line_no);
+STATIC GNC_RES parser_waiting_to_end();
+STATIC GNC_RES parser_waiting_for_motion();
+STATIC GNC_RES parser_waiting_for_buf();
 STATIC GNC_RES parser_handle_mcode(pmc_data* motion_data, NcItpState *itp_state, int *line_no);
 STATIC GNC_RES parser_handle_tcode(pmc_data* motion_data, NcItpState *itp_state, int *line_no);
 STATIC GNC_RES parser_handle_scode(pmc_data* motion_data, NcItpState *itp_state, int *line_no);
@@ -121,6 +124,124 @@ static GNC_RES parser_set_content(NC_MODE nc_mode){
     return GNC_OPERATOR_SUCCESS;
 }
 
+void parser_run_mode(){
+    if (rt_get_chan_state(0, CHAN_IS_PARSER_RESET) == true)
+    {
+        parser_reset();
+        gcode_queue_reset(gcode_queue);
+        rt_set_chan_state(0, CHAN_IS_PARSER_RESET, false);
+    }
+    GNC_RES res = GNC_OPERATOR_SUCCESS;
+    switch(parser_data->parser_state){
+        case PARSER_IDLE:
+        break;
+        case PARSER_READING:
+            res = parser_reading();
+            CHECK_RES(parser_check_res(res));
+            break;
+        case PARSER_WAITING_FOR_BUF:
+            res = parser_waiting_for_buf();
+            CHECK_RES(parser_check_res(res));
+            break;
+        case PARSER_WAITING_FOR_MOTION:
+        case PARSER_WAITING_FOR_IO:
+            res = parser_waiting_for_motion();
+            CHECK_RES(parser_check_res(res));
+            break;
+        case PARSER_WAITING_TO_END:
+            res = parser_waiting_to_end();
+            CHECK_RES(parser_check_res(res));
+            break;
+        default:
+            break;
+    }
+}
+
+GNC_RES parser_reading(){
+    GNC_RES res = GNC_CAL_SUCCESS;
+    ItpGetMotionData(&parser_data->itp_datas);
+    ItpGetState(&parser_data->itp_state);
+    ItpGetLineNumber(&parser_data->itp_line_no);
+    if (parser_data->itp_datas.count > PARSER_BUF_SIZE) return GNC_PARSER_OVER;
+    int error_no = ItpError();
+    rt_set_parser_state(error_no);
+    if (error_no >= 0)
+    {
+        // setAlarm(ALARM_PS, ALARM_ERROR, error_no);
+        // LOG(LOG_LEVEL_ERR, "译码错误 %d", error_no);
+        return GNC_PARSER_OVER;
+    }
+    if (parser_data->itp_datas.count <= 0)
+    {
+        // LOG(LOG_LEVEL_WARN, "译码为空"); // 空包
+    }
+    else
+    {
+        for (int i = 0; i < parser_data->itp_datas.count; ++i)
+        {
+            pmc_data motion_data = parser_data->itp_datas.datas[i];
+            parser_data->interp_list_index = i;
+            res = parser_handle_recieve(&motion_data, &parser_data->itp_state, &parser_data->itp_line_no);
+            CHECK_RES(parser_check_res(res));
+        }
+    }
+    if (ItpIsOver())
+    {
+        // LOG(LOG_LEVEL_WARN, "译码结束");
+        if (res == GNC_CAL_SUCCESS || res == GNC_OPERATOR_SUCCESS)
+        {
+            return GNC_PARSER_OVER;
+        }
+        return GNC_PARSER_OVER_AND_WAIT;
+    } 
+    ItpNextLine();
+    return res;
+}
+
+STATIC bool parser_check_res(GNC_RES res){
+    switch(res){
+        case GNC_PARSER_OVER:
+            LOG(LOG_LEVEL_INFO, "译码结束");
+            rt_set_chan_state(0, CHAN_IS_PARSERING, false);
+            rt_set_chan_state(0, CHAN_IS_PARSER_RERUN, false);
+            parser_data->parser_state = PARSER_IDLE;
+            parser_reset();
+            return false;
+        case GNC_PARSER_WAIT:
+            parser_data->parser_state = PARSER_WAITING_FOR_MOTION;
+            return false;
+        case GNC_PARSER_OVER_AND_WAIT:
+            parser_data->parser_state = PARSER_WAITING_TO_END;
+            return false;
+        case GNC_CAL_SUCCESS:
+        case GNC_OPERATOR_SUCCESS:
+            if(parser_data->parser_state == PARSER_WAITING_FOR_BUF || 
+                parser_data->parser_state == PARSER_WAITING_FOR_MOTION)
+            {
+                parser_data->parser_state = PARSER_READING;
+            }
+            // else if (parser_data->parser_state == PARSER_WAITING_TO_END)
+            // {
+            //     return parser_check_res(GNC_PARSER_OVER);
+            // }
+            return true;
+        case GNC_DATA_FULL:
+            if(parser_data->parser_state == PARSER_READING){
+                parser_data->parser_state = PARSER_WAITING_FOR_BUF;
+                return false;
+            }
+            return true;
+        default:
+            parser_data->parser_state = PARSER_IDLE;
+            // todo：译码出错让运动暂停后报警，而不是直接进入报警
+            // LOG(LOG_LEVEL_ERR, "译码报警 %d", res);
+            // setAlarm(ALARM_CH, ALARM_ERROR, 2);
+            // rt_set_parser_state(res);
+            parser_reset();
+            return false;
+    }
+}
+
 STATIC GNC_RES parser_handle_recieve(pmc_data* motion_data, NcItpState *itp_state, int *line_no){
     GNC_RES res = GNC_OPERATOR_SUCCESS;
     // 模式
@@ -189,7 +310,7 @@ STATIC GNC_RES parser_handle_gcode(pmc_data* motion_data, NcItpState *itp_state,
     gcode_block.line_number = *line_no;
     // 暂停时间
     gcode_block.pause_time = motion_data->pause_time;
-    // LOG(LOG_LEVEL_DEBUG,  "pos %f %f %f mode %d no %d", motion_data->position.x, motion_data->position.y, motion_data->position.z, gcode_block.mode, gcode_block.line_number);
+    // LOG(LOG_LEVEL_DEBUG,　"pos %f %f %f mode %d no %d", motion_data->position.x, motion_data->position.y, motion_data->position.z, gcode_block.mode, gcode_block.line_number);
     // 加入队列
     if(gcode_queue_is_full(gcode_queue)){
         return GNC_DATA_FULL;
@@ -207,6 +328,17 @@ STATIC GNC_RES parser_handle_gcode(pmc_data* motion_data, NcItpState *itp_state,
 
 STATIC GNC_RES parser_handle_mcode(pmc_data* motion_data, NcItpState *itp_state, int *line_no){
     MCODE_BLOCK mcode_block;
+    // 判断Ｍ代码大小
+    if(motion_data->m_code > 300){
+        rt_set_parser_state(3000);
+        setAlarm(ALARM_PS, ALARM_ERROR, 3000);
+        LOG(LOG_LEVEL_ERR, "译码错误 %d", 3000);
+        return GNC_PARSER_OVER;
+    }
+    // todo: 子程序调用M98和M99
+    if(motion_data->m_code == 98 || motion_data->m_code == 99){
+        return GNC_OPERATOR_SUCCESS;
+    }
     // M码
     mcode_block.m_code = motion_data->m_code;
     // 主轴
@@ -230,49 +362,7 @@ STATIC GNC_RES parser_handle_mcode(pmc_data* motion_data, NcItpState *itp_state,
     }
     mcode_queue_push(mcode_queue, &mcode_block);
     rt_set_chan_state(0, CHAN_IS_MCODE_END, false);
-
     return GNC_OPERATOR_SUCCESS;
-}
-
-GNC_RES parser_reading(){
-    GNC_RES res = GNC_CAL_SUCCESS;
-    ItpGetMotionData(&parser_data->itp_datas);
-    ItpGetState(&parser_data->itp_state);
-    ItpGetLineNumber(&parser_data->itp_line_no);
-    if (parser_data->itp_datas.count > PARSER_BUF_SIZE) return GNC_PARSER_OVER;
-    int error_no = ItpError();
-    rt_set_parser_state(error_no);
-    if (error_no >= 0)
-    {
-        // setAlarm(ALARM_PS, ALARM_ERROR, error_no);
-        // LOG(LOG_LEVEL_ERR, "译码错误 %d", error_no);
-        return GNC_PARSER_OVER;
-    }
-    if (parser_data->itp_datas.count <= 0)
-    {
-        // LOG(LOG_LEVEL_WARN, "译码为空"); // 空包
-    }
-    else
-    {
-        for (int i = 0; i < parser_data->itp_datas.count; ++i)
-        {
-            pmc_data motion_data = parser_data->itp_datas.datas[i];
-            parser_data->interp_list_index = i;
-            res = parser_handle_recieve(&motion_data, &parser_data->itp_state, &parser_data->itp_line_no);
-            CHECK_RES(parser_check_res(res));
-        }
-    }
-    if (ItpIsOver())
-    {
-        // LOG(LOG_LEVEL_WARN, "译码结束");
-        if (res == GNC_CAL_SUCCESS || res == GNC_OPERATOR_SUCCESS)
-        {
-            return GNC_PARSER_OVER;
-        }
-        return GNC_PARSER_OVER_AND_WAIT;
-    } 
-    ItpNextLine();
-    return res;
 }
 
 GNC_RES parser_waiting_for_buf(){
@@ -314,83 +404,6 @@ GNC_RES parser_waiting_to_end() {
         return GNC_PARSER_OVER;
     }
     return GNC_PARSER_OVER_AND_WAIT;
-}
-
-STATIC bool parser_check_res(GNC_RES res){
-    switch(res){
-        case GNC_PARSER_OVER:
-            LOG(LOG_LEVEL_INFO, "译码结束");
-            rt_set_chan_state(0, CHAN_IS_PARSERING, false);
-            rt_set_chan_state(0, CHAN_IS_PARSER_RERUN, false);
-            parser_data->parser_state = PARSER_IDLE;
-            parser_reset();
-            return false;
-        case GNC_PARSER_WAIT:
-            parser_data->parser_state = PARSER_WAITING_FOR_MOTION;
-            return false;
-        case GNC_PARSER_OVER_AND_WAIT:
-            parser_data->parser_state = PARSER_WAITING_TO_END;
-            return false;
-        case GNC_CAL_SUCCESS:
-        case GNC_OPERATOR_SUCCESS:
-            if(parser_data->parser_state == PARSER_WAITING_FOR_BUF || 
-                parser_data->parser_state == PARSER_WAITING_FOR_MOTION)
-            {
-                parser_data->parser_state = PARSER_READING;
-            }
-            // else if (parser_data->parser_state == PARSER_WAITING_TO_END)
-            // {
-            //     return parser_check_res(GNC_PARSER_OVER);
-            // }
-            return true;
-        case GNC_DATA_FULL:
-            if(parser_data->parser_state == PARSER_READING){
-                parser_data->parser_state = PARSER_WAITING_FOR_BUF;
-                return false;
-            }
-            return true;
-        default:
-            parser_data->parser_state = PARSER_IDLE;
-            // todo：译码出错让运动暂停后报警，而不是直接进入报警
-            // LOG(LOG_LEVEL_ERR, "译码报警 %d", res);
-            // setAlarm(ALARM_CH, ALARM_ERROR, 2);
-            // rt_set_parser_state(res);
-            parser_reset();
-            return false;
-    }
-}
-
-void parser_run_mode(){
-    if (rt_get_chan_state(0, CHAN_IS_PARSER_RESET) == true)
-    {
-        parser_reset();
-        gcode_queue_reset(gcode_queue);
-        rt_set_chan_state(0, CHAN_IS_PARSER_RESET, false);
-    }
-    GNC_RES res = GNC_OPERATOR_SUCCESS;
-    switch(parser_data->parser_state){
-        case PARSER_IDLE:
-        break;
-        case PARSER_READING:
-            res = parser_reading();
-            CHECK_RES(parser_check_res(res));
-            break;
-        case PARSER_WAITING_FOR_BUF:
-            res = parser_waiting_for_buf();
-            CHECK_RES(parser_check_res(res));
-            break;
-        case PARSER_WAITING_FOR_MOTION:
-        case PARSER_WAITING_FOR_IO:
-            res = parser_waiting_for_motion();
-            CHECK_RES(parser_check_res(res));
-            break;
-        case PARSER_WAITING_TO_END:
-            res = parser_waiting_to_end();
-            CHECK_RES(parser_check_res(res));
-            break;
-        default:
-            break;
-    }
 }
 
 void parser_reset(){

@@ -7,12 +7,16 @@
 
 static void auto_check_error();
 static int error_no = -1;
+static bool reset_trigger = false;
 
 void handle_run_cmd(){
     // 自动模式下，报警或切换模式，减速停止
     if(rt_data->sys_state[SYS_IS_ALARMING] || rt_data->sys_state[SYS_IS_SWITCHING_MODE]){
-        rt_data->nc_event = SYS_EVENT_RESET;
-    }
+        if(!reset_trigger){
+            rt_data->nc_event = SYS_EVENT_RESET;
+            reset_trigger = true;
+        }
+    }else reset_trigger = false;
     execute_mcode();
     execute_gcode();
 }
