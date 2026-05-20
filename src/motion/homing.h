@@ -51,6 +51,7 @@ typedef struct{
     bool is_event_trigger;          // 触发重新计算
     bool is_finish_at_the_end;
     bool is_resetting;
+    bool is_ref_on;                 // 回零状态（1回零，0停止）
 }HOMING_TP;
 
 void homing_tp_init();

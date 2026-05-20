@@ -42,7 +42,6 @@ void handle_homing_cmd(){
     }
     homing_cal_fv();
     homing_is_all_homed();
-    // homing_is_resetting();
 }
 
 static void homing_cal_fv(){
@@ -60,13 +59,11 @@ static void homing_set_state(){
         case SYS_EVENT_NONE:
             break;
 
+        // 回零时按复位，856梯形图会产生XYZ释放G100.0~G100.2变为0
         case SYS_EVENT_RESET:
             LOG(LOG_LEVEL_INFO, "回零处理复位");
             for(int i = 0; i < SYS_AXES_NUM; i++){
-                if(homing_tp[i].homing_state == ABS_EXEC_HOMING){
-                    homing_tp[i].is_event_trigger = true;
-                    homing_tp[i].homing_state = ABS_EXEC_RESETTING;
-                }
+                homing_tp[i].is_ref_on = false;
             }        
             break;
 
@@ -79,11 +76,7 @@ static void homing_set_state(){
             }else{
                 delAlarm(ALARM_SY, ALARM_WARNING, 2);
             }
-            if(rt_data->sys_state[SYS_IS_SWITCHING_MODE]) break; // 换挡模式下，不允许操作
-            if(homing_tp[AXIS_X].homing_state == ABS_EXEC_IDLE){
-                homing_tp[AXIS_X].is_event_trigger = true;  
-                homing_tp[AXIS_X].homing_state = ABS_EXEC_HOMING;   
-            }
+            homing_tp[AXIS_X].is_ref_on = true;
             break;
 
         case SYS_EVENT_Y_POS_PRESS:
@@ -95,11 +88,7 @@ static void homing_set_state(){
             }else{
                 delAlarm(ALARM_SY, ALARM_WARNING, 2);
             }
-            if(rt_data->sys_state[SYS_IS_SWITCHING_MODE]) break;
-            if(homing_tp[AXIS_Y].homing_state == ABS_EXEC_IDLE){
-                homing_tp[AXIS_Y].is_event_trigger = true;
-                homing_tp[AXIS_Y].homing_state = ABS_EXEC_HOMING;
-            }
+            homing_tp[AXIS_Y].is_ref_on = true;
             break;
 
         case SYS_EVENT_Z_POS_PRESS:
@@ -111,13 +100,27 @@ static void homing_set_state(){
             }else{
                 delAlarm(ALARM_SY, ALARM_WARNING, 2);
             }
-            if(rt_data->sys_state[SYS_IS_SWITCHING_MODE]) break;
-            if(homing_tp[AXIS_Z].homing_state == ABS_EXEC_IDLE){
-                homing_tp[AXIS_Z].is_event_trigger = true;
-                homing_tp[AXIS_Z].homing_state = ABS_EXEC_HOMING;
-            }
+            homing_tp[AXIS_Z].is_ref_on = true;
             break;
         
+        case SYS_EVENT_X_POS_RELEASE:
+        case SYS_EVENT_X_NEG_RELEASE:
+            LOG(LOG_LEVEL_INFO, "回零处理X松开");
+            homing_tp[AXIS_X].is_ref_on = false;
+            break;
+
+        case SYS_EVENT_Y_POS_RELEASE:
+        case SYS_EVENT_Y_NEG_RELEASE:
+            LOG(LOG_LEVEL_INFO, "回零处理Y松开");
+            homing_tp[AXIS_Y].is_ref_on = false;
+            break;
+
+        case SYS_EVENT_Z_POS_RELEASE:
+        case SYS_EVENT_Z_NEG_RELEASE:
+            LOG(LOG_LEVEL_INFO, "回零处理Z松开");
+            homing_tp[AXIS_Z].is_ref_on = false;
+            break;
+
         case SYS_EVENT_RAPID_OVERRIDE:
             LOG(LOG_LEVEL_INFO, "回零处理快速进给倍率改变");
             if(IsEqualTo(var_chan[0][VAR_CHAN_RAPID_OVERRIDE].value.f, 0)){
@@ -139,7 +142,21 @@ static void homing_set_state(){
         default:
             break;
     }
-    rt_data->nc_event = SYS_EVENT_NONE;
+    //　根据回零状态和方向
+    for(int axis_type = 0; axis_type < SYS_AXES_NUM; axis_type++){
+        if(homing_tp[axis_type].is_ref_on){
+            if(rt_data->sys_state[SYS_IS_SWITCHING_MODE]) break;// 换挡模式下，不允许操作
+            if(homing_tp[axis_type].homing_state == ABS_EXEC_IDLE){
+                homing_tp[axis_type].is_event_trigger = true;
+                homing_tp[axis_type].homing_state = ABS_EXEC_HOMING;
+            }
+        }else{
+            if(homing_tp[axis_type].homing_state == ABS_EXEC_HOMING){
+                homing_tp[axis_type].is_event_trigger = true;
+                homing_tp[axis_type].homing_state = ABS_EXEC_RESETTING;
+            }
+        }
+    }
 }
 
 static bool homing_check_res(GNC_RES res){
@@ -194,6 +211,7 @@ static void homing_handle_alarm(){
         if(homing_tp[i].homing_state == ABS_EXEC_HOMING){
             homing_tp[i].is_event_trigger = true;
             homing_tp[i].homing_state = ABS_EXEC_RESETTING;
+            homing_tp[i].is_ref_on = false;
             LOG(LOG_LEVEL_WARN, "开始制动");
         }
     }
@@ -326,6 +344,7 @@ void homing_tp_init(){
 void homing_tp_reset(){
     for(int i = 0; i < SYS_AXES_NUM; i++){
         homing_tp[i].homing_state = ABS_EXEC_IDLE;
+        homing_tp[i].is_ref_on = false;
         memset(homing_tp[i].traj_data, 0, sizeof(TRAJ_PARAMS));
     }
 }
