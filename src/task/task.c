@@ -8,19 +8,22 @@
 #include "spl_control.h"
 
 static PMC_EVENT event_data;
-static GNC_RES task_handle_pmc_event(PMC_EVENT* event_data);
+static GNC_RES task_handle_pmc_event(PMC_EVENT *event_data);
 
 // 任务消息队列初始化
-GNC_RES task_mq_init(){
-    event_queue = (EVENT_QUEUE*)calloc(sizeof(EVENT_QUEUE), 1);
+GNC_RES task_mq_init()
+{
+    event_queue = (EVENT_QUEUE *)calloc(sizeof(EVENT_QUEUE), 1);
     return event_queue_init(event_queue);
 }
 
 // 消息队列处理
 GNC_RES task_mq_proc()
 {
-    if(event_queue_is_empty(event_queue)) return GNC_DATA_EMPTY;
-    if(event_queue_is_full(event_queue)){
+    if (event_queue_is_empty(event_queue))
+        return GNC_DATA_EMPTY;
+    if (event_queue_is_full(event_queue))
+    {
         LOG(LOG_LEVEL_ERR, "事件队列已满");
         // setAlarm(ALARM_SY, ALARM_ERROR, 0);
         // return GNC_OPERATOR_ERROR;
@@ -30,7 +33,7 @@ GNC_RES task_mq_proc()
     return GNC_OPERATOR_SUCCESS;
 }
 
-static GNC_RES task_handle_pmc_event(PMC_EVENT* event_data)
+static GNC_RES task_handle_pmc_event(PMC_EVENT *event_data)
 {
     if (!event_data || !rt_data)
         return GNC_DATA_NULL;
@@ -144,19 +147,19 @@ static GNC_RES task_handle_pmc_event(PMC_EVENT* event_data)
     }
     case EV_MSG_SPINDLE:
     {
-        if(event_data->spindle_payload.direction == 1)
+        if (event_data->spindle_payload.direction == 1)
         {
             spl_data.spl_event = SPINDLE_EVENT_CW;
             spl_data.emot_speed = spl_data.mcp_target_speed;
             LOG(LOG_LEVEL_INFO, "处理主轴正转事件");
         }
-        if(event_data->spindle_payload.direction == -1)
+        if (event_data->spindle_payload.direction == -1)
         {
             spl_data.spl_event = SPINDLE_EVENT_CCW;
             spl_data.emot_speed = -1.0 * spl_data.mcp_target_speed;
             LOG(LOG_LEVEL_INFO, "处理主轴反转事件");
         }
-        if(event_data->spindle_payload.direction == 0)
+        if (event_data->spindle_payload.direction == 0)
         {
             spl_data.spl_event = SPINDLE_EVENT_STOP;
             spl_data.emot_speed = 0;
@@ -221,30 +224,34 @@ static GNC_RES task_handle_pmc_event(PMC_EVENT* event_data)
         break;
     }
     case EV_MSG_ENANLE:
-        switch(event_data->enable_payload.enable_key){
-            case BLOCK_SKIP:
-                rt_data->sys_state[SYS_IS_BLOCK_SKIP] = event_data->enable_payload.enable_state;
-                LOG(LOG_LEVEL_INFO, "处理跳段事件");
-                break;
-            case SINGLE_BLOCK:
-                rt_data->sys_state[SYS_IS_BLOCK_SKIP] = event_data->enable_payload.enable_state;
-                LOG(LOG_LEVEL_INFO, "处理单程序段事件");
-                break;
-            case DRY_RUN:
-                rt_data->sys_state[SYS_IS_SINGLE_BLOCK] = event_data->enable_payload.enable_state;
-                LOG(LOG_LEVEL_INFO, "处理空运行事件");
-                break;
-            case MAC_LOCK:
-                rt_data->sys_state[SYS_IS_MAC_LOCK] = event_data->enable_payload.enable_state;
-                LOG(LOG_LEVEL_INFO, "处理机床锁住事件");
-                break;
-            case MSBT_LOCK:
-                rt_data->sys_state[SYS_IS_MSBT_LOCK] = event_data->enable_payload.enable_state;
-                LOG(LOG_LEVEL_INFO, "处理辅助功能锁住事件");
-                break;   
-            default:
-                break; 
+        switch (event_data->enable_payload.enable_key)
+        {
+        case BLOCK_SKIP:
+            rt_data->sys_state[SYS_IS_BLOCK_SKIP] = event_data->enable_payload.enable_state;
+            LOG(LOG_LEVEL_INFO, "处理跳段事件");
+            break;
+        case SINGLE_BLOCK:
+            rt_data->sys_state[SYS_IS_BLOCK_SKIP] = event_data->enable_payload.enable_state;
+            LOG(LOG_LEVEL_INFO, "处理单程序段事件");
+            break;
+        case DRY_RUN:
+            rt_data->sys_state[SYS_IS_SINGLE_BLOCK] = event_data->enable_payload.enable_state;
+            LOG(LOG_LEVEL_INFO, "处理空运行事件");
+            break;
+        case MAC_LOCK:
+            rt_data->sys_state[SYS_IS_MAC_LOCK] = event_data->enable_payload.enable_state;
+            LOG(LOG_LEVEL_INFO, "处理机床锁住事件");
+            break;
+        case MSBT_LOCK:
+            rt_data->sys_state[SYS_IS_MSBT_LOCK] = event_data->enable_payload.enable_state;
+            LOG(LOG_LEVEL_INFO, "处理辅助功能锁住事件");
+            break;
+        default:
+            break;
         }
+        break;
+    case EV_MSG_SPD_ORI:
+        LOG(LOG_LEVEL_INFO, "处理主轴定向事件");
         break;
     default:
         break;
