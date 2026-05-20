@@ -489,9 +489,9 @@ static void pmc_dispatch_event(PMC_EVENT_ID id, int p1, int p2)
         break;
     case EV_MSG_SPD_ORI:
         event.id = id;
-        event.enable_payload.enable_key = p1;
-        event.enable_payload.enable_state = p2;
-        LOG(LOG_LEVEL_INFO, "扫描到主轴定向: %d, enable_state: %d", p1, p2);
+        event.spd_ori_payload.p1 = p1;
+        event.spd_ori_payload.p2 = p2;
+        LOG(LOG_LEVEL_INFO, "扫描到主轴定向: %d", event.id);
         break;
     default:
         break;
