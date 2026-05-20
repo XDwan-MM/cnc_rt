@@ -51,7 +51,7 @@ void handle_alarm_cmd(){
             // 复位清除跟随误差报警标志
             reset_ferror_control();
             // 清除译码器状态
-            rt_set_parser_state(-1);
+            rt_set_parser_state(-1, 0);
             LOG(LOG_LEVEL_INFO, "报警已清除");
             break;
         case SYS_EVENT_RERUN:

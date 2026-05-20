@@ -93,6 +93,11 @@ typedef struct
 }SYS_RESET;
 
 typedef struct {
+    int parser_error_line;
+    int parser_error_no;
+} PARSER_ERROR_DATA;
+
+typedef struct {
     SYS_EVENT nc_event;
     SYS_RESET nc_reset;
     NC_MODE target_mode; 
@@ -102,13 +107,14 @@ typedef struct {
     RT_AXIS axis_data[SYS_AXES_NUM];
     RT_CHAN chan_data[SYS_CHAN_NUM];
     pthread_mutex_t mutex;
-    int parser_errorno;
+    PARSER_ERROR_DATA parser_error;
 } RT_DATA;
 
 GNC_RES rt_data_init(void);
 GNC_RES rt_data_reset(void);
-void rt_set_parser_state(int value);
-int rt_get_parser_state();
+void rt_set_parser_state(int error_no, int error_line);
+int rt_get_parser_error_no();
+int rt_get_parser_error_line();
 void rt_set_sys_state(SysStateIndex state, bool value);
 bool rt_get_sys_state(SysStateIndex state);
 void rt_set_chan_state(int chan_index, ChanStateIndex state, bool value);

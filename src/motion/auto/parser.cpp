@@ -51,7 +51,7 @@ void parser_new(){
     // 设置译码参数
     parser_macro_init();
     parser_data->parser_state = PARSER_IDLE;
-    rt_set_parser_state(-1);
+    rt_set_parser_state(-1, 0);
 }
 
 GNC_RES parser_init(NC_MODE nc_mode)
@@ -65,6 +65,17 @@ GNC_RES parser_init(NC_MODE nc_mode)
     ItpCfgSetMacroVarCB(macroVarSetValue);
     // 是否跳过注释段
     ItpSetBlockSkipEnable(rt_get_sys_state(SYS_IS_BLOCK_SKIP));
+    // 长度刀补
+    double toollens[20];
+    for (int i = 0; i < 20; ++i)
+    {
+        double glen1 = 0.0;
+        double wlen1 = 0.0;
+        int ret = SHM_ToolGetToolPara(i, GTOOL_LEN1, &glen1, 0);
+        ret = SHM_ToolGetToolPara(i, WTOOL_LEN1, &wlen1, 0);
+        toollens[i] = glen1 - wlen1;
+    }
+    ItpSetToolLens(toollens, 20);
     // 设置机床起点
     double ori_pos_x, ori_pos_y, ori_pos_z;
     getVarAxisDouble(AXIS_X, VAR_AXIS_CMD_POS_EX, &ori_pos_x, 0);
@@ -77,7 +88,7 @@ GNC_RES parser_init(NC_MODE nc_mode)
     // 将GM指令设置为已完成
     rt_set_chan_state(0, CHAN_IS_GCODE_END, true);
     rt_set_chan_state(0, CHAN_IS_MCODE_END, true);
-    rt_set_parser_state(-1);
+    rt_set_parser_state(-1, 0);
     return res;
 }
 
@@ -164,7 +175,7 @@ GNC_RES parser_reading(){
     ItpGetLineNumber(&parser_data->itp_line_no);
     if (parser_data->itp_datas.count > PARSER_BUF_SIZE) return GNC_PARSER_OVER;
     int error_no = ItpError();
-    rt_set_parser_state(error_no);
+    rt_set_parser_state(error_no, parser_data->itp_line_no);
     if (error_no >= 0)
     {
         // setAlarm(ALARM_PS, ALARM_ERROR, error_no);
@@ -330,7 +341,7 @@ STATIC GNC_RES parser_handle_mcode(pmc_data* motion_data, NcItpState *itp_state,
     MCODE_BLOCK mcode_block;
     // 判断Ｍ代码大小
     if(motion_data->m_code > 300){
-        rt_set_parser_state(3000);
+        rt_set_parser_state(3000, *line_no);
         setAlarm(ALARM_PS, ALARM_ERROR, 3000);
         LOG(LOG_LEVEL_ERR, "译码错误 %d", 3000);
         return GNC_PARSER_OVER;

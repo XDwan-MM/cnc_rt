@@ -37,7 +37,7 @@ static void auto_handle_alarm(){
 }
 
 static bool auto_check_error(){
-    int error_no = rt_get_parser_state();
+    int error_no = rt_get_parser_error_no();
     if(error_no >= 0){
         int res = setAlarm(ALARM_PS, ALARM_ERROR, error_no);
         if(res == -8) return true;
@@ -55,8 +55,11 @@ static bool auto_check_running(){
 static void auto_check_prog_end(){
     if(auto_check_running()) return;
     if(cycle_tp->mem_exec_state == EXEC_RUNNING){
-        int error_no = rt_get_parser_state();
+        int error_no = rt_get_parser_error_no();
+        int error_line = rt_get_parser_error_line();
         if(error_no >= 0){
+            setVarChanInt(0, VAR_CHAN_RUN_ROW, error_line, 0);
+            LOG(LOG_LEVEL_INFO, "gline: %d", error_line);
             int res = setAlarm(ALARM_PS, ALARM_ERROR, error_no);
             if(res == -8) return;
             LOG(LOG_LEVEL_ERR, "译码错误 %d", error_no);
