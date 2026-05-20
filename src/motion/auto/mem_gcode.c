@@ -88,8 +88,6 @@ static double mem_cal_pinc(VELPLAN_TYPE velplan_mode, double ncu_cycle, double c
             res = cycle_tp_update_params(velplan_mode, ncu_cycle);
             CHECK_RES(mem_check_res(res));
             interp_distance = cycle_tp->accum_distance;
-            // setVarChanInt(0, VAR_CHAN_RUN_ROW, cycle_tp->plan_block->line_number, 0);
-            // LOG(LOG_LEVEL_INFO, "gline: %d", cycle_tp->plan_block->line_number);
             break;
 
         // 执行暂停中
@@ -101,6 +99,7 @@ static double mem_cal_pinc(VELPLAN_TYPE velplan_mode, double ncu_cycle, double c
                     // 复位
                     if(cycle_tp->is_resetting){
                         gcode_handle_reset();
+                        setVarChanInt(0, VAR_CHAN_RUN_ROW, 0, 0); 
                         auto_check_soft_limit_del_done();
                         LOG(LOG_LEVEL_DEBUG, "完成复位");
                     }else{
@@ -207,21 +206,10 @@ void gcode_handle_reset(){
     gcode_queue_reset(gcode_queue);
     setVarChanInt(0, VAR_CHAN_IS_RUNNING, 0, 0);
     setVarChanInt(0, VAR_CHAN_IS_MOVING, 0, 0);
-    setVarChanInt(0, VAR_CHAN_IS_PROGEND, 1, 0);   
+    setVarChanInt(0, VAR_CHAN_IS_PROGEND, 1, 0);  
     rt_set_chan_state(0, CHAN_IS_PARSERING, false);
     rt_set_chan_state(0, CHAN_IS_GCODE_END, true);
 }
-
-// static void mem_handle_alarm(){
-//     if(cycle_tp->mem_exec_state == EXEC_RUNNING){
-//         cycle_tp->mem_exec_state = EXEC_PAUSING;
-//         cycle_tp->is_event_trigger = true;
-//         cycle_tp->is_resetting = 1;
-//     }else if(cycle_tp->mem_exec_state == EXEC_PAUSING){
-//         cycle_tp->is_resetting = 1;
-//     }
-//     rt_set_chan_state(0, CHAN_IS_PARSER_RESET, true);
-// }
 
 static bool mem_check_running(){
     if(rt_get_chan_state(0, CHAN_IS_PARSERING)) return true;

@@ -43,6 +43,7 @@ static void nc_deal_mcode(){
     // 辅助功能锁住
     if(rt_data->sys_state[SYS_IS_MSBT_LOCK]) {
         mcode_queue_reset(mcode_queue);
+        rt_set_chan_state(0, CHAN_IS_MCODE_END, true);
         return;
     }
     mcode_data->mcode_size = mcode_queue_get_size(mcode_queue);
@@ -64,12 +65,10 @@ static void nc_deal_mcode(){
         case M02: // 复位
             setRegValue8(REG_F, 10, 0x02); 
             setRegBit(REG_F, 9, 5);  
-            setVarChanInt(0, VAR_CHAN_RUN_ROW, 0, 0);
             break;
         case M30: // 复位
             setRegValue8(REG_F, 10, 0x1e); 
             setRegBit(REG_F, 9, 4);  
-            setVarChanInt(0, VAR_CHAN_RUN_ROW, 0, 0);
             break;
         case M03: // 主轴正转
             setRegValue8(REG_F, 10, 0x03); 

@@ -258,3 +258,14 @@ void auto_handle_estop(){
     mcode_handle_estop();
     gcode_handle_estop();
 }
+
+// 编辑模式下复位，光标回到首行
+void handle_edit_cmd(){
+    switch(rt_data->nc_event){
+        case SYS_EVENT_RESET:
+            setVarChanInt(0, VAR_CHAN_RUN_ROW, 0, 0);
+            break;
+        default:
+            break;
+    }
+}

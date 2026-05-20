@@ -184,6 +184,9 @@ static void spindle_control(){
 // 不同加工模式的运动控制
 static void get_cmd_pos() {
     switch (rt_data->current_mode) {
+        case MODE_EDIT: // 编辑
+            handle_edit_cmd();
+            break;
         case MODE_MDI: // MDI
         case MODE_MEM: // 记忆
         case MODE_DNC:
@@ -199,7 +202,6 @@ static void get_cmd_pos() {
             handle_mpg_cmd();
             break;
         case MODE_IDLE: // 空闲状态
-        case MODE_EDIT: // 编辑
         default: // error
             break;
     }
