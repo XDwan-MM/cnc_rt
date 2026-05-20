@@ -224,30 +224,33 @@ static GNC_RES task_handle_pmc_event(PMC_EVENT *event_data)
         break;
     }
     case EV_MSG_ENANLE:
-        switch (event_data->enable_payload.enable_key)
-        {
-        case BLOCK_SKIP:
-            rt_data->sys_state[SYS_IS_BLOCK_SKIP] = event_data->enable_payload.enable_state;
-            LOG(LOG_LEVEL_INFO, "处理跳段事件");
-            break;
-        case SINGLE_BLOCK:
-            rt_data->sys_state[SYS_IS_BLOCK_SKIP] = event_data->enable_payload.enable_state;
-            LOG(LOG_LEVEL_INFO, "处理单程序段事件");
-            break;
-        case DRY_RUN:
-            rt_data->sys_state[SYS_IS_SINGLE_BLOCK] = event_data->enable_payload.enable_state;
-            LOG(LOG_LEVEL_INFO, "处理空运行事件");
-            break;
-        case MAC_LOCK:
-            rt_data->sys_state[SYS_IS_MAC_LOCK] = event_data->enable_payload.enable_state;
-            LOG(LOG_LEVEL_INFO, "处理机床锁住事件");
-            break;
-        case MSBT_LOCK:
-            rt_data->sys_state[SYS_IS_MSBT_LOCK] = event_data->enable_payload.enable_state;
-            LOG(LOG_LEVEL_INFO, "处理辅助功能锁住事件");
-            break;
-        default:
-            break;
+        switch(event_data->enable_payload.enable_key){
+            case BLOCK_SKIP:
+                rt_data->sys_state[SYS_IS_BLOCK_SKIP] = event_data->enable_payload.enable_state;
+                LOG(LOG_LEVEL_INFO, "处理跳段事件");
+                break;
+            case SINGLE_BLOCK:
+                // rt_data->sys_state[SYS_IS_SINGLE_BLOCK] = event_data->enable_payload.enable_state;
+                // if(rt_data->sys_state[SYS_IS_SINGLE_BLOCK]) rt_data->nc_event = SYS_EVENT_SINGLE_BLOCK_ON;
+                // else rt_data->nc_event = SYS_EVENT_SINGLE_BLOCK_OFF;
+                // LOG(LOG_LEVEL_INFO, "处理单段事件");
+                break;
+            case DRY_RUN:
+                rt_data->sys_state[SYS_IS_DRY_RUN] = event_data->enable_payload.enable_state;
+                if(rt_data->sys_state[SYS_IS_DRY_RUN]) rt_data->nc_event = SYS_EVENT_DRY_RUN_ON;
+                else rt_data->nc_event = SYS_EVENT_DRY_RUN_OFF;
+                LOG(LOG_LEVEL_INFO, "处理空运行事件");
+                break;
+            case MAC_LOCK:
+                rt_data->sys_state[SYS_IS_MAC_LOCK] = event_data->enable_payload.enable_state;
+                LOG(LOG_LEVEL_INFO, "处理机床锁住事件");
+                break;
+            case MSBT_LOCK:
+                rt_data->sys_state[SYS_IS_MSBT_LOCK] = event_data->enable_payload.enable_state;
+                LOG(LOG_LEVEL_INFO, "处理辅助功能锁住事件");
+                break;   
+            default:
+                break; 
         }
         break;
     case EV_MSG_SPD_ORI:

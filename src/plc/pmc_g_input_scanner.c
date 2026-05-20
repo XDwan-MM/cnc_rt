@@ -28,6 +28,7 @@ static const int SCAN_G_REGS[] =
         43,
         44,
         45,
+        46,
         54,
         55,
         56,
@@ -310,7 +311,7 @@ void pmc_g_input_scan_cycle(void)
     }
     if (SIGNAL_FALLING(curr_g.g_regs[46], last_g.g_regs[46], 1))
     {
-        pmc_dispatch_event(EV_MSG_ENANLE, SINGLE_BLOCK, 1);
+        pmc_dispatch_event(EV_MSG_ENANLE, SINGLE_BLOCK, 0);
         LOG(LOG_LEVEL_INFO, "扫描到G46.1 发生下降沿");
     }
 

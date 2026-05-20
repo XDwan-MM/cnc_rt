@@ -203,7 +203,7 @@ GNC_RES shm_var_update(){
     {
         if(rt_data->current_mode == MODE_MEM || rt_data->current_mode == MODE_MDI || rt_data->current_mode == MODE_DNC){
             // 剩余移动量
-            crds_remain = var_axis[i][VAR_AXIS_PROG_POS_EX].value.f - var_axis[i][VAR_AXIS_ACT_POS_EX].value.f;
+            crds_remain = var_axis[i][VAR_AXIS_PROG_POS_EX].value.f - var_axis[i][VAR_AXIS_CMD_POS_EX].value.f;
             // 运行模态
             VarUnion set_modal;
             set_modal.type = 0;
@@ -214,9 +214,9 @@ GNC_RES shm_var_update(){
             }
             // 机床指令位置
             if(queue_is_empty(plan_queue)){
-                setVarAxisDouble(AXIS_X, VAR_AXIS_PROG_POS_EX, var_axis[0][VAR_AXIS_ACT_POS_EX].value.f, 0);
-                setVarAxisDouble(AXIS_Y, VAR_AXIS_PROG_POS_EX, var_axis[1][VAR_AXIS_ACT_POS_EX].value.f, 0);
-                setVarAxisDouble(AXIS_Z, VAR_AXIS_PROG_POS_EX, var_axis[2][VAR_AXIS_ACT_POS_EX].value.f, 0);
+                setVarAxisDouble(AXIS_X, VAR_AXIS_PROG_POS_EX, var_axis[0][VAR_AXIS_CMD_POS_EX].value.f, 0);
+                setVarAxisDouble(AXIS_Y, VAR_AXIS_PROG_POS_EX, var_axis[1][VAR_AXIS_CMD_POS_EX].value.f, 0);
+                setVarAxisDouble(AXIS_Z, VAR_AXIS_PROG_POS_EX, var_axis[2][VAR_AXIS_CMD_POS_EX].value.f, 0);
             }else{
                 setVarAxisDouble(AXIS_X, VAR_AXIS_PROG_POS_EX, cycle_tp->plan_block->end_pos.x, 0);
                 setVarAxisDouble(AXIS_Y, VAR_AXIS_PROG_POS_EX, cycle_tp->plan_block->end_pos.y, 0);
@@ -230,7 +230,7 @@ GNC_RES shm_var_update(){
         // 绝对坐标
         getVarChanValue(0, VAR_CHAN_MODAL, 14, &crds_type_var, 0);
         getCrdsValue(CRDS_TYPE_G5X + crds_type_var.value.i - 1, i, &crds_oft);
-        act_pos_wcs_ex = var_axis[i][VAR_AXIS_ACT_POS_EX].value.f - crds_oft;
+        act_pos_wcs_ex = var_axis[i][VAR_AXIS_CMD_POS_EX].value.f - crds_oft;
         setVarAxisDouble(i, VAR_AXIS_ACT_POS_WCS_EX, act_pos_wcs_ex, 0);
         // 轴速度等参数
         setVarAxisDouble(i, VAR_AXIS_ACT_VEL, var_chan[0][VAR_AXIS_CMD_VEL].value.f, 0);
@@ -239,7 +239,7 @@ GNC_RES shm_var_update(){
         // 相对坐标
         double real_zero = 0.0;
         getVarAxisDouble(i, VAR_AXIS_REAL_ZERO_EX, &real_zero, 0);
-        double real = var_axis[i][VAR_AXIS_ACT_POS_EX].value.f - real_zero;
+        double real = var_axis[i][VAR_AXIS_CMD_POS_EX].value.f - real_zero;
         setVarAxisDouble(i, VAR_AXIS_ACT_POS_RCS_EX, real, 0);
         // todo：机械坐标
         if(rt_data->sys_state[SYS_IS_MAC_LOCK]){
@@ -261,12 +261,6 @@ GNC_RES shm_var_update(){
         rt_data->chan_data[i].act_acc = rt_data->chan_data[i].cmd_acc;
         rt_data->chan_data[i].act_jk = rt_data->chan_data[i].cmd_jk;
     }
-}
-
-GNC_RES shm_var_update_prog(){
-    // 运行行号
-    setVarChanInt(0, VAR_CHAN_RUN_ROW, cycle_tp->plan_block->line_number, 0);
-    return GNC_OPERATOR_SUCCESS;
 }
 
 // todo：待删除

@@ -43,15 +43,15 @@ typedef struct{
     double max_vel;                 // 最大允许速度
     bool is_paused_inside_block;    // 在当段减速到0
     bool is_event_trigger;          // 触发重新计算
-    bool is_resetting;
-    int mcode;
-    bool run_row_reset;
+    bool is_resetting;              // 复位中
+    bool is_ve_zero;                // 加工段末速度为0
 }COORD_TP;
 
 void cycle_tp_init();
 void cycle_tp_reset();
-void execute_gcode();
+void auto_execute_gcode();
 void gcode_handle_estop();
+void gcode_handle_reset();
 
 #ifdef __cplusplus
 }

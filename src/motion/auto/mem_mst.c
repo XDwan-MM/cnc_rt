@@ -6,31 +6,13 @@
 #include "regapi.h"
 #include <hmisysapi.h>  
 
-static void mcode_set_state();
 static void nc_deal_mcode();
 static void nc_output_mf();
 static void nc_check_fin();
 static void nc_clear_msignal();
 static void mcode_data_mend();
 
-static void mcode_set_state(){
-    switch(rt_data->nc_event){
-        case SYS_EVENT_RESET:
-            mcode_data->mcode_state = MCODE_EXECUTE_RESET;
-            break;
-        case SYS_EVENT_RERUN:
-            mcode_data->mcode_state = MCODE_EXECUTE_RUNNING;
-            break;
-        case SYS_EVENT_PAUSE:
-            mcode_data->mcode_state = MCODE_EXECUTE_PAUSING;
-            break;
-        default:
-            break;
-    }
-}
-
-void execute_mcode(){
-    mcode_set_state();
+void auto_execute_mcode(){
     switch (mcode_data->mcode_state)
     {
     case MCODE_EXECUTE_RUNNING:
@@ -61,12 +43,14 @@ static void nc_deal_mcode(){
     // 辅助功能锁住
     if(rt_data->sys_state[SYS_IS_MSBT_LOCK]) {
         mcode_queue_reset(mcode_queue);
+        rt_set_chan_state(0, CHAN_IS_MCODE_END, true);
         return;
     }
     mcode_data->mcode_size = mcode_queue_get_size(mcode_queue);
     for(int i = 0; i < mcode_data->mcode_size; i++){
         mcode_queue_copy_block(mcode_queue, i, &mcode_data->mcode_block[i]);
         setVarChanInt(0, VAR_CHAN_RUN_ROW, mcode_data->mcode_block[i].line_number, 0);
+        LOG(LOG_LEVEL_INFO, "mline: %d", mcode_data->mcode_block[i].line_number);
         // nc侧输出代码信号M00~M31
         switch (mcode_data->mcode_block[i].m_code)
         {
@@ -81,12 +65,10 @@ static void nc_deal_mcode(){
         case M02: // 复位
             setRegValue8(REG_F, 10, 0x02); 
             setRegBit(REG_F, 9, 5);  
-            cycle_tp->mcode = M02;
             break;
         case M30: // 复位
             setRegValue8(REG_F, 10, 0x1e); 
             setRegBit(REG_F, 9, 4);  
-            cycle_tp->mcode = M30;
             break;
         case M03: // 主轴正转
             setRegValue8(REG_F, 10, 0x03); 

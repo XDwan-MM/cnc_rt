@@ -10,6 +10,7 @@ GNC_RES rt_data_init(void)
     rt_data->target_mode = MODE_EDIT;
     rt_data->current_mode = MODE_EDIT;
     rt_data->nc_event = SYS_EVENT_NONE;
+    rt_data->parser_error.parser_error_no = -1;
     rt_set_chan_state(0, CHAN_IS_GCODE_END, true);
     rt_set_chan_state(0, CHAN_IS_MCODE_END, true);
     pthread_mutex_init(&rt_data->mutex, NULL);
@@ -20,12 +21,34 @@ GNC_RES rt_data_reset(void){
     if(rt_data == NULL) return GNC_DATA_NULL;
     rt_data->nc_event = SYS_EVENT_NONE;
     pthread_mutex_lock(&rt_data->mutex);
-    memset(rt_data->sys_state, 0, sizeof(rt_data->sys_state));
+    // memset(rt_data->sys_state, 0, sizeof(rt_data->sys_state));
     rt_set_chan_state(0, CHAN_IS_GCODE_END, true);
     rt_set_chan_state(0, CHAN_IS_MCODE_END, true);
     rt_data->sys_state[SYS_IS_ESTOP_ON] = false;
+    rt_data->parser_error.parser_error_no = -1;
     pthread_mutex_unlock(&rt_data->mutex);
     return GNC_OPERATOR_SUCCESS;
+}
+
+void rt_set_parser_state(int error_no, int error_line){
+    pthread_mutex_lock(&rt_data->mutex);
+    rt_data->parser_error.parser_error_no = error_no;
+    rt_data->parser_error.parser_error_line = error_line;
+    pthread_mutex_unlock(&rt_data->mutex);
+}
+
+int rt_get_parser_error_no(){
+    pthread_mutex_lock(&rt_data->mutex);
+    int value = rt_data->parser_error.parser_error_no;
+    pthread_mutex_unlock(&rt_data->mutex);
+    return value;
+}
+
+int rt_get_parser_error_line(){
+    pthread_mutex_lock(&rt_data->mutex);
+    int value = rt_data->parser_error.parser_error_line;
+    pthread_mutex_unlock(&rt_data->mutex);
+    return value;
 }
 
 bool rt_get_sys_state(SysStateIndex state){
