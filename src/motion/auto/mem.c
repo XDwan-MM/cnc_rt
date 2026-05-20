@@ -36,16 +36,6 @@ static void auto_handle_alarm(){
     rt_set_chan_state(0, CHAN_IS_PARSER_RESET, true);
 }
 
-static bool auto_check_error(){
-    int error_no = rt_get_parser_error_no();
-    if(error_no >= 0){
-        int res = setAlarm(ALARM_PS, ALARM_ERROR, error_no);
-        if(res == -8) return true;
-        LOG(LOG_LEVEL_ERR, "译码错误 %d", error_no);
-    }
-    return false;
-}
-
 static bool auto_check_running(){
     if(rt_get_chan_state(0, CHAN_IS_PARSERING)) return true;
     if(!queue_is_empty(plan_queue) || !queue_is_empty(pretreat_queue) || !gcode_queue_is_empty(gcode_queue) || mcode_data->mcode_size != 0) return true;
@@ -127,7 +117,6 @@ static void auto_set_state(){
                 queue_reset(pretreat_queue);
                 gcode_queue_reset(gcode_queue);
                 mcode_handle_reset();
-                mcode_data->mcode_state = MCODE_EXECUTE_RUNNING;
                 // 通知译码运行，初始化译码器
                 rt_set_chan_state(0, CHAN_IS_PARSER_RERUN, true);
                 // 译码正在运行，译码结束译码器将其置false
@@ -140,6 +129,7 @@ static void auto_set_state(){
                 setVarChanInt(0, VAR_CHAN_IS_RUNNING, 1, 0);
                 setVarChanInt(0, VAR_CHAN_IS_MOVING, 1, 0);
             }
+            mcode_data->mcode_state = MCODE_EXECUTE_RUNNING;
             break;
         
         case SYS_EVENT_PAUSE:
