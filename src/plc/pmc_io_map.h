@@ -31,6 +31,7 @@ typedef enum {
     EV_MSG_AUTO_RUN,    /**< 运行控制 (参数1: 启动/中止) */
     EV_MSG_RESET,       /**< 系统复位 */
     EV_MSG_ENANLE,
+    EV_MSG_SPD_ORI,     /**< 主轴定向 */
 } PMC_EVENT_ID;
 
 typedef enum{
@@ -38,7 +39,7 @@ typedef enum{
     DRY_RUN,             // 空运行
     SINGLE_BLOCK,        // 单段
     BLOCK_SKIP = 3,      // 程序段跳过（1~9）    
-    MAC_LOCK = 12,       // 所有轴机床锁住（MLK,MLK1~4)
+    MAC_LOCK = 12,       // 所有轴机床锁住（MLK,MLK1~4）
     MAC_LOCK1,           // 各轴轴机床锁住   
     MAC_LOCK2,
     MAC_LOCK3,
@@ -83,6 +84,11 @@ typedef struct {
     int enable_state;
 } EV_MSG_ENABLE_PAYLOAD;
 
+typedef struct {
+    int p1;
+    int p2;
+} EV_MSG_SPD_ORI_PAYLOAD;
+
 /**
  * @brief CNC 事件通用结构
  * 用于在内存中统一事件格式，方便解析
@@ -97,6 +103,7 @@ typedef struct {
         EV_MSG_AUTO_RUN_PAYLOAD run_payload;
         EV_MSG_RESET_PAYLOAD reset_payload;
         EV_MSG_ENABLE_PAYLOAD enable_payload;
+        EV_MSG_SPD_ORI_PAYLOAD spd_ori_payload;
     };
 } PMC_EVENT;
 

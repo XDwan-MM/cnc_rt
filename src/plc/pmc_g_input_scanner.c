@@ -258,6 +258,7 @@ void pmc_g_input_scan_cycle(void)
     if (SIGNAL_RISING(curr_g.g_regs[70], last_g.g_regs[70], 6))
     {
         LOG(LOG_LEVEL_INFO, "扫描到G70.6 发生上升沿");
+        pmc_dispatch_event(EV_MSG_SPD_ORI, 0, 0);
     }
 
     /* 可选程序段跳过 G44.0 */
@@ -485,6 +486,12 @@ static void pmc_dispatch_event(PMC_EVENT_ID id, int p1, int p2)
         event.enable_payload.enable_key = p1;
         event.enable_payload.enable_state = p2;
         LOG(LOG_LEVEL_INFO, "扫描到使能: %d, enable_state: %d", p1, p2);
+        break;
+    case EV_MSG_SPD_ORI:
+        event.id = id;
+        event.enable_payload.enable_key = p1;
+        event.enable_payload.enable_state = p2;
+        LOG(LOG_LEVEL_INFO, "扫描到主轴定向: %d, enable_state: %d", p1, p2);
         break;
     default:
         break;
