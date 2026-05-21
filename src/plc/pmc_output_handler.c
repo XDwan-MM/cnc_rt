@@ -14,7 +14,7 @@ static void pmc_output_home();
 static void pmc_output_auto();
 static void pmc_output_reset();
 static void pmc_output_axis_status();
-
+static void pmc_outpus_spl_vel_status();
 void pmc_output_feedback()
 {
     pmc_output_alarm();
@@ -23,6 +23,7 @@ void pmc_output_feedback()
     pmc_output_home();
     pmc_output_reset();
     pmc_output_axis_status();
+    pmc_outpus_spl_vel_status();
 }
 
 static void pmc_output_alarm(){
@@ -278,5 +279,33 @@ static void pmc_output_axis_status()
     else
     {
         setRegBit(REG_F, 0, 6);
+    }
+    if(rt_data->axis_data[3].axis_status.is_error)
+    {
+        setRegBit(REG_F, 45, 0);
+    }
+    else
+    {
+        clearRegBit(REG_F, 45, 0);
+    }
+
+}
+static void pmc_outpus_spl_vel_status()
+{
+    if (spl_data.spl_vel_state == SPINDLE_VEL_ARRIVED)
+    {
+        setRegBit(REG_F, 45, 3);
+    }
+    else
+    {
+        clearRegBit(REG_F, 45, 3);
+    }
+    if (spl_data.spl_vel_state == SPINDLE_VEL_ZERO)
+    {
+        setRegBit(REG_F, 45, 1);
+    }
+    else
+    {
+        clearRegBit(REG_F, 45, 1);
     }
 }

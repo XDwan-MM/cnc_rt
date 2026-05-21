@@ -19,13 +19,20 @@ typedef enum{
     SPINDLE_EVENT_ORIENT
 }SpindleEvent;
 
+typedef enum{
+    SPINDLE_VEL_ZERO = 0,   // 主轴速度为零
+    SPINDLE_VEL_RAMP,       // 主轴速度正在变化
+    SPINDLE_VEL_ARRIVED     // 主轴速度到达
+}SpindleVelState;
+
 typedef struct{
-    SpindleState spl_state;     // 主轴状态
-    SpindleEvent spl_event;     // 主轴事件
-    int32_t current_speed;       // 主轴速度
-    double emot_speed;        // 目标速度
-    double mcp_target_speed;    // 面板按键目标速度
-    bool mcode_feedback;        // 是否完成M指令反馈
+    SpindleState spl_state;       // 主轴状态
+    SpindleVelState spl_vel_state;// 主轴速度状态
+    SpindleEvent spl_event;       // 主轴事件
+    int32_t current_speed;        // 主轴速度
+    double emot_speed;            // 目标速度
+    double mcp_target_speed;      // 面板按键目标速度
+    bool mcode_feedback;          // 是否完成M指令反馈
 }SPINDLE_DATA;
 
 extern SPINDLE_DATA spl_data;

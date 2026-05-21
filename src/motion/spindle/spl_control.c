@@ -74,8 +74,6 @@ void spindle_cal_speed(){
     }
     Hal_Driver_Set_Target_Vel(&spindle, (int32_t)spl_data.current_speed);
     setVarChanInt(0, VAR_CHAN_S_CODE, spl_data.current_speed, 0);
-
-//    setVarChanDouble(0, VAR_CHAN_CMD_SPDL_SPEED, spl_data.current_speed, 0);
 }
 
 bool spindle_is_stopped(){
@@ -103,7 +101,7 @@ static void Spindle_Stop(SPINDLE_DATA *spl_data)
         {
             spindle.mode = DRV_MODE_DISABLED;
         }
-        spindle_mcode_feedback();
+        spl_data->spl_vel_state = SPINDLE_VEL_ZERO;
     }
 }
 // 主轴正转，输入参数d_speed 主轴转速 unit 转/分钟
@@ -113,11 +111,12 @@ static void Spindle_Cw(SPINDLE_DATA *spl_data)
     if(spl_data->current_speed + diff < target_speed)
     {
         spl_data->current_speed = spl_data->current_speed + diff;
+        spl_data->spl_vel_state = SPINDLE_VEL_RAMP;
     }
     else
     {
         spl_data->current_speed = target_speed;
-        spindle_mcode_feedback();
+        spl_data->spl_vel_state = SPINDLE_VEL_ARRIVED;
     }
 }
 
@@ -128,11 +127,12 @@ static void Spindle_Ccw(SPINDLE_DATA *spl_data)
     if((spl_data->current_speed - diff) > target_speed)
     {
         spl_data->current_speed = spl_data->current_speed - diff;
+        spl_data->spl_vel_state = SPINDLE_VEL_RAMP;
     }
     else
     {
         spl_data->current_speed = target_speed;
-        spindle_mcode_feedback();
+        spl_data->spl_vel_state = SPINDLE_VEL_ARRIVED;
     }
 }
 
