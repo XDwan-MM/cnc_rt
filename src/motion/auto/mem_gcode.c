@@ -294,7 +294,7 @@ static GNC_RES cycle_tp_update_params(VELPLAN_TYPE velplan_type, double cycle_ti
     }
     cycle_tp->interp_cycle += 1;
     if(IsLessThan(cycle_tp->target_distance, 0)){
-        // LOG(LOG_LEVEL_DEBUG, "cycle_tp->target_distance %f", cycle_tp->target_distance);
+        LOG(LOG_LEVEL_DEBUG, "cycle_tp->target_distance %f", cycle_tp->target_distance);
         return VP_CAL_S_ERROR;
     }
     return GNC_CAL_SUCCESS;
@@ -428,7 +428,10 @@ static GNC_RES cycle_tp_cal_pausing(VELPLAN_TYPE vplan_mode, double ncu_cycle, d
     if (decline_s > remain_s){ // 在当前段无法减速到ve 
         cycle_tp->plan_block->start_vel = vs; 
         cycle_tp->plan_block->end_vel = vp_cal_decel_vel(vplan_mode, vs, amax, jmax, remain_s);  
-        if(IsLessThan(cycle_tp->plan_block->end_vel, 0)) return VP_CAL_ERROR;  
+        if(IsLessThan(cycle_tp->plan_block->end_vel, 0)) {
+            LOG(LOG_LEVEL_DEBUG, "end_vel %f", cycle_tp->plan_block->end_vel);
+            return VP_CAL_ERROR; 
+        } 
         cycle_tp->plan_block->max_vel = vs;
         cycle_tp->plan_block->length = remain_s;
         // LOG(LOG_LEVEL_DEBUG, "length %f", cycle_tp->plan_block->length);
