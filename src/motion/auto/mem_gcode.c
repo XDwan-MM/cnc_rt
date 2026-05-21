@@ -294,7 +294,7 @@ static GNC_RES cycle_tp_update_params(VELPLAN_TYPE velplan_type, double cycle_ti
     }
     cycle_tp->interp_cycle += 1;
     if(IsLessThan(cycle_tp->target_distance, 0)){
-        // LOG(LOG_LEVEL_DEBUG, "cycle_tp->target_distance %f", cycle_tp->target_distance);
+        LOG(LOG_LEVEL_DEBUG, "cycle_tp->target_distance %f", cycle_tp->target_distance);
         return VP_CAL_S_ERROR;
     }
     return GNC_CAL_SUCCESS;
@@ -428,7 +428,10 @@ static GNC_RES cycle_tp_cal_pausing(VELPLAN_TYPE vplan_mode, double ncu_cycle, d
     if (decline_s > remain_s){ // 在当前段无法减速到ve 
         cycle_tp->plan_block->start_vel = vs; 
         cycle_tp->plan_block->end_vel = vp_cal_decel_vel(vplan_mode, vs, amax, jmax, remain_s);  
-        if(IsLessThan(cycle_tp->plan_block->end_vel, 0)) return VP_CAL_ERROR;  
+        if(IsLessThan(cycle_tp->plan_block->end_vel, 0)) {
+            LOG(LOG_LEVEL_DEBUG, "end_vel %f", cycle_tp->plan_block->end_vel);
+            return VP_CAL_ERROR; 
+        } 
         cycle_tp->plan_block->max_vel = vs;
         cycle_tp->plan_block->length = remain_s;
         // LOG(LOG_LEVEL_DEBUG, "length %f", cycle_tp->plan_block->length);
@@ -460,7 +463,6 @@ static bool cycle_block_is_arrived(POS current_pos){
     if(head_block->mode == PMC_MODE_ARRIVE_CHECK){
         rt_set_chan_state(0, CHAN_IS_MODE_ARRIVE, true);
         LOG(LOG_LEVEL_DEBUG,  "到位检测 pos:%f %f %f vel:%f", head_block->end_pos.x, head_block->end_pos.y, head_block->end_pos.z, head_block->end_vel);
-        // todo：G27返回参考点检测信号的控制时序
     }
     if(head_block->mode == PMC_MODE_EXACT_STOP) {
         rt_set_chan_state(0, CHAN_IS_EXACT_STOP, true);
@@ -507,8 +509,13 @@ static GNC_RES cycle_tp_look_ahead(VELPLAN_TYPE vplan_mode, double ncu_cycle, do
     if(cur_block->start_vel > cur_block->max_vel) cur_block->max_vel = cur_block->start_vel;
     vp_cal_bid_lookahead(vplan_mode, plan_queue, ncu_cycle);
     // 如果无法减速到ve
-    double del_vel = vp_cal_decel_vel(vplan_mode, cur_block->start_vel, cur_block->max_acc, cur_block->max_jerk, cur_block->length);
-    if(IsGreaterThan(del_vel, cur_block->end_vel)) cur_block->end_vel = del_vel;
+    if(IsGreaterThan(vs, 0)){
+        double del_dist = vp_cal_decel_dist(vplan_mode, cur_block->start_vel, cur_block->end_vel, cur_block->max_acc, cur_block->max_jerk);
+        if(IsGreaterThan(del_dist, cur_block->length)) {
+            double del_vel = vp_cal_decel_vel(vplan_mode, cur_block->start_vel, cur_block->max_acc, cur_block->max_jerk, cur_block->length);
+            cur_block->end_vel = del_vel;
+        }
+    }
     // LOG(LOG_LEVEL_INFO, "2 %f %f", cur_block->length, cur_block->feed_vel);
     return GNC_CAL_SUCCESS;
 }
@@ -534,7 +541,6 @@ static void block_cal_lookahead_vel(PLAN_BLOCK* current_block){
             break;
     }
 }
-
 
 // 精准停：终点减速，到位检测
 static void block_cal_exact_stop_vel(PLAN_BLOCK* current_block){

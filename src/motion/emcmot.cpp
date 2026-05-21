@@ -79,7 +79,7 @@ void emcmotTrajPlan() {
         get_cmd_pos();
 
         // 误差补偿
-        compute_screw_comp();
+        // compute_screw_comp();
 
         #ifndef DEBUG_MODE_ENABLED
         //更新轴状态
@@ -302,25 +302,42 @@ static void read_from_hal() {
     Hal_Driver_Get_Actual_Pos(&z_axis_driver, &z_target_pos);
     rt_data->axis_data[AXIS_Z].motor_act_pos = pulses_to_position(z_target_pos, par_axis[AXIS_Z]);
 
-    // 人机交互显示的位置值，要减去误差补偿值.
-    var_axis[AXIS_X][VAR_AXIS_ACT_POS_EX].value.f = rt_data->axis_data[AXIS_X].motor_act_pos - 0;
-    var_axis[AXIS_Y][VAR_AXIS_ACT_POS_EX].value.f = rt_data->axis_data[AXIS_Y].motor_act_pos - 0;
-    var_axis[AXIS_Z][VAR_AXIS_ACT_POS_EX].value.f = rt_data->axis_data[AXIS_Z].motor_act_pos - 0;
-
     // 第一次运行，初始化位置
     if (!update_pos_flag) {
         var_axis[AXIS_X][VAR_AXIS_CMD_POS_EX].value.f = rt_data->axis_data[AXIS_X].motor_act_pos;
         var_axis[AXIS_Y][VAR_AXIS_CMD_POS_EX].value.f = rt_data->axis_data[AXIS_Y].motor_act_pos;
         var_axis[AXIS_Z][VAR_AXIS_CMD_POS_EX].value.f = rt_data->axis_data[AXIS_Z].motor_act_pos;
+        rt_data->axis_data[AXIS_X].wcs_cmd_pos = rt_data->axis_data[AXIS_X].motor_act_pos;
+        rt_data->axis_data[AXIS_Y].wcs_cmd_pos = rt_data->axis_data[AXIS_Y].motor_act_pos;
+        rt_data->axis_data[AXIS_Z].wcs_cmd_pos = rt_data->axis_data[AXIS_Z].motor_act_pos;
+        rt_data->axis_data[AXIS_X].wcs_cmd_pos2 = rt_data->axis_data[AXIS_X].motor_act_pos;
+        rt_data->axis_data[AXIS_Y].wcs_cmd_pos2 = rt_data->axis_data[AXIS_Y].motor_act_pos;
+        rt_data->axis_data[AXIS_Z].wcs_cmd_pos2 = rt_data->axis_data[AXIS_Z].motor_act_pos;
+        rt_data->axis_data[AXIS_X].motor_cmd_pos = rt_data->axis_data[AXIS_X].motor_act_pos;
+        rt_data->axis_data[AXIS_Y].motor_cmd_pos = rt_data->axis_data[AXIS_Y].motor_act_pos;
+        rt_data->axis_data[AXIS_Z].motor_cmd_pos = rt_data->axis_data[AXIS_Z].motor_act_pos;
         update_pos_flag = 1;
     }
 }
 
 static void output_to_hal() {
-    // todo：机床锁住时机械坐标不变，不发送给伺服
-    // if(rt_data->sys_state[SYS_IS_MAC_LOCK]){
-    //     return;
-    // }    
+    // 机床锁住时机械坐标不变，不发送给伺服
+    if(rt_data->sys_state[SYS_IS_MAC_LOCK]){
+        // 上一周期插补位置
+        rt_data->axis_data[AXIS_X].wcs_cmd_pos2 = var_axis[AXIS_X][VAR_AXIS_CMD_POS_EX].value.f;
+        rt_data->axis_data[AXIS_Y].wcs_cmd_pos2 = var_axis[AXIS_Y][VAR_AXIS_CMD_POS_EX].value.f;
+        rt_data->axis_data[AXIS_Z].wcs_cmd_pos2 = var_axis[AXIS_Z][VAR_AXIS_CMD_POS_EX].value.f;
+        return;
+    }    
+    // 本周期插补位置（加入补偿后使用wcs_comp_pos替换wcs_cmd_pos）
+    rt_data->axis_data[AXIS_X].motor_cmd_pos += var_axis[AXIS_X][VAR_AXIS_CMD_POS_EX].value.f - rt_data->axis_data[AXIS_X].wcs_cmd_pos2;
+    rt_data->axis_data[AXIS_Y].motor_cmd_pos += var_axis[AXIS_Y][VAR_AXIS_CMD_POS_EX].value.f - rt_data->axis_data[AXIS_Y].wcs_cmd_pos2;
+    rt_data->axis_data[AXIS_Z].motor_cmd_pos += var_axis[AXIS_Z][VAR_AXIS_CMD_POS_EX].value.f - rt_data->axis_data[AXIS_Z].wcs_cmd_pos2;
+    // 上一周期插补位置
+    rt_data->axis_data[AXIS_X].wcs_cmd_pos2 = var_axis[AXIS_X][VAR_AXIS_CMD_POS_EX].value.f;
+    rt_data->axis_data[AXIS_Y].wcs_cmd_pos2 = var_axis[AXIS_Y][VAR_AXIS_CMD_POS_EX].value.f;
+    rt_data->axis_data[AXIS_Z].wcs_cmd_pos2 = var_axis[AXIS_Z][VAR_AXIS_CMD_POS_EX].value.f;
+    // 发送给驱动器
     x_cmd_Pulses = position_to_pulses(rt_data->axis_data[AXIS_X].motor_cmd_pos, par_axis[AXIS_X]);
     Hal_Driver_Set_Target_Pos(&x_axis_driver, x_cmd_Pulses);
     y_cmd_Pulses = position_to_pulses(rt_data->axis_data[AXIS_Y].motor_cmd_pos, par_axis[AXIS_Y]);
