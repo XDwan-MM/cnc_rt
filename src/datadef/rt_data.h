@@ -68,10 +68,10 @@ typedef struct{
     double act_jk;
     double cmd_acc;
     double cmd_jk;
-    double wcs_cmd_pos;         // 工件插补计算位置（目前使用VAR_AXIS_CMD_POS_EX）
-    double wcs_cmd_pos2;        // 上一插补工件插补计算位置
-    double wcs_comp_pos;        // 补偿后位置
-    double wcs_comp_pos2;       // 上一插补补偿后位置 
+    double wcs_cmd_pos_cur;     // 工件插补计算位置（目前使用VAR_AXIS_CMD_POS_EX）
+    double wcs_cmd_pos_pre;     // 上一插补工件插补计算位置
+    double wcs_comp_pos_cur;    // 补偿后位置
+    double wcs_comp_pos_pre;    // 上一插补补偿后位置 
     double motor_cmd_pos;       // 下发至驱动器的指令位置 
     double motor_act_pos;       // 驱动器反馈位置 
     double pitch_comp_val;      // 当前位置螺距误差补偿值 (单位:um)  // wcf add 2026.01.23

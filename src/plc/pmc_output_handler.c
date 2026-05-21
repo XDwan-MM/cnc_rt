@@ -58,8 +58,8 @@ static void pmc_output_auto()
     else
         clearRegBit(REG_F, 0, 4);
     // 切削进给中
-    if(cycle_tp->mem_exec_state == EXEC_RUNNING){
-        if(cycle_tp->plan_block->mode != PMC_MODE_PAUSE) setRegBit(REG_F, 2, 6);
+    if(cycle_tp->mem_exec_state == EXEC_RUNNING && cycle_tp->plan_block->mode == PMC_MODE_CHOP){
+        setRegBit(REG_F, 2, 6);
     }
     else
         clearRegBit(REG_F, 2, 6); 
