@@ -99,7 +99,7 @@ static double mem_cal_pinc(VELPLAN_TYPE velplan_mode, double ncu_cycle, double c
                     // 复位
                     if(cycle_tp->is_resetting){
                         gcode_handle_reset();
-                        setVarChanInt(0, VAR_CHAN_RUN_ROW, 0, 0); 
+                        // setVarChanInt(0, VAR_CHAN_RUN_ROW, 0, 0); 
                         auto_check_soft_limit_del_done();
                         LOG(LOG_LEVEL_DEBUG, "完成复位");
                     }else{
