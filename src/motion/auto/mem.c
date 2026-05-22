@@ -86,9 +86,10 @@ static void auto_set_state(){
                 cycle_tp->is_resetting = 1;
             }else if(cycle_tp->mem_exec_state == EXEC_PAUSING){
                 cycle_tp->is_resetting = 1;
-            }else if(cycle_tp->mem_exec_state == EXEC_IDLE){
-                setVarChanInt(0, VAR_CHAN_RUN_ROW, 0, 0);
             }
+            // else if(cycle_tp->mem_exec_state == EXEC_IDLE){
+            //     setVarChanInt(0, VAR_CHAN_RUN_ROW, 0, 0);
+            // }
             // 通知译码复位
             rt_set_chan_state(0, CHAN_IS_PARSER_RESET, true);
             break;
@@ -138,7 +139,11 @@ static void auto_set_state(){
             if(cycle_tp->mem_exec_state == EXEC_RUNNING){
                 // 攻丝方式下进给暂停无效
                 if(!queue_is_empty(plan_queue)){
-                    if(cycle_tp->plan_block->mode == PMC_MODE_TAP) break;
+                    if(cycle_tp->plan_block->mode == PMC_MODE_TAP) {
+                        // ｍ代码状态也不能进入暂停
+                        mcode_data->mcode_state = MCODE_EXECUTE_RUNNING;
+                        break;
+                    }
                 }
                 cycle_tp->mem_exec_state = EXEC_PAUSING;
                 cycle_tp->is_event_trigger = true;
