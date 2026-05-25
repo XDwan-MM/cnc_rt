@@ -210,11 +210,7 @@ void Axis_Status_Update()
             rt_data->axis_data[var].axis_status.is_init = 1;
             return ;
         }
-        if(delta == 0)
-        {
-            rt_data->axis_data[var].axis_status.is_moving = 0;
-        }
-        else if(delta > 0)
+        if(delta > 0)
         {
             rt_data->axis_data[var].axis_status.is_moving = 1;
             rt_data->axis_data[var].axis_status.direction = 1;
@@ -223,6 +219,10 @@ void Axis_Status_Update()
         {
             rt_data->axis_data[var].axis_status.is_moving = 1;
             rt_data->axis_data[var].axis_status.direction = 0;
+        }
+        else
+        {
+            rt_data->axis_data[var].axis_status.is_moving = 0;
         }
     }
 }
