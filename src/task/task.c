@@ -175,6 +175,12 @@ static GNC_RES task_handle_pmc_event(PMC_EVENT *event_data)
             setVarChanDouble(0, VAR_CHAN_FEED_OVERRIDE, (double)event_data->override_payload.val, 0);
             rt_data->nc_event = SYS_EVENT_FEED_OVERRIDE;
             LOG(LOG_LEVEL_INFO, "处理进给倍率事件 %d", event_data->override_payload.val);
+            if(IsEqualTo(var_chan[0][VAR_CHAN_FEED_OVERRIDE].value.f, 0)){
+                setAlarm(ALARM_SY, ALARM_WARNING, 3);
+                LOG(LOG_LEVEL_WARN, "进给倍率为0");
+            }else{
+                delAlarm(ALARM_SY, ALARM_WARNING, 3);
+            }
         }
         // 2.快速进给倍率
         if (event_data->override_payload.override_type == 1)
@@ -182,6 +188,12 @@ static GNC_RES task_handle_pmc_event(PMC_EVENT *event_data)
             setVarChanDouble(0, VAR_CHAN_RAPID_OVERRIDE, (double)event_data->override_payload.val, 0);
             rt_data->nc_event = SYS_EVENT_RAPID_OVERRIDE;
             LOG(LOG_LEVEL_INFO, "处理快速进给倍率事件 %d", event_data->override_payload.val);
+            if(IsEqualTo(var_chan[0][VAR_CHAN_RAPID_OVERRIDE].value.f, 0)){
+                setAlarm(ALARM_SY, ALARM_WARNING, 2);
+                LOG(LOG_LEVEL_WARN, "快速倍率为0");
+            }else{
+                delAlarm(ALARM_SY, ALARM_WARNING, 2);
+            }
         }
         // 3.主轴倍率
         if (event_data->override_payload.override_type == 2)
