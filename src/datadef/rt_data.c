@@ -99,11 +99,9 @@ void nc_set_resetted(){
         case MODE_MDI: // MDI
         case MODE_MEM: // 记忆
         case MODE_DNC:
-            if(rt_data->nc_reset.is_resetting){
-                if(cycle_tp->mem_exec_state == EXEC_IDLE && mcode_data->mcode_state == MCODE_EXECUTE_IDLE){
-                    setVarChanInt(0, VAR_CHAN_IS_RESETTING, 0, 0);
-                    rt_data->nc_reset.is_resetted = 1;
-                }
+            if(rt_data->nc_reset.is_resetting && cycle_tp->mem_exec_state == EXEC_IDLE){
+                setVarChanInt(0, VAR_CHAN_IS_RESETTING, 0, 0);
+                rt_data->nc_reset.is_resetted = 1;
             }
             break;
         case MODE_HOMING: // 回零
