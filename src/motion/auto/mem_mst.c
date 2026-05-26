@@ -50,7 +50,7 @@ static void nc_deal_mcode(){
     for(int i = 0; i < mcode_data->mcode_size; i++){
         mcode_queue_copy_block(mcode_queue, i, &mcode_data->mcode_block[i]);
         setVarChanInt(0, VAR_CHAN_RUN_ROW, mcode_data->mcode_block[i].line_number, 0);
-        LOG(LOG_LEVEL_INFO, "mline: %d", mcode_data->mcode_block[i].line_number);
+        // LOG(LOG_LEVEL_INFO, "mline: %d", mcode_data->mcode_block[i].line_number);
         // nc侧输出代码信号M00~M31
         switch (mcode_data->mcode_block[i].m_code)
         {
@@ -94,6 +94,14 @@ static void nc_deal_mcode(){
             spl_data.spl_event = SPINDLE_EVENT_ORIENT;
             break;
         default:
+            // 判断Ｍ代码大小
+            if(mcode_data->mcode_block[i].m_code > 300){
+                rt_set_parser_state(243, mcode_data->mcode_block[i].line_number);
+                rt_set_chan_state(0, CHAN_IS_PARSER_RESET, true);
+                mcode_queue_reset(mcode_queue);
+                mcode_handle_reset();
+                return;
+            }
             if(mcode_data->mcode_block[i].m_code < REG_F10){
                 setRegValue8(REG_F, 10, mcode_data->mcode_block[i].m_code);
                 setRegValue8(REG_F, 11, 0);

@@ -178,8 +178,6 @@ GNC_RES parser_reading(){
     rt_set_parser_state(error_no, parser_data->itp_line_no);
     if (error_no >= 0)
     {
-        // setAlarm(ALARM_PS, ALARM_ERROR, error_no);
-        // LOG(LOG_LEVEL_ERR, "译码错误 %d", error_no);
         return GNC_PARSER_OVER;
     }
     if (parser_data->itp_datas.count <= 0)
@@ -213,9 +211,6 @@ STATIC bool parser_check_res(GNC_RES res){
     switch(res){
         case GNC_PARSER_OVER:
             LOG(LOG_LEVEL_INFO, "译码结束");
-            rt_set_chan_state(0, CHAN_IS_PARSERING, false);
-            rt_set_chan_state(0, CHAN_IS_PARSER_RERUN, false);
-            parser_data->parser_state = PARSER_IDLE;
             parser_reset();
             return false;
         case GNC_PARSER_WAIT:
@@ -244,10 +239,6 @@ STATIC bool parser_check_res(GNC_RES res){
             return true;
         default:
             parser_data->parser_state = PARSER_IDLE;
-            // todo：译码出错让运动暂停后报警，而不是直接进入报警
-            // LOG(LOG_LEVEL_ERR, "译码报警 %d", res);
-            // setAlarm(ALARM_CH, ALARM_ERROR, 2);
-            // rt_set_parser_state(res);
             parser_reset();
             return false;
     }
@@ -339,14 +330,7 @@ STATIC GNC_RES parser_handle_gcode(pmc_data* motion_data, NcItpState *itp_state,
 
 STATIC GNC_RES parser_handle_mcode(pmc_data* motion_data, NcItpState *itp_state, int *line_no){
     MCODE_BLOCK mcode_block;
-    // 判断Ｍ代码大小
-    if(motion_data->m_code > 300){
-        rt_set_parser_state(3000, *line_no);
-        setAlarm(ALARM_PS, ALARM_ERROR, 3000);
-        LOG(LOG_LEVEL_ERR, "译码错误 %d", 3000);
-        return GNC_PARSER_OVER;
-    }
-    // todo: 子程序调用M98和M99
+    // 子程序调用M98和M99
     if(motion_data->m_code == 98 || motion_data->m_code == 99){
         return GNC_OPERATOR_SUCCESS;
     }
@@ -420,6 +404,8 @@ GNC_RES parser_waiting_to_end() {
 void parser_reset(){
     ItpReset();
     parser_data->parser_state = PARSER_IDLE;
+    rt_set_chan_state(0, CHAN_IS_PARSERING, false);
+    rt_set_chan_state(0, CHAN_IS_PARSER_RERUN, false);
 }
 
 int macroVarGetValue(int no, double *mac)

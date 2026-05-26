@@ -7,19 +7,18 @@
 
 static void auto_set_state();
 static void auto_handle_alarm();
-static bool auto_check_error();
 static bool auto_check_running();
 static void auto_check_prog_end();
-static int error_no = -1;
 static bool reset_trigger = false;
 
-void handle_run_cmd(){
+void handle_auto_cmd(){
     // 设置自动加工状态
     auto_set_state();
     // 执行Ｍ代码
     auto_execute_mcode();
     // 执行Ｇ代码
     auto_execute_gcode();
+    // 检查程序是否结束
     auto_check_prog_end();
 }
 
@@ -49,7 +48,7 @@ static void auto_check_prog_end(){
         int error_line = rt_get_parser_error_line();
         if(error_no >= 0){
             setVarChanInt(0, VAR_CHAN_RUN_ROW, error_line, 0);
-            LOG(LOG_LEVEL_INFO, "gline: %d", error_line);
+            // LOG(LOG_LEVEL_INFO, "error line: %d", error_line);
             int res = setAlarm(ALARM_PS, ALARM_ERROR, error_no);
             if(res == -8) return;
             LOG(LOG_LEVEL_ERR, "译码错误 %d", error_no);
