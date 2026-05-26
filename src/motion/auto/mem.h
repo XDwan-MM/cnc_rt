@@ -18,9 +18,9 @@
 extern "C" {
 #endif
 
-void handle_run_cmd();
-void auto_handle_estop();
+void handle_auto_cmd();
 void handle_edit_cmd();
+void auto_handle_estop();
 
 #ifdef __cplusplus
 }

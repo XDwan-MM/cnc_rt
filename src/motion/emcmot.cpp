@@ -190,7 +190,7 @@ static void get_cmd_pos() {
         case MODE_MDI: // MDI
         case MODE_MEM: // 记忆
         case MODE_DNC:
-            handle_run_cmd();
+            handle_auto_cmd();
             break;
         case MODE_HOMING: // 回零
             handle_homing_cmd();

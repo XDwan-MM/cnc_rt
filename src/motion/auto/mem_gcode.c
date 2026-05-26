@@ -332,7 +332,7 @@ static GNC_RES cycle_tp_update_block(VELPLAN_TYPE vplan_mode, double ncu_cycle, 
     // 更新当前行信息
     queue_copy_block(plan_queue, 0, cycle_tp->plan_block);
     setVarChanInt(0, VAR_CHAN_RUN_ROW, cycle_tp->plan_block->line_number, 0);
-    LOG(LOG_LEVEL_INFO, "gline: %d", cycle_tp->plan_block->line_number);
+    // LOG(LOG_LEVEL_INFO, "gline: %d", cycle_tp->plan_block->line_number);
     // 对插补段终点进行行程限位检查
     lookahead_check_soft_limit(&cycle_tp->plan_block->end_pos);
     return res;
@@ -358,7 +358,7 @@ static GNC_RES plan_block_get_next(){
     while(true){
         head_block = queue_peak(plan_queue);
         setVarChanInt(0, VAR_CHAN_RUN_ROW, head_block->line_number, 0);
-        LOG(LOG_LEVEL_INFO, "gline: %d", head_block->line_number);
+        // LOG(LOG_LEVEL_INFO, "gline: %d", head_block->line_number);
         queue_pop(plan_queue);
         if(queue_is_empty(plan_queue)) return GNC_DATA_EMPTY;
         head_block = queue_peak(plan_queue);
@@ -456,6 +456,8 @@ static bool cycle_block_is_arrived(POS current_pos){
         if(head_block->pause_time < cycle_tp->interp_cycle) return true;
         else return false;
     }
+    // LOG(LOG_LEVEL_DEBUG,  "end pos:%f %f %f", head_block->end_pos.x, head_block->end_pos.y, head_block->end_pos.z);
+    // LOG(LOG_LEVEL_DEBUG,  "cur pos:%f %f %f", current_pos.x, current_pos.y, current_pos.z); 
     if((fabs(head_block->end_pos.x - current_pos.x)) > MEM_END_TOL) return false;
     if((fabs(head_block->end_pos.y - current_pos.y)) > MEM_END_TOL) return false;
     if((fabs(head_block->end_pos.z - current_pos.z)) > MEM_END_TOL) return false;
