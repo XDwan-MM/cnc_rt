@@ -313,6 +313,12 @@ static void read_from_hal() {
         rt_data->axis_data[AXIS_X].wcs_cmd_pos_pre = rt_data->axis_data[AXIS_X].motor_act_pos;
         rt_data->axis_data[AXIS_Y].wcs_cmd_pos_pre = rt_data->axis_data[AXIS_Y].motor_act_pos;
         rt_data->axis_data[AXIS_Z].wcs_cmd_pos_pre = rt_data->axis_data[AXIS_Z].motor_act_pos;
+        rt_data->axis_data[AXIS_X].wcs_comp_pos_cur = rt_data->axis_data[AXIS_X].motor_act_pos;
+        rt_data->axis_data[AXIS_Y].wcs_comp_pos_cur = rt_data->axis_data[AXIS_Y].motor_act_pos;
+        rt_data->axis_data[AXIS_Z].wcs_comp_pos_cur = rt_data->axis_data[AXIS_Z].motor_act_pos;
+        rt_data->axis_data[AXIS_X].wcs_comp_pos_pre = rt_data->axis_data[AXIS_X].motor_act_pos;
+        rt_data->axis_data[AXIS_Y].wcs_comp_pos_pre = rt_data->axis_data[AXIS_Y].motor_act_pos;
+        rt_data->axis_data[AXIS_Z].wcs_comp_pos_pre = rt_data->axis_data[AXIS_Z].motor_act_pos;
         rt_data->axis_data[AXIS_X].motor_cmd_pos = rt_data->axis_data[AXIS_X].motor_act_pos;
         rt_data->axis_data[AXIS_Y].motor_cmd_pos = rt_data->axis_data[AXIS_Y].motor_act_pos;
         rt_data->axis_data[AXIS_Z].motor_cmd_pos = rt_data->axis_data[AXIS_Z].motor_act_pos;
