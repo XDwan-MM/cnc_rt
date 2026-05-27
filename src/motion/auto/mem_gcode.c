@@ -458,9 +458,16 @@ static bool cycle_block_is_arrived(POS current_pos){
     }
     // LOG(LOG_LEVEL_DEBUG,  "end pos:%f %f %f", head_block->end_pos.x, head_block->end_pos.y, head_block->end_pos.z);
     // LOG(LOG_LEVEL_DEBUG,  "cur pos:%f %f %f", current_pos.x, current_pos.y, current_pos.z); 
-    if((fabs(head_block->end_pos.x - current_pos.x)) > MEM_END_TOL) return false;
-    if((fabs(head_block->end_pos.y - current_pos.y)) > MEM_END_TOL) return false;
-    if((fabs(head_block->end_pos.z - current_pos.z)) > MEM_END_TOL) return false;
+    // todo：检查圆弧插补
+    if(head_block->type == CIRCLE_CW || head_block->type == CIRCLE_CCW){
+        if((fabs(head_block->end_pos.x - current_pos.x)) > CIRCLE_END_TOL) return false;
+        if((fabs(head_block->end_pos.y - current_pos.y)) > CIRCLE_END_TOL) return false;
+        if((fabs(head_block->end_pos.z - current_pos.z)) > CIRCLE_END_TOL) return false;
+    }else{
+        if((fabs(head_block->end_pos.x - current_pos.x)) > MEM_END_TOL) return false;
+        if((fabs(head_block->end_pos.y - current_pos.y)) > MEM_END_TOL) return false;
+        if((fabs(head_block->end_pos.z - current_pos.z)) > MEM_END_TOL) return false;
+    }
     // 如果是到位检测模组，发送到位信号
     if(head_block->mode == PMC_MODE_ARRIVE_CHECK){
         rt_set_chan_state(0, CHAN_IS_MODE_ARRIVE, true);
