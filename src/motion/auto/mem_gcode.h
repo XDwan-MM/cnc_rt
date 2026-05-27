@@ -17,7 +17,8 @@ extern "C" {
 #include "plan_queue.h"
 #include "trajectory.h"
 
-#define MEM_END_TOL 0.004    // todo：阈值大
+#define MEM_END_TOL 0.001    
+#define CIRCLE_END_TOL 0.004
 #define LOOK_AHEAD_SIZE 200  // 速度前瞻的最大段数
 
 typedef enum mem_exec_state
