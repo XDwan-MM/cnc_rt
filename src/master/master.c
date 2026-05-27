@@ -66,16 +66,17 @@ int Master_Start() {
 
 void Master_Run()
 {
+    // === 1.定义变量 ===
+    int rc = 0;
+    PdoWarn PdoWarnInfo; //pdo警告信息结构体
+    
 #ifdef MASTER_RUN_ON
     int slavernum = Hal_Driver_Get_Count();
     uint16_t* statis = (uint16_t*)malloc(slavernum * sizeof(uint16_t));
     uint32_t* pos = (uint32_t*)malloc(slavernum * sizeof(uint32_t));
     uint32_t* pos_cmd = (uint32_t*)malloc(slavernum * sizeof(uint32_t));
     uint16_t* error_code = (uint16_t*)malloc(slavernum * sizeof(uint16_t));
-
-    // === 1.定义变量 ===
-    int rc = 0;
-    PdoWarn PdoWarnInfo; //pdo警告信息结构体
+    
     // === 2.握手前读 ===
     debug("==============================握手前DMA读================================\n");
     rc = GM_Master_Receive(1, &PdoWarnInfo);
@@ -320,6 +321,7 @@ void Master_Run()
 
     }
 err_close:
+    Master_Error(rc);
     LOG(LOG_LEVEL_ERR, "pdo线程不正常退出");
     exit_flag = 1;
 }
