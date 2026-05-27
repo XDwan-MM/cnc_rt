@@ -53,9 +53,9 @@ void auto_execute_gcode(){
     // 根据插补类型计算插补点：快速G00、直线G01、圆弧G02|03……
     interp_pos = mem_cal_pos(current_pos, interp_pinc);
     // 更新速度参数
-    setVarAxisDouble(AXIS_X, VAR_AXIS_CMD_POS_EX, interp_pos.x, 0);
-    setVarAxisDouble(AXIS_Y, VAR_AXIS_CMD_POS_EX, interp_pos.y, 0);
-    setVarAxisDouble(AXIS_Z, VAR_AXIS_CMD_POS_EX, interp_pos.z, 0);
+    rt_data->axis_data[AXIS_X].wcs_cmd_pos_cur = interp_pos.x;
+    rt_data->axis_data[AXIS_Y].wcs_cmd_pos_cur = interp_pos.y;
+    rt_data->axis_data[AXIS_Z].wcs_cmd_pos_cur = interp_pos.z;
     setVarChanDouble(0, VAR_CHAN_CMD_FEEDRATE, cycle_tp->traj_data->v * TIME_MINUS_2_S, 0);
     rt_data->chan_data[0].cmd_acc = cycle_tp->traj_data->a;
     rt_data->chan_data[0].cmd_jk = cycle_tp->traj_data->j;

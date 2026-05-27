@@ -363,9 +363,6 @@ static void compute_screw_comp() {
     perp_comp_val_z = 0;
 
     // 开始补偿
-    // rt_data->axis_data[AXIS_X].wcs_comp_pos_cur = var_axis[AXIS_X][VAR_AXIS_CMD_POS_EX].value.f + pitch_comp_val_x + perp_comp_val_x;
-    // rt_data->axis_data[AXIS_Y].wcs_comp_pos_cur = var_axis[AXIS_Y][VAR_AXIS_CMD_POS_EX].value.f + pitch_comp_val_y + perp_comp_val_y;
-    // rt_data->axis_data[AXIS_Z].wcs_comp_pos_cur = var_axis[AXIS_Z][VAR_AXIS_CMD_POS_EX].value.f + pitch_comp_val_z + perp_comp_val_z;
     rt_data->axis_data[AXIS_X].wcs_comp_pos_cur = rt_data->axis_data[AXIS_X].wcs_cmd_pos_cur + pitch_comp_val_x + perp_comp_val_x;
     rt_data->axis_data[AXIS_Y].wcs_comp_pos_cur = rt_data->axis_data[AXIS_Y].wcs_cmd_pos_cur + pitch_comp_val_y + perp_comp_val_y;
     rt_data->axis_data[AXIS_Z].wcs_comp_pos_cur = rt_data->axis_data[AXIS_Z].wcs_cmd_pos_cur + pitch_comp_val_z + perp_comp_val_z;
