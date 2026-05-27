@@ -26,7 +26,7 @@ GNC_RES chan_add_block(){
     // 译码第一段类型为g00，起点为当前机床位置
     if(rt_get_chan_state(0, CHAN_IS_FIRST_RUN)){
         // todo：var变量在路径线程中被读取，存在数据竞争风险，需加锁保护
-        pretreat_queue->pre_pos = (POS){.x = var_axis[AXIS_X][VAR_AXIS_CMD_POS_EX].value.f, .y = var_axis[AXIS_Y][VAR_AXIS_CMD_POS_EX].value.f, .z = var_axis[AXIS_Z][VAR_AXIS_CMD_POS_EX].value.f};
+        pretreat_queue->pre_pos = (POS){.x = rt_data->axis_data[AXIS_X].wcs_cmd_pos_cur, .y = rt_data->axis_data[AXIS_Y].wcs_cmd_pos_cur, .z = rt_data->axis_data[AXIS_Z].wcs_cmd_pos_cur};
         rt_set_chan_state(0, CHAN_IS_FIRST_RUN, false);
         // LOG(LOG_LEVEL_DEBUG,  "%f %f %f", pretreat_queue->pre_pos.x, pretreat_queue->pre_pos.y, pretreat_queue->pre_pos.z);
     }

@@ -43,7 +43,7 @@ static void check_traj_data_valid(TRAJ_PARAMS* traj_data);
 // G指令执行流程：处理开始和暂停 → 计算插补距离 → 计算插补空间坐标
 void auto_execute_gcode(){
     double current_vel = var_chan[0][VAR_CHAN_CMD_FEEDRATE].value.f / TIME_MINUS_2_S;
-    POS current_pos = {.x = var_axis[AXIS_X][VAR_AXIS_CMD_POS_EX].value.f, .y = var_axis[AXIS_Y][VAR_AXIS_CMD_POS_EX].value.f, .z = var_axis[AXIS_Z][VAR_AXIS_CMD_POS_EX].value.f};
+    POS current_pos = {.x = rt_data->axis_data[AXIS_X].wcs_cmd_pos_cur, .y = rt_data->axis_data[AXIS_Y].wcs_cmd_pos_cur, .z = rt_data->axis_data[AXIS_Z].wcs_cmd_pos_cur};
     int velplan_mode = par_chan[0][PAR_CH_VPLAN_MODE].value.val_int;
     double ncu_cycle = (double)par_ncu[PAR_NCU_CYCLE].value.val_uint / TIME_US_2_S;
     double interp_pinc = 0;

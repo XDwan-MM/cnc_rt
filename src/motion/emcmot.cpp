@@ -304,24 +304,14 @@ static void read_from_hal() {
 
     // 第一次运行，初始化位置
     if (!update_pos_flag) {
-        var_axis[AXIS_X][VAR_AXIS_CMD_POS_EX].value.f = rt_data->axis_data[AXIS_X].motor_act_pos;
-        var_axis[AXIS_Y][VAR_AXIS_CMD_POS_EX].value.f = rt_data->axis_data[AXIS_Y].motor_act_pos;
-        var_axis[AXIS_Z][VAR_AXIS_CMD_POS_EX].value.f = rt_data->axis_data[AXIS_Z].motor_act_pos;
-        rt_data->axis_data[AXIS_X].wcs_cmd_pos_cur = rt_data->axis_data[AXIS_X].motor_act_pos;
-        rt_data->axis_data[AXIS_Y].wcs_cmd_pos_cur = rt_data->axis_data[AXIS_Y].motor_act_pos;
-        rt_data->axis_data[AXIS_Z].wcs_cmd_pos_cur = rt_data->axis_data[AXIS_Z].motor_act_pos;
-        rt_data->axis_data[AXIS_X].wcs_cmd_pos_pre = rt_data->axis_data[AXIS_X].motor_act_pos;
-        rt_data->axis_data[AXIS_Y].wcs_cmd_pos_pre = rt_data->axis_data[AXIS_Y].motor_act_pos;
-        rt_data->axis_data[AXIS_Z].wcs_cmd_pos_pre = rt_data->axis_data[AXIS_Z].motor_act_pos;
-        rt_data->axis_data[AXIS_X].wcs_comp_pos_cur = rt_data->axis_data[AXIS_X].motor_act_pos;
-        rt_data->axis_data[AXIS_Y].wcs_comp_pos_cur = rt_data->axis_data[AXIS_Y].motor_act_pos;
-        rt_data->axis_data[AXIS_Z].wcs_comp_pos_cur = rt_data->axis_data[AXIS_Z].motor_act_pos;
-        rt_data->axis_data[AXIS_X].wcs_comp_pos_pre = rt_data->axis_data[AXIS_X].motor_act_pos;
-        rt_data->axis_data[AXIS_Y].wcs_comp_pos_pre = rt_data->axis_data[AXIS_Y].motor_act_pos;
-        rt_data->axis_data[AXIS_Z].wcs_comp_pos_pre = rt_data->axis_data[AXIS_Z].motor_act_pos;
-        rt_data->axis_data[AXIS_X].motor_cmd_pos = rt_data->axis_data[AXIS_X].motor_act_pos;
-        rt_data->axis_data[AXIS_Y].motor_cmd_pos = rt_data->axis_data[AXIS_Y].motor_act_pos;
-        rt_data->axis_data[AXIS_Z].motor_cmd_pos = rt_data->axis_data[AXIS_Z].motor_act_pos;
+        for (int i = 0; i < SYS_AXES_NUM; i++)
+        {
+            rt_data->axis_data[i].wcs_cmd_pos_cur = rt_data->axis_data[i].motor_act_pos;
+            rt_data->axis_data[i].wcs_cmd_pos_pre = rt_data->axis_data[i].motor_act_pos;
+            rt_data->axis_data[i].wcs_comp_pos_cur = rt_data->axis_data[i].motor_act_pos;
+            rt_data->axis_data[i].wcs_comp_pos_pre = rt_data->axis_data[i].motor_act_pos;
+            rt_data->axis_data[i].motor_cmd_pos = rt_data->axis_data[i].motor_act_pos;
+        }
         update_pos_flag = 1;
     }
 }
@@ -329,26 +319,26 @@ static void read_from_hal() {
 static void output_to_hal() {
     // 机床锁住时机械坐标不变，不发送给伺服
     if(rt_data->sys_state[SYS_IS_MAC_LOCK]){
-        // 上一周期插补位置
-        rt_data->axis_data[AXIS_X].wcs_cmd_pos_pre = var_axis[AXIS_X][VAR_AXIS_CMD_POS_EX].value.f;
-        rt_data->axis_data[AXIS_Y].wcs_cmd_pos_pre = var_axis[AXIS_Y][VAR_AXIS_CMD_POS_EX].value.f;
-        rt_data->axis_data[AXIS_Z].wcs_cmd_pos_pre = var_axis[AXIS_Z][VAR_AXIS_CMD_POS_EX].value.f;
-        rt_data->axis_data[AXIS_X].wcs_comp_pos_pre = rt_data->axis_data[AXIS_X].wcs_comp_pos_cur;
-        rt_data->axis_data[AXIS_Y].wcs_comp_pos_pre = rt_data->axis_data[AXIS_Y].wcs_comp_pos_cur;
-        rt_data->axis_data[AXIS_Z].wcs_comp_pos_pre = rt_data->axis_data[AXIS_Z].wcs_comp_pos_cur;
+        for (int i = 0; i < SYS_AXES_NUM; i++)
+        {
+            // 上一周期插补位置
+            rt_data->axis_data[i].wcs_cmd_pos_pre = rt_data->axis_data[i].wcs_cmd_pos_cur;
+            rt_data->axis_data[i].wcs_comp_pos_pre = rt_data->axis_data[i].wcs_comp_pos_cur;
+            // 更新 VAR_AXIS_CMD_POS_EX
+            var_axis[i][VAR_AXIS_CMD_POS_EX].value.f = rt_data->axis_data[i].wcs_cmd_pos_cur;
+        }
         return;
     }    
-    // 本周期插补位置
-    rt_data->axis_data[AXIS_X].motor_cmd_pos += rt_data->axis_data[AXIS_X].wcs_comp_pos_cur - rt_data->axis_data[AXIS_X].wcs_comp_pos_pre;
-    rt_data->axis_data[AXIS_Y].motor_cmd_pos += rt_data->axis_data[AXIS_Y].wcs_comp_pos_cur - rt_data->axis_data[AXIS_Y].wcs_comp_pos_pre;
-    rt_data->axis_data[AXIS_Z].motor_cmd_pos += rt_data->axis_data[AXIS_Z].wcs_comp_pos_cur - rt_data->axis_data[AXIS_Z].wcs_comp_pos_pre;
-    // 上一周期插补位置
-    rt_data->axis_data[AXIS_X].wcs_cmd_pos_pre = var_axis[AXIS_X][VAR_AXIS_CMD_POS_EX].value.f;
-    rt_data->axis_data[AXIS_Y].wcs_cmd_pos_pre = var_axis[AXIS_Y][VAR_AXIS_CMD_POS_EX].value.f;
-    rt_data->axis_data[AXIS_Z].wcs_cmd_pos_pre = var_axis[AXIS_Z][VAR_AXIS_CMD_POS_EX].value.f;
-    rt_data->axis_data[AXIS_X].wcs_comp_pos_pre = rt_data->axis_data[AXIS_X].wcs_comp_pos_cur;
-    rt_data->axis_data[AXIS_Y].wcs_comp_pos_pre = rt_data->axis_data[AXIS_Y].wcs_comp_pos_cur;
-    rt_data->axis_data[AXIS_Z].wcs_comp_pos_pre = rt_data->axis_data[AXIS_Z].wcs_comp_pos_cur;
+    for (int i = 0; i < SYS_AXES_NUM; i++)
+    {
+        // 本周期插补位置
+        rt_data->axis_data[i].motor_cmd_pos += rt_data->axis_data[i].wcs_comp_pos_cur - rt_data->axis_data[i].wcs_comp_pos_pre;
+        // 上一周期插补位置
+        rt_data->axis_data[i].wcs_cmd_pos_pre = rt_data->axis_data[i].wcs_cmd_pos_cur;
+        rt_data->axis_data[i].wcs_comp_pos_pre = rt_data->axis_data[i].wcs_comp_pos_cur;
+        // 更新 VAR_AXIS_CMD_POS_EX
+        var_axis[i][VAR_AXIS_CMD_POS_EX].value.f = rt_data->axis_data[i].wcs_cmd_pos_cur;
+    }
     // 发送给驱动器
     x_cmd_Pulses = position_to_pulses(rt_data->axis_data[AXIS_X].motor_cmd_pos, par_axis[AXIS_X]);
     Hal_Driver_Set_Target_Pos(&x_axis_driver, x_cmd_Pulses);
@@ -373,9 +363,12 @@ static void compute_screw_comp() {
     perp_comp_val_z = 0;
 
     // 开始补偿
-    rt_data->axis_data[AXIS_X].wcs_comp_pos_cur = var_axis[AXIS_X][VAR_AXIS_CMD_POS_EX].value.f + pitch_comp_val_x + perp_comp_val_x;
-    rt_data->axis_data[AXIS_Y].wcs_comp_pos_cur = var_axis[AXIS_Y][VAR_AXIS_CMD_POS_EX].value.f + pitch_comp_val_y + perp_comp_val_y;
-    rt_data->axis_data[AXIS_Z].wcs_comp_pos_cur = var_axis[AXIS_Z][VAR_AXIS_CMD_POS_EX].value.f + pitch_comp_val_z + perp_comp_val_z;
+    // rt_data->axis_data[AXIS_X].wcs_comp_pos_cur = var_axis[AXIS_X][VAR_AXIS_CMD_POS_EX].value.f + pitch_comp_val_x + perp_comp_val_x;
+    // rt_data->axis_data[AXIS_Y].wcs_comp_pos_cur = var_axis[AXIS_Y][VAR_AXIS_CMD_POS_EX].value.f + pitch_comp_val_y + perp_comp_val_y;
+    // rt_data->axis_data[AXIS_Z].wcs_comp_pos_cur = var_axis[AXIS_Z][VAR_AXIS_CMD_POS_EX].value.f + pitch_comp_val_z + perp_comp_val_z;
+    rt_data->axis_data[AXIS_X].wcs_comp_pos_cur = rt_data->axis_data[AXIS_X].wcs_cmd_pos_cur + pitch_comp_val_x + perp_comp_val_x;
+    rt_data->axis_data[AXIS_Y].wcs_comp_pos_cur = rt_data->axis_data[AXIS_Y].wcs_cmd_pos_cur + pitch_comp_val_y + perp_comp_val_y;
+    rt_data->axis_data[AXIS_Z].wcs_comp_pos_cur = rt_data->axis_data[AXIS_Z].wcs_cmd_pos_cur + pitch_comp_val_z + perp_comp_val_z;
 
     // 输出给VAR变量后面用
     rt_data->axis_data[AXIS_X].pitch_comp_val = pitch_comp_val_x;
