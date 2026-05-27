@@ -102,6 +102,7 @@ static void Spindle_Stop(SPINDLE_DATA *spl_data)
             spindle.mode = DRV_MODE_DISABLED;
         }
         spl_data->spl_vel_state = SPINDLE_VEL_ZERO;
+        spindle_mcode_feedback();
     }
 }
 // 主轴正转，输入参数d_speed 主轴转速 unit 转/分钟
@@ -117,6 +118,7 @@ static void Spindle_Cw(SPINDLE_DATA *spl_data)
     {
         spl_data->current_speed = target_speed;
         spl_data->spl_vel_state = SPINDLE_VEL_ARRIVED;
+        spindle_mcode_feedback();
     }
 }
 
@@ -133,6 +135,7 @@ static void Spindle_Ccw(SPINDLE_DATA *spl_data)
     {
         spl_data->current_speed = target_speed;
         spl_data->spl_vel_state = SPINDLE_VEL_ARRIVED;
+        spindle_mcode_feedback();
     }
 }
 
@@ -140,6 +143,7 @@ static void spindle_mcode_feedback(){
     // 只在完成M指令后执行一次
     if(!spl_data.mcode_feedback){
         spl_data.mcode_feedback = true;
+        LOG(LOG_LEVEL_DEBUG, "主轴速度到达 %d", spl_data.current_speed);
     }
 }
 

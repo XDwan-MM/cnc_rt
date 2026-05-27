@@ -48,7 +48,7 @@ static void auto_check_prog_end(){
         int error_line = rt_get_parser_error_line();
         if(error_no >= 0){
             setVarChanInt(0, VAR_CHAN_RUN_ROW, error_line, 0);
-            // LOG(LOG_LEVEL_INFO, "error line: %d", error_line);
+            LOG(LOG_LEVEL_INFO, "error line: %d", error_line);
             int res = setAlarm(ALARM_PS, ALARM_ERROR, error_no);
             if(res == -8) return;
             LOG(LOG_LEVEL_ERR, "译码错误 %d", error_no);

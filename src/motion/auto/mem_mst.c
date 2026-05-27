@@ -50,7 +50,7 @@ static void nc_deal_mcode(){
     for(int i = 0; i < mcode_data->mcode_size; i++){
         mcode_queue_copy_block(mcode_queue, i, &mcode_data->mcode_block[i]);
         setVarChanInt(0, VAR_CHAN_RUN_ROW, mcode_data->mcode_block[i].line_number, 0);
-        // LOG(LOG_LEVEL_INFO, "mline: %d", mcode_data->mcode_block[i].line_number);
+        LOG(LOG_LEVEL_INFO, "mline: %d", mcode_data->mcode_block[i].line_number);
         // nc侧输出代码信号M00~M31
         switch (mcode_data->mcode_block[i].m_code)
         {
