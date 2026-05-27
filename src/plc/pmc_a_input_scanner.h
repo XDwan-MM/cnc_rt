@@ -4,7 +4,7 @@
 #include "pmc_io_map.h"
 
 #define A_START_ADDR 0
-#define A_BYTE_COUNT 64  // 修改此处：支持 A0 - A63 共 64 个字节
+#define A_BYTE_COUNT 128  // 1、A0-A63共64个PLC报警A变量 2、 A64-A127共64个PLC提示A变量
 
 #ifdef __cplusplus
 extern "C" {
