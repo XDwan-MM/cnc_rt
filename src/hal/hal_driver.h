@@ -10,7 +10,7 @@ extern "C" {
 #include <GreeMasterAPI.h>
 
 // 常量定义
-#define MAX_DRIVERS 4
+#define MAX_DRIVERS 5
 
 // 返回值定义
 typedef enum {

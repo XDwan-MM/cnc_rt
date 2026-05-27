@@ -287,10 +287,10 @@ void Master_Run()
         }
 
         //读取驱动器警报
-        for (int i = 0; i < 4; i++)
+        for (int i = 0; i < 5; i++)
         {
             CHECK_FUNC(GM_TxPdoEntry_Read(ErrorNumb[i], &error_code[i] , 2));// 获取状态字
-            if(error_code[i] != 0)
+            if(error_code[i] != 0 && !rt_data->axis_data[i].axis_status.is_disable)
             {
                 dri_manager.drivers[i]->state = DRV_STATE_FAULT;
                 if(i == 0)
@@ -325,7 +325,6 @@ void Master_Run()
                 }
             }
         }
-        //轴屏蔽
 
         debug("=============================发送主站周期数据==============================\n");
         rc = GM_Master_Send(1);
