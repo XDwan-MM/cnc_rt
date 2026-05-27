@@ -94,15 +94,6 @@ static void pmc_output_auto()
 // 各轴返回零点完成、参考点建立
 static void pmc_output_home()
 {
-    // 急停后清除回参考点建立
-    if (rt_data->sys_state[SYS_IS_ESTOP_ON])
-    {
-        for (int i = 0; i < SYS_AXES_NUM; i++)
-        {
-            clearRegBit(REG_F, 120, i);
-        }
-        return;
-    }
     for (int i = 0; i < SYS_AXES_NUM; i++)
     {
         if (var_axis[i][VAR_AXIS_IS_HOMEF].value.i)
