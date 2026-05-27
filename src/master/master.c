@@ -313,7 +313,20 @@ void Master_Run()
                     rt_data->axis_data[i-1].axis_status.is_error = 0;
                 }
             }
+            if (rt_data->axis_data[i].axis_status.is_disable)
+            {
+                if(i == 0)
+                {
+                    CHECK_FUNC(GM_RxPdoEntry_Write(ControlWord[3], 0x00));
+                }
+                else
+                {
+                    CHECK_FUNC(GM_RxPdoEntry_Write(ControlWord[i - 1], 0x00));
+                }
+            }
         }
+        //轴屏蔽
+
         debug("=============================发送主站周期数据==============================\n");
         rc = GM_Master_Send(1);
         CHECK_RC(rc, "发送主站周期数据失败", err_close);

@@ -317,6 +317,7 @@ static void read_from_hal() {
 }
 
 static void output_to_hal() {
+
     // 机床锁住时机械坐标不变，不发送给伺服
     if(rt_data->sys_state[SYS_IS_MAC_LOCK]){
         for (int i = 0; i < SYS_AXES_NUM; i++)

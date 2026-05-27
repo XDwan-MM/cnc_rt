@@ -200,6 +200,7 @@ uint8_t Is_Outside_Limit(float position, LimitLevel limit)
 
 void Axis_Status_Update()
 {
+    //进给轴正、反、停状态
     for (int var = 0; var < SYS_AXES_NUM; ++var)
     {
         rt_data->axis_data[var].axis_status.current_pos = rt_data->axis_data[var].motor_cmd_pos;
@@ -223,6 +224,29 @@ void Axis_Status_Update()
         else
         {
             rt_data->axis_data[var].axis_status.is_moving = 0;
+        }
+    }
+    for (int var = 0; var < 5; ++var)
+    {
+        //界面参数设置轴拆卸状态
+        if (par_axis[var][PAR_AX_DISABLE].value.val_int)
+        {
+            LOG(LOG_LEVEL_INFO, "扫描到%d轴被屏蔽",var);
+            rt_data->axis_data[var].axis_status.is_disable = 1;
+        }
+        else
+        {
+            LOG(LOG_LEVEL_INFO, "扫描到%d轴解除屏蔽", var);
+            rt_data->axis_data[var].axis_status.is_disable = 0;
+        }
+        //该轴已处于屏蔽状态
+        if (rt_data->axis_data[var].axis_status.is_disable)
+        {
+            setVarAxisInt(var, VAR_AXIS_DISABLE, 1, 0);
+        }
+        else
+        {
+            setVarAxisInt(var, VAR_AXIS_DISABLE, 0, 0);
         }
     }
 }
