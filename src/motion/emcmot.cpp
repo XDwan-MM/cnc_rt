@@ -317,29 +317,22 @@ static void read_from_hal() {
 }
 
 static void output_to_hal() {
-
-    // 机床锁住时机械坐标不变，不发送给伺服
-    if(rt_data->sys_state[SYS_IS_MAC_LOCK]){
-        for (int i = 0; i < SYS_AXES_NUM; i++)
-        {
-            // 上一周期插补位置
-            rt_data->axis_data[i].wcs_cmd_pos_pre = rt_data->axis_data[i].wcs_cmd_pos_cur;
-            rt_data->axis_data[i].wcs_comp_pos_pre = rt_data->axis_data[i].wcs_comp_pos_cur;
-            // 更新 VAR_AXIS_CMD_POS_EX
-            var_axis[i][VAR_AXIS_CMD_POS_EX].value.f = rt_data->axis_data[i].wcs_cmd_pos_cur;
-        }
-        return;
-    }    
     for (int i = 0; i < SYS_AXES_NUM; i++)
     {
-        // 本周期插补位置
-        rt_data->axis_data[i].motor_cmd_pos += rt_data->axis_data[i].wcs_comp_pos_cur - rt_data->axis_data[i].wcs_comp_pos_pre;
+        // 机床锁住时机械坐标不变，不发送给伺服
+        if(!rt_data->sys_state[SYS_IS_MAC_LOCK])
+        {
+            // 本周期插补位置
+            rt_data->axis_data[i].motor_cmd_pos += rt_data->axis_data[i].wcs_comp_pos_cur - rt_data->axis_data[i].wcs_comp_pos_pre;
+        }
         // 上一周期插补位置
         rt_data->axis_data[i].wcs_cmd_pos_pre = rt_data->axis_data[i].wcs_cmd_pos_cur;
         rt_data->axis_data[i].wcs_comp_pos_pre = rt_data->axis_data[i].wcs_comp_pos_cur;
+        if(!rt_data->axis_data[i].axis_status.is_disable)
         // 更新 VAR_AXIS_CMD_POS_EX
         var_axis[i][VAR_AXIS_CMD_POS_EX].value.f = rt_data->axis_data[i].wcs_cmd_pos_cur;
     }
+
     // 发送给驱动器
     x_cmd_Pulses = position_to_pulses(rt_data->axis_data[AXIS_X].motor_cmd_pos, par_axis[AXIS_X]);
     Hal_Driver_Set_Target_Pos(&x_axis_driver, x_cmd_Pulses);
