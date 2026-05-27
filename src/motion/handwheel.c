@@ -175,7 +175,6 @@ void handle_mpg_cmd() {
 
         //初始化
         if (mpg_statis) {
-            // simple_tp[axis].joint.pos_cmd = simple_tp[axis].pos_cmd = simple_tp[axis].curr_pos = var_axis[axis][VAR_AXIS_CMD_POS_EX].value.f;
             simple_tp[axis].joint.pos_cmd = simple_tp[axis].pos_cmd = simple_tp[axis].curr_pos = rt_data->axis_data[axis].wcs_cmd_pos_cur;
             simple_tp[axis].curr_vel = 0;
             mpg_statis = false;
@@ -187,7 +186,7 @@ void handle_mpg_cmd() {
         simple_tp[axis].joint.pos_cmd = simple_tp[axis].curr_pos;
     }
     if (!mpg_statis) {
-        setVarAxisDouble(axis, VAR_AXIS_CMD_POS_EX, simple_tp[axis].joint.pos_cmd, 0);
+        rt_data->axis_data[axis].wcs_cmd_pos_cur = simple_tp[axis].joint.pos_cmd;
         setVarAxisDouble(axis, VAR_AXIS_CMD_VEL_EX, abs(simple_tp[axis].curr_vel) * 60, 0);
         setVarChanDouble(0, VAR_CHAN_CMD_FEEDRATE, abs(simple_tp[axis].curr_vel) * 60, 0);
     }

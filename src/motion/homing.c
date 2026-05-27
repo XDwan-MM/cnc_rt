@@ -284,7 +284,7 @@ static double abs_homing_tp_pinc(AXIS_TYPE axis_type){
 static void abs_homing_do_home(AXIS_TYPE axis_type){
     double axis_cmd_pos = rt_data->axis_data[axis_type].wcs_cmd_pos_cur;
     axis_cmd_pos = axis_cmd_pos + abs_homing_tp_pinc(axis_type);
-    setVarAxisDouble(axis_type, VAR_AXIS_CMD_POS_EX, axis_cmd_pos, 0);
+    rt_data->axis_data[axis_type].wcs_cmd_pos_cur = axis_cmd_pos;
 }
 
 static void relative_homing_do_home(AXIS_TYPE axis_type){

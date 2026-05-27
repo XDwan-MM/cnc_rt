@@ -329,10 +329,11 @@ static void output_to_hal() {
         rt_data->axis_data[i].wcs_cmd_pos_pre = rt_data->axis_data[i].wcs_cmd_pos_cur;
         rt_data->axis_data[i].wcs_comp_pos_pre = rt_data->axis_data[i].wcs_comp_pos_cur;
         if(!rt_data->axis_data[i].axis_status.is_disable)
-        // 更新 VAR_AXIS_CMD_POS_EX
-        var_axis[i][VAR_AXIS_CMD_POS_EX].value.f = rt_data->axis_data[i].wcs_cmd_pos_cur;
+        {
+            // 更新 VAR_AXIS_CMD_POS_EX
+            var_axis[i][VAR_AXIS_CMD_POS_EX].value.f = rt_data->axis_data[i].wcs_cmd_pos_cur;
+        }
     }
-
     // 发送给驱动器
     x_cmd_Pulses = position_to_pulses(rt_data->axis_data[AXIS_X].motor_cmd_pos, par_axis[AXIS_X]);
     Hal_Driver_Set_Target_Pos(&x_axis_driver, x_cmd_Pulses);
@@ -357,9 +358,6 @@ static void compute_screw_comp() {
     perp_comp_val_z = 0;
 
     // 开始补偿
-    // rt_data->axis_data[AXIS_X].wcs_comp_pos_cur = var_axis[AXIS_X][VAR_AXIS_CMD_POS_EX].value.f + pitch_comp_val_x + perp_comp_val_x;
-    // rt_data->axis_data[AXIS_Y].wcs_comp_pos_cur = var_axis[AXIS_Y][VAR_AXIS_CMD_POS_EX].value.f + pitch_comp_val_y + perp_comp_val_y;
-    // rt_data->axis_data[AXIS_Z].wcs_comp_pos_cur = var_axis[AXIS_Z][VAR_AXIS_CMD_POS_EX].value.f + pitch_comp_val_z + perp_comp_val_z;
     rt_data->axis_data[AXIS_X].wcs_comp_pos_cur = rt_data->axis_data[AXIS_X].wcs_cmd_pos_cur + pitch_comp_val_x + perp_comp_val_x;
     rt_data->axis_data[AXIS_Y].wcs_comp_pos_cur = rt_data->axis_data[AXIS_Y].wcs_cmd_pos_cur + pitch_comp_val_y + perp_comp_val_y;
     rt_data->axis_data[AXIS_Z].wcs_comp_pos_cur = rt_data->axis_data[AXIS_Z].wcs_cmd_pos_cur + pitch_comp_val_z + perp_comp_val_z;
@@ -379,9 +377,9 @@ static void check_for_soft_limit() {
     {
         if(runtime[var].is_first_run)
         {
-            int levels = Check_Axis_Limit_Violation(&runtime[var], rt_data->axis_data[var].motor_cmd_pos, RESET_CHEAK_USED);
+            int levels = Check_Axis_Limit_Violation(&runtime[var], rt_data->axis_data[var].wcs_cmd_pos_cur, RESET_CHEAK_USED);
             runtime[var].temp_config = runtime[var].config;
-            runtime[var].limit_pos = rt_data->axis_data[var].motor_cmd_pos;
+            runtime[var].limit_pos = rt_data->axis_data[var].wcs_cmd_pos_cur;
             if(!levels)
             {
                 runtime[var].limit_type = NO_LIMIT_TRIGGERED;
@@ -394,17 +392,17 @@ static void check_for_soft_limit() {
             if((runtime[var].limit_type == 0) ||
                (!rt_data->axis_data[var].axis_status.is_decel_done))
             {
-                runtime[var].active_levels = Check_Axis_Limit_Violation(&runtime[var], rt_data->axis_data[var].motor_cmd_pos, SOFT_CHEAK_USED);
-                runtime[var].limit_pos = rt_data->axis_data[var].motor_cmd_pos;
+                runtime[var].active_levels = Check_Axis_Limit_Violation(&runtime[var], rt_data->axis_data[var].wcs_cmd_pos_cur, SOFT_CHEAK_USED);
+                runtime[var].limit_pos = rt_data->axis_data[var].wcs_cmd_pos_cur;
             }
             switch (runtime[var].limit_type)
             {
             case LEVEL1_FWD_LIMIT:
                 runtime[var].temp_config.level1.positive_limit = runtime[var].limit_pos;
-                runtime[var].active_levels = Check_Axis_Limit_Violation(&runtime[var], rt_data->axis_data[var].motor_cmd_pos, ALARM_CHEAK_USED);                    break;
+                runtime[var].active_levels = Check_Axis_Limit_Violation(&runtime[var], rt_data->axis_data[var].wcs_cmd_pos_cur, ALARM_CHEAK_USED);                    break;
             case LEVEL1_REV_LIMIT:
                 runtime[var].temp_config.level1.negative_limit = runtime[var].limit_pos;
-                runtime[var].active_levels = Check_Axis_Limit_Violation(&runtime[var], rt_data->axis_data[var].motor_cmd_pos, ALARM_CHEAK_USED);
+                runtime[var].active_levels = Check_Axis_Limit_Violation(&runtime[var], rt_data->axis_data[var].wcs_cmd_pos_cur, ALARM_CHEAK_USED);
                 break;
             case LEVEL2_FWD_LIMIT:
                 if (runtime[var].config.level2_mode == 0)
@@ -415,7 +413,7 @@ static void check_for_soft_limit() {
                 {
                     runtime[var].temp_config.level2.negative_limit = runtime[var].limit_pos;
                 }
-                runtime[var].active_levels = Check_Axis_Limit_Violation(&runtime[var], rt_data->axis_data[var].motor_cmd_pos, ALARM_CHEAK_USED);
+                runtime[var].active_levels = Check_Axis_Limit_Violation(&runtime[var], rt_data->axis_data[var].wcs_cmd_pos_cur, ALARM_CHEAK_USED);
                 break;
             case LEVEL2_REV_LIMIT:
                 if (runtime[var].config.level2_mode == 0)
@@ -426,15 +424,15 @@ static void check_for_soft_limit() {
                 {
                     runtime[var].temp_config.level2.positive_limit = runtime[var].limit_pos;
                 }
-                runtime[var].active_levels = Check_Axis_Limit_Violation(&runtime[var], rt_data->axis_data[var].motor_cmd_pos, ALARM_CHEAK_USED);
+                runtime[var].active_levels = Check_Axis_Limit_Violation(&runtime[var], rt_data->axis_data[var].wcs_cmd_pos_cur, ALARM_CHEAK_USED);
                 break;
             case LEVEL3_FWD_LIMIT:
                 runtime[var].temp_config.level3.negative_limit = runtime[var].limit_pos;
-                runtime[var].active_levels = Check_Axis_Limit_Violation(&runtime[var], rt_data->axis_data[var].motor_cmd_pos, ALARM_CHEAK_USED);
+                runtime[var].active_levels = Check_Axis_Limit_Violation(&runtime[var], rt_data->axis_data[var].wcs_cmd_pos_cur, ALARM_CHEAK_USED);
                 break;
             case LEVEL3_REV_LIMIT:
                 runtime[var].temp_config.level3.positive_limit = runtime[var].limit_pos;
-                runtime[var].active_levels = Check_Axis_Limit_Violation(&runtime[var], rt_data->axis_data[var].motor_cmd_pos, ALARM_CHEAK_USED);
+                runtime[var].active_levels = Check_Axis_Limit_Violation(&runtime[var], rt_data->axis_data[var].wcs_cmd_pos_cur, ALARM_CHEAK_USED);
                 break;
             default:
                 break;
