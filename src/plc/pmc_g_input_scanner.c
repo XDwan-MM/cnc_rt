@@ -130,37 +130,62 @@ void pmc_g_input_scan_cycle(void)
         process_mode_selection(curr_g.g_regs[43]);
     }
 
-    /* (G100/G102)进给轴按键检测  - 支持多轴同时扫描 */
+    /* (G100/G102)进给轴按键检测 - 支持多轴同时扫描，带方向互锁 */
     for (int i = 0; i < 3; i++)
     {
-        /* G100 正向轴选按键检测 */
-        // 检测按下(上升沿)
+        bool pos_curr = GET_BIT(curr_g.g_regs[100], i);
+        bool neg_curr = GET_BIT(curr_g.g_regs[102], i);
+        bool pos_last = GET_BIT(last_g.g_regs[100], i);
+        bool neg_last = GET_BIT(last_g.g_regs[102], i);
+
+        /* 更新实时数据中的原始信号电平（供运动层互锁检查使用） */
+        rt_data->axis_data[i].axis_status.is_jog_pos_req = pos_curr;
+        rt_data->axis_data[i].axis_status.is_jog_neg_req = neg_curr;
+
+        bool interlock_curr = (pos_curr && neg_curr);
+        bool interlock_last = (pos_last && neg_last);
+
+        /* 方向互锁：同一轴正负两个方向同时有效 -> 禁止运动 */
+        if (interlock_curr)
+        {
+            /* 从非互锁进入互锁：强制释放当前方向 */
+            if (!interlock_last)
+            {
+                pmc_dispatch_event(EV_MSG_FEEDAXIS_KEY, i, 0);
+            }
+            /* 互锁期间跳过所有边沿检测 */
+            continue;
+        }
+
+        /* 退出互锁：为保持有效的方向合成一次按下事件 */
+        if (interlock_last && !interlock_curr)
+        {
+            if (pos_curr && !neg_curr)
+            {
+                pmc_dispatch_event(EV_MSG_FEEDAXIS_KEY, i, 1);
+            }
+            else if (!pos_curr && neg_curr)
+            {
+                pmc_dispatch_event(EV_MSG_FEEDAXIS_KEY, i, -1);
+            }
+            continue;
+        }
+
+        /* 正常边沿检测（非互锁状态） */
         if (SIGNAL_RISING(curr_g.g_regs[100], last_g.g_regs[100], i))
         {
-            // i = 0, 1, 2  对应这个G100变量的第0, 1,
-            // 2位。SIGNAL_RISING()为真时，发生上升沿，表示对应进给轴按钮被按下。
             pmc_dispatch_event(EV_MSG_FEEDAXIS_KEY, i, 1);
         }
-        // 检测释放(下降沿)
         if (SIGNAL_FALLING(curr_g.g_regs[100], last_g.g_regs[100], i))
         {
-            // i = 0, 1, 2  对应这个G100变量的第0, 1,
-            // 2位。SIGNAL_FALLING()为真时，发生下降沿，表示对应进给轴按钮被释放。
             pmc_dispatch_event(EV_MSG_FEEDAXIS_KEY, i, 0);
         }
-        /* G102 负向轴选按键检测 */
-        // 检测按下(上升沿)
         if (SIGNAL_RISING(curr_g.g_regs[102], last_g.g_regs[102], i))
         {
-            // i = 0, 1, 2  对应这个G102变量的第0, 1, 2位。
-            // SIGNAL_RISING()为真时，发生上升沿，表示对应进给轴按钮被按下。
             pmc_dispatch_event(EV_MSG_FEEDAXIS_KEY, i, -1);
         }
-        // 检测释放(下降沿)
         if (SIGNAL_FALLING(curr_g.g_regs[102], last_g.g_regs[102], i))
         {
-            // i = 0, 1, 2  对应这个G102变量的第0, 1,
-            // 2位。SIGNAL_FALLING()为真时，发生下降沿，表示对应进给轴按钮被释放。
             pmc_dispatch_event(EV_MSG_FEEDAXIS_KEY, i, 0);
         }
     }

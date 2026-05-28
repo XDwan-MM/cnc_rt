@@ -19,6 +19,9 @@
 #include <alarmapi.h>
 #include <math.h>
 #include "rt_data.h"
+#include "pitch_comp.h"
+#include "comp_data.h"
+#include "debug_mode.h"
 
 static void check_for_fault();
 static void set_operating_mode();
@@ -311,6 +314,7 @@ static void read_from_hal() {
             rt_data->axis_data[i].wcs_comp_pos_cur = rt_data->axis_data[i].motor_act_pos;
             rt_data->axis_data[i].wcs_comp_pos_pre = rt_data->axis_data[i].motor_act_pos;
             rt_data->axis_data[i].motor_cmd_pos = rt_data->axis_data[i].motor_act_pos;
+            rt_data->axis_data[i].fb_pos_no_comp = rt_data->axis_data[i].motor_act_pos;
         }
         update_pos_flag = 1;
     }
@@ -347,20 +351,36 @@ static void compute_screw_comp() {
     double pitch_comp_val_x, pitch_comp_val_y, pitch_comp_val_z;
     double perp_comp_val_x, perp_comp_val_y, perp_comp_val_z;
 
+    // Sync params from shared memory to library-compatible structs
+    comp_data_sync_params();
+
     // 螺距误差补偿值计算 (计算出来的补偿值 单位为:mm)
-    pitch_comp_val_x = 0;
-    pitch_comp_val_y = 0;
-    pitch_comp_val_z = 0;
+    pitch_comp_val_x = calculate_pitch_compensation(
+        &pitch_rt[AXIS_X], &acmp_params[AXIS_X], &pitch_table[AXIS_X],
+        (double)var_axis[AXIS_X][VAR_AXIS_CMD_POS_EX].value.f,
+        (double)var_axis[AXIS_X][VAR_AXIS_CMD_VEL].value.f);
+    pitch_comp_val_y = calculate_pitch_compensation(
+        &pitch_rt[AXIS_Y], &acmp_params[AXIS_Y], &pitch_table[AXIS_Y],
+        (double)var_axis[AXIS_Y][VAR_AXIS_CMD_POS_EX].value.f,
+        (double)var_axis[AXIS_Y][VAR_AXIS_CMD_VEL].value.f);
+    pitch_comp_val_z = calculate_pitch_compensation(
+        &pitch_rt[AXIS_Z], &acmp_params[AXIS_Z], &pitch_table[AXIS_Z],
+        (double)var_axis[AXIS_Z][VAR_AXIS_CMD_POS_EX].value.f,
+        (double)var_axis[AXIS_Z][VAR_AXIS_CMD_VEL].value.f);
 
     // 垂直度误差补偿值计算 (计算出来的补偿值 单位为:mm)
     perp_comp_val_x = 0;
     perp_comp_val_y = 0;
     perp_comp_val_z = 0;
 
-    // 开始补偿
-    rt_data->axis_data[AXIS_X].wcs_comp_pos_cur = rt_data->axis_data[AXIS_X].wcs_cmd_pos_cur + pitch_comp_val_x + perp_comp_val_x;
-    rt_data->axis_data[AXIS_Y].wcs_comp_pos_cur = rt_data->axis_data[AXIS_Y].wcs_cmd_pos_cur + pitch_comp_val_y + perp_comp_val_y;
-    rt_data->axis_data[AXIS_Z].wcs_comp_pos_cur = rt_data->axis_data[AXIS_Z].wcs_cmd_pos_cur + pitch_comp_val_z + perp_comp_val_z;
+    // 当前周期插补+补偿后位置
+    rt_data->axis_data[AXIS_X].wcs_comp_pos_cur = var_axis[AXIS_X][VAR_AXIS_CMD_POS_EX].value.f + pitch_comp_val_x + perp_comp_val_x;
+    rt_data->axis_data[AXIS_Y].wcs_comp_pos_cur = var_axis[AXIS_Y][VAR_AXIS_CMD_POS_EX].value.f + pitch_comp_val_y + perp_comp_val_y;
+    rt_data->axis_data[AXIS_Z].wcs_comp_pos_cur = var_axis[AXIS_Z][VAR_AXIS_CMD_POS_EX].value.f + pitch_comp_val_z + perp_comp_val_z;
+    // 反馈位置（去除补偿）
+    rt_data->axis_data[AXIS_X].fb_pos_no_comp = rt_data->axis_data[AXIS_X].motor_act_pos - pitch_comp_val_x - perp_comp_val_x;
+    rt_data->axis_data[AXIS_Y].fb_pos_no_comp = rt_data->axis_data[AXIS_Y].motor_act_pos - pitch_comp_val_y - perp_comp_val_y;
+    rt_data->axis_data[AXIS_Z].fb_pos_no_comp = rt_data->axis_data[AXIS_Z].motor_act_pos - pitch_comp_val_z - perp_comp_val_z;
 
     // 输出给VAR变量后面用
     rt_data->axis_data[AXIS_X].pitch_comp_val = pitch_comp_val_x;

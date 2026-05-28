@@ -57,17 +57,14 @@ void handle_alarm_cmd(){
         case SYS_EVENT_RERUN:
         case SYS_EVENT_PAUSE:
         case SYS_EVENT_X_POS_PRESS:
-        case SYS_EVENT_X_POS_RELEASE:
         case SYS_EVENT_X_NEG_PRESS:
-        case SYS_EVENT_X_NEG_RELEASE:
+        case SYS_EVENT_X_RELEASE:
         case SYS_EVENT_Y_POS_PRESS:
-        case SYS_EVENT_Y_POS_RELEASE:
         case SYS_EVENT_Y_NEG_PRESS:
-        case SYS_EVENT_Y_NEG_RELEASE:
+        case SYS_EVENT_Y_RELEASE:
         case SYS_EVENT_Z_POS_PRESS:
-        case SYS_EVENT_Z_POS_RELEASE:
         case SYS_EVENT_Z_NEG_PRESS:
-        case SYS_EVENT_Z_NEG_RELEASE:
+        case SYS_EVENT_Z_RELEASE:
         default:
             // todo：报警时由pmc控制面板按键是否可执行，nc侧不约束
             LOG(LOG_LEVEL_ERR, "报警下操作 %d 按键", rt_data->nc_event);

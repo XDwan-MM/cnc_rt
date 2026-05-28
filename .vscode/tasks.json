@@ -9,7 +9,7 @@
                 "-c",
                 // 核心指令：建目录 -> 进目录 -> qmake生成Makefile -> make编译
                 // "mkdir -p build && cd build && qmake ../*.pro && make -j$(nproc)"
-                "sudo ./build.sh"
+                "sudo ./build.sh debug"
             ],
             "group": {
                 "kind": "build",

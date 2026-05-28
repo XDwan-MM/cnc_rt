@@ -72,10 +72,11 @@ typedef struct{
     double cmd_jk;
     double wcs_cmd_pos_cur;     // 工件插补计算位置（目前使用VAR_AXIS_CMD_POS_EX）
     double wcs_cmd_pos_pre;     // 上一插补工件插补计算位置
-    double wcs_comp_pos_cur;    // 补偿后位置
-    double wcs_comp_pos_pre;    // 上一插补补偿后位置 
-    double motor_cmd_pos;       // 下发至驱动器的指令位置 
-    double motor_act_pos;       // 驱动器反馈位置 
+    double wcs_comp_pos_cur;    // 当前周期插补+补偿后位置
+    double wcs_comp_pos_pre;    // 上一周期插补+补偿后位置 
+    double motor_cmd_pos;       // 下发至驱动器的指令位置（带补偿）
+    double motor_act_pos;       // 驱动器反馈位置（带补偿）
+    double fb_pos_no_comp;      // 反馈位置（去除补偿）
     double pitch_comp_val;      // 当前位置螺距误差补偿值 (单位:um)  // wcf add 2026.01.23
     double perp_comp_val;       // 当前位置垂直度误差补偿值 (单位:mm)  // wcf add 2026.01.23
     AxisStatus axis_status;

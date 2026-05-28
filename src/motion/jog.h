@@ -33,7 +33,6 @@ typedef struct {
 
 /* 全局规划器实例，供系统其他模块读取指令位置/速度 */
 extern jog_planner_t jog_tp[SYS_AXES_NUM_JOG];
-extern jog_planner_t rapid_jog_tp[SYS_AXES_NUM_JOG];
 
 /* 1ms 周期调用的主任务函数 */
 extern void handle_jog_cmd();

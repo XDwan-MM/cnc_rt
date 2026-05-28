@@ -100,8 +100,7 @@ static GNC_RES task_handle_pmc_event(PMC_EVENT *event_data)
                 }
                 else
                 {
-                    // 松开时，为了保险，可以根据 record_nc_event 或直接触发 Release
-                    rt_data->nc_event = (rt_data->nc_event == SYS_EVENT_X_POS_PRESS) ? SYS_EVENT_X_POS_RELEASE : SYS_EVENT_X_NEG_RELEASE;
+                    rt_data->nc_event = SYS_EVENT_X_RELEASE;
                     LOG(LOG_LEVEL_INFO, "处理X释放事件");
                 }
             }
@@ -119,7 +118,7 @@ static GNC_RES task_handle_pmc_event(PMC_EVENT *event_data)
                 }
                 else
                 {
-                    rt_data->nc_event = (rt_data->nc_event == SYS_EVENT_Y_POS_PRESS) ? SYS_EVENT_Y_POS_RELEASE : SYS_EVENT_Y_NEG_RELEASE;
+                    rt_data->nc_event = SYS_EVENT_Y_RELEASE;
                     LOG(LOG_LEVEL_INFO, "处理Y释放事件");
                 }
             }
@@ -137,7 +136,7 @@ static GNC_RES task_handle_pmc_event(PMC_EVENT *event_data)
                 }
                 else
                 {
-                    rt_data->nc_event = (rt_data->nc_event == SYS_EVENT_Z_POS_PRESS) ? SYS_EVENT_Z_POS_RELEASE : SYS_EVENT_Z_NEG_RELEASE;
+                    rt_data->nc_event = SYS_EVENT_Z_RELEASE;
                     LOG(LOG_LEVEL_INFO, "处理Z释放事件");
                 }
             }

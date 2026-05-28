@@ -103,20 +103,17 @@ static void homing_set_state(){
             homing_tp[AXIS_Z].is_ref_on = true;
             break;
         
-        case SYS_EVENT_X_POS_RELEASE:
-        case SYS_EVENT_X_NEG_RELEASE:
+        case SYS_EVENT_X_RELEASE:
             LOG(LOG_LEVEL_INFO, "回零处理X松开");
             homing_tp[AXIS_X].is_ref_on = false;
             break;
 
-        case SYS_EVENT_Y_POS_RELEASE:
-        case SYS_EVENT_Y_NEG_RELEASE:
+        case SYS_EVENT_Y_RELEASE:
             LOG(LOG_LEVEL_INFO, "回零处理Y松开");
             homing_tp[AXIS_Y].is_ref_on = false;
             break;
 
-        case SYS_EVENT_Z_POS_RELEASE:
-        case SYS_EVENT_Z_NEG_RELEASE:
+        case SYS_EVENT_Z_RELEASE:
             LOG(LOG_LEVEL_INFO, "回零处理Z松开");
             homing_tp[AXIS_Z].is_ref_on = false;
             break;

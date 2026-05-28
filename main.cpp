@@ -10,6 +10,7 @@
 #include "threads_controller.h"
 #include "debug_mode.h"
 #include "global.h"
+#include "comp_data.h"
 #include "parser.h"
 #include <hmisysapi.h>
 #include "stored_stroke_check.h"
@@ -68,6 +69,22 @@ int main() {
         return -1;
     };
     LOG(LOG_LEVEL_INFO, "初始化全局变量");
+#ifdef DEBUG_MODE_ENABLED
+    // 注入螺距误差补偿测试数据 (单位: um)
+    // X轴: 11个测量点, 正向[0..10] + 反向[11..21]
+    {
+        float test_pitch[PITCH_COUNT_MAX] = {0};
+        float fwd[] = {1, 10, 20};
+        float rev[] = {-1, -10, -20};
+        memcpy(test_pitch + 0,  fwd, sizeof(fwd));
+        memcpy(test_pitch + 3, rev, sizeof(rev));
+        setAllPitChData(test_pitch);
+        LOG(LOG_LEVEL_INFO, "调试模式: 已注入螺距补偿测试数据");
+    }
+#endif
+    // 初始化螺距误差补偿
+    comp_data_init();
+    LOG(LOG_LEVEL_INFO, "初始化螺距误差补偿");
     // 初始化译码器
     parser_new();
     LOG(LOG_LEVEL_INFO, "初始化译码器");
