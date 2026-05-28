@@ -408,13 +408,13 @@ void pmc_g_input_scan_cycle(void)
         {
             if (SIGNAL_RISING(curr_g.g_regs[124], last_g.g_regs[124], i))
             {
-                LOG(LOG_LEVEL_INFO, "扫描到%d轴被屏蔽",i);
-                rt_data->axis_data[i].axis_status.is_disable = 1;
+                rt_data->axis_data[i].axis_status.plc_is_disable = 1;
+                LOG(LOG_LEVEL_INFO, "plc扫描到%d轴被屏蔽",i);
             }
             if (SIGNAL_FALLING(curr_g.g_regs[124], last_g.g_regs[124], i))
             {
-                LOG(LOG_LEVEL_INFO, "扫描到%d轴解除屏蔽", i);
-                rt_data->axis_data[i].axis_status.is_disable = 0;
+                rt_data->axis_data[i].axis_status.plc_is_disable = 0;
+                LOG(LOG_LEVEL_INFO, "plc扫描到%d轴解除屏蔽", i);
             }
         }
     }

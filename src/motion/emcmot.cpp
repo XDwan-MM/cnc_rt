@@ -320,7 +320,7 @@ static void output_to_hal() {
     for (int i = 0; i < SYS_AXES_NUM; i++)
     {
         // 机床锁住时机械坐标不变，不发送给伺服
-        if(!rt_data->sys_state[SYS_IS_MAC_LOCK])
+        if(!rt_data->sys_state[SYS_IS_MAC_LOCK] && !rt_data->axis_data[i].axis_status.is_disable)
         {
             // 本周期插补位置
             rt_data->axis_data[i].motor_cmd_pos += rt_data->axis_data[i].wcs_comp_pos_cur - rt_data->axis_data[i].wcs_comp_pos_pre;
