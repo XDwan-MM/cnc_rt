@@ -80,7 +80,7 @@ static GNC_RES task_handle_pmc_event(PMC_EVENT *event_data)
     case EV_MSG_FEEDAXIS_KEY:
     {
         int axis = event_data->feedaxis_key_payload.axis_num;       // 0:X, 1:Y, 2:Z
-        int direction = event_data->feedaxis_key_payload.direction; // 1:正按, -1:负按, 0:松开
+        int direction = event_data->feedaxis_key_payload.direction; // 1:正按, -1:正释放, 2:负按，-2:负释放
 
         // 基于当前系统模式进行逻辑分发
         if (rt_data->current_mode == MODE_JOG || rt_data->current_mode == MODE_HOMING)
@@ -88,56 +88,77 @@ static GNC_RES task_handle_pmc_event(PMC_EVENT *event_data)
             // axis为轴号
             if (axis == AXIS_X)
             {
-                if (direction == 1)
+                switch (direction)
                 {
+                case 1:
                     rt_data->nc_event = SYS_EVENT_X_POS_PRESS;
-                    LOG(LOG_LEVEL_INFO, "处理X+按下事件");
-                }
-                else if (direction == -1)
-                {
+                    // LOG(LOG_LEVEL_INFO, "处理X+按下事件");
+                    break;
+                case -1:
+                    rt_data->nc_event = SYS_EVENT_X_POS_RELEASE;
+                    // LOG(LOG_LEVEL_INFO, "处理X+释放事件");
+                    break;
+                case 2:
                     rt_data->nc_event = SYS_EVENT_X_NEG_PRESS;
-                    LOG(LOG_LEVEL_INFO, "处理X-按下事件");
-                }
-                else
-                {
-                    rt_data->nc_event = SYS_EVENT_X_RELEASE;
-                    LOG(LOG_LEVEL_INFO, "处理X释放事件");
+                    // LOG(LOG_LEVEL_INFO, "处理X-按下事件");
+                    break;
+                case -2:
+                    rt_data->nc_event = SYS_EVENT_X_NEG_RELEASE;
+                    // LOG(LOG_LEVEL_INFO, "处理X-释放事件");
+                    break;
+                default:
+                    rt_data->nc_event = SYS_EVENT_NONE;
+                    break;
                 }
             }
             else if (axis == AXIS_Y)
             {
-                if (direction == 1)
+                switch (direction)
                 {
+                case 1:
                     rt_data->nc_event = SYS_EVENT_Y_POS_PRESS;
-                    LOG(LOG_LEVEL_INFO, "处理Y+按下事件");
-                }
-                else if (direction == -1)
-                {
+                    // LOG(LOG_LEVEL_INFO, "处理Y+按下事件");
+                    break;
+                case -1:
+                    rt_data->nc_event = SYS_EVENT_Y_POS_RELEASE;
+                    // LOG(LOG_LEVEL_INFO, "处理Y+释放事件");
+                    break;
+                case 2:
                     rt_data->nc_event = SYS_EVENT_Y_NEG_PRESS;
-                    LOG(LOG_LEVEL_INFO, "处理Y-按下事件");
-                }
-                else
-                {
-                    rt_data->nc_event = SYS_EVENT_Y_RELEASE;
-                    LOG(LOG_LEVEL_INFO, "处理Y释放事件");
+                    // LOG(LOG_LEVEL_INFO, "处理Y-按下事件");
+                    break;
+                case -2:
+                    rt_data->nc_event = SYS_EVENT_Y_NEG_RELEASE;
+                    // LOG(LOG_LEVEL_INFO, "处理Y-释放事件");
+                    break;
+                default:
+                    rt_data->nc_event = SYS_EVENT_NONE;
+                    break;
                 }
             }
             else if (axis == AXIS_Z)
             {
-                if (direction == 1)
+                switch (direction)
                 {
+                case 1:
                     rt_data->nc_event = SYS_EVENT_Z_POS_PRESS;
-                    LOG(LOG_LEVEL_INFO, "处理Z+按下事件");
-                }
-                else if (direction == -1)
-                {
+                    // LOG(LOG_LEVEL_INFO, "处理Z+按下事件");
+                    break;
+                case -1:
+                    rt_data->nc_event = SYS_EVENT_Z_POS_RELEASE;
+                    // LOG(LOG_LEVEL_INFO, "处理Z+释放事件");
+                    break;
+                case 2:
                     rt_data->nc_event = SYS_EVENT_Z_NEG_PRESS;
-                    LOG(LOG_LEVEL_INFO, "处理Z-按下事件");
-                }
-                else
-                {
-                    rt_data->nc_event = SYS_EVENT_Z_RELEASE;
-                    LOG(LOG_LEVEL_INFO, "处理Z释放事件");
+                    // LOG(LOG_LEVEL_INFO, "处理Z-按下事件");
+                    break;
+                case -2:
+                    rt_data->nc_event = SYS_EVENT_Z_NEG_RELEASE;
+                    // LOG(LOG_LEVEL_INFO, "处理Z-释放事件");
+                    break;
+                default:
+                    rt_data->nc_event = SYS_EVENT_NONE;
+                    break;
                 }
             }
             LOG(LOG_LEVEL_INFO, "处理进给轴按键事件 Axis %d action %d under mode %d", axis, direction, rt_data->current_mode);
@@ -174,10 +195,13 @@ static GNC_RES task_handle_pmc_event(PMC_EVENT *event_data)
             setVarChanDouble(0, VAR_CHAN_FEED_OVERRIDE, (double)event_data->override_payload.val, 0);
             rt_data->nc_event = SYS_EVENT_FEED_OVERRIDE;
             LOG(LOG_LEVEL_INFO, "处理进给倍率事件 %d", event_data->override_payload.val);
-            if(IsEqualTo(var_chan[0][VAR_CHAN_FEED_OVERRIDE].value.f, 0)){
+            if (IsEqualTo(var_chan[0][VAR_CHAN_FEED_OVERRIDE].value.f, 0))
+            {
                 setAlarm(ALARM_SY, ALARM_WARNING, 3);
                 LOG(LOG_LEVEL_WARN, "进给倍率为0");
-            }else{
+            }
+            else
+            {
                 delAlarm(ALARM_SY, ALARM_WARNING, 3);
             }
         }
@@ -187,10 +211,13 @@ static GNC_RES task_handle_pmc_event(PMC_EVENT *event_data)
             setVarChanDouble(0, VAR_CHAN_RAPID_OVERRIDE, (double)event_data->override_payload.val, 0);
             rt_data->nc_event = SYS_EVENT_RAPID_OVERRIDE;
             LOG(LOG_LEVEL_INFO, "处理快速进给倍率事件 %d", event_data->override_payload.val);
-            if(IsEqualTo(var_chan[0][VAR_CHAN_RAPID_OVERRIDE].value.f, 0)){
+            if (IsEqualTo(var_chan[0][VAR_CHAN_RAPID_OVERRIDE].value.f, 0))
+            {
                 setAlarm(ALARM_SY, ALARM_WARNING, 2);
                 LOG(LOG_LEVEL_WARN, "快速倍率为0");
-            }else{
+            }
+            else
+            {
                 delAlarm(ALARM_SY, ALARM_WARNING, 2);
             }
         }
@@ -235,33 +262,36 @@ static GNC_RES task_handle_pmc_event(PMC_EVENT *event_data)
         break;
     }
     case EV_MSG_ENANLE:
-        switch(event_data->enable_payload.enable_key){
-            case BLOCK_SKIP:
-                rt_data->sys_state[SYS_IS_BLOCK_SKIP] = event_data->enable_payload.enable_state;
-                LOG(LOG_LEVEL_INFO, "处理跳段事件");
-                break;
-            case SINGLE_BLOCK:
-                // rt_data->sys_state[SYS_IS_SINGLE_BLOCK] = event_data->enable_payload.enable_state;
-                // if(rt_data->sys_state[SYS_IS_SINGLE_BLOCK]) rt_data->nc_event = SYS_EVENT_SINGLE_BLOCK_ON;
-                // else rt_data->nc_event = SYS_EVENT_SINGLE_BLOCK_OFF;
-                // LOG(LOG_LEVEL_INFO, "处理单段事件");
-                break;
-            case DRY_RUN:
-                rt_data->sys_state[SYS_IS_DRY_RUN] = event_data->enable_payload.enable_state;
-                if(rt_data->sys_state[SYS_IS_DRY_RUN]) rt_data->nc_event = SYS_EVENT_DRY_RUN_ON;
-                else rt_data->nc_event = SYS_EVENT_DRY_RUN_OFF;
-                LOG(LOG_LEVEL_INFO, "处理空运行事件");
-                break;
-            case MAC_LOCK:
-                rt_data->sys_state[SYS_IS_MAC_LOCK] = event_data->enable_payload.enable_state;
-                LOG(LOG_LEVEL_INFO, "处理机床锁住事件");
-                break;
-            case MSBT_LOCK:
-                rt_data->sys_state[SYS_IS_MSBT_LOCK] = event_data->enable_payload.enable_state;
-                LOG(LOG_LEVEL_INFO, "处理辅助功能锁住事件");
-                break;   
-            default:
-                break; 
+        switch (event_data->enable_payload.enable_key)
+        {
+        case BLOCK_SKIP:
+            rt_data->sys_state[SYS_IS_BLOCK_SKIP] = event_data->enable_payload.enable_state;
+            LOG(LOG_LEVEL_INFO, "处理跳段事件");
+            break;
+        case SINGLE_BLOCK:
+            // rt_data->sys_state[SYS_IS_SINGLE_BLOCK] = event_data->enable_payload.enable_state;
+            // if(rt_data->sys_state[SYS_IS_SINGLE_BLOCK]) rt_data->nc_event = SYS_EVENT_SINGLE_BLOCK_ON;
+            // else rt_data->nc_event = SYS_EVENT_SINGLE_BLOCK_OFF;
+            // LOG(LOG_LEVEL_INFO, "处理单段事件");
+            break;
+        case DRY_RUN:
+            rt_data->sys_state[SYS_IS_DRY_RUN] = event_data->enable_payload.enable_state;
+            if (rt_data->sys_state[SYS_IS_DRY_RUN])
+                rt_data->nc_event = SYS_EVENT_DRY_RUN_ON;
+            else
+                rt_data->nc_event = SYS_EVENT_DRY_RUN_OFF;
+            LOG(LOG_LEVEL_INFO, "处理空运行事件");
+            break;
+        case MAC_LOCK:
+            rt_data->sys_state[SYS_IS_MAC_LOCK] = event_data->enable_payload.enable_state;
+            LOG(LOG_LEVEL_INFO, "处理机床锁住事件");
+            break;
+        case MSBT_LOCK:
+            rt_data->sys_state[SYS_IS_MSBT_LOCK] = event_data->enable_payload.enable_state;
+            LOG(LOG_LEVEL_INFO, "处理辅助功能锁住事件");
+            break;
+        default:
+            break;
         }
         break;
     case EV_MSG_SPD_ORI:

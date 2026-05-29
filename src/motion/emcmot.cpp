@@ -352,6 +352,7 @@ static void compute_screw_comp() {
     double perp_comp_val_x, perp_comp_val_y, perp_comp_val_z;
 
     // Sync params from shared memory to library-compatible structs
+    // 暂时是立马同步螺补参数，后续改成复位生效应将函数移到复位逻辑．
     comp_data_sync_params();
 
     // 螺距误差补偿值计算 (计算出来的补偿值 单位为:mm)
@@ -386,6 +387,7 @@ static void compute_screw_comp() {
     rt_data->axis_data[AXIS_X].pitch_comp_val = pitch_comp_val_x;
     rt_data->axis_data[AXIS_Y].pitch_comp_val = pitch_comp_val_y;
     rt_data->axis_data[AXIS_Z].pitch_comp_val = pitch_comp_val_z;
+    // printf("pitch_comp_val_x %f %f %f\n", pitch_comp_val_x, var_axis[AXIS_X][VAR_AXIS_CMD_POS_EX].value.f, rt_data->axis_data[AXIS_X].wcs_comp_pos_cur);
 
     rt_data->axis_data[AXIS_X].perp_comp_val = perp_comp_val_x;
     rt_data->axis_data[AXIS_Y].perp_comp_val = perp_comp_val_y;

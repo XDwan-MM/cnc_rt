@@ -11,12 +11,25 @@ LIB_PAR_ACMP acmp_params[3];
 void comp_data_sync_params(void) {
     for (int axis = 0; axis < 3; axis++) {
         acmp_params[axis].pitch_comp_type      = par_acmp[axis][PAR_CMP_PITCH_TYPE].value.val_int;
+        // printf("PAR_CMP_PITCH_TYPE %d\n", par_acmp[axis][PAR_CMP_PITCH_TYPE].value.val_int);
+
         acmp_params[axis].pitch_comp_start_pos = par_acmp[axis][PAR_CMP_PITCH_START].value.val_real;
+        // printf("PAR_CMP_PITCH_START %f\n", par_acmp[axis][PAR_CMP_PITCH_START].value.val_real);
+
         acmp_params[axis].pitch_comp_num       = par_acmp[axis][PAR_CMP_PITCH_NUM].value.val_int;
+        // printf("PAR_CMP_PITCH_NUM %d\n", par_acmp[axis][PAR_CMP_PITCH_NUM].value.val_int);
+
         acmp_params[axis].pitch_comp_step      = par_acmp[axis][PAR_CMP_PITCH_STEP].value.val_real;
+        // printf("PAR_CMP_PITCH_STEP %f\n", par_acmp[axis][PAR_CMP_PITCH_STEP].value.val_real);
+
         acmp_params[axis].pitch_comp_modulo    = par_acmp[axis][PAR_CMP_PITCH_MODULO].value.val_int;
+        // printf("PAR_CMP_PITCH_MODULO %d\n", par_acmp[axis][PAR_CMP_PITCH_MODULO].value.val_int);
+
         acmp_params[axis].pitch_comp_factor    = par_acmp[axis][PAR_CMP_PITCH_FACTOR].value.val_real;
+        // printf("PAR_CMP_PITCH_FACTOR %f\n", par_acmp[axis][PAR_CMP_PITCH_FACTOR].value.val_real);
+
         acmp_params[axis].pitch_comp_table     = par_acmp[axis][PAR_CMP_PITCH_TABLE].value.val_int;
+        // printf("PAR_CMP_PITCH_TABLE %d\n", par_acmp[axis][PAR_CMP_PITCH_TABLE].value.val_int);
     }
 }
 
@@ -43,18 +56,23 @@ void establish_pitch_comp_table()
             num = COMP_ARRAY_MAX_SIZE;
         int table_start = par->pitch_comp_table;
 
-        float fwd_errors[COMP_ARRAY_MAX_SIZE];
-        float rev_errors[COMP_ARRAY_MAX_SIZE];
-        double measurement_points[COMP_ARRAY_MAX_SIZE];
+        float fwd_errors[num];
+        float rev_errors[num];
+        double measurement_points[num];
 
         // 正向补偿数组 (um), 负向紧随其后
         getPitchData(table_start, num, fwd_errors);
         getPitchData(table_start + num, num, rev_errors);
 
-        for (int i = 0; i < num; i++) {
-            fwd_errors[i] *= 0.001f;
-            rev_errors[i] *= 0.001f;
-        }
+        // for (int i = 0; i < num; i++) {
+        //     printf("fwd_errors[%d] %f\n", i, fwd_errors[i]);
+        //     printf("fwd_errors[%d] %f\n", i, rev_errors[i]);
+        // }
+
+        // for (int i = 0; i < num; i++) {
+        //     fwd_errors[i] *= 0.001f;
+        //     rev_errors[i] *= 0.001f;
+        // }
 
         // 生成测量点数组
         for (int i = 0; i < num; i++) {
