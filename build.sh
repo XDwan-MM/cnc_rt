@@ -1,6 +1,6 @@
 #!/bin/bash
 # rt_cnc 构建脚本
-# 用法: ./build.sh [debug|release|all|clean|help]
+# 用法: ./build.sh [debug|release|all|debug_run|run|run2|clean|help]
 
 set -e
 
@@ -30,11 +30,14 @@ print_help() {
     echo "用法: ./build.sh [选项]"
     echo ""
     echo "选项:"
-    echo "  debug     编译调试模式 (生成 rt_cnc_d，无需硬件)"
-    echo "  release   编译实时模式 (生成 rt_cnc，需要EtherCAT硬件)"
-    echo "  all       同时编译调试和实时模式 (默认)"
-    echo "  clean     清理所有构建文件"
-    echo "  help      显示此帮助信息"
+    echo "  debug      编译调试模式 (生成 rt_cnc_d，无需硬件)"
+    echo "  release    编译实时模式 (生成 rt_cnc，需要EtherCAT硬件)"
+    echo "  all        同时编译调试和实时模式 (默认)"
+    echo "  debug_run  编译调试模式并自动运行 rt_cnc_d"
+    echo "  run        编译实时模式平台1并运行 rt_cnc_1"
+    echo "  run2       编译实时模式平台2并运行 rt_cnc_2"
+    echo "  clean      清理所有构建文件"
+    echo "  help       显示此帮助信息"
     echo ""
     echo "构建目录结构:"
     echo "  build/"
@@ -47,7 +50,8 @@ print_help() {
     echo "示例:"
     echo "  ./build.sh          # 编译所有版本"
     echo "  ./build.sh debug    # 仅编译调试版本"
-    echo "  ./build.sh release  # 仅编译发布版本"
+    echo "  ./build.sh release    # 仅编译发布版本"
+    echo "  ./build.sh debug_run  # 编译调试模式并运行"
     echo ""
 }
 
@@ -269,7 +273,7 @@ case "${1:-all}" in
     run2)
         run2
         ;;
-    run_debug)
+    run_debug|debug_run)
         run_debug
         ;;
     help|--help|-h)

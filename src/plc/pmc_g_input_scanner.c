@@ -130,38 +130,27 @@ void pmc_g_input_scan_cycle(void)
         process_mode_selection(curr_g.g_regs[43]);
     }
 
-    /* (G100/G102)进给轴按键检测  - 支持多轴同时扫描 */
+    /* (G100/G102)进给轴按键检测 - 支持多轴同时扫描 */
     for (int i = 0; i < 3; i++)
     {
-        /* G100 正向轴选按键检测 */
-        // 检测按下(上升沿)
+        /* 正常边沿检测 */
+        // 正向按键检测
         if (SIGNAL_RISING(curr_g.g_regs[100], last_g.g_regs[100], i))
         {
-            // i = 0, 1, 2  对应这个G100变量的第0, 1,
-            // 2位。SIGNAL_RISING()为真时，发生上升沿，表示对应进给轴按钮被按下。
             pmc_dispatch_event(EV_MSG_FEEDAXIS_KEY, i, 1);
         }
-        // 检测释放(下降沿)
-        if (SIGNAL_FALLING(curr_g.g_regs[100], last_g.g_regs[100], i))
+        else if (SIGNAL_FALLING(curr_g.g_regs[100], last_g.g_regs[100], i))
         {
-            // i = 0, 1, 2  对应这个G100变量的第0, 1,
-            // 2位。SIGNAL_FALLING()为真时，发生下降沿，表示对应进给轴按钮被释放。
-            pmc_dispatch_event(EV_MSG_FEEDAXIS_KEY, i, 0);
-        }
-        /* G102 负向轴选按键检测 */
-        // 检测按下(上升沿)
-        if (SIGNAL_RISING(curr_g.g_regs[102], last_g.g_regs[102], i))
-        {
-            // i = 0, 1, 2  对应这个G102变量的第0, 1, 2位。
-            // SIGNAL_RISING()为真时，发生上升沿，表示对应进给轴按钮被按下。
             pmc_dispatch_event(EV_MSG_FEEDAXIS_KEY, i, -1);
         }
-        // 检测释放(下降沿)
+        // 负向按键检测
+        if (SIGNAL_RISING(curr_g.g_regs[102], last_g.g_regs[102], i))
+        {
+            pmc_dispatch_event(EV_MSG_FEEDAXIS_KEY, i, 2);
+        }
         if (SIGNAL_FALLING(curr_g.g_regs[102], last_g.g_regs[102], i))
         {
-            // i = 0, 1, 2  对应这个G102变量的第0, 1,
-            // 2位。SIGNAL_FALLING()为真时，发生下降沿，表示对应进给轴按钮被释放。
-            pmc_dispatch_event(EV_MSG_FEEDAXIS_KEY, i, 0);
+            pmc_dispatch_event(EV_MSG_FEEDAXIS_KEY, i, -2);
         }
     }
 
@@ -466,7 +455,7 @@ static void pmc_dispatch_event(PMC_EVENT_ID id, int p1, int p2)
         event.id = id;
         event.feedaxis_key_payload.axis_num = p1;
         event.feedaxis_key_payload.direction = p2;
-        LOG(LOG_LEVEL_INFO, "扫描到手动 feedaxis_key: %d, axis: %d, action: %d",
+        LOG(LOG_LEVEL_INFO, "扫描到进给轴按键切换: %d, axis: %d, action: %d",
             event.id, p1, p2);
         break;
     }

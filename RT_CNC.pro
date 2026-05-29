@@ -78,6 +78,10 @@ INCLUDEPATH += $$PWD/lib/parser/api $$PWD/lib/parser
 LIBS += -L"$$PWD/lib/kinematic/bin/" -lkinematic
 INCLUDEPATH += $$PWD/lib/kinematic/include $$PWD/lib/kinematic
 
+# 添加误差补偿库
+LIBS += -L"$$PWD/lib/CNC_ErrorComp/bin" -lCNC_ErrorComp
+INCLUDEPATH += $$PWD/lib/CNC_ErrorComp/include $$PWD/lib/CNC_ErrorComp
+
 unix:!macx: {
     DESTDIR = $$PWD/bin
 }
@@ -103,6 +107,7 @@ debug_mode {
 
 HEADERS += \
     src/common/debug_mode.h \
+    src/compensation/comp_data.h \
     src/datadef/datatype.h \
     src/datadef/event_queue.h \
     src/datadef/eventdef.h \
@@ -151,6 +156,7 @@ HEADERS += \
 
 SOURCES += \
     main.cpp \
+    src/compensation/comp_data.c \
     src/datadef/datatype.c \
     src/datadef/event_queue.c \
     src/datadef/gcode_queue.c \
@@ -190,6 +196,7 @@ SOURCES += \
 
 INCLUDEPATH += \
     src/common \
+    src/compensation \
     src/datadef \
     src/hal \
     src/master \

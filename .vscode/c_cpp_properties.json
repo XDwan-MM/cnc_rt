@@ -17,6 +17,7 @@
                 "/opt/Qt5.15.16/5.15.16/gcc_64/include/QtCore"
             ],
             "defines": [
+                "DEBUG_MODE_ENABLED",
                 "QT_CORE_LIB",
                 "QT_GUI_LIB",
                 "QT_WIDGETS_LIB"

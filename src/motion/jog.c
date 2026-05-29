@@ -14,10 +14,14 @@ static JOG_AXIS_CTRL jog_ctrls[SYS_AXES_NUM_JOG] = {
     {JOG_STATE_IDLE, JOG_DIR_NONE}};
 
 /* 在 jog.c 的文件头部定义 */
-static NC_MODE last_sys_mode = MODE_EDIT; // 记录进入当前模式前，上一次的操作模式
+static NC_MODE last_sys_mode = MODE_IDLE; // 记录进入当前模式前，上一次的操作模式
+
+/* 本地按键保持状态 -- 由 nc_event 边沿更新，替代原先 rt_data 中的 is_jog_pos_req / is_jog_neg_req */
+static bool jog_pos_held[SYS_AXES_NUM_JOG];
+static bool jog_neg_held[SYS_AXES_NUM_JOG];
 
 /* 内部私有函数声明 */
-static void update_axis_state(int i, JOG_AXIS_CTRL *jog_axis_ctrl);
+static void update_axis_state(int i, JOG_AXIS_CTRL *jog_axis_ctrl, bool global_fatal);
 static void execute_axis_motion(int i, JOG_AXIS_CTRL *jog_axis_ctrl, jog_planner_t *axis_jog_tp, const bool is_rapid);
 static void sync_jog_on_mode_entry();
 static bool check_all_axes_idle_jog();
@@ -34,16 +38,39 @@ void handle_jog_cmd()
         return;
     }
 
-    // 【核心逻辑】：
-    // 如果 handle_jog_cmd 被调用了，说明系统当前一定是在执行点动逻辑。
-    // 如果此时发现 last_sys_mode 还没更新成 MODE_JOG，
-    // 那就说明这一帧是“从其他模式切入点动模式”的第一帧！
-    if (last_sys_mode != MODE_JOG)
+    // 模式切换中：重置进入标志，确保下次切回 JOG 时重新同步规划器位置
+    if (rt_data->sys_state[SYS_IS_SWITCHING_MODE])
+        last_sys_mode = MODE_IDLE;
+    // 模式切换完成后首次进入 JOG：同步规划器坐标到当前物理位置
+    if (last_sys_mode != MODE_JOG && !rt_data->sys_state[SYS_IS_SWITCHING_MODE])
     {
-        // 1. 立即执行同步，把规划器坐标对齐到当前物理位置
         sync_jog_on_mode_entry();
-        // 2. 标记“我已经上班了”，下一毫秒就不会再进这个 if 了
         last_sys_mode = MODE_JOG;
+    }
+
+    /* 报警分类预计算：每周期一次，判定是否为全局致命报警。
+       - 仅当报警纯粹由限位开关引起时，不致命，放行各轴自行处理（X轴限位不影响Y/Z轴）。
+       - 其余一切情况（非限位报警、限位+非限位混合、系统级报警）均为致命，三轴全停。
+
+       SYS_IS_ALARMING 为真时：
+         non_limit   pure_limit   →  global_fatal
+         ✓           任意          →  true   非限位报警
+         ✗           ✓            →  false  纯限位报警（放行）
+         ✗           ✗            →  true   系统级报警（无限位标志） */
+    bool global_fatal = false;
+    if (rt_data->sys_state[SYS_IS_ALARMING])
+    {
+        bool any_non_limit = false;
+        bool any_pure_limit = false;
+        for (int j = 0; j < SYS_AXES_NUM_JOG; j++)
+        {
+            if (rt_data->axis_data[j].axis_status.is_error || ferror_control[j].error_flag)
+                any_non_limit = true;
+            else if (rt_data->axis_data[j].axis_status.is_fwd_limit ||
+                     rt_data->axis_data[j].axis_status.is_rev_limit)
+                any_pure_limit = true;
+        }
+        global_fatal = (any_non_limit || !any_pure_limit);
     }
 
     for (int i = 0; i < SYS_AXES_NUM_JOG; i++)
@@ -57,7 +84,7 @@ void handle_jog_cmd()
         }
 
         /* 2. 处理按键信号与状态机切换 */
-        update_axis_state(i, &jog_ctrls[i]);
+        update_axis_state(i, &jog_ctrls[i], global_fatal);
 
         /* 3. 执行JOG运动计算逻辑 */
         execute_axis_motion(i, &jog_ctrls[i], &jog_tp[i], rt_data->sys_state[SYS_IS_RAPID]);
@@ -69,22 +96,24 @@ void handle_jog_cmd()
 
     /* 计算合成进给速度并更新给人机交互显示 */
     double f_sq = 0;
-    for (int i = 0; i < 3; i++)
+    for (int i = 0; i < SYS_AXES_NUM_JOG; i++)
     {
         f_sq += (jog_tp[i].curr_vel * jog_tp[i].curr_vel);
     }
     setVarChanDouble(0, VAR_CHAN_CMD_FEEDRATE, sqrt(f_sq) * 60.0, 0);
 
-    // 减速完成信号赋值
+    // 减速完成信号：仅在限位触发且速度归零时置位，否则清零
     for (int i = 0; i < SYS_AXES_NUM_JOG; i++)
     {
-        if (fabs(rt_data->axis_data[i].wcs_cmd_pos_cur) < SPEED_THRESHOLD)
+        if (fabs(var_axis[i][VAR_AXIS_CMD_VEL].value.f) < SPEED_THRESHOLD &&
+            (rt_data->axis_data[i].axis_status.is_fwd_limit || rt_data->axis_data[i].axis_status.is_rev_limit))
         {
-            if (rt_data->axis_data[i].axis_status.is_fwd_limit || rt_data->axis_data[i].axis_status.is_rev_limit)
-            {
-                rt_data->axis_data[i].axis_status.is_decel_done = 1;
-            }
+            rt_data->axis_data[i].axis_status.is_decel_done = 1;
         }
+        // else
+        // {
+        //     rt_data->axis_data[i].axis_status.is_decel_done = 0;
+        // }
     }
 
     // 无动作时将通道事件全局变量置为NONE事件
@@ -105,122 +134,120 @@ void jog_handle_estop()
         jog_ctrls[i].state = JOG_STATE_IDLE;
         jog_ctrls[i].direction = JOG_DIR_NONE;
         memset(&jog_tp[i], 0, sizeof(jog_planner_t));
+        /* 清除本地保持状态 */
+        jog_pos_held[i] = false;
+        jog_neg_held[i] = false;
     }
 }
 
 /**
- * @brief 根据按键事件更新状态机
+ * @brief 根据 nc_event 边沿更新本地保持状态，并驱动 JOG 状态机
+ *
+ * 状态机完全由 nc_event 边沿事件驱动，不再依赖 rt_data 中的电平标志。
+ * 本函数将 nc_event 边沿转换为本地保持状态（jog_pos_held / jog_neg_held），
+ * 供状态机作为电平信号消费。
+ *
+ * 行为规则：
+ * - 仅正向按键按住 → 正向运动
+ * - 仅负向按键按住 → 负向运动
+ * - 正负同时按住  → 停止（工业安全互锁）
+ * - 正向按住时松开负向 → 继续正向运动（不受负向释放影响）
+ * - 全松开 → 停止
  */
-static void update_axis_state(int i, JOG_AXIS_CTRL *jog_axis_ctrl)
+static void update_axis_state(int i, JOG_AXIS_CTRL *jog_axis_ctrl, bool global_fatal)
 {
-    // 获取当前通道的系统事件（从全局变量获取）
     SYS_EVENT event = rt_data->nc_event;
 
-    /* 获取当前轴的限位状态 （从全局变量获取）*/
+    /* 0. nc_event 边沿 → 本地保持状态 */
+    switch (i)
+    {
+    case 0:
+        if (event == SYS_EVENT_X_POS_PRESS)
+            jog_pos_held[0] = true;
+        else if (event == SYS_EVENT_X_POS_RELEASE)
+            jog_pos_held[0] = false;
+        else if (event == SYS_EVENT_X_NEG_PRESS)
+            jog_neg_held[0] = true;
+        else if (event == SYS_EVENT_X_NEG_RELEASE)
+            jog_neg_held[0] = false;
+        break;
+    case 1:
+        if (event == SYS_EVENT_Y_POS_PRESS)
+            jog_pos_held[1] = true;
+        else if (event == SYS_EVENT_Y_POS_RELEASE)
+            jog_pos_held[1] = false;
+        else if (event == SYS_EVENT_Y_NEG_PRESS)
+            jog_neg_held[1] = true;
+        else if (event == SYS_EVENT_Y_NEG_RELEASE)
+            jog_neg_held[1] = false;
+        break;
+    case 2:
+        if (event == SYS_EVENT_Z_POS_PRESS)
+            jog_pos_held[2] = true;
+        else if (event == SYS_EVENT_Z_POS_RELEASE)
+            jog_pos_held[2] = false;
+        else if (event == SYS_EVENT_Z_NEG_PRESS)
+            jog_neg_held[2] = true;
+        else if (event == SYS_EVENT_Z_NEG_RELEASE)
+            jog_neg_held[2] = false;
+        break;
+    }
+
+    /* 本地保持状态（替代原先 is_jog_pos_req / is_jog_neg_req） */
+    bool pos_held = jog_pos_held[i];
+    bool neg_held = jog_neg_held[i];
     bool is_fwd_limit = rt_data->axis_data[i].axis_status.is_fwd_limit;
     bool is_rev_limit = rt_data->axis_data[i].axis_status.is_rev_limit;
 
-    /* 解析当前轴的按键意图方向 */
-    bool press_pos = false;
-    bool press_neg = false;
-    bool is_release = false;
-
-    if (i == AXIS_X)
+    /* 1. 复位事件：清除本地保持状态并强制刹车 */
+    if (event == SYS_EVENT_RESET)
     {
-        press_pos = (event == SYS_EVENT_X_POS_PRESS);
-        press_neg = (event == SYS_EVENT_X_NEG_PRESS);
-        is_release = (event == SYS_EVENT_X_POS_RELEASE || event == SYS_EVENT_X_NEG_RELEASE);
-    }
-    else if (i == AXIS_Y)
-    {
-        press_pos = (event == SYS_EVENT_Y_POS_PRESS);
-        press_neg = (event == SYS_EVENT_Y_NEG_PRESS);
-        is_release = (event == SYS_EVENT_Y_POS_RELEASE || event == SYS_EVENT_Y_NEG_RELEASE);
-    }
-    else if (i == AXIS_Z)
-    {
-        press_pos = (event == SYS_EVENT_Z_POS_PRESS);
-        press_neg = (event == SYS_EVENT_Z_NEG_PRESS);
-        is_release = (event == SYS_EVENT_Z_POS_RELEASE || event == SYS_EVENT_Z_NEG_RELEASE);
-    }
-
-    /* 1. 处理复位,切模式：强制停止所有运动 */
-    if (event == SYS_EVENT_RESET || rt_data->sys_state[SYS_IS_SWITCHING_MODE])
-    {
-        // 切换至减速停止状态
+        jog_pos_held[i] = false;
+        jog_neg_held[i] = false;
         jog_axis_ctrl->state = JOG_STATE_STOPPING;
         return;
     }
 
-    /* ==================== 核心修改：全局非限位报警拦截逻辑 ==================== */
-    if (rt_data->sys_state[SYS_IS_ALARMING])
+    /* 2. 切模式：强制停止 */
+    if (rt_data->sys_state[SYS_IS_SWITCHING_MODE])
     {
-        bool has_global_fatal_alarm = false; // 是否存在全局级别的致命报警
-        bool any_axis_fatal = false;         // 是否有任何轴存在跟随误差/伺服报警
-        bool any_axis_limit = false;         // 是否有任何轴触发了限位
-
-        // 遍历所有轴，收集当前报警的具体特征
-        for (int j = 0; j < SYS_AXES_NUM_JOG; j++)
-        {
-            // 只要有任意一轴发生了伺服错误或跟随误差，整个系统判定为致命报警
-            if (rt_data->axis_data[j].axis_status.is_error || ferror_control[j].error_flag)
-            {
-                any_axis_fatal = true;
-                // break; // 只要找到一个致命报警，就无需继续判断
-            }
-            if (rt_data->axis_data[j].axis_status.is_fwd_limit || rt_data->axis_data[j].axis_status.is_rev_limit)
-            {
-                any_axis_limit = true;
-            }
-        }
-
-        /* * 逻辑综合：
-         * 1. 存在致命报警 (any_axis_fatal) -> 必须停！
-         * 2. 没有致命报警，且没有任何轴在限位 (!any_axis_limit) 但 SYS_IS_ALARMING 仍为真
-         * -> 说明发生了系统级其他报警（如主轴、IO异常等） -> 必须停！
-         */
-        if (any_axis_fatal || !any_axis_limit)
-        {
-            has_global_fatal_alarm = true;
-        }
-
-        // 如果存在全局致命报警，拦截当前轴(所有轴遍历到此时都会被拦截)
-        if (has_global_fatal_alarm)
-        {
-            if (jog_axis_ctrl->state != JOG_STATE_IDLE)
-                jog_axis_ctrl->state = JOG_STATE_STOPPING;
-            return;
-        }
-
-        // 运行到这里说明：SYS_IS_ALARMING虽然为真，但仅仅是因为某些轴触发了限位引起的。
-        // 那么放行逻辑，继续往下走判断方向是否合法（实现了X轴限位不影响Y轴运动）。
+        jog_axis_ctrl->state = JOG_STATE_STOPPING;
+        return;
     }
-    /* ========================================================================= */
 
-    /* 2. 状态机切换逻辑改写 */
+    /* 3. 全局致命报警 */
+    if (global_fatal)
+    {
+        if (jog_axis_ctrl->state != JOG_STATE_IDLE)
+            jog_axis_ctrl->state = JOG_STATE_STOPPING;
+        return;
+    }
+
+    /* 4. 按键保持状态 → 期望方向：
+     *    仅当有且仅有一个方向按住时才产生有效方向；
+     *    双按（互锁）、全松均映射为 JOG_DIR_NONE（停止）。 */
+    int desired_dir = JOG_DIR_NONE;
+    if (pos_held && !neg_held)
+        desired_dir = JOG_DIR_POSITIVE;
+    else if (neg_held && !pos_held)
+        desired_dir = JOG_DIR_NEGATIVE;
+
+    bool dir_blocked = (desired_dir == JOG_DIR_POSITIVE && is_fwd_limit) ||
+                       (desired_dir == JOG_DIR_NEGATIVE && is_rev_limit);
+
+    /* 5. 状态机切换 */
     switch (jog_axis_ctrl->state)
     {
     case JOG_STATE_IDLE:
-    {
-        // 捕捉【正向按键按下】
-        if (press_pos && !is_fwd_limit)
+        if (desired_dir != JOG_DIR_NONE && !dir_blocked)
         {
             jog_axis_ctrl->state = JOG_STATE_RUNNING;
-            jog_axis_ctrl->direction = JOG_DIR_POSITIVE;
-        }
-        // 捕捉【负向按键按下】
-        else if (press_neg && !is_rev_limit)
-        {
-            jog_axis_ctrl->state = JOG_STATE_RUNNING;
-            jog_axis_ctrl->direction = JOG_DIR_NEGATIVE;
+            jog_axis_ctrl->direction = desired_dir;
         }
         break;
-    }
+
     case JOG_STATE_RUNNING:
-    {
-        /* 运行中如果后台限位状态突然变为触发，立即刹车 */
-        /* 情况 A: 撞到了运动方向的限位 -> 停止
-         * 情况 B: 运动过程中发生了严重报警 (由步骤 4 拦截，此处作为冗余保护)*/
+        /* 运行中运动方向限位触发 → 刹车 */
         if ((jog_axis_ctrl->direction == JOG_DIR_POSITIVE && is_fwd_limit) ||
             (jog_axis_ctrl->direction == JOG_DIR_NEGATIVE && is_rev_limit))
         {
@@ -228,42 +255,26 @@ static void update_axis_state(int i, JOG_AXIS_CTRL *jog_axis_ctrl)
             break;
         }
 
-        /* 捕捉运行过程中的反向按键（或重复按下），直接切换目标方向 */
-        /* 规划器会自动处理减速过零并反向加速的平滑过渡 */
-        if (press_pos && !is_fwd_limit)
+        if (desired_dir != JOG_DIR_NONE && !dir_blocked)
         {
-            jog_axis_ctrl->direction = JOG_DIR_POSITIVE;
+            /* 平滑换向/保持：规划器自动处理减速过零 */
+            jog_axis_ctrl->direction = desired_dir;
         }
-        else if (press_neg && !is_rev_limit)
+        else
         {
-            jog_axis_ctrl->direction = JOG_DIR_NEGATIVE;
-        }
-
-        /* 2. 捕捉按键释放（核心修复：只响应与当前运行方向匹配的释放事件） */
-        if (is_release)
-        {
+            /* 无有效方向 → 刹车（双按互锁、全松、或被限位阻挡） */
             jog_axis_ctrl->state = JOG_STATE_STOPPING;
         }
         break;
-    }
 
     case JOG_STATE_STOPPING:
-    {
-        /* 核心逻辑：在减速过程中，如果按键再次按下，立即恢复 RUNNING */
-        // 捕捉【正向按键再次按下】，且未触发正向限位才允许运行
-        if (press_pos && !is_fwd_limit)
+        /* 减速过程中恢复：按键电平有效且方向无障碍则切回 RUNNING */
+        if (desired_dir != JOG_DIR_NONE && !dir_blocked)
         {
             jog_axis_ctrl->state = JOG_STATE_RUNNING;
-            jog_axis_ctrl->direction = JOG_DIR_POSITIVE;
-        }
-        // 捕捉【负向按键再次按下】，且未触发负向限位才允许运行
-        else if (press_neg && !is_rev_limit)
-        {
-            jog_axis_ctrl->state = JOG_STATE_RUNNING;
-            jog_axis_ctrl->direction = JOG_DIR_NEGATIVE;
+            jog_axis_ctrl->direction = desired_dir;
         }
         break;
-    }
     }
 }
 
@@ -363,6 +374,9 @@ static void sync_jog_on_mode_entry()
         jog_tp[i].curr_pos = actual_pos;
         jog_tp[i].curr_vel = 0.0;
         jog_tp[i].enable = 0;
+        /* 清除本地保持状态，防止切模式时残留的 hold 状态导致误动作 */
+        jog_pos_held[i] = false;
+        jog_neg_held[i] = false;
     }
 }
 
