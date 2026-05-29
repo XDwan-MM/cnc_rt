@@ -15,6 +15,7 @@ static uint8_t Is_Outside_Limit(float position, LimitLevel limit);
 static void Outside_Alarm(float position, LimitLevel limit , int premove_id, Level level, AxisLimitRuntime *runtime);
 static void Inside_Alarm(AxisLimitRuntime *runtime, int premove_id ,Level level);
 
+static bool detect_falling_edge(bool current_value ,int i);
 
 
 void Axis_Limit_Manager_Init(void)
@@ -40,6 +41,8 @@ void Axis_Limit_Manager_Init(void)
         rt_data->axis_data[i].axis_status.is_decel_done = 0;
         runtime[i].is_first_run = 1;
         runtime[i].axis = i;
+        update_pos_flag = 0;
+
     }
 }
 
@@ -200,9 +203,10 @@ uint8_t Is_Outside_Limit(float position, LimitLevel limit)
 
 void Axis_Status_Update()
 {
+    //进给轴正、反、停状态
     for (int var = 0; var < SYS_AXES_NUM; ++var)
     {
-        rt_data->axis_data[var].axis_status.current_pos = rt_data->axis_data[var].motor_cmd_pos;
+        rt_data->axis_data[var].axis_status.current_pos = rt_data->axis_data[var].wcs_cmd_pos_cur;
         double delta = rt_data->axis_data[var].axis_status.current_pos - rt_data->axis_data[var].axis_status.last_pos;
         rt_data->axis_data[var].axis_status.last_pos = rt_data->axis_data[var].axis_status.current_pos;
         if(!rt_data->axis_data[var].axis_status.is_init)
@@ -223,6 +227,36 @@ void Axis_Status_Update()
         else
         {
             rt_data->axis_data[var].axis_status.is_moving = 0;
+        }
+    }
+    for (int var = 0; var < 5; ++var)
+    {
+        //界面参数设置轴拆卸状态
+        if (!par_axis[var][PAR_AX_DISABLE].value.val_int && !rt_data->axis_data[var].axis_status.plc_is_disable)
+        {
+            rt_data->axis_data[var].axis_status.is_disable = 0;
+        }
+        else
+        {
+            // LOG(LOG_LEVEL_INFO, "扫描到%d轴解除屏蔽", var);
+            rt_data->axis_data[var].axis_status.is_disable = 1;
+        }
+        if(detect_falling_edge(rt_data->axis_data[var].axis_status.is_disable,var))
+        {
+            int res = setAlarm(ALARM_AX, ALARM_ERROR, 40 + var);
+            if (res == -8)
+                return 1;
+            LOG(LOG_LEVEL_ERR, "%s 轴已解除屏蔽，请重启或复位%d", axis_names[runtime->axis], runtime->axis);
+        }
+
+        //该轴已处于屏蔽状态
+        if (rt_data->axis_data[var].axis_status.is_disable)
+        {
+            setVarAxisInt(var, VAR_AXIS_DISABLE, 1, 0);
+        }
+        else
+        {
+            setVarAxisInt(var, VAR_AXIS_DISABLE, 0, 0);
         }
     }
 }
@@ -341,4 +375,18 @@ static void Data_Log_Alarm(AXIS_TYPE axis ,Level level)
     int res = setAlarm(ALARM_AX, ALARM_ERROR, 21 + axis * 2 + level - 2);
     if(res == -8) return ;
     LOG(LOG_LEVEL_ERR, "%s 轴处于存储行程检查%d外，请检查限位参数", axis_names[axis], level);
+}
+static bool detect_falling_edge(bool current_value ,int i)
+{
+    static bool last_value[5] = {0}; // 保存上一次信号状态（初始设为高电平）
+    bool edge_detected = false;
+
+    // 检测下降沿：上一次高电平，当前低电平
+    if (last_value[i] == true && current_value == false)
+    {
+        edge_detected = true;
+    }
+
+    last_value[i] = current_value; // 更新上一次信号状态
+    return edge_detected;
 }

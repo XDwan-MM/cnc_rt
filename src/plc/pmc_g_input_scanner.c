@@ -38,6 +38,7 @@ static const int SCAN_G_REGS[] =
         100,
         102,
         108,
+        124,
         130,
         132,
         134, /* 已有信号的地址 */
@@ -397,6 +398,23 @@ void pmc_g_input_scan_cycle(void)
             {
                 pmc_dispatch_event(EV_MSG_ENANLE, MAC_LOCK + i + 1, 0);
                 LOG(LOG_LEVEL_INFO, "扫描到G108.%d 发生下降沿", i);
+            }
+        }
+    }
+    /* 各轴屏蔽 G124 */
+    if (SIGNAL_BYTE_CHANGED(curr_g.g_regs[124], last_g.g_regs[124]))
+    {
+        for (int i = 0; i < 5; i++)
+        {
+            if (SIGNAL_RISING(curr_g.g_regs[124], last_g.g_regs[124], i))
+            {
+                rt_data->axis_data[i].axis_status.plc_is_disable = 1;
+                LOG(LOG_LEVEL_INFO, "plc扫描到%d轴被屏蔽",i);
+            }
+            if (SIGNAL_FALLING(curr_g.g_regs[124], last_g.g_regs[124], i))
+            {
+                rt_data->axis_data[i].axis_status.plc_is_disable = 0;
+                LOG(LOG_LEVEL_INFO, "plc扫描到%d轴解除屏蔽", i);
             }
         }
     }

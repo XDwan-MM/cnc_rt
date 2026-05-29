@@ -78,9 +78,9 @@ GNC_RES parser_init(NC_MODE nc_mode)
     ItpSetToolLens(toollens, 20);
     // 设置机床起点
     double ori_pos_x, ori_pos_y, ori_pos_z;
-    getVarAxisDouble(AXIS_X, VAR_AXIS_CMD_POS_EX, &ori_pos_x, 0);
-    getVarAxisDouble(AXIS_Y, VAR_AXIS_CMD_POS_EX, &ori_pos_y, 0);
-    getVarAxisDouble(AXIS_Z, VAR_AXIS_CMD_POS_EX, &ori_pos_z, 0);
+    ori_pos_x = rt_data->axis_data[AXIS_X].wcs_cmd_pos_cur;
+    ori_pos_y = rt_data->axis_data[AXIS_Y].wcs_cmd_pos_cur;
+    ori_pos_z = rt_data->axis_data[AXIS_Z].wcs_cmd_pos_cur;
     ItpSetOriginMacPos(ori_pos_x, ori_pos_y, ori_pos_z, 0);
     // 设置程序段来源
     res = parser_set_content(nc_mode);

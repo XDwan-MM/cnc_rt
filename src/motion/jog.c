@@ -51,7 +51,7 @@ void handle_jog_cmd()
         /* 1. 静态同步：IDLE状态下强制同步位置，防止从JOG切入其他模式时位置突跳 */
         if (jog_ctrls[i].state == JOG_STATE_IDLE)
         {
-            jog_tp[i].curr_pos = var_axis[i][VAR_AXIS_CMD_POS_EX].value.f;
+            jog_tp[i].curr_pos = rt_data->axis_data[i].wcs_cmd_pos_cur;
             jog_tp[i].curr_vel = 0.0;
             jog_tp[i].enable = 0;
         }
@@ -63,7 +63,7 @@ void handle_jog_cmd()
         execute_axis_motion(i, &jog_ctrls[i], &jog_tp[i], rt_data->sys_state[SYS_IS_RAPID]);
 
         /* 4. 指令输出给外部系统变量 */
-        var_axis[i][VAR_AXIS_CMD_POS_EX].value.f = jog_tp[i].curr_pos;
+        rt_data->axis_data[i].wcs_cmd_pos_cur = jog_tp[i].curr_pos;
         var_axis[i][VAR_AXIS_CMD_VEL].value.f = jog_tp[i].curr_vel;
     }
 
@@ -78,7 +78,7 @@ void handle_jog_cmd()
     // 减速完成信号赋值
     for (int i = 0; i < SYS_AXES_NUM_JOG; i++)
     {
-        if (fabs(var_axis[i][VAR_AXIS_CMD_POS_EX].value.f) < SPEED_THRESHOLD)
+        if (fabs(rt_data->axis_data[i].wcs_cmd_pos_cur) < SPEED_THRESHOLD)
         {
             if (rt_data->axis_data[i].axis_status.is_fwd_limit || rt_data->axis_data[i].axis_status.is_rev_limit)
             {
@@ -357,7 +357,7 @@ static void sync_jog_on_mode_entry()
 {
     for (int i = 0; i < SYS_AXES_NUM_JOG; i++)
     {
-        double actual_pos = var_axis[i][VAR_AXIS_CMD_POS_EX].value.f;
+        double actual_pos = rt_data->axis_data[i].wcs_cmd_pos_cur;
         jog_ctrls[i].state = JOG_STATE_IDLE;
         jog_ctrls[i].direction = JOG_DIR_NONE;
         jog_tp[i].curr_pos = actual_pos;

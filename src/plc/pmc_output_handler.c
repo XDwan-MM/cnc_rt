@@ -271,6 +271,17 @@ static void pmc_output_axis_status()
             clearRegBit(REG_F, 102, i);
         }
     }
+    for (int i = 0; i < 5; ++i)
+    {
+        if (rt_data->axis_data[i].axis_status.is_disable)
+        {
+            setRegBit(REG_F, 110, i);
+        }
+        else
+        {
+            clearRegBit(REG_F, 110, i);
+        }
+    }
     if(rt_data->axis_data[0].axis_status.is_error || rt_data->axis_data[1].axis_status.is_error ||
         rt_data->axis_data[2].axis_status.is_error || rt_data->axis_data[3].axis_status.is_error)
     {

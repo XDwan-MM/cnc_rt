@@ -60,6 +60,8 @@ typedef struct {
     bool is_decel_done;          //报警减速是否完成
     bool is_fwd_limit;           //手动正方向限制
     bool is_rev_limit;           //手动负方向限制
+    bool plc_is_disable;       
+    bool is_disable;             //轴是否被屏蔽
 } AxisStatus;
 
 // 目前仅轨迹线程使用

@@ -186,7 +186,6 @@ void Master_Run()
         sem_post(&path_plan_sem);
         sem_wait(&moton_sem_exec_done);
         op_flag = 1;
-
         //复位清除驱动器报警
         if(reset_sem)
         {
@@ -289,31 +288,46 @@ void Master_Run()
         //读取驱动器警报
         for (int i = 0; i < 4; i++)
         {
-            CHECK_FUNC(GM_TxPdoEntry_Read(ErrorNumb[i], &error_code[i] , 2));// 获取状态字
-            if(error_code[i] != 0)
+            CHECK_FUNC(GM_TxPdoEntry_Read(ErrorNumb[i], &error_code[i], 2)); // 获取状态字
+            dri_manager.drivers[i]->state = DRV_STATE_FAULT;
+            if (i == 0)
             {
-                dri_manager.drivers[i]->state = DRV_STATE_FAULT;
-                if(i == 0)
+                if (error_code[0] != 0 && !rt_data->axis_data[3].axis_status.is_disable)
                 {
                     rt_data->axis_data[3].axis_status.is_error = 1;
                 }
                 else
                 {
-                    rt_data->axis_data[i-1].axis_status.is_error = 1;
+                    rt_data->axis_data[3].axis_status.is_error = 0;
                 }
             }
             else
             {
-                if(i == 0)
+                // printf("i:%d %d \n ",i,rt_data->axis_data[i-1].axis_status.is_disable);
+                if (error_code[i] != 0 && !rt_data->axis_data[i-1].axis_status.is_disable)
                 {
-                    rt_data->axis_data[3].axis_status.is_error = 0;
+                    rt_data->axis_data[i-1].axis_status.is_error = 1;
                 }
                 else
                 {
                     rt_data->axis_data[i-1].axis_status.is_error = 0;
                 }
+                // printf("rt_data->axis_data[i-1].axis_status.is_error:%d\n",rt_data->axis_data[i-1].axis_status.is_error);
+            }
+
+            if (rt_data->axis_data[i].axis_status.is_disable)
+            {
+                if(i == 3)
+                {
+                    CHECK_FUNC(GM_RxPdoEntry_Write(ControlWord[0], 0x00));
+                }
+                else
+                {
+                    CHECK_FUNC(GM_RxPdoEntry_Write(ControlWord[i + 1], 0x00));
+                }
             }
         }
+
         debug("=============================发送主站周期数据==============================\n");
         rc = GM_Master_Send(1);
         CHECK_RC(rc, "发送主站周期数据失败", err_close);
