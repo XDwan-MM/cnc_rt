@@ -81,6 +81,8 @@ build*/
 .cache/
 
 bin/
+#!lib/CNC_ErrorComp/bin/ 例外规则
+!lib/CNC_ErrorComp/bin/
 
 lib/cncshm/bin/
 lib/log/bin/
