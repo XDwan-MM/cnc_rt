@@ -55,9 +55,10 @@ static inline long long get_ns() {
 
 // 软PLC线程的具体实现
 void* soft_plc_thread_func(void*) {
-    while (!exit_flag) {
+    while (!thread_exit_flag) {
         sem_wait(&plc_sem);
-        if (exit_flag) break;
+        // printf("soft_plc_thread_func");
+        if (thread_exit_flag) break;
         #ifdef DEBUG_MODE_ENABLED
         hal_keyboard_minitor();
         #else
@@ -108,10 +109,11 @@ void* soft_plc_thread_func(void*) {
 
 // 运动控制器线程的具体实现
 void* motion_controller_thread_func(void*) {
-    while (!exit_flag)
+    while (!thread_exit_flag)
     {
         sem_wait(&motion_sem);
-        if (exit_flag) break;
+        if (thread_exit_flag) break;
+        // printf("motion_controller_thread_func");
         start = get_ns();
         Hal_Driver_Update_All(true, false);
         task_mq_proc();
@@ -133,11 +135,11 @@ void* motion_controller_thread_func(void*) {
 
 // 路径规划线程的具体实现
 void* path_plan_thread_func(void*) {
-    while (!exit_flag)
+    while (!thread_exit_flag)
     {
         // todo：不需要信号量
         sem_wait(&path_plan_sem);
-        if (exit_flag) break;
+        if (thread_exit_flag) break;
         emcmotPathPlan();
     }
     return NULL;
@@ -145,17 +147,17 @@ void* path_plan_thread_func(void*) {
 
 // 任务控制器线程的具体实现
 // void* task_controller_thread_func(void*) {
-//     while (!exit_flag) {
+//     while (!thread_exit_flag) {
 //         // todo：修改此处写法    
 //     }
 //     return NULL;
 // }
 
 void* pdo_thread_func(void*) {
-#ifdef DEBUG_MODE_ENABLED
-    Master_Run_Simulated();  // 调试模式使用模拟主站
-#else
-    Master_Run();            // 实时模式使用真实主站
-#endif
+    #ifdef DEBUG_MODE_ENABLED
+        Master_Run_Simulated();  // 调试模式使用模拟主站
+    #else
+        Master_Run();            // 实时模式使用真实主站
+    #endif
     return NULL;
 }

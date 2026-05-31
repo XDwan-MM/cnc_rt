@@ -1,5 +1,7 @@
 #include "log.h"
 #define _POSIX_C_SOURCE 200809L
+// #define PROJECT_NAME cnc_rt
+#define PROJECT_NAME 
 
 FILE* gnc_log_file = NULL;
 char gnc_log_file_path[256];
@@ -35,6 +37,33 @@ char* get_log_path(void) {
     return strdup(path);
 }
 
+char* get_master_eni_path(){
+    char cwd[1024];
+    char eni_path[512];
+    #ifdef PLATFORM_1
+    if(getcwd(cwd, sizeof(cwd)) != NULL){
+        char* last_slash = strrchr(cwd, '/');
+        if(last_slash != NULL){
+            *last_slash = '\0';
+            snprintf(eni_path, sizeof(eni_path), "%s/%s", cwd, "config/ENI/speed.xml");
+        }
+    }else{
+        RT_LOG(ERROR, "无法打开ENI %s 文件", cwd);
+    }
+    #else
+    if(getcwd(cwd, sizeof(cwd)) != NULL){
+        char* last_slash = strrchr(cwd, '/');
+        if(last_slash != NULL){
+            *last_slash = '\0';
+            snprintf(eni_path, sizeof(eni_path), "%s/%s", cwd, "config/ENI/gugao_io.xml");
+        }
+    }else{
+        RT_LOG(ERROR, "无法打开ENI %s 文件", cwd);
+    }
+    #endif
+    return strdup(eni_path);
+}
+
 static char* get_version_path() {
     char cwd[1024];
     char path[512];
@@ -48,18 +77,18 @@ static char* get_version_path() {
     return strdup(path); // 无斜杠则返回当前目录
 }
 
-int get_hmi_version(char *version, size_t version_size) {
+int get_rt_version(char *version, size_t version_size) {
     // 1. 打开文件
     const char *file_path = get_version_path();
     FILE *file = fopen(file_path, "r"); 
     if (file == NULL) {
-        RT_LOG(ERROR, "无法打开 %s 文件\n", file_path);
+        RT_LOG(ERROR, "无法打开 %s 文件", file_path);
         return -1;
     }
     // 2. 读取第一行
     char buffer[256];
     if (fgets(buffer, sizeof(buffer), file) == NULL) {
-        RT_LOG(ERROR, "读取文件内容失败或文件为空\n");
+        RT_LOG(ERROR, "读取文件内容失败或文件为空");
         fclose(file);
         // 如果文件存在但读不到内容，视情况决定返回什么，这里返回错误
         return -1; 
@@ -85,19 +114,34 @@ int get_hmi_version(char *version, size_t version_size) {
         }
         // 5. 安全拷贝到输出参数
         if (len >= version_size) {
-            RT_LOG(ERROR, "版本号过长，已截断\n");
+            RT_LOG(ERROR, "版本号过长，已截断");
             strncpy(version, start_ptr, version_size - 1);
             version[version_size - 1] = '\0';
         } else {
             strcpy(version, start_ptr);
         }
-        RT_LOG(INFO, "实时版本号 %s\n", version);
+        RT_LOG(INFO, "实时版本号 %s", version);
         return 0;
     } else {
         // 6. 处理错误情况
         strncpy(version, "(版本号错误)", version_size - 1);
         version[version_size - 1] = '\0';
-        RT_LOG(INFO, "实时版本号 %s\n", version);
+        RT_LOG(INFO, "实时版本号 %s", version);
         return 0; 
     }
+}
+
+void printMode() {
+    RT_LOG(INFO, "══════════════════════════════════════════");
+#ifdef DEBUG_MODE_ENABLED
+    RT_LOG(INFO, "         调试模式 (DEBUG MODE)              ");
+#else
+    RT_LOG(INFO, "         实时模式 (REALTIME MODE)           ");
+    #ifdef PLATFORM_1
+    RT_LOG(INFO, "         平台1 (REALTIME MODE)             ");
+    #else
+    RT_LOG(INFO, "         平台2 (REALTIME MODE)             ");
+    #endif
+#endif
+    RT_LOG(INFO, "══════════════════════════════════════════");
 }

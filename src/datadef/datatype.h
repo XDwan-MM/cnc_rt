@@ -32,6 +32,7 @@ extern "C" {
 #define CHECK_RES(res) \
     if (!res) break;
 
+
 // 定义数据类型
 typedef int int32_t;
 

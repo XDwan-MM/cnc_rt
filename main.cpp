@@ -30,30 +30,16 @@ void sigint_handler([[maybe_unused]] int sig) {
     exit_flag = 1;
 }
 
-void printMode() {
-    RT_LOG(INFO, "══════════════════════════════════════════");
-#ifdef DEBUG_MODE_ENABLED
-    RT_LOG(INFO, "         调试模式 (DEBUG MODE)              ");
-#else
-    RT_LOG(INFO, "         实时模式 (REALTIME MODE)           ");
-    #ifdef PLATFORM_1
-    RT_LOG(INFO, "         平台1 (REALTIME MODE)             ");
-    #else
-    RT_LOG(INFO, "         平台2 (REALTIME MODE)             ");
-    #endif
-#endif
-    RT_LOG(INFO, "══════════════════════════════════════════");
-}
-
 int main() {  
     // 初始化实时日志
     RT_LOG_INIT();
+    RT_LOG(INFO, "********************************************************");
     RT_LOG(INFO, "初始化实时日志成功");
     // 打印当前模式
     printMode();
     // 打印版本信息
     char version[64];
-    get_hmi_version(version, sizeof(version));
+    get_rt_version(version, sizeof(version));
     // 初始化共享内存
     if(!shmInit()) {
         RT_LOG(ERROR, "共享内存初始化失败");
@@ -105,7 +91,6 @@ int main() {
     LOG(LOG_LEVEL_INFO, "初始化硬件抽象层成功");
     //初始化行程检查功能
     Axis_Limit_Manager_Init();
-    signal(SIGINT, sigint_handler);
     // 启动主站
 #ifndef DEBUG_MODE_ENABLED
     if (Master_Start() < 0) {
@@ -130,12 +115,14 @@ int main() {
     }
     RT_LOG(INFO, "创建所有线程成功");
     LOG(LOG_LEVEL_INFO, "创建所有线程成功");
+    // 主循环
     while (!exit_flag) {
         sleep(1);
     }
     RT_LOG(INFO, "收到退出信号，关闭线程");
+    thread_exit_flag = 1;
     LOG(LOG_LEVEL_INFO, "收到退出信号，关闭线程");
-    // 唤醒所有阻塞在信号量上的线程，让它们能够检查 exit_flag 并退出
+    // 唤醒所有阻塞在信号量上的线程，让它们能够检查 thread_exit_flag 并退出
     for (int i = 0; i < 3; i++) {
         post_rt_sem_all();
     }
@@ -151,6 +138,7 @@ int main() {
     }
     RT_LOG(INFO,  "退出实时程序");
     LOG(LOG_LEVEL_INFO, "退出实时程序");
+    RT_LOG(INFO, "********************************************************");
     // 关闭实时日志
     RT_LOG_CLOSE();
     return 0;

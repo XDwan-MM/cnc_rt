@@ -8,7 +8,7 @@
 extern "C" {
 #endif
 
-extern volatile sig_atomic_t exit_flag;
+extern volatile sig_atomic_t exit_flag, main_exit_flag, thread_exit_flag;
 
 extern sem_t plc_sem, motion_sem, task_sem, path_plan_sem, moton_sem_exec_done;
 

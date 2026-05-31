@@ -44,8 +44,11 @@ extern "C" {
 
 extern FILE* gnc_log_file;
 extern char gnc_log_file_path[256];
+
 char* get_log_path(void);
-int get_hmi_version(char *version, size_t version_size);
+char* get_master_eni_path();
+int get_rt_version(char *version, size_t version_size);
+void printMode();
 
 typedef enum{
     INFO = 0,

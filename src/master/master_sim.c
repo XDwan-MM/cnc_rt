@@ -41,7 +41,7 @@ void Master_Run_Simulated(void) {
     // 设置 op_flag 表示已进入操作状态
     op_flag = 1;
 
-    while (!exit_flag) {
+    while (!thread_exit_flag) {
         sim_cycle_count++;
 
         // 模拟周期等待（使用 usleep 而非硬件中断）
