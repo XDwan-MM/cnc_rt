@@ -48,7 +48,7 @@ static void auto_check_prog_end(){
         int error_line = rt_get_parser_error_line();
         if(error_no >= 0){
             setVarChanInt(0, VAR_CHAN_RUN_ROW, error_line, 0);
-            // LOG(LOG_LEVEL_INFO, "error line: %d", error_line);
+            LOG(LOG_LEVEL_INFO, "error line: %d", error_line);
             int res = setAlarm(ALARM_PS, ALARM_ERROR, error_no);
             if(res == -8) return;
             LOG(LOG_LEVEL_ERR, "译码错误 %d", error_no);
@@ -86,9 +86,6 @@ static void auto_set_state(){
             }else if(cycle_tp->mem_exec_state == EXEC_PAUSING){
                 cycle_tp->is_resetting = 1;
             }
-            // else if(cycle_tp->mem_exec_state == EXEC_IDLE){
-            //     setVarChanInt(0, VAR_CHAN_RUN_ROW, 0, 0);
-            // }
             // 通知译码复位
             rt_set_chan_state(0, CHAN_IS_PARSER_RESET, true);
             break;
@@ -155,8 +152,6 @@ static void auto_set_state(){
                 if(!queue_is_empty(plan_queue)){
                     if(cycle_tp->plan_block->mode == PMC_MODE_PAUSE) break;
                     if(cycle_tp->plan_block->mode != PMC_MODE_TAP && cycle_tp->plan_block->type != RAPID){
-                        if(rt_get_sys_state(SYS_IS_DRY_RUN)) cycle_tp->max_vel = par_chan[0][PAR_CH_DRYRUN_SPD].value.val_real * var_chan[0][VAR_CHAN_FEED_OVERRIDE].value.f / OVERRIDE_PERCENT;
-                        else cycle_tp->max_vel = cycle_tp->plan_block->feed_vel * var_chan[0][VAR_CHAN_FEED_OVERRIDE].value.f / OVERRIDE_PERCENT;
                         cycle_tp->is_event_trigger = true;
                     }
                 }
@@ -169,8 +164,6 @@ static void auto_set_state(){
                 if(!queue_is_empty(plan_queue)){
                     if(cycle_tp->plan_block->mode == PMC_MODE_PAUSE) break;
                     if(cycle_tp->plan_block->mode != PMC_MODE_TAP && cycle_tp->plan_block->type == RAPID){
-                        if(rt_get_sys_state(SYS_IS_DRY_RUN)) cycle_tp->max_vel = par_chan[0][PAR_CH_DRYRUN_SPD].value.val_real * var_chan[0][VAR_CHAN_RAPID_OVERRIDE].value.f / OVERRIDE_PERCENT;
-                        else cycle_tp->max_vel = cycle_tp->plan_block->feed_vel * var_chan[0][VAR_CHAN_RAPID_OVERRIDE].value.f / OVERRIDE_PERCENT;
                         cycle_tp->is_event_trigger = true;
                     };
                 }

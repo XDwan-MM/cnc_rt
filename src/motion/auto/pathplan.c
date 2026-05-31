@@ -88,7 +88,7 @@ static void block_cal_pos(GCODE_BLOCK* gcode_block, PLAN_BLOCK* current_block, P
         case CIRCLE_CW:
             // 计算圆心和半径
             POS_COPY(&current_block->circular_block.center_pos, &gcode_block->center_pos);
-            current_block->circular_block.radius = POS_Distance(&current_block->start_pos, &current_block->circular_block.center_pos);
+            current_block->circular_block.radius = POS_Distance(&current_block->end_pos, &current_block->circular_block.center_pos);
             current_block->circular_block.plane = gcode_block->plane;
             current_block->circular_block.dir = (gcode_block->type == CIRCLE_CW) ? CLOCK : COUNTERCLOCK;
             break;
@@ -234,12 +234,13 @@ static double block_cal_circle_length(PLAN_BLOCK* current_block){
     double angDelta = current_block->circular_block.end_rad - current_block->circular_block.statr_rad;
     switch(current_block->type){
         case CIRCLE_CW:
-            if (angDelta >= 0) angDelta -= 2 * PI;
+            if (angDelta > 0) angDelta -= 2 * PI;
             break;
         case CIRCLE_CCW:
-            if (angDelta <= 0) angDelta += 2 * PI;
+            if (angDelta < 0) angDelta += 2 * PI;
             break;
     }
+    if(fabs(angDelta) < CIRCLE_ANGLE_TOL) angDelta = 2 * PI;
     current_block->circular_block.rad = fabs(angDelta);
     return current_block->circular_block.rad * current_block->circular_block.radius;
 }

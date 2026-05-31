@@ -43,6 +43,7 @@ typedef struct{
     double target_vel;              // 目标速度
     double max_vel;                 // 最大允许速度
     bool is_paused_inside_block;    // 在当段减速到0
+    bool is_arrive_at_the_end;      // 到达段终点
     bool is_event_trigger;          // 触发重新计算
     bool is_resetting;              // 复位中
     bool is_ve_zero;                // 加工段末速度为0
