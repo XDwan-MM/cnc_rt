@@ -3,9 +3,12 @@
 #include "rt_sem.h"
 #include <stdio.h>
 #include "hal_driver.h"
+#include "hal_io.h"
+#include "regapi.h"
+#include "global.h"
 #include "task.h"
 #include "emcmot.h"
-#include "hal_task.h"
+#include "plctask.h"
 #include "pmc_a_input_scanner.h"
 #include "pmc_g_input_scanner.h"
 #include "pmc_output_handler.h"
@@ -58,7 +61,44 @@ void* soft_plc_thread_func(void*) {
         #ifdef DEBUG_MODE_ENABLED
         hal_keyboard_minitor();
         #else
-        hal_task();
+
+        // 将IO和MCP输入数据写至X变量
+        uint32_t io_input = 0;
+        Hal_Io_Read_Di(&hal_io_module[0], &io_input);
+        Hal_Io_Update(&hal_io_module[0], 1, 0);
+        for (int i = 0; i < 4; i++) {
+            setRegValue8(REG_X, i, (char)(io_input & 0xFF));
+            io_input >>= 8;
+        }
+        uint16_t mcp_input = 0;
+        for (int i = 0; i < 11; i++) {
+            GM_TxPdoEntry_Read(MCPDI[i], &mcp_input, 2);
+            setRegValue8(REG_X, i * 2 + 4, (char)(mcp_input & 0xFF));
+            setRegValue8(REG_X, i * 2 + 5, (char)((mcp_input >> 8) & 0xFF));
+        }
+
+        // Plc执行器逻辑
+        PlcTask::instance().execute();
+
+        // 将Y变量数据写至IO和MCP输出
+        uint32_t io_output = 0;
+        for (int i = 0; i < 4; i++) {
+            char value = 0;
+            getRegValue8(REG_Y, i, &value);
+            io_output |= (uint32_t)(unsigned char)value << (i * 8);
+        }
+        Hal_Io_Write_Do(&hal_io_module[0], io_output);
+        Hal_Io_Update(&hal_io_module[0], 0, 1);
+        uint16_t mcp_output = 0;
+        for (int i = 0; i < 7; i++) {
+            char value1 = 0;
+            getRegValue8(REG_Y, i * 2 + 4, &value1);
+            char value2 = 0;
+            getRegValue8(REG_Y, i * 2 + 5, &value2);
+            mcp_output = (uint32_t)(unsigned char)value1 | (uint32_t)(unsigned char)value2 << 8;
+            GM_RxPdoEntry_Write(MCPDO[i], mcp_output);
+        }
+
         pmc_g_input_scan_cycle();
         pmc_a_input_scan_cycle();
         #endif

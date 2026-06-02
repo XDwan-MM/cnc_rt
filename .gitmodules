@@ -1,6 +1,3 @@
 [submodule "lib/cncshm"]
 	path = lib/cncshm
 	url = ssh://git@10.2.29.14:8085/lzp_35b362/cncshm.git
-[submodule "lib/plc"]
-	path = lib/plc
-	url = ssh://git@10.2.29.14:8085/lzp_35b362/plc.git

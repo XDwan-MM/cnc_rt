@@ -147,12 +147,7 @@ HEADERS += \
     src/threads/threads_config.h \
     src/threads/threads_controller.h \
     src/utils/math/cnc_math.h \
-    lib/plc/src/ctimer.h \
-    lib/plc/src/cyclescanning.h \
-    lib/plc/src/hal_task.h \
-    lib/plc/src/mt_data.h \
-    lib/plc/src/nc_data.h \
-    lib/plc/src/plcdatatype.h \
+    src/plc/plctask.h \
 
 SOURCES += \
     main.cpp \
@@ -191,8 +186,7 @@ SOURCES += \
     src/threads/rt_sem.c \
     src/threads/threads_controller.cpp \
     src/utils/math/cnc_math.c \
-    lib/plc/src/hal_task.cpp \
-    lib/plc/src/cyclescanning.cpp \
+    src/plc/plctask.cpp \
 
 INCLUDEPATH += \
     src/common \
@@ -210,5 +204,3 @@ INCLUDEPATH += \
     src/utils \
     src/utils/math \
     lib/kinematic/include \
-    lib/plc/src \
-

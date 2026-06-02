@@ -6,6 +6,7 @@
 #include "main_demo.h"
 #include "shmapi.h"
 #include "rt_sem.h"
+#include "src/plc/plctask.h"
 #include "threads_api.h"
 #include "threads_controller.h"
 #include "debug_mode.h"
@@ -69,6 +70,7 @@ int main() {
         return -1;
     };
     LOG(LOG_LEVEL_INFO, "初始化全局变量");
+    PlcTask::instance();
 #ifdef DEBUG_MODE_ENABLED
     // 注入螺距误差补偿测试数据 (单位: um)
     // X轴: 11个测量点, 正向[0..10] + 反向[11..21]
