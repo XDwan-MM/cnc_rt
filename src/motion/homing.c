@@ -22,6 +22,7 @@ void abs_homing_tp_update_traj(VELPLAN_TYPE velplan_type, double cycle_time, AXI
 static bool homing_tp_new_vel_valid(AXIS_TYPE axis_type, double target_vel);
 static GNC_RES abs_homing_tp_init(AXIS_TYPE axis_type);
 static GNC_RES abs_declining_tp_init(AXIS_TYPE axis_type, double target_vel);
+static void reset_pos_at_home(AXIS_TYPE axis_type);
 
 void handle_homing_cmd(){
     homing_set_state();
@@ -237,6 +238,7 @@ static double abs_homing_tp_pinc(AXIS_TYPE axis_type){
                 if(abs_homing_is_axis_homed(axis_type)){
                     homing_tp[axis_type].homing_state = ABS_EXEC_IDLE;
                     setVarAxisInt(axis_type, VAR_AXIS_IS_HOMEF, 1, 0);
+                    // reset_pos_at_home(axis_type);
                     LOG(LOG_LEVEL_INFO, "轴%d完成回零", axis_type);
                     break;
                 }
@@ -322,6 +324,13 @@ static bool abs_homing_is_axis_homed(AXIS_TYPE axis_type){
     double current_pos = rt_data->axis_data[axis_type].wcs_cmd_pos_cur;
     if (fabs(home_crds - current_pos) < par_chan[0][PAR_CH_HOMED_ANG].value.val_real) return true;
     return false;
+}
+
+static void reset_pos_at_home(AXIS_TYPE axis_type){
+    // 到达零点，重置cmd_pos
+    rt_data->axis_data[axis_type].wcs_cmd_pos_cur = par_axis[axis_type][PAR_AX_HOME_CRDS].value.val_real;
+    rt_data->axis_data[axis_type].wcs_cmd_pos_pre = par_axis[axis_type][PAR_AX_HOME_CRDS].value.val_real;
+    rt_data->axis_data[axis_type].mac_cmd_pos = par_axis[axis_type][PAR_AX_HOME_CRDS].value.val_real;
 }
 
 void homing_tp_init(){

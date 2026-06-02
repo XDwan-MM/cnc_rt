@@ -256,8 +256,6 @@ GNC_RES shm_var_update(){
         getVarAxisDouble(i, VAR_AXIS_REAL_ZERO_EX, &real_zero, 0);
         double real = var_axis[i][VAR_AXIS_CMD_POS_EX].value.f - real_zero;
         setVarAxisDouble(i, VAR_AXIS_ACT_POS_RCS_EX, real, 0);
-        // 机械坐标（加入补偿后）
-        setVarAxisDouble(i, VAR_AXIS_ACT_POS_EX, rt_data->axis_data[i].fb_pos_no_comp, 0);
         // 判断各轴零点
         if(fabs(par_axis[i][PAR_AX_HOME_CRDS].value.val_real - var_axis[i][VAR_AXIS_CMD_POS_EX].value.f) > HOMEF_TOL){
             setVarAxisInt(i, VAR_AXIS_IS_HOMEF, 0, 0);
