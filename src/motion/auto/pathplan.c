@@ -234,13 +234,15 @@ static double block_cal_circle_length(PLAN_BLOCK* current_block){
     double angDelta = current_block->circular_block.end_rad - current_block->circular_block.statr_rad;
     switch(current_block->type){
         case CIRCLE_CW:
-            if (angDelta > 0) angDelta -= 2 * PI;
+            // if (angDelta >= 0) angDelta -= 2 * PI;
+            if (IsGreaterThanOrEqual(angDelta, 0)) angDelta -= 2 * PI;
             break;
         case CIRCLE_CCW:
-            if (angDelta < 0) angDelta += 2 * PI;
+            // if (angDelta <= 0) angDelta += 2 * PI;
+            if (IsLessThanOrEqual(angDelta, 0)) angDelta += 2 * PI;
             break;
     }
-    if(fabs(angDelta) < CIRCLE_ANGLE_TOL) angDelta = 2 * PI;
+    // if(fabs(angDelta) < CIRCLE_ANGLE_TOL) angDelta = 2 * PI;
     current_block->circular_block.rad = fabs(angDelta);
     return current_block->circular_block.rad * current_block->circular_block.radius;
 }

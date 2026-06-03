@@ -61,12 +61,10 @@ build_shm_lib() {
     qmake ../shm.pro CONFIG+=debug
     make -j$(nproc)
     if [ $? -eq 0 ]; then
-        make install
-        sudo ldconfig
-        echo -e "${GREEN}[OK] 编译共享内存库成功, 安装到/usr/local/lib${NC}"
+        echo -e "${GREEN}[OK] 编译共享内存库成功"
         return 0
     else
-        echo -e "${RED}[FAIL] 编译共享内存库失败${NC}"
+        echo -e "${RED}[FAIL] 编译共享内存库失败"
         return 1
     fi
 }
@@ -169,19 +167,19 @@ build_all() {
 run() {
     build_release_1
     cd $BIN_DIR
-    sudo ./rt_cnc_1
+    sudo -E LD_LIBRARY_PATH=../lib/cncshm/bin ./rt_cnc_1
 }
 
 run2() {
     build_release_2
     cd $BIN_DIR
-    sudo ./rt_cnc_2
+    sudo -E LD_LIBRARY_PATH=../lib/cncshm/bin ./rt_cnc_2
 }
 
 run_debug() {
     build_debug
     cd $BIN_DIR
-    sudo ./rt_cnc_d
+    sudo -E LD_LIBRARY_PATH=../lib/cncshm/bin ./rt_cnc_d
 }
 
 clean_build() {
@@ -191,6 +189,11 @@ clean_build() {
     if [ -d "$LIB_DIR/cncshm/build" ]; then
         rm -rf "$LIB_DIR/cncshm/build"
         echo "  已清理: $LIB_DIR/cncshm/build"
+    fi
+
+    if [ -d "$LIB_DIR/cncshm/bin" ]; then
+        rm -rf "$LIB_DIR/cncshm/bin"
+        echo "  已清理: $LIB_DIR/cncshm/bin"
     fi
 
     # 清理 debug 构建目录
@@ -249,7 +252,7 @@ case "${1:-all}" in
         echo -e "可执行文件: ${YELLOW}$BIN_DIR/rt_cnc_d${NC}"
         ;;
     release)
-        # build_shm_lib
+        build_shm_lib
         build_release_1
         build_release_2
         echo ""
@@ -267,13 +270,13 @@ case "${1:-all}" in
     clean)
         clean_build
         ;;
-    run)
+    run|run1|run_1)
         run
         ;;
-    run2)
+    run2|run_2)
         run2
         ;;
-    run_debug|debug_run)
+    rund|run_d|run_debug|debug_run)
         run_debug
         ;;
     help|--help|-h)

@@ -31,6 +31,7 @@ typedef enum{
     SYS_IS_ALARMING,            // 是否正在报警中
     SYS_IS_SWITCHING_MODE,      // 是否正在切换模式
     SYS_IS_MAC_LOCK,            // 机床锁住 
+    SYS_IS_MACK_LOCK_READY,     // 机床锁住完成
     SYS_IS_DRY_RUN,             // 空运行
     SYS_IS_BLOCK_SKIP,          // 程序段跳过（路径和轨迹线程使用）
     SYS_IS_SINGLE_BLOCK,        // 单段
@@ -70,11 +71,11 @@ typedef struct{
     double act_jk;
     double cmd_acc;
     double cmd_jk;
-    double wcs_cmd_pos_cur;     // 工件插补计算位置（目前使用VAR_AXIS_CMD_POS_EX）
-    double wcs_cmd_pos_pre;     // 上一插补工件插补计算位置
-    double wcs_comp_pos_cur;    // 当前周期插补+补偿后位置
-    double wcs_comp_pos_pre;    // 上一周期插补+补偿后位置 
-    double motor_cmd_pos;       // 下发至驱动器的指令位置（带补偿）
+    double wcs_cmd_pos_cur;     // 工件插补计算位置
+    double wcs_cmd_pos_pre;     // 工件插补计算位置(上一插补)
+    double mac_cmd_pos;         // 机床指令位置
+    double mac_comp_pos;        // 机床补偿后位置
+    double motor_cmd_pos;       // 驱动器指令位置（带补偿）
     double motor_act_pos;       // 驱动器反馈位置（带补偿）
     double fb_pos_no_comp;      // 反馈位置（去除补偿）
     double pitch_comp_val;      // 当前位置螺距误差补偿值 (单位:um)  // wcf add 2026.01.23

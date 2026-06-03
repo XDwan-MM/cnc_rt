@@ -11,6 +11,7 @@ static void nc_output_mf();
 static void nc_check_fin();
 static void nc_clear_msignal();
 static void mcode_data_mend();
+static void mstb_lock_on();
 
 void auto_execute_mcode(){
     switch (mcode_data->mcode_state)
@@ -40,12 +41,7 @@ void auto_execute_mcode(){
 // 1、输出M代码信号，最多3个
 static void nc_deal_mcode(){
     if(mcode_queue_is_empty(mcode_queue)) return;
-    // 辅助功能锁住
-    if(rt_data->sys_state[SYS_IS_MSBT_LOCK]) {
-        mcode_queue_reset(mcode_queue);
-        rt_set_chan_state(0, CHAN_IS_MCODE_END, true);
-        return;
-    }
+    mstb_lock_on();
     mcode_data->mcode_size = mcode_queue_get_size(mcode_queue);
     for(int i = 0; i < mcode_data->mcode_size; i++){
         mcode_queue_copy_block(mcode_queue, i, &mcode_data->mcode_block[i]);
@@ -208,6 +204,29 @@ static void nc_check_fin(){
             LOG(LOG_LEVEL_DEBUG, "3、接收到FIN信号, 执行下一指令");
         }
         else mcode_data->tfin_count ++;
+    }
+}
+
+// 开启辅助功能锁住
+static void mstb_lock_on(){
+    if(rt_data->sys_state[SYS_IS_MSBT_LOCK]) {
+        int mcode_size =  mcode_queue_get_size(mcode_queue);
+        for(int i = 0; i < mcode_size; i++){
+            switch (mcode_queue->block->m_code)
+            {
+            // 依旧可执行预定义M代码
+            case M00:
+            case M01:
+            case M02:
+            case M30:
+                break;
+            // 不执行自定义M代码
+            default:
+                mcode_queue_pop(mcode_queue);
+                rt_set_chan_state(0, CHAN_IS_MCODE_END, true);
+                break;
+            }
+        } 
     }
 }
 
