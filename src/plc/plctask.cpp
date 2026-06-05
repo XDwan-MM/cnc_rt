@@ -24,7 +24,7 @@ void PlcTask::execute() {
     } 
     // 如果停止状态变运行
     if (!_isRunning && _ladData.info.isRunning) {
-        resetRegData();
+        // resetRegData();
         resetContext();
         executeInit();
         _isRunning = true;
