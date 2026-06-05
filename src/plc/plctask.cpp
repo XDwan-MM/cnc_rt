@@ -608,28 +608,28 @@ void PlcTask::handleMOD(const LadInstr& instr) {
 void PlcTask::handleINC(const LadInstr& instr) {
     if (static_cast<bool>(_currCtx->_logicStack & 1)) {
         int val1 = getValue(_ladData.regs[instr.regIdx]);
-        setValue(_ladData.regs[instr.regIdx + 2], val1 + 1);
+        setValue(_ladData.regs[instr.regIdx], val1 + 1);
     }
 }
 
 void PlcTask::handleDEC(const LadInstr& instr) {
     if (static_cast<bool>(_currCtx->_logicStack & 1)) {
         int val1 = getValue(_ladData.regs[instr.regIdx]);
-        setValue(_ladData.regs[instr.regIdx + 2], val1 - 1);
+        setValue(_ladData.regs[instr.regIdx], val1 - 1);
     }
 }
 
 void PlcTask::handleABS(const LadInstr& instr) {
     if (static_cast<bool>(_currCtx->_logicStack & 1)) {
         int val1 = getValue(_ladData.regs[instr.regIdx]);
-        setValue(_ladData.regs[instr.regIdx + 2], abs(val1));
+        setValue(_ladData.regs[instr.regIdx + 1], abs(val1));
     }
 }
 
 void PlcTask::handleNEG(const LadInstr& instr) {
     if (static_cast<bool>(_currCtx->_logicStack & 1)) {
         int val1 = getValue(_ladData.regs[instr.regIdx]);
-        setValue(_ladData.regs[instr.regIdx + 2], -val1);
+        setValue(_ladData.regs[instr.regIdx + 1], -val1);
     }
 }
 

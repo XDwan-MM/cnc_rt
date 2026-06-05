@@ -99,9 +99,9 @@ void* soft_plc_thread_func(void*) {
             GM_RxPdoEntry_Write(MCPDO[i], mcp_output);
         }
 
+        #endif
         pmc_g_input_scan_cycle();
         pmc_a_input_scan_cycle();
-        #endif
     }
     return NULL;
 }
