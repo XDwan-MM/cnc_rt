@@ -91,6 +91,7 @@ int main() {
     LOG(LOG_LEVEL_INFO, "初始化硬件抽象层成功");
     //初始化行程检查功能
     Axis_Limit_Manager_Init();
+    signal(SIGINT, sigint_handler);
     // 启动主站
 #ifndef DEBUG_MODE_ENABLED
     if (Master_Start() < 0) {
@@ -116,7 +117,7 @@ int main() {
     RT_LOG(INFO, "创建所有线程成功");
     LOG(LOG_LEVEL_INFO, "创建所有线程成功");
     // 主循环
-    while (!exit_flag) {
+    while (!main_exit_flag) {
         sleep(1);
     }
     RT_LOG(INFO, "收到退出信号，关闭线程");

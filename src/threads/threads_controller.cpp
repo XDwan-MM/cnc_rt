@@ -39,9 +39,6 @@ thread_config_t motion_config = {.core_id = 2, .policy = SCHED_FIFO, .priority =
 thread_config_t path_plan_config = {.core_id = 2, .policy = SCHED_RR, .priority = 30, .thread_name = "解释器线程"};
 #endif
 
-// todo：修改此处写法
-bool RESET = false;
-
 // 线程首末时间
 static long long start = 0;
 static long long end = 0;

@@ -1,7 +1,5 @@
 #include "log.h"
 #define _POSIX_C_SOURCE 200809L
-// #define PROJECT_NAME cnc_rt
-#define PROJECT_NAME 
 
 FILE* gnc_log_file = NULL;
 char gnc_log_file_path[256];
