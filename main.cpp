@@ -16,6 +16,7 @@
 #include <hmisysapi.h>
 #include "stored_stroke_check.h"
 #include "master.h"
+#include "log.h"
 #include <QFile>
 #include <QTextStream>
 #include <hmisysapi.h>
@@ -23,54 +24,43 @@
 #include "keyboard.h"
 #endif
 
-static char* get_version_path();
-static int get_hmi_version(char *version, size_t version_size);
-
 // Ctrl + C 终止程序触发
 void sigint_handler([[maybe_unused]] int sig) {
     LOG(LOG_LEVEL_INFO, "收到 Ctrl + C 按键信号");
     exit_flag = 1;
 }
 
-void printMode() {
-    printf("\n");
-    printf("╔══════════════════════════════════════════╗\n");
-#ifdef DEBUG_MODE_ENABLED
-    printf("║         调试模式 (DEBUG MODE)            ║\n");
-#else
-    printf("║         实时模式 (REALTIME MODE)         ║\n");
-    #ifdef PLATFORM_1
-    printf("║         平台1 (REALTIME MODE)            ║\n");
-    #else
-    printf("║         平台2 (REALTIME MODE)            ║\n");
-    #endif
-#endif
-    printf("╚══════════════════════════════════════════╝\n");
-    printf("\n");
-}
-
 int main() {  
+    // 初始化实时日志
+    RT_LOG_INIT();
+    RT_LOG(INFO, "********************************************************");
+    RT_LOG(INFO, "初始化实时日志成功");
     // 打印当前模式
     printMode();
     // 打印版本信息
     char version[64];
-    get_hmi_version(version, sizeof(version));
+    get_rt_version(version, sizeof(version));
     // 初始化共享内存
     if(!shmInit()) {
-        LOG(LOG_LEVEL_ERR, "共享内存初始化失败");
+        RT_LOG(ERROR, "共享内存初始化失败");
         return -1;
     } else  {
         errno = 0;
-        LOG(LOG_LEVEL_INFO, "启动实时程序");
-        LOG(LOG_LEVEL_INFO, "初始化共享内存");
+        RT_LOG(INFO,  "共享内存初始化成功");
+        LOG(LOG_LEVEL_INFO, "共享内存初始化成功");
     }
     // 初始化实时全局变量
     if(rt_global_init() != GNC_OPERATOR_SUCCESS){
+        RT_LOG(ERROR,  "全局变量初始化失败");
         LOG(LOG_LEVEL_ERR, "全局变量初始化失败");
         return -1;
     };
-    LOG(LOG_LEVEL_INFO, "初始化全局变量");
+    RT_LOG(INFO,  "初始化全局变量成功");
+    LOG(LOG_LEVEL_INFO, "初始化全局变量成功");
+    // 初始化PLC单例
     PlcTask::instance();
+    RT_LOG(INFO,  "初始化PLC单例成功");
+    LOG(LOG_LEVEL_INFO, "初始化PLC单例成功");
 #ifdef DEBUG_MODE_ENABLED
     // 注入螺距误差补偿测试数据 (单位: um)
     // X轴: 11个测量点, 正向[0..10] + 反向[11..21]
@@ -81,26 +71,31 @@ int main() {
         memcpy(test_pitch + 0,  fwd, sizeof(fwd));
         memcpy(test_pitch + 3, rev, sizeof(rev));
         setAllPitChData(test_pitch);
+        RT_LOG(INFO, "调试模式: 已注入螺距补偿测试数据");
         LOG(LOG_LEVEL_INFO, "调试模式: 已注入螺距补偿测试数据");
     }
 #endif
     // 初始化螺距误差补偿
     comp_data_init();
-    LOG(LOG_LEVEL_INFO, "初始化螺距误差补偿");
+    RT_LOG(INFO, "初始化螺距误差补偿成功");
+    LOG(LOG_LEVEL_INFO, "初始化螺距误差补偿成功");
     // 初始化译码器
     parser_new();
-    LOG(LOG_LEVEL_INFO, "初始化译码器");
+    RT_LOG(INFO, "初始化译码器成功");
+    LOG(LOG_LEVEL_INFO, "初始化译码器成功");
     // 初始化硬件抽象层
     Hal_Driver_Manager_Init();
     Hal_Driver_Array_Init();
     Hal_Io_Array_Init();
-    LOG(LOG_LEVEL_INFO, "初始化硬件抽象层");
+    RT_LOG(INFO, "初始化硬件抽象层成功");
+    LOG(LOG_LEVEL_INFO, "初始化硬件抽象层成功");
     //初始化行程检查功能
     Axis_Limit_Manager_Init();
     signal(SIGINT, sigint_handler);
     // 启动主站
 #ifndef DEBUG_MODE_ENABLED
     if (Master_Start() < 0) {
+        RT_LOG(ERROR, "EtherCAT主站启动失败，请检查ENI文件是否正确");
         LOG(LOG_LEVEL_ERR, "EtherCAT主站启动失败，请检查ENI文件是否正确");
         return -1; // 直接退出，不再启动线程
     }
@@ -115,15 +110,20 @@ int main() {
     init_rt_sem();
     // 启动各个线程，pdo线程运行master_run，给各实时线程发送信号量
     if (threads_start()) {
+        RT_LOG(ERROR, "创建线程失败");
         LOG(LOG_LEVEL_ERR, "线程创建失败");
         exit(1);
     }
+    RT_LOG(INFO, "创建所有线程成功");
     LOG(LOG_LEVEL_INFO, "创建所有线程成功");
-    while (!exit_flag) {
+    // 主循环
+    while (!main_exit_flag) {
         sleep(1);
     }
+    RT_LOG(INFO, "收到退出信号，关闭线程");
+    thread_exit_flag = 1;
     LOG(LOG_LEVEL_INFO, "收到退出信号，关闭线程");
-    // 唤醒所有阻塞在信号量上的线程，让它们能够检查 exit_flag 并退出
+    // 唤醒所有阻塞在信号量上的线程，让它们能够检查 thread_exit_flag 并退出
     for (int i = 0; i < 3; i++) {
         post_rt_sem_all();
     }
@@ -133,79 +133,15 @@ int main() {
     // 关闭主站
     int error_code = ethercat_close();
     if ( error_code < 0) {
+        RT_LOG(ERROR,  "关闭EtherCAT失败，错误码 %d", error_code);
         LOG(LOG_LEVEL_ERR, "关闭EtherCAT失败，错误码 %d", error_code);
         return -1;
     }
+    RT_LOG(INFO,  "退出实时程序");
     LOG(LOG_LEVEL_INFO, "退出实时程序");
+    RT_LOG(INFO, "********************************************************");
+    // 关闭实时日志
+    RT_LOG_CLOSE();
     return 0;
 }
 
-static char* get_version_path() {
-    char cwd[1024];
-    char path[512];
-    if(getcwd(cwd, sizeof(cwd)) != NULL){
-        char* last_slash = strrchr(cwd, '/');
-        if(last_slash != NULL){
-            *last_slash = '\0';
-            snprintf(path, sizeof(path), "%s/%s", cwd, "version.sh");
-        }
-    }
-    return strdup(path); // 无斜杠则返回当前目录
-}
-
-static int get_hmi_version(char *version, size_t version_size) {
-    // 1. 打开文件
-    const char *file_path = get_version_path();
-    FILE *file = fopen(file_path, "r"); 
-
-    if (file == NULL) {
-        fprintf(stderr, "无法打开 %s 文件\n", file_path);
-        return -1;
-    }
-    // 2. 读取第一行
-    char buffer[256];
-    if (fgets(buffer, sizeof(buffer), file) == NULL) {
-        fprintf(stderr, "读取文件内容失败或文件为空\n");
-        fclose(file);
-        // 如果文件存在但读不到内容，视情况决定返回什么，这里返回错误
-        return -1; 
-    }
-    fclose(file);
-    // 3. 检查行首是否为 "Version="
-    // "Version=" 长度为 8
-    if (strncmp(buffer, "Version=", 8) == 0) {
-        // 4. 提取版本号
-        // buffer + 8 指向版本号起始位置
-        // 去除可能存在的换行符 (\n)
-        char *start_ptr = buffer + 8;
-        
-        // 移除末尾的换行符 (如果存在)
-        size_t len = strlen(start_ptr);
-        if (len > 0 && start_ptr[len-1] == '\n') {
-            start_ptr[len-1] = '\0';
-            len--;
-        }
-        // 移除末尾的回车符 (\r)，防止 Windows 格式文件导致的问题
-        if (len > 0 && start_ptr[len-1] == '\r') {
-            start_ptr[len-1] = '\0';
-            len--;
-        }
-        // 5. 安全拷贝到输出参数
-        if (len >= version_size) {
-            fprintf(stderr, "警告：版本号过长，已截断\n");
-            strncpy(version, start_ptr, version_size - 1);
-            version[version_size - 1] = '\0';
-        } else {
-            strcpy(version, start_ptr);
-        }
-        // LOG(LOG_LEVEL_INFO, "实时版本号：%s", version);
-        printf("实时版本号：%s\n", version);
-        return 0;
-    } else {
-        // 6. 处理错误情况
-        strncpy(version, "(版本号错误)", version_size - 1);
-        version[version_size - 1] = '\0';
-        printf("实时版本号：%s\n", version);
-        return 0; // 虽然内容错误，但函数执行流程完成，返回 0 表示逻辑走完了，或者根据需求返回 -1
-    }
-}

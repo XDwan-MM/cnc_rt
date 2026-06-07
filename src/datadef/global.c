@@ -16,6 +16,13 @@ sem_t op_sem;                           // 已进入op信号，用于线程间�
 int InterruptFlag = 0;                  // 打断标志位
 Slave_info* slave_list = NULL;          // 定义从站信息结构体以存储解析结果
 int update_pos_flag = 0;                // 理论位置读取驱动器位置
+int rc = 0;
+PdoWarn PdoWarnInfo; //pdo警告信息结构体
+int slavernum = 0;
+uint16_t* statis;
+uint32_t* pos;
+uint32_t* pos_cmd;
+uint16_t* error_code;
 
 TxEntry_Unit DI0[MAX_IO_MODULES];
 TxEntry_Unit DI1[MAX_IO_MODULES];

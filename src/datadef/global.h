@@ -58,6 +58,13 @@ extern sem_t op_sem;                           // 已进入op信号，用于线�
 extern int InterruptFlag;                      // 打断标志位
 extern Slave_info* slave_list;                 // 定义从站信息结构体以存储解析结果
 extern int update_pos_flag;                    // 理论位置读取驱动器位置
+extern int rc;
+extern PdoWarn PdoWarnInfo; //pdo警告信息结构体
+extern int slavernum;
+extern uint16_t* statis;
+extern uint32_t* pos;
+extern uint32_t* pos_cmd;
+extern uint16_t* error_code;
 
 extern TxEntry_Unit DI0[MAX_IO_MODULES];
 extern TxEntry_Unit DI1[MAX_IO_MODULES];
