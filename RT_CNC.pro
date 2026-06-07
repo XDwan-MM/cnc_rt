@@ -147,6 +147,7 @@ HEADERS += \
     src/threads/threads_config.h \
     src/threads/threads_controller.h \
     src/utils/math/cnc_math.h \
+    src/utils/log/log.h \
     src/plc/plctask.h \
 
 SOURCES += \
@@ -186,6 +187,7 @@ SOURCES += \
     src/threads/rt_sem.c \
     src/threads/threads_controller.cpp \
     src/utils/math/cnc_math.c \
+    src/utils/log/log.c \
     src/plc/plctask.cpp \
 
 INCLUDEPATH += \
@@ -203,4 +205,5 @@ INCLUDEPATH += \
     src/threads \
     src/utils \
     src/utils/math \
+    src/utils/log \
     lib/kinematic/include \
