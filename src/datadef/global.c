@@ -143,49 +143,6 @@ static GNC_RES shm_par_init(){
     par_chan = par_data->par[0].par_chan;          // 通道参数
     par_axis = par_data->par[0].par_axis;          // 坐标轴参数
     par_acmp = par_data->par[0].par_acmp;          // 误差补偿参数
-    #ifdef DEBUG_MODE_ENABLED
-    par_ncu[PAR_NCU_CYCLE].value.val_uint = 1000;  // 插补周期1ms
-    for(int i = 0; i < SYS_AXES_NUM; i++){
-        par_axis[i][PAR_AX_RAPID_SPD].value.val_real = 3000.0;
-        par_axis[i][PAR_AX_FEED_SPD].value.val_real = 2000.0;
-        par_axis[i][PAR_AX_JOG_LOWSPD].value.val_real = 600.0;
-        par_axis[i][PAR_AX_JOG_FASTSPD].value.val_real = 3000.0;
-        par_axis[i][PAR_AX_RAPID_ACC].value.val_real = 1000.0;
-        par_axis[i][PAR_AX_RAPID_JK].value.val_real = 1000.0;
-        par_axis[i][PAR_AX_FEED_ACC].value.val_real = 1000.0;
-        par_axis[i][PAR_AX_FEED_JK].value.val_real = 1000.0;
-        par_axis[i][PAR_AX_HOME_CRDS].value.val_real = 100;
-        par_axis[i][PAR_AX_PLMT].value.val_real = 1500;
-        par_axis[i][PAR_AX_NLMT].value.val_real = -1500;
-        par_axis[i][PAR_AX_PLMT2].value.val_real = 1000;
-        par_axis[i][PAR_AX_NLMT2].value.val_real = -1000;
-        par_axis[i][PAR_AX_MAX_FERROR].value.val_real = 1000;
-        par_axis[i][PAR_AX_MIN_FERROR].value.val_real = 500;
-    }
-    for(int i = 0; i < SYS_CHAN_NUM; i++){
-        par_chan[i][PAR_CH_DEFAULT_F].value.val_real = 1000.0;
-        par_chan[i][PAR_CH_DRYRUN_SPD].value.val_real = 3000.0;
-        par_chan[i][PAR_CH_VPLAN_MODE].value.val_uint = 0;
-        par_chan[i][PAR_CH_MAX_ECEN_ACC].value.val_real = 1000.0;
-        par_chan[i][PAR_CH_LOOKAHEAD_NUM].value.val_uint = 200;
-        par_chan[i][PAR_CH_HOMED_ANG].value.val_real = 0.0001;
-        par_chan[i][PAR_CH_TMF_DELAY].value.val_int = 0;
-        par_chan[0][PAR_CH_TFIN_DELEY].value.val_int = 2;
-    }
-    // 螺距误差补偿测试参数 (X轴双向补偿, Y/Z轴未配置)
-    for (int i = 0; i < SYS_AXES_NUM; i++) {
-        par_acmp[i][PAR_CMP_PITCH_TYPE].value.val_int   = 0;   // 默认关闭
-        par_acmp[i][PAR_CMP_PITCH_NUM].value.val_int    = 0;
-        par_acmp[i][PAR_CMP_PITCH_FACTOR].value.val_real = 1.0;
-    }
-    // X轴: 11个测量点, 0~100mm, 步距10mm, 双向补偿, pitchData起始索引0
-    par_acmp[0][PAR_CMP_PITCH_TYPE].value.val_int   = 1;     // 0关闭补偿，1单向补偿，2双向补偿
-    par_acmp[0][PAR_CMP_PITCH_START].value.val_real  = 0.0;   // 起点 0mm
-    par_acmp[0][PAR_CMP_PITCH_NUM].value.val_int    = 3;    // 11个测量点
-    par_acmp[0][PAR_CMP_PITCH_STEP].value.val_real   = 10.0;  // 步距10mm
-    par_acmp[0][PAR_CMP_PITCH_FACTOR].value.val_real = 1.0;   // 倍率1.0
-    par_acmp[0][PAR_CMP_PITCH_TABLE].value.val_int   = 0;     // pitchData起始索引
-    #endif
     return GNC_OPERATOR_SUCCESS;
 }
 

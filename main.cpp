@@ -100,11 +100,6 @@ int main() {
         return -1; // 直接退出，不再启动线程
     }
     LOG(LOG_LEVEL_INFO, "启动EtherCAT主站");
-#else // 模拟时不启动主站
-    if (init_keyboard() < 0) {
-        fprintf(stderr, "键盘初始化失败\n");
-        return -1;
-    }
 #endif
     // 创建信号量，需要放在线程启动（threads_start函数）前
     init_rt_sem();
@@ -117,9 +112,15 @@ int main() {
     RT_LOG(INFO, "创建所有线程成功");
     LOG(LOG_LEVEL_INFO, "创建所有线程成功");
     // 主循环
+    #ifndef DEBUG_MODE_ENABLED
     while (!main_exit_flag) {
         sleep(1);
     }
+    #else
+    while (!exit_flag) {
+        sleep(1);
+    }
+    #endif
     RT_LOG(INFO, "收到退出信号，关闭线程");
     thread_exit_flag = 1;
     LOG(LOG_LEVEL_INFO, "收到退出信号，关闭线程");
