@@ -12,19 +12,9 @@
 static int sim_cycle_count = 0;
 
 void simulate_hal_data(void) {
-    // 模拟驱动器数据更新
-    // 这里可以根据需要添加模拟逻辑
-
-    // 模拟位置递增（简单示例）
-    static int32_t sim_pos[4] = {0, 0, 0, 0};
-    for (int i = 0; i < 4; i++) {
-        sim_pos[i] += 100;  // 每周期位置增加
-    }
-
-    // 更新 HAL 驱动器数据
-    x_axis_driver.actual_pos = sim_pos[1];
-    y_axis_driver.actual_pos = sim_pos[2];
-    z_axis_driver.actual_pos = sim_pos[3];
+    x_axis_driver.actual_pos = x_axis_driver.target_pos;
+    y_axis_driver.actual_pos = y_axis_driver.target_pos;
+    z_axis_driver.actual_pos = z_axis_driver.target_pos;
 
     // 模拟状态字（已使能状态）
     x_axis_driver.state = DRV_STATE_OPERATION_ENABLED;

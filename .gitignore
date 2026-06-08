@@ -97,3 +97,5 @@ data/
 # .vscode/
 
 *.log
+
+compile_commands.json

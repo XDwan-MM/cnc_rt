@@ -54,12 +54,9 @@ static inline long long get_ns() {
 void* soft_plc_thread_func(void*) {
     while (!thread_exit_flag) {
         sem_wait(&plc_sem);
-        // printf("soft_plc_thread_func");
         if (thread_exit_flag) break;
-        #ifdef DEBUG_MODE_ENABLED
-        hal_keyboard_minitor();
-        #else
 
+        #ifndef DEBUG_MODE_ENABLED
         // 将IO和MCP输入数据写至X变量
         uint32_t io_input = 0;
         Hal_Io_Read_Di(&hal_io_module[0], &io_input);
@@ -74,10 +71,12 @@ void* soft_plc_thread_func(void*) {
             setRegValue8(REG_X, i * 2 + 4, (char)(mcp_input & 0xFF));
             setRegValue8(REG_X, i * 2 + 5, (char)((mcp_input >> 8) & 0xFF));
         }
+        #endif
 
         // Plc执行器逻辑
         PlcTask::instance().execute();
 
+        #ifndef DEBUG_MODE_ENABLED
         // 将Y变量数据写至IO和MCP输出
         uint32_t io_output = 0;
         for (int i = 0; i < 4; i++) {
@@ -96,8 +95,8 @@ void* soft_plc_thread_func(void*) {
             mcp_output = (uint32_t)(unsigned char)value1 | (uint32_t)(unsigned char)value2 << 8;
             GM_RxPdoEntry_Write(MCPDO[i], mcp_output);
         }
-
         #endif
+        
         pmc_g_input_scan_cycle();
         pmc_a_input_scan_cycle();
     }

@@ -98,12 +98,7 @@ static GNC_RES parser_set_content(NC_MODE nc_mode){
     {
     case MODE_MEM:
         // 选择NC文件
-        #ifdef DEBUG_MODE_ENABLED
-        snprintf(parser_data->parser_file_path, sizeof(parser_data->parser_file_path), "%s/%s", PROJECT_DIR, "config/NC/comp.nc");
-        ItpSetFile(parser_data->parser_file_path);  
-        #else
         getNcFilePath(parser_data->parser_file_path);
-        #endif
         // todo：界面增加校验，增加警告
         if((strlen(parser_data->parser_file_path) == 0)){
             LOG(LOG_LEVEL_ERR, "译码文件路径不存在");
@@ -115,12 +110,7 @@ static GNC_RES parser_set_content(NC_MODE nc_mode){
         break;
     case MODE_MDI:
         // 读取MDI内容
-        #ifdef DEBUG_MODE_ENABLED
-        strncpy(parser_data->mdiContent, "G00 X10", MDICONTENT_CHAR_LEN - 1);
-        parser_data->mdiContent[MDICONTENT_CHAR_LEN - 1] = '\0'; 
-        #else
         getMdiContent(parser_data->mdiContent);
-        #endif
         if((strlen(parser_data->mdiContent) == 0)){
             LOG(LOG_LEVEL_ERR, "MDI内容为空");
             setAlarm(ALARM_CH, ALARM_WARNING, 2);
