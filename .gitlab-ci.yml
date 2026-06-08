@@ -103,7 +103,7 @@
     # 3.编译rt_cnc
     - cd ../../
     - echo "⏳ Compiling Main Project..."
-    - ./build.sh release
+    - ./build.sh
     - ls -l bin/
     - echo "✅ Compiled Main Project Success!"
     # 加载version变量
