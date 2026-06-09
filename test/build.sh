@@ -43,6 +43,24 @@ run_test(){
     sudo -E LD_LIBRARY_PATH=../lib/cncshm/bin ./bin/tests
 }
 
+print_help() {
+    echo ""
+    echo "用法: ./build.sh [选项]"
+    echo ""
+    echo "选项:"
+    echo "  clean      清除可执行文件"
+    echo "             编译可执行文件"
+    echo "  run        执行所有单元测试"
+    echo "  help       显示此帮助信息"
+    echo ""
+    echo "示例:"
+    echo "  ./build.sh clean        # 清除可执行文件"
+    echo "  ./build.sh              # 编译可执行文件"
+    echo "  ./build.sh run          # 执行所有单元测试"
+    echo "  ./build.sh help         # 显示此帮助信息"
+    echo ""
+}
+
 case "${1:-all}" in
     all|build)
         build_test
@@ -53,7 +71,7 @@ case "${1:-all}" in
     run)
         run_test
         ;; 
-    help|--help|-h)
+    help|--help|-h|-H)
         print_help
         ;;
     *)

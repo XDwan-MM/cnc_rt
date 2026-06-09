@@ -7,6 +7,8 @@
 #include <varapi.h>
 #include <pardata.h>
 #include <parapi.h>
+#include <sysapi.h>
+#include <sysdata.h>
 #include <hmisysapi.h>
 #include <pthread.h>
 
@@ -57,6 +59,7 @@ ParamUnit (*par_axis)[PARAMAN_FILE_AXIS_MAX] = NULL;        // 坐标轴参数
 ParamUnit (*par_acmp)[PARAMAN_FILE_ACMP_MAX] = NULL;        // 误差补偿参数
 ParamUnit (*par_cfg)[PARAMAN_FILE_CFG_MAX] = NULL;          // 设备接口参数
 ParamUnit *par_table = NULL;                                // 刀具和刀库参数
+SysData* sys_data = NULL; 
 
 // 实时数据
 RT_DATA* rt_data;               // 实时数据

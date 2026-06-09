@@ -1,3 +1,59 @@
+
+### 运行方式
+
+1、目录结构
+
+├── cnc_hmi*   界面
+├── cnc_rt*    实时
+└── run.sh     启动脚本
+
+2、启动方式
+
+用法: ./run.sh [选项]
+
+选项:
+  debug      运行调试模式
+  run1       运行测试平台1
+  run2       运行测试平台2
+  help       显示帮助信息
+
+示例:
+  sudo ./run.sh debug      # 运行调试模式
+  sudo ./run.sh run1       # 运行测试平台1
+  sudo ./run.sh run2       # 运行测试平台2
+  sudo ./run.sh help       # 显示帮助信息
+
+模糊匹配：
+debug|rund|run_d|run_debug|debug_run
+run|run1|run_1
+run2|run_2
+help|--help|-h|-H
+
+
+3、启动流程
+
+正常流程：等待界面 → 界面初始化 → 实时初始化 → 进入主界面
+
+异常流程：如果界面长时间处于等待界面，可能是主站启动失败，此时50s后无法进入，等待界面显示报警信息，测试阶段请关闭重启。
+
+
+
+### 实时调试
+
+如果想脱离界面，只启动实时进行调试，可继续使用之前的启动方式 sudo ./build.sh debug
+
+为了解除与界面的交互，请在 main.cpp 结束该部分程序段的注释
+
+解释：该段模拟界面已发送启动实时的信号
+
+```c
+    // 如果想脱离界面进行调试，请解除注释
+    // #ifdef DEBUG_MODE_ENABLED
+    // setSysCommInt(SYS_START_RT, 1, 0);
+    // #endif
+```
+
+
 ### 共享内存
 
 连接数大于2，段错误

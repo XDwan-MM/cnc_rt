@@ -21,13 +21,6 @@ fi
 HMI_BIN_DIR="${HMI_DIRS[0]}/bin"
 RT_BIN_DIR="${RT_DIRS[0]}/bin"
 
-# 请修改可执行文件
-CMD1="sudo -E LD_LIBRARY_PATH=../include/cncshm/bin ./cnc_hmi_v3"
-# 如果为调试模式，请修改为 rt_cnc_d
-CMD2="sudo -E LD_LIBRARY_PATH=../lib/cncshm/bin ./rt_cnc_1"
-# >> 表示追加写入，> 表示覆盖写入。建议用 >> 避免每次重启清空日志。
-# CMD2="sudo -E LD_LIBRARY_PATH=../lib/cncshm/bin ./rt_cnc_1 > cnc_rt.log 2>&1"
-
 TERMINAL_OPTIONS=("gnome-terminal" "xterm" "konsole" "xfce4-terminal" "mate-terminal")
 # 注意：把 xterm/konsole 放在前面，它们的 PID 行为更可靠
 # ============================================
@@ -54,6 +47,25 @@ fi
 echo "[INFO] 使用终端模拟器: $TERMINAL_CMD"
 echo "[TIPS] 使用 Ctrl+C 关闭系统"
 echo "------------------------------------------"
+
+run_debug(){
+    # 请修改可执行文件
+    CMD1="sudo -E LD_LIBRARY_PATH=../include/cncshm/bin ./cnc_hmi_v3 -p"
+    # 如果为调试模式，请修改为 rt_cnc_d
+    CMD2="sudo -E LD_LIBRARY_PATH=../lib/cncshm/bin ./rt_cnc_d"
+    # >> 表示追加写入，> 表示覆盖写入。建议用 >> 避免每次重启清空日志。
+    # CMD2="sudo -E LD_LIBRARY_PATH=../lib/cncshm/bin ./rt_cnc_1 > cnc_rt.log 2>&1"
+}
+
+run1(){
+    CMD1="sudo -E LD_LIBRARY_PATH=../include/cncshm/bin ./cnc_hmi_v3"
+    CMD2="sudo -E LD_LIBRARY_PATH=../lib/cncshm/bin ./rt_cnc_1"
+}
+
+run2(){
+    CMD1="sudo -E LD_LIBRARY_PATH=../include/cncshm/bin ./cnc_hmi_v3"
+    CMD2="sudo -E LD_LIBRARY_PATH=../lib/cncshm/bin ./rt_cnc_2"
+}
 
 # 存储实际业务进程的 PID（不是终端模拟器的 PID）
 ACTUAL_PIDS=()
@@ -111,21 +123,42 @@ launch_process() {
     fi
 }
 
+print_help() {
+    echo ""
+    echo "用法: ./run.sh [选项]"
+    echo ""
+    echo "选项:"
+    echo "  debug      运行调试模式"
+    echo "  run1       运行测试平台1"
+    echo "  run2       运行测试平台2"
+    echo "  help       显示此帮助信息"
+    echo ""
+    echo "示例:"
+    echo "  ./run.sh debug      # 运行调试模式"
+    echo "  ./run.sh run1       # 运行测试平台1"
+    echo "  ./run.sh run2       # 运行测试平台2"
+    echo "  ./run.sh help       # 显示此帮助信息"
+    echo ""
+}
+
 # 3. 启动进程
-cd "$HMI_BIN_DIR"
-[ -n "${CMD1:-}" ] && launch_process "$CMD1" "CNC_HMI"
+run_process(){
+    cd "$HMI_BIN_DIR"
+    [ -n "${CMD1:-}" ] && launch_process "$CMD1" "CNC_HMI"
 
-# 延时
-sleep 0.5 
+    # 延时
+    sleep 0.5 
 
-cd "$RT_BIN_DIR"
-[ -n "${CMD2:-}" ] && launch_process "$CMD2" "CNC_RT"
+    cd "$RT_BIN_DIR"
+    [ -n "${CMD2:-}" ] && launch_process "$CMD2" "CNC_RT"
 
-if [ ${#ACTUAL_PIDS[@]} -eq 0 ]; then
-    echo "[ERROR] 进程数量0, 找不到启动的进程"
-    rm -f "${PID_FILES[@]}"
-    exit 1
-fi
+    if [ ${#ACTUAL_PIDS[@]} -eq 0 ]; then
+        echo "[ERROR] 进程数量0, 找不到启动的进程"
+        rm -f "${PID_FILES[@]}"
+        exit 1
+    fi
+}
+
 
 # 4. 清理函数（关键修复：杀的是实际业务进程，不是终端）
 cleanup() {
@@ -163,24 +196,63 @@ cleanup() {
     exit 0
 }
 
-trap cleanup SIGINT SIGTERM
 
-# 5. 主循环：监控实际业务进程
-while true; do
-    all_dead=true
-    for pid in "${ACTUAL_PIDS[@]}"; do
-        if kill -0 "$pid" 2>/dev/null; then
-            all_dead=false
+run_while(){
+    trap cleanup SIGINT SIGTERM
+
+    # 5. 主循环：监控实际业务进程
+    while true; do
+        all_dead=true
+        for pid in "${ACTUAL_PIDS[@]}"; do
+            if kill -0 "$pid" 2>/dev/null; then
+                all_dead=false
+                break
+            fi
+        done
+        
+        if [ "$all_dead" = true ]; then
+            echo "[INFO] 所有子进程已退出"
             break
         fi
+        
+        sleep 1
     done
-    
-    if [ "$all_dead" = true ]; then
-        echo "[INFO] 所有子进程已退出"
-        break
-    fi
-    
-    sleep 1
-done
 
-cleanup
+    cleanup
+}
+
+
+case "${1:-all}" in
+    debug|rund|run_d|run_debug|debug_run)
+        echo -e "[INFO] 运行调试模式"
+        run_debug
+        run_process
+        run_while
+        ;;
+    all)
+        echo -e "[INFO] 运行调试模式"
+        run_debug
+        run_process
+        run_while
+        ;;
+    run|run1|run_1)
+        echo -e "[INFO] 运行实时模式平台1"
+        run1
+        run_process
+        run_while
+        ;;
+    run2|run_2)
+        echo -e "[INFO] 运行实时模式平台2"
+        run2
+        run_process
+        run_while
+        ;;
+    help|--help|-h|-H)
+        print_help
+        ;;
+    *)
+        echo -e "[ERROR] 参数不足"
+        print_help
+        exit 1
+        ;;
+esac
