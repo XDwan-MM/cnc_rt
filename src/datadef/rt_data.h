@@ -78,8 +78,9 @@ typedef struct{
     double motor_cmd_pos;       // 驱动器指令位置（带补偿）
     double motor_act_pos;       // 驱动器反馈位置（带补偿）
     double fb_pos_no_comp;      // 反馈位置（去除补偿）
-    double pitch_comp_val;      // 当前位置螺距误差补偿值 (单位:um)  // wcf add 2026.01.23
-    double perp_comp_val;       // 当前位置垂直度误差补偿值 (单位:mm)  // wcf add 2026.01.23
+    double pitch_comp_val;      // 当前位置螺距误差补偿值 (单位:mm)
+    double backlash_comp_val;   // 当前位置反向间隙补偿值 (单位:mm)
+    double perp_comp_val;       // 当前位置垂直度误差补偿值 (单位:mm)
     AxisStatus axis_status;
 }RT_AXIS;
 

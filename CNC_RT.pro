@@ -79,7 +79,7 @@ LIBS += -L"$$PWD/lib/kinematic/bin/" -lkinematic
 INCLUDEPATH += $$PWD/lib/kinematic/include $$PWD/lib/kinematic
 
 # 添加误差补偿库
-LIBS += -L"$$PWD/lib/CNC_ErrorComp/bin" -lCNC_ErrorComp
+LIBS += -L"$$PWD/lib/CNC_ErrorComp/lib" -lCNC_ErrorComp
 INCLUDEPATH += $$PWD/lib/CNC_ErrorComp/include $$PWD/lib/CNC_ErrorComp
 
 unix:!macx: {
@@ -135,11 +135,11 @@ HEADERS += \
     src/motion/jog.h \
     src/motion/jog_planner.h \
     src/motion/stored_stroke_check.h \
-    src/plc/pmc_a_input_scanner.h \
-    src/plc/pmc_g_input_scanner.h \
-    src/plc/pmc_io_map.h \
-    src/plc/pmc_output_handler.h \
-    src/plc/signal_utils.h \
+    src/pmc_scanner/pmc_a_input_scanner.h \
+    src/pmc_scanner/pmc_g_input_scanner.h \
+    src/pmc_scanner/pmc_io_map.h \
+    src/pmc_scanner/pmc_output_handler.h \
+    src/pmc_scanner/signal_utils.h \
     src/task/task.h \
     src/threads/threads_api.h \
     src/threads/thread_manager.h \
@@ -178,9 +178,9 @@ SOURCES += \
     src/motion/jog.c \
     src/motion/jog_planner.c \
     src/motion/stored_stroke_check.c \
-    src/plc/pmc_a_input_scanner.c \
-    src/plc/pmc_g_input_scanner.c \
-    src/plc/pmc_output_handler.c \
+    src/pmc_scanner/pmc_a_input_scanner.c \
+    src/pmc_scanner/pmc_g_input_scanner.c \
+    src/pmc_scanner/pmc_output_handler.c \
     src/task/task.c \
     src/threads/thread_manager.cpp \
     src/threads/threads.cpp \
@@ -200,6 +200,7 @@ INCLUDEPATH += \
     src/motion/auto \
     src/motion/spindle \
     src/monitor \
+    src/pmc_scanner \
     src/plc \
     src/task \
     src/threads \

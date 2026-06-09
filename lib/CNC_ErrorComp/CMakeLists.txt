@@ -1,12 +1,23 @@
 cmake_minimum_required(VERSION 3.16)
-project(CNC_ErrorComp LANGUAGES C CXX)
-
-set(CMAKE_AUTOMOC ON)
+project(CNC_ErrorComp VERSION 1.0.0 LANGUAGES C CXX)
 
 # ============================================================
-# Static library: CNC_ErrorComp (pure C, no Qt dependency)
+# Global settings
+# ============================================================
+if(NOT CMAKE_BUILD_TYPE)
+    set(CMAKE_BUILD_TYPE Release CACHE STRING
+        "Build type (Debug / Release / RelWithDebInfo / MinSizeRel)" FORCE)
+endif()
+
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+
+# ============================================================
+# Static library: CNC_ErrorComp (pure C, no external dependency)
 # ============================================================
 add_library(CNC_ErrorComp STATIC
+    src/backlash_comp.c
     src/perp_comp.c
     src/pitch_comp.c
     src/pitch_comp_table_init.c
@@ -18,51 +29,37 @@ target_include_directories(CNC_ErrorComp PUBLIC
 
 target_compile_features(CNC_ErrorComp PUBLIC c_std_11)
 
+# Output static library to project root lib/
 set_target_properties(CNC_ErrorComp PROPERTIES
-    ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/bin
+    ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/lib
+)
+
+target_compile_options(CNC_ErrorComp PRIVATE
+    $<$<OR:$<C_COMPILER_ID:GNU>,$<C_COMPILER_ID:Clang>,$<C_COMPILER_ID:AppleClang>>:
+        -Wall -Wextra -Wpedantic>
+    $<$<C_COMPILER_ID:MSVC>:
+        /W4>
 )
 
 # ============================================================
-# Unit tests (require Qt Test)
+# Install rules
+# ============================================================
+include(GNUInstallDirs)
+
+install(TARGETS CNC_ErrorComp
+    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+)
+
+install(DIRECTORY include/
+    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/${PROJECT_NAME}
+)
+
+# ============================================================
+# Tests
 # ============================================================
 option(BUILD_TESTS "Build unit tests" ON)
 
 if(BUILD_TESTS)
     enable_testing()
-
-    # Support both Qt5 and Qt6
-    find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS Test)
-    find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Test)
-
-    # ---- perp_comp test ----
-    add_executable(tst_perp_comp
-        tests/unit_perp_comp/tst_perp.cpp
-    )
-
-    target_link_libraries(tst_perp_comp PRIVATE
-        CNC_ErrorComp
-        Qt${QT_VERSION_MAJOR}::Test
-    )
-
-    target_include_directories(tst_perp_comp PRIVATE
-        ${CMAKE_CURRENT_SOURCE_DIR}/include
-    )
-
-    add_test(NAME perp_comp COMMAND tst_perp_comp)
-
-    # ---- pitch_comp test ----
-    add_executable(tst_pitch_comp
-        tests/unit_pitch_comp/tst_pitch.cpp
-    )
-
-    target_link_libraries(tst_pitch_comp PRIVATE
-        CNC_ErrorComp
-        Qt${QT_VERSION_MAJOR}::Test
-    )
-
-    target_include_directories(tst_pitch_comp PRIVATE
-        ${CMAKE_CURRENT_SOURCE_DIR}/include
-    )
-
-    add_test(NAME pitch_comp COMMAND tst_pitch_comp)
+    add_subdirectory(tests)
 endif()

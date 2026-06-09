@@ -349,50 +349,46 @@ static void output_to_hal() {
 }
 
 static void compute_screw_comp() {
-    double pitch_comp_val_x, pitch_comp_val_y, pitch_comp_val_z;
-    double perp_comp_val_x, perp_comp_val_y, perp_comp_val_z;
+    double pitch_comp_val[3];
+    double backlash_comp_val[3];
 
     // Sync params from shared memory to library-compatible structs
-    // 暂时是立马同步螺补参数，后续改成复位生效应将函数移到复位逻辑．
-    comp_data_sync_params();
+    // 暂时是立马同步补偿参数，后续改成复位生效应将函数移到复位逻辑．
+    sync_comp_params();
 
-    // 螺距误差补偿值计算 (计算出来的补偿值 单位为:mm)
-    pitch_comp_val_x = calculate_pitch_compensation(
-        &pitch_rt[AXIS_X], &acmp_params[AXIS_X], &pitch_table[AXIS_X],
-        (double)var_axis[AXIS_X][VAR_AXIS_CMD_POS_EX].value.f,
-        (double)var_axis[AXIS_X][VAR_AXIS_CMD_VEL].value.f);
-    pitch_comp_val_y = calculate_pitch_compensation(
-        &pitch_rt[AXIS_Y], &acmp_params[AXIS_Y], &pitch_table[AXIS_Y],
-        (double)var_axis[AXIS_Y][VAR_AXIS_CMD_POS_EX].value.f,
-        (double)var_axis[AXIS_Y][VAR_AXIS_CMD_VEL].value.f);
-    pitch_comp_val_z = calculate_pitch_compensation(
-        &pitch_rt[AXIS_Z], &acmp_params[AXIS_Z], &pitch_table[AXIS_Z],
-        (double)var_axis[AXIS_Z][VAR_AXIS_CMD_POS_EX].value.f,
-        (double)var_axis[AXIS_Z][VAR_AXIS_CMD_VEL].value.f);
+    bool is_rapid = false;
+    if(cycle_tp->plan_block->type == RAPID || rt_data->sys_state[SYS_IS_RAPID])
+    {
+        is_rapid = true;
+    }
 
+    for (int i = 0; i < 3; i++) {
+        // 螺距误差补偿值计算 (计算出来的补偿值 单位为:mm)
+        pitch_comp_val[i] = calculate_pitch_compensation(
+            &pitch_rt[i], &acmp_params[i], &pitch_table[i],
+            rt_data->axis_data[i].mac_cmd_pos,
+            var_axis[i][VAR_AXIS_CMD_VEL].value.f);
+
+        // 反向间隙补偿值计算 (计算出来的补偿值 单位为:mm)
+        backlash_comp_val[i] = calculate_backlash_compensation(
+            &acmp_params[i], &backlash_rt[i],
+            var_axis[i][VAR_AXIS_CMD_VEL].value.f,
+            is_rapid);
+
+        double total_comp = pitch_comp_val[i] + backlash_comp_val[i];
+
+        // 当前周期插补+补偿后位置
+        rt_data->axis_data[i].motor_cmd_pos = rt_data->axis_data[i].mac_cmd_pos + total_comp;
+        // 反馈位置（去除补偿）
+        rt_data->axis_data[i].fb_pos_no_comp = rt_data->axis_data[i].motor_act_pos - total_comp;
+
+        rt_data->axis_data[i].pitch_comp_val     = pitch_comp_val[i];
+        rt_data->axis_data[i].backlash_comp_val  = backlash_comp_val[i];
+    }
     // 垂直度误差补偿值计算 (计算出来的补偿值 单位为:mm)
-    perp_comp_val_x = 0;
-    perp_comp_val_y = 0;
-    perp_comp_val_z = 0;
-
-    // 当前周期插补+补偿后位置
-    rt_data->axis_data[AXIS_X].mac_comp_pos = rt_data->axis_data[AXIS_X].mac_cmd_pos + pitch_comp_val_x + perp_comp_val_x;
-    rt_data->axis_data[AXIS_Y].mac_comp_pos = rt_data->axis_data[AXIS_Y].mac_cmd_pos+ pitch_comp_val_y + perp_comp_val_y;
-    rt_data->axis_data[AXIS_Z].mac_comp_pos = rt_data->axis_data[AXIS_Z].mac_cmd_pos + pitch_comp_val_z + perp_comp_val_z;
-    // 反馈位置（去除补偿）
-    rt_data->axis_data[AXIS_X].fb_pos_no_comp = rt_data->axis_data[AXIS_X].motor_act_pos - pitch_comp_val_x - perp_comp_val_x;
-    rt_data->axis_data[AXIS_Y].fb_pos_no_comp = rt_data->axis_data[AXIS_Y].motor_act_pos - pitch_comp_val_y - perp_comp_val_y;
-    rt_data->axis_data[AXIS_Z].fb_pos_no_comp = rt_data->axis_data[AXIS_Z].motor_act_pos - pitch_comp_val_z - perp_comp_val_z;
-
-    // 输出给VAR变量后面用
-    rt_data->axis_data[AXIS_X].pitch_comp_val = pitch_comp_val_x;
-    rt_data->axis_data[AXIS_Y].pitch_comp_val = pitch_comp_val_y;
-    rt_data->axis_data[AXIS_Z].pitch_comp_val = pitch_comp_val_z;
-    // printf("pitch_comp_val_x %f %f %f\n", pitch_comp_val_x, var_axis[AXIS_X][VAR_AXIS_CMD_POS_EX].value.f, rt_data->axis_data[AXIS_X].mac_comp_pos);
-
-    rt_data->axis_data[AXIS_X].perp_comp_val = perp_comp_val_x;
-    rt_data->axis_data[AXIS_Y].perp_comp_val = perp_comp_val_y;
-    rt_data->axis_data[AXIS_Z].perp_comp_val = perp_comp_val_z;
+    rt_data->axis_data[AXIS_X].perp_comp_val = 0;
+    rt_data->axis_data[AXIS_Y].perp_comp_val = 0;
+    rt_data->axis_data[AXIS_Z].perp_comp_val = 0;
 }
 
 static void check_for_soft_limit() {

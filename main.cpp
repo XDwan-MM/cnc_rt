@@ -79,10 +79,9 @@ int main() {
         LOG(LOG_LEVEL_INFO, "调试模式: 已注入螺距补偿测试数据");
     }
 #endif
-    // 初始化螺距误差补偿
+    // 初始化螺距误差补偿(包括同步补偿参数，和建立螺距补偿表)
     comp_data_init();
     RT_LOG(INFO, "初始化螺距误差补偿成功");
-    LOG(LOG_LEVEL_INFO, "初始化螺距误差补偿成功");
     // 初始化译码器
     parser_new();
     RT_LOG(INFO, "初始化译码器成功");

@@ -82,7 +82,9 @@ build*/
 
 bin/
 #!lib/CNC_ErrorComp/bin/ 例外规则
-!lib/CNC_ErrorComp/bin/
+lib/CNC_ErrorComp/src
+/lib/CNC_ErrorComp/build.sh
+/lib/CNC_ErrorComp/CMakeLists.txt
 
 lib/cncshm/bin/
 lib/log/bin/
