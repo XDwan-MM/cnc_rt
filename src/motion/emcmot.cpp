@@ -81,10 +81,8 @@ void emcmotTrajPlan() {
         // 根据运动模式计算运动位置
         get_cmd_pos();
 
-        #ifndef DEBUG_MODE_ENABLED
         //更新轴状态
         Axis_Status_Update();
-        #endif
 
         // 预先检查插补位置是否超软限位
         check_for_soft_limit();
