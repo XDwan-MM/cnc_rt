@@ -21,7 +21,9 @@ fi
 HMI_BIN_DIR="${HMI_DIRS[0]}/bin"
 RT_BIN_DIR="${RT_DIRS[0]}/bin"
 
+# 请修改可执行文件
 CMD1="sudo -E LD_LIBRARY_PATH=../include/cncshm/bin ./cnc_hmi_v3"
+# 如果为调试模式，请修改为 rt_cnc_d
 CMD2="sudo -E LD_LIBRARY_PATH=../lib/cncshm/bin ./rt_cnc_1"
 # >> 表示追加写入，> 表示覆盖写入。建议用 >> 避免每次重启清空日志。
 # CMD2="sudo -E LD_LIBRARY_PATH=../lib/cncshm/bin ./rt_cnc_1 > cnc_rt.log 2>&1"
@@ -112,6 +114,10 @@ launch_process() {
 # 3. 启动进程
 cd "$HMI_BIN_DIR"
 [ -n "${CMD1:-}" ] && launch_process "$CMD1" "CNC_HMI"
+
+# 延时
+sleep 0.5 
+
 cd "$RT_BIN_DIR"
 [ -n "${CMD2:-}" ] && launch_process "$CMD2" "CNC_RT"
 
