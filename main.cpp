@@ -20,9 +20,14 @@
 #include <QFile>
 #include <QTextStream>
 #include <hmisysapi.h>
+#include "sysapi.h"
 #ifdef DEBUG_MODE_ENABLED
 #include "keyboard.h"
 #endif
+
+static char version[64];
+static int sys_start_rt = 0;
+static int sys_close_rt = 0;
 
 // Ctrl + C 终止程序触发
 void sigint_handler([[maybe_unused]] int sig) {
@@ -38,7 +43,6 @@ int main() {
     // 打印当前模式
     printMode();
     // 打印版本信息
-    char version[64];
     get_rt_version(version, sizeof(version));
     // 初始化共享内存
     if(!shmInit()) {
@@ -92,6 +96,20 @@ int main() {
     //初始化行程检查功能
     Axis_Limit_Manager_Init();
     signal(SIGINT, sigint_handler);
+    // 等待实时开始初始化信号
+    RT_LOG(INFO, "等待实时启动信号");
+    LOG(LOG_LEVEL_INFO, "等待实时启动信号");
+    // 如果想脱离界面进行调试，请解除注释
+    // #ifdef DEBUG_MODE_ENABLED
+    // setSysCommInt(SYS_START_RT, 1, 0);
+    // #endif
+    while (true) {
+        getSysCommInt(SYS_START_RT, &sys_start_rt, 0);
+        if(sys_start_rt) break;
+        sleep(1);
+    }
+    RT_LOG(INFO, "获取到实时启动信号");
+    LOG(LOG_LEVEL_INFO, "获取到实时启动信号");
     // 启动主站
 #ifndef DEBUG_MODE_ENABLED
     if (Master_Start() < 0) {
@@ -99,6 +117,7 @@ int main() {
         LOG(LOG_LEVEL_ERR, "EtherCAT主站启动失败，请检查ENI文件是否正确");
         return -1; // 直接退出，不再启动线程
     }
+    RT_LOG(INFO, "启动EtherCAT主站");
     LOG(LOG_LEVEL_INFO, "启动EtherCAT主站");
 #endif
     // 创建信号量，需要放在线程启动（threads_start函数）前
@@ -111,9 +130,18 @@ int main() {
     }
     RT_LOG(INFO, "创建所有线程成功");
     LOG(LOG_LEVEL_INFO, "创建所有线程成功");
+    // 发送实时初始化完成信号
+    setSysCommInt(SYS_START_RT_FINISH, 1, 0);
+    RT_LOG(INFO, "发送实时启动完成信号");
+    LOG(LOG_LEVEL_INFO, "发送实时启动完成信号");
     // 主循环
+    RT_LOG(INFO, "等待实时关闭信号");
+    LOG(LOG_LEVEL_INFO, "等待实时关闭信号");
     #ifndef DEBUG_MODE_ENABLED
     while (!main_exit_flag) {
+        // 等待实时关闭信号
+        getSysCommInt(SYS_CLOSE_RT, &sys_close_rt, 0);
+        if(sys_close_rt) break;
         sleep(1);
     }
     #else
@@ -121,8 +149,14 @@ int main() {
         sleep(1);
     }
     #endif
-    RT_LOG(INFO, "收到退出信号，关闭线程");
+    RT_LOG(INFO, "获取到实时关闭信号");
+    LOG(LOG_LEVEL_INFO, "获取到实时关闭信号");
+    // 发送实时关闭完成信号
+    setSysCommInt(SYS_CLOSE_RT_FINISH, 1, 0);
+    RT_LOG(INFO, "发送实时关闭完成信号");
+    LOG(LOG_LEVEL_INFO, "发送实时关闭完成信号");
     thread_exit_flag = 1;
+    RT_LOG(INFO, "收到退出信号，关闭线程");
     LOG(LOG_LEVEL_INFO, "收到退出信号，关闭线程");
     // 唤醒所有阻塞在信号量上的线程，让它们能够检查 thread_exit_flag 并退出
     for (int i = 0; i < 3; i++) {
