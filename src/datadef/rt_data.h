@@ -74,7 +74,6 @@ typedef struct{
     double wcs_cmd_pos_cur;     // 工件插补计算位置
     double wcs_cmd_pos_pre;     // 工件插补计算位置(上一插补)
     double mac_cmd_pos;         // 机床指令位置
-    double mac_comp_pos;        // 机床补偿后位置
     double motor_cmd_pos;       // 驱动器指令位置（带补偿）
     double motor_act_pos;       // 驱动器反馈位置（带补偿）
     double fb_pos_no_comp;      // 反馈位置（去除补偿）

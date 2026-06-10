@@ -33,7 +33,8 @@ static void check_ferror_fault();
 static void output_to_hal();
 static void read_from_hal();
 static void check_for_soft_limit();
-static void compute_screw_comp();
+static void compute_error_comp();
+static void calcul_mac_cmd_pos();
 
 static int32_t x_cmd_Pulses, y_cmd_Pulses, z_cmd_Pulses;
 static int32_t x_target_pos, y_target_pos, z_target_pos;
@@ -82,6 +83,12 @@ void emcmotTrajPlan() {
         // 根据运动模式计算运动位置
         get_cmd_pos();
 
+        // 计算mac_cmd_pos
+        calcul_mac_cmd_pos();
+
+        // 误差补偿
+        compute_error_comp();
+
         //更新轴状态
         Axis_Status_Update();
 
@@ -99,7 +106,7 @@ void emcmotTrajPlan() {
 
         // 清除事件
         rt_data->nc_event = SYS_EVENT_NONE;
-    }
+        }
 }
 
 // 路径规划
@@ -308,37 +315,14 @@ static void read_from_hal() {
             rt_data->axis_data[i].wcs_cmd_pos_cur = rt_data->axis_data[i].motor_act_pos;
             rt_data->axis_data[i].wcs_cmd_pos_pre = rt_data->axis_data[i].motor_act_pos;
             rt_data->axis_data[i].mac_cmd_pos = rt_data->axis_data[i].motor_act_pos;
-            rt_data->axis_data[i].mac_comp_pos = rt_data->axis_data[i].motor_act_pos;
             rt_data->axis_data[i].motor_cmd_pos = rt_data->axis_data[i].motor_act_pos;
+            rt_data->axis_data[i].fb_pos_no_comp = rt_data->axis_data[i].motor_act_pos;
         }
         update_pos_flag = 1;
     }
 }
 
 static void output_to_hal() {
-    for (int i = 0; i < SYS_AXES_NUM; i++)
-    {
-        // 控制轴拆卸时绝对坐标不变
-        if(!rt_data->axis_data[i].axis_status.is_disable)
-        {
-            setVarAxisDouble(i, VAR_AXIS_CMD_POS_EX, rt_data->axis_data[i].wcs_cmd_pos_cur, 0);
-        }
-        // 机床锁住时机械坐标不变
-        if(!rt_data->sys_state[SYS_IS_MAC_LOCK] && !rt_data->axis_data[i].axis_status.is_disable)
-        {
-            rt_data->axis_data[i].mac_cmd_pos += rt_data->axis_data[i].wcs_cmd_pos_cur - rt_data->axis_data[i].wcs_cmd_pos_pre;
-            setVarAxisDouble(i, VAR_AXIS_ACT_POS_EX, rt_data->axis_data[i].mac_cmd_pos, 0);
-        }
-    }
-    // 误差补偿
-    // compute_screw_comp();
-    for (int i = 0; i < SYS_AXES_NUM; i++)
-    {
-        // 电机位置
-        rt_data->axis_data[i].motor_cmd_pos = rt_data->axis_data[i].mac_cmd_pos;
-        // 上一周期插补位置
-        rt_data->axis_data[i].wcs_cmd_pos_pre = rt_data->axis_data[i].wcs_cmd_pos_cur;
-    }
     // 发送给驱动器
     x_cmd_Pulses = position_to_pulses(rt_data->axis_data[AXIS_X].motor_cmd_pos, par_axis[AXIS_X]);
     Hal_Driver_Set_Target_Pos(&x_axis_driver, x_cmd_Pulses);
@@ -348,13 +332,18 @@ static void output_to_hal() {
     Hal_Driver_Set_Target_Pos(&z_axis_driver, z_cmd_Pulses);
 }
 
-static void compute_screw_comp() {
+static void compute_error_comp() 
+{
     double pitch_comp_val[3];
     double backlash_comp_val[3];
+    double perp_comp_val[3];
 
     // Sync params from shared memory to library-compatible structs
     // 暂时是立马同步补偿参数，后续改成复位生效应将函数移到复位逻辑．
     sync_comp_params();
+
+    // TODO: check_and_rebuild_pitch_tables() 脏标记检测（预留）
+    // 后续 HMI 侧 par_table[] 接口就绪后，加 PAR_CMP_PITCH_TABLE_DIRTY 枚举并实现
 
     bool is_rapid = false;
     if(cycle_tp->plan_block->type == RAPID || rt_data->sys_state[SYS_IS_RAPID])
@@ -362,33 +351,59 @@ static void compute_screw_comp() {
         is_rapid = true;
     }
 
+    // 构建 all_axis_pos[] 供垂直度等跨轴补偿使用
+    double all_axis_pos[3];
     for (int i = 0; i < 3; i++) {
+        all_axis_pos[i] = rt_data->axis_data[i].mac_cmd_pos;
+    }
+
+    for (int i = 0; i < 3; i++) {
+        double vel_cmd = var_axis[i][VAR_AXIS_CMD_VEL].value.f;
+        double mac_cmd_pos = rt_data->axis_data[i].mac_cmd_pos;
+
         // 螺距误差补偿值计算 (计算出来的补偿值 单位为:mm)
         pitch_comp_val[i] = calculate_pitch_compensation(
-            &pitch_rt[i], &acmp_params[i], &pitch_table[i],
-            rt_data->axis_data[i].mac_cmd_pos,
-            var_axis[i][VAR_AXIS_CMD_VEL].value.f);
+            &pitch_comp_state[i], &par_comp_lib[i], &pitch_comp_table[i],
+            mac_cmd_pos, vel_cmd);
 
         // 反向间隙补偿值计算 (计算出来的补偿值 单位为:mm)
         backlash_comp_val[i] = calculate_backlash_compensation(
-            &acmp_params[i], &backlash_rt[i],
-            var_axis[i][VAR_AXIS_CMD_VEL].value.f,
-            is_rapid);
+            &par_comp_lib[i], &backlash_comp_state[i],
+            vel_cmd, is_rapid);
 
-        double total_comp = pitch_comp_val[i] + backlash_comp_val[i];
+        // 垂直度误差补偿值计算 (计算出来的补偿值 单位为:mm)
+        perp_comp_val[i] = calculate_perpendicularity_total(
+            &par_comp_lib[i], &perp_comp_state[i],
+            i, all_axis_pos, vel_cmd);
+
+        // TODO: 直线度补偿值计算 (预留)
+        // straight_comp_val = calculate_straightness_compensation(...);
+
+        double total_comp = pitch_comp_val[i] + backlash_comp_val[i] + perp_comp_val[i];
 
         // 当前周期插补+补偿后位置
-        rt_data->axis_data[i].motor_cmd_pos = rt_data->axis_data[i].mac_cmd_pos + total_comp;
+        rt_data->axis_data[i].motor_cmd_pos = mac_cmd_pos + total_comp;
         // 反馈位置（去除补偿）
         rt_data->axis_data[i].fb_pos_no_comp = rt_data->axis_data[i].motor_act_pos - total_comp;
 
-        rt_data->axis_data[i].pitch_comp_val     = pitch_comp_val[i];
-        rt_data->axis_data[i].backlash_comp_val  = backlash_comp_val[i];
+        rt_data->axis_data[i].pitch_comp_val    = pitch_comp_val[i];
+        rt_data->axis_data[i].backlash_comp_val = backlash_comp_val[i];
+        rt_data->axis_data[i].perp_comp_val     = perp_comp_val[i];
     }
-    // 垂直度误差补偿值计算 (计算出来的补偿值 单位为:mm)
-    rt_data->axis_data[AXIS_X].perp_comp_val = 0;
-    rt_data->axis_data[AXIS_Y].perp_comp_val = 0;
-    rt_data->axis_data[AXIS_Z].perp_comp_val = 0;
+}
+
+static void calcul_mac_cmd_pos()
+{
+    for (int i = 0; i < SYS_AXES_NUM; i++)
+    {
+        // 机床锁住或者轴拆卸，不下发位置
+        if (!rt_data->sys_state[SYS_IS_MAC_LOCK] && !rt_data->axis_data[i].axis_status.is_disable)
+        {
+            rt_data->axis_data[i].mac_cmd_pos += rt_data->axis_data[i].wcs_cmd_pos_cur - rt_data->axis_data[i].wcs_cmd_pos_pre;
+        }
+        // 上一周期插补位置
+        rt_data->axis_data[i].wcs_cmd_pos_pre = rt_data->axis_data[i].wcs_cmd_pos_cur;
+    }
 }
 
 static void check_for_soft_limit() {
