@@ -53,10 +53,10 @@ void check_ferror_fault(void)
             int alarm_code;
             const char* fault_type;
             if (ferror_control[i].is_moving) {
-                alarm_code = i * 10 + 100;   /* 移动时: X=100, Y=110, Z=120 */
+                alarm_code = i * 10 + 100;   /* 报警号 移动时: X=100, Y=110, Z=120 */
                 fault_type = "移动时";
             } else {
-                alarm_code = i * 10 + 101;   /* 停止时: X=101, Y=111, Z=121 */
+                alarm_code = i * 10 + 101;   /* 报警号 停止时: X=101, Y=111, Z=121 */
                 fault_type = "停止时";
             }
             int res = setAlarm(ALARM_AX, ALARM_ERROR, alarm_code);
