@@ -25,7 +25,6 @@ typedef enum{
     ABS_EXEC_IDLE = 0,              // 空闲
     ABS_EXEC_HOMING,                // 回零中
     ABS_EXEC_RESETTING,             // 复位中
-    ABS_EXEC_OVERRIDE,              // 改倍率中
 }ABS_AXIS_HOMING_STATE;
 
 typedef enum{

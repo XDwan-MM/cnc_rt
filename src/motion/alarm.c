@@ -2,6 +2,7 @@
 #include <hmisysapi.h>
 #include "rt_data.h"
 #include <alarmapi.h>
+#include "master.h"
 
 // 急停处理逻辑
 void handle_estop_cmd(){
