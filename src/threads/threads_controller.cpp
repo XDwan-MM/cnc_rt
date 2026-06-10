@@ -12,6 +12,7 @@
 #include "pmc_a_input_scanner.h"
 #include "pmc_g_input_scanner.h"
 #include "pmc_output_handler.h"
+#include "master.h"
 #include <hmisysapi.h>
 #include <stdio.h>
 #include <time.h>

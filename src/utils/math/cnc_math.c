@@ -284,6 +284,7 @@ int solve_quadratic_equation(double a, double b, double c, double x[])
         else if (fabs(delta - 0.0) < EPS)
         {
             x[0] = x[1] = -b / (2.0 * a);
+            return 2;   // 重根，x[0]、x[1] 为两个相等实根
         }
         else
         {

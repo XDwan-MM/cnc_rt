@@ -22,6 +22,7 @@
 #include "pitch_comp.h"
 #include "comp_data.h"
 #include "debug_mode.h"
+#include "master.h"
 
 static void check_for_fault();
 static void set_operating_mode();
