@@ -44,11 +44,12 @@ typedef struct
  */
 typedef struct
 {
-    double current_output; // 该轴当前实际输出的补偿量
-    double step_limit;     // 平滑过渡的步进限制
-    int last_type;         // 上周期补偿类型
-    CompPhase phase;       // 状态机当前阶段: IDLE / RAMPING / ACTIVE
-    bool has_moved;        // 上电后首动判定标志
+    double current_output;  // 该轴当前实际输出的补偿量
+    double step_limit;      // 平滑过渡的步进限制
+    int last_type;          // 上周期补偿类型
+    double last_target_val; // 上周期目标值，监控用，每周期更新
+    CompPhase phase;        // 状态机当前阶段: IDLE / RAMPING / ACTIVE
+    bool has_moved;         // 上电后首动判定标志
 } PitchCompState;
 
 /* --- 接口函数 --- */
