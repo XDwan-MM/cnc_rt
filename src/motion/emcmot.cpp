@@ -29,7 +29,6 @@ static void set_operating_mode();
 static void spindle_control();
 static void get_cmd_pos();
 static void update_status();
-static void check_ferror_fault();
 static void output_to_hal();
 static void read_from_hal();
 static void check_for_soft_limit();
@@ -59,6 +58,8 @@ void emcmotTrajPlan() {
             nc_set_resetting();
             // 复位生效参数
             Axis_Limit_Manager_Init();
+            // 清除跟随误差标志
+            reset_ferror_control();
             // 清除警告
             cleanAllAlarm(ALARM_TYPE_ALL, ALARM_WARNING);
         }
@@ -232,73 +233,6 @@ static void check_for_fault() {
     }
 }
 
-// 检查轴跟随误差错误
-static void check_ferror_fault()
-{
-    // 急停拍下情况、(空闲、编辑状态)时不检查跟随误差，避免上电无运动误报
-    if (rt_data->sys_state[SYS_IS_ESTOP_ON] || rt_data->current_mode == MODE_IDLE ||
-        rt_data->current_mode == MODE_EDIT)
-    {
-        return;
-    }
-    /* 指令速度不为0时，检测跟随误差 */
-    // x轴
-    if (fabs(var_axis[AXIS_X][VAR_AXIS_CMD_VEL].value.f) > SPEED_THRESHOLD)
-    {
-        // 指令速度 指令位置 反馈位置
-        double vel_cmd_x = var_axis[AXIS_X][VAR_AXIS_CMD_VEL].value.f;
-        double pos_cmd_x = rt_data->axis_data[AXIS_X].motor_cmd_pos;
-        double pos_fb_x = rt_data->axis_data[AXIS_X].motor_act_pos;
-        // 计算跟随误差
-        updata_axis_ferror(&ferror_control[AXIS_X], par_axis[AXIS_X], pos_cmd_x, pos_fb_x, vel_cmd_x);
-        // 跟随误差报警处理
-        if (ferror_control[AXIS_X].error_flag)
-        {
-            int res = setAlarm(ALARM_AX, ALARM_ERROR, 100);
-            if (res == -8)
-                return;
-            // 上述代码逻辑是让下面LOG只打印一次；返回值-8：表示该报警已存在。
-            LOG(LOG_LEVEL_ERR, "X轴跟随误差过大");
-        }
-    }
-    // y轴
-    if (fabs(var_axis[AXIS_Y][VAR_AXIS_CMD_VEL].value.f) > SPEED_THRESHOLD)
-    {
-        // 指令速度 指令位置 反馈位置
-        double vel_cmd_y = var_axis[AXIS_Y][VAR_AXIS_CMD_VEL].value.f;
-        double pos_cmd_y = rt_data->axis_data[AXIS_Y].motor_cmd_pos;
-        double pos_fb_y = rt_data->axis_data[AXIS_Y].motor_act_pos;
-        // 计算跟随误差
-        updata_axis_ferror(&ferror_control[AXIS_Y], par_axis[AXIS_Y], pos_cmd_y, pos_fb_y, vel_cmd_y);
-        // 跟随误差报警处理
-        if (ferror_control[AXIS_Y].error_flag)
-        {
-            int res = setAlarm(ALARM_AX, ALARM_ERROR, 101);
-            if (res == -8)
-                return;
-            LOG(LOG_LEVEL_ERR, "Y轴跟随误差过大");
-        }
-    }
-    // z轴
-    if (fabs(var_axis[AXIS_Z][VAR_AXIS_CMD_VEL].value.f) > SPEED_THRESHOLD)
-    {
-        // 指令速度 指令位置 反馈位置
-        double vel_cmd_z = var_axis[AXIS_Z][VAR_AXIS_CMD_VEL].value.f;
-        double pos_cmd_z = rt_data->axis_data[AXIS_Z].motor_cmd_pos;
-        double pos_fb_z = rt_data->axis_data[AXIS_Z].motor_act_pos;
-        // 计算跟随误差
-        updata_axis_ferror(&ferror_control[AXIS_Z], par_axis[AXIS_Z], pos_cmd_z, pos_fb_z, vel_cmd_z);
-        // 跟随误差报警处理
-        if (ferror_control[AXIS_Z].error_flag)
-        {
-            int res = setAlarm(ALARM_AX, ALARM_ERROR, 102);
-            if (res == -8)
-                return;
-            LOG(LOG_LEVEL_ERR, "Z轴跟随误差过大");
-        }
-    }
-}
-
 static void read_from_hal() {
     // 读取实际位置
     Hal_Driver_Get_Actual_Pos(&x_axis_driver, &x_target_pos);
@@ -406,25 +340,26 @@ static void calcul_mac_cmd_pos()
     }
 }
 
-static void check_for_soft_limit() {
+static void check_for_soft_limit()
+{
     for (int var = 0; var < 3; ++var)
     {
-        if(runtime[var].is_first_run)
+        if (runtime[var].is_first_run)
         {
             int levels = Check_Axis_Limit_Violation(&runtime[var], rt_data->axis_data[var].wcs_cmd_pos_cur, RESET_CHEAK_USED);
             runtime[var].temp_config = runtime[var].config;
             runtime[var].limit_pos = rt_data->axis_data[var].wcs_cmd_pos_cur;
-            if(!levels)
+            if (!levels)
             {
                 runtime[var].limit_type = NO_LIMIT_TRIGGERED;
             }
             runtime[var].is_first_run = 0;
         }
 
-        if(rt_data->axis_data[var].axis_status.is_moving)
+        if (rt_data->axis_data[var].axis_status.is_moving)
         {
-            if((runtime[var].limit_type == 0) ||
-               (!rt_data->axis_data[var].axis_status.is_decel_done))
+            if ((runtime[var].limit_type == 0) ||
+                (!rt_data->axis_data[var].axis_status.is_decel_done))
             {
                 runtime[var].active_levels = Check_Axis_Limit_Violation(&runtime[var], rt_data->axis_data[var].wcs_cmd_pos_cur, SOFT_CHEAK_USED);
                 runtime[var].limit_pos = rt_data->axis_data[var].wcs_cmd_pos_cur;
@@ -433,7 +368,8 @@ static void check_for_soft_limit() {
             {
             case LEVEL1_FWD_LIMIT:
                 runtime[var].temp_config.level1.positive_limit = runtime[var].limit_pos;
-                runtime[var].active_levels = Check_Axis_Limit_Violation(&runtime[var], rt_data->axis_data[var].wcs_cmd_pos_cur, ALARM_CHEAK_USED);                    break;
+                runtime[var].active_levels = Check_Axis_Limit_Violation(&runtime[var], rt_data->axis_data[var].wcs_cmd_pos_cur, ALARM_CHEAK_USED);
+                break;
             case LEVEL1_REV_LIMIT:
                 runtime[var].temp_config.level1.negative_limit = runtime[var].limit_pos;
                 runtime[var].active_levels = Check_Axis_Limit_Violation(&runtime[var], rt_data->axis_data[var].wcs_cmd_pos_cur, ALARM_CHEAK_USED);
@@ -470,7 +406,7 @@ static void check_for_soft_limit() {
                 break;
             default:
                 break;
-                }
+            }
         }
     }
 }
