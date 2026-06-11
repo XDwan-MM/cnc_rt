@@ -31,7 +31,6 @@ do { \
 } while (0)
 
 bool sp_start_sem = false;
-bool feed_start_sem = false;
 int master_error_code = 0;
 bool reset_sem = 0;
 static char* drv_names[] = {"X","Y","Z","主"};
@@ -192,47 +191,40 @@ void Master_Run()
                     dri_manager.drivers[i]->mode = DRV_MODE_DISABLED;
                 }
             }
-            if ((statis[0] & 0x0f) != 0x08 && (statis[1] & 0x0f) != 0x08 && (statis[2] & 0x0f) != 0x08 && (statis[3] & 0x0f) != 0x08)
+            if (((statis[0] & 0x0f) != 0x08 || rt_data->axis_data[3].axis_status.is_disable)
+                && ((statis[1] & 0x0f) != 0x08 || rt_data->axis_data[0].axis_status.is_disable)
+                && ((statis[2] & 0x0f) != 0x08 || rt_data->axis_data[1].axis_status.is_disable)
+                && ((statis[3] & 0x0f) != 0x08 || rt_data->axis_data[2].axis_status.is_disable))
             {
-                feed_start_sem = false;
                 reset_sem = false;
             }
         }
         //进给轴上电
-        if(!feed_start_sem)
+        for (int i = 1; i < 4; i++)
         {
-            for (int i = 1; i < 4; i++)
+            CHECK_FUNC(GM_TxPdoEntry_Read(StatusWord[i], &statis[i] , 2));// 获取状态字
+            CHECK_FUNC(GM_TxPdoEntry_Read(CurPos[i], &pos[i], 4));
+            // 根据状态字设置控制字
+            if((statis[i] & 0x4f) == 0x40)
             {
-                CHECK_FUNC(GM_TxPdoEntry_Read(StatusWord[i], &statis[i] , 2));// 获取状态字
-                CHECK_FUNC(GM_TxPdoEntry_Read(CurPos[i], &pos[i], 4));
-                // 根据状态字设置控制字
-                if((statis[i] & 0x4f) == 0x40)
-                {
-                    CHECK_FUNC(GM_RxPdoEntry_Write(OperationMode[i], 0x08)); // 设置操作模式
-                    CHECK_FUNC(GM_RxPdoEntry_Write(ControlWord[i], 0x06));
-                }
-                else if((statis[i] & 0x6f) == 0x21)
-                {
-                    CHECK_FUNC(GM_RxPdoEntry_Write(ControlWord[i], 0x07));
-                    CHECK_FUNC(GM_RxPdoEntry_Write(PurPos[i], pos[i]));
-                    pos_cmd[i] = pos[i];
-                }
-                else if((statis[i] & 0x6f) == 0x23)
-                {
-                    dri_manager.drivers[i]->state = DRV_STATE_SWITCHED_ON;
-                    CHECK_FUNC(GM_RxPdoEntry_Write(ControlWord[i], 0x0f));
-                }
-                else if((statis[i] & 0x27f) == 0x237)
-                {
-                    dri_manager.drivers[i]->state = DRV_STATE_OPERATION_ENABLED;
-                    CHECK_FUNC(GM_RxPdoEntry_Write(ControlWord[i], 0x1f));
-                }
+                CHECK_FUNC(GM_RxPdoEntry_Write(OperationMode[i], 0x08)); // 设置操作模式
+                CHECK_FUNC(GM_RxPdoEntry_Write(ControlWord[i], 0x06));
             }
-            if(dri_manager.drivers[1]->state == DRV_STATE_OPERATION_ENABLED &&
-                dri_manager.drivers[2]->state == DRV_STATE_OPERATION_ENABLED &&
-                dri_manager.drivers[3]->state == DRV_STATE_OPERATION_ENABLED)
+            else if((statis[i] & 0x6f) == 0x21)
             {
-                feed_start_sem = 1;
+                CHECK_FUNC(GM_RxPdoEntry_Write(ControlWord[i], 0x07));
+                CHECK_FUNC(GM_RxPdoEntry_Write(PurPos[i], pos[i]));
+                pos_cmd[i] = pos[i];
+            }
+            else if((statis[i] & 0x6f) == 0x23)
+            {
+                dri_manager.drivers[i]->state = DRV_STATE_SWITCHED_ON;
+                CHECK_FUNC(GM_RxPdoEntry_Write(ControlWord[i], 0x0f));
+            }
+            else if((statis[i] & 0x27f) == 0x237)
+            {
+                dri_manager.drivers[i]->state = DRV_STATE_OPERATION_ENABLED;
+                CHECK_FUNC(GM_RxPdoEntry_Write(ControlWord[i], 0x1f));
             }
         }
         //主轴上电
@@ -331,7 +323,6 @@ err_close:
 
 void Master_Reset()
 {
-    feed_start_sem = 1;
     reset_sem = 1;
 }
 

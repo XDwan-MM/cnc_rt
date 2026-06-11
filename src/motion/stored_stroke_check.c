@@ -4,7 +4,7 @@
 #include <alarmapi.h>
 
 AxisLimitRuntime runtime[SYS_AXES_NUM];
-static char* axis_names[] = {"X","Y","Z"};
+static char* axis_names[] = {"X","Y","Z","SP"};
 
 static void Pre_Log_Alarm(bool direction);
 static void Data_Log_Alarm(AXIS_TYPE axis ,Level level);
@@ -238,7 +238,6 @@ void Axis_Status_Update()
         }
         else
         {
-            // LOG(LOG_LEVEL_INFO, "扫描到%d轴解除屏蔽", var);
             rt_data->axis_data[var].axis_status.is_disable = 1;
         }
         if(detect_falling_edge(rt_data->axis_data[var].axis_status.is_disable,var))
@@ -246,7 +245,8 @@ void Axis_Status_Update()
             int res = setAlarm(ALARM_AX, ALARM_ERROR, 40 + var);
             if (res == -8)
                 return 1;
-            LOG(LOG_LEVEL_ERR, "%s 轴已解除屏蔽，请重启或复位%d", axis_names[runtime->axis], runtime->axis);
+            LOG(LOG_LEVEL_ERR, "%s 轴已解除屏蔽，请重启或复位", axis_names[var]);
+            update_pos_flag = 0;
         }
 
         //该轴已处于屏蔽状态
