@@ -58,6 +58,7 @@ private:
     void updateTimer();
 
     inline void handleDefault(const LadInstr& instr);
+    inline void handleLDT(const LadInstr& instr);
     inline void handleLD(const LadInstr& instr);
     inline void handleLDI(const LadInstr& instr);
     inline void handleAND(const LadInstr& instr);

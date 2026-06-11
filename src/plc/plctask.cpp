@@ -39,6 +39,7 @@ void PlcTask::initDispatchTable() {
     for (int i = 0; i < OP_TOTAL; i++) {
         _dispatchTable[i] = &PlcTask::handleDefault;
     }
+    _dispatchTable[OP_LDT] = &PlcTask::handleLDT;
     _dispatchTable[OP_LD] = &PlcTask::handleLD;
     _dispatchTable[OP_LDI] = &PlcTask::handleLDI;
     _dispatchTable[OP_AND] = &PlcTask::handleAND;
@@ -232,6 +233,12 @@ void PlcTask::updateTimer() {
 
 void PlcTask::handleDefault(const LadInstr& instr) {
     Q_UNUSED(instr)
+}
+
+void PlcTask::handleLDT(const LadInstr& instr) {
+    Q_UNUSED(instr)
+    _currCtx->_logicStack <<= 1;
+    _currCtx->_logicStack |= 1;
 }
 
 void PlcTask::handleLD(const LadInstr& instr) {
