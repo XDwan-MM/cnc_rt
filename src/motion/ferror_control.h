@@ -10,9 +10,9 @@
 #ifndef FERROR_CONTROL_H
 #define FERROR_CONTROL_H
 
-#include <stdbool.h>
-#include "pardata.h"
 #include "gncdatadef.h"
+#include "pardata.h"
+#include <stdbool.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -20,10 +20,10 @@ extern "C" {
 
 /* 跟随误差控制器结构体 */
 typedef struct {
-  double ferror;          /* 实际跟随误差 (mm)，供 HMI 显示 */
-  double ferror_limit;    /* 当前生效的跟随误差限值 (mm)，供 HMI 显示 */
-  bool error_flag;        /* 跟随误差超限标志 */
-  bool is_moving;         /* 轴是否在运动中（区分报警类型：移动时/停止时）*/
+    double ferror;       /* 实际跟随误差 (mm)，供 HMI 显示 */
+    double ferror_limit; /* 当前生效的跟随误差限值 (mm)，供 HMI 显示 */
+    bool error_flag;     /* 跟随误差超限标志 */
+    bool is_moving;      /* 轴是否在运动中（区分报警类型：移动时/停止时）*/
 } ferror_control_t;
 
 // 外部声明,跟随误差控制器
