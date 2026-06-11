@@ -16,6 +16,10 @@
 /* 运动判定速度阈值 (mm/s)：低于此值视为静止，用于触发首次运动入场逻辑 */
 #define VEL_THRESHOLD (1e-5)
 
+/* 位置增量检测阈值 (mm/周期)：1e-5 mm/s × 1ms = 1e-8 mm。
+ * 实际最小运动步长 ~1e-4 mm，远大于此值。静止时指令位置逐周期相同，不会误判。 */
+#define POS_DELTA_THRESHOLD (1e-8)
+
 /* 角度转换因子：将 um/m 转换为 mm/mm 的无量纲比值 (1 um/m = 1e-6 mm/mm) */
 #define ANGLE_UM_PER_M_TO_RATIO (1e-6)
 
@@ -42,7 +46,8 @@ typedef enum
 {
     COMP_PHASE_IDLE = 0,
     COMP_PHASE_RAMPING,
-    COMP_PHASE_ACTIVE
+    COMP_PHASE_ACTIVE,
+    COMP_PHASE_WAIT_MOTION   /* 使能变化时所有轴静止，等待任意轴运动后再斜坡 */
 } CompPhase;
 
 /**
