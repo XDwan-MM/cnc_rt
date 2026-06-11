@@ -132,8 +132,8 @@ HEADERS += \
     src/motion/ferror_control.h \
     src/motion/handwheel.h \
     src/motion/homing.h \
-    src/motion/jog.h \
-    src/motion/jog_planner.h \
+    src/motion/jog/jog.h \
+    src/motion/jog/jog_planner.h \
     src/motion/stored_stroke_check.h \
     src/pmc_scanner/pmc_a_input_scanner.h \
     src/pmc_scanner/pmc_g_input_scanner.h \
@@ -175,8 +175,8 @@ SOURCES += \
     src/motion/ferror_control.c \
     src/motion/handwheel.c \
     src/motion/homing.c \
-    src/motion/jog.c \
-    src/motion/jog_planner.c \
+    src/motion/jog/jog.c \
+    src/motion/jog/jog_planner.c \
     src/motion/stored_stroke_check.c \
     src/pmc_scanner/pmc_a_input_scanner.c \
     src/pmc_scanner/pmc_g_input_scanner.c \
@@ -198,6 +198,7 @@ INCLUDEPATH += \
     src/master \
     src/motion \
     src/motion/auto \
+    src/motion/jog \
     src/motion/spindle \
     src/monitor \
     src/pmc_scanner \
