@@ -154,6 +154,7 @@ static bool mem_check_res(GNC_RES res){
         // 运行中无数据，则进入等待 
         if(mem_check_running()){
             if(queue_is_empty(pretreat_queue) && gcode_queue_is_empty(gcode_queue)){
+                // if(!rt_get_chan_state(0, CHAN_IS_GCODE_END)) LOG(LOG_LEVEL_DEBUG, "gcode is empty");
                 rt_set_chan_state(0, CHAN_IS_GCODE_END, true);
                 cycle_tp->is_arrive_at_the_end = false;
             }
