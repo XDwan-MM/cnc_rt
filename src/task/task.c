@@ -232,6 +232,12 @@ static GNC_RES task_handle_pmc_event(PMC_EVENT *event_data)
     }
     case EV_MSG_AUTO_RUN:
     {
+        // check：复位在F1.1置高，实时不响应启动和暂停事件
+        if(var_chan[0][VAR_CHAN_IS_RESETTING].value.i) {
+            if(event_data->run_payload.run_state == 1) LOG(LOG_LEVEL_WARN, "复位中...循环启动无效");
+            if(event_data->run_payload.run_state == 0) LOG(LOG_LEVEL_WARN, "复位中...进给保持无效");
+            break;
+        }
         if (event_data->run_payload.run_state == 1)
         {
             if (rt_data->current_mode == MODE_MEM || rt_data->current_mode == MODE_MDI)

@@ -45,7 +45,7 @@ if [ -n "$EXISTING_PIDS" ]; then
     # 将多个 PID 转为单行空格分隔，方便显示
     DISPLAY_PIDS=$(echo $EXISTING_PIDS | tr '\n' ' ')
     echo -e "${COLOR_ERR}[警告] 发现已有相关进程正在运行 (PID: $DISPLAY_PIDS)${COLOR_RESET}"
-    read -p "是否强制终止这些进程并继续运行？ [y/N]: " choice </dev/tty
+    read -p "是否强制终止这些进程并继续运行？ [Y/N]: " choice </dev/tty
     case "$choice" in
         y|Y )
             echo -e "${COLOR_SYS}[系统] 正在清理残留进程...${COLOR_RESET}"
@@ -78,20 +78,39 @@ COLOR_RESET=$'\e[0m'     # 重置颜色
 PID1=""
 PID2=""
 
-# 定义清理函数：用于关闭所有后台进程
+# 定义清理函数：用于关闭所有后台进程并清理环境（退出时保障）
 cleanup() {
     # 移除 trap 避免死循环
     trap - EXIT SIGINT SIGTERM
     
-    echo -e "\n${COLOR_SYS}[系统] 正在关闭所有相关后台进程...${COLOR_RESET}"
+    # \r 保证不管终端当前状态如何，都能回到行首打印
+    echo -e "\r\n${COLOR_SYS}[系统] 正在关闭所有相关后台进程并清理环境...${COLOR_RESET}"
+    
+    # 1. 优先杀掉已知管道 PID 
     if [ -n "$PID1" ]; then
-        echo "${COLOR_SYS}[系统] 正在停止界面进程 (PID: $PID1)...${COLOR_RESET}"
-        sudo kill "$PID1" 2>/dev/null
+        echo -e "${COLOR_SYS}[系统] 正在停止界面进程监控管道...${COLOR_RESET}\r"
+        sudo kill -9 "$PID1" 2>/dev/null
     fi
     if [ -n "$PID2" ]; then
-        echo "${COLOR_SYS}[系统] 正在停止实时进程 (PID: $PID2)...${COLOR_RESET}"
-        sudo kill "$PID2" 2>/dev/null
+        echo -e "${COLOR_SYS}[系统] 正在停止实时进程监控管道...${COLOR_RESET}\r"
+        sudo kill -9 "$PID2" 2>/dev/null
     fi
+    
+    # 2. 兜底扫描，保证【绝对】没有存活的实际同名进程
+    local LEFT_PIDS=$(ps -eo pid,comm | awk -v mypid="$$" '$1 != mypid && ($2 ~ /^cnc_rt/ || $2 == "cnc_hmi_v3") {print $1}')
+    if [ -n "$LEFT_PIDS" ]; then
+        sudo kill -9 $LEFT_PIDS 2>/dev/null
+    fi
+    
+    # 3. 等待 0.5 秒，确保进程死亡后，操作系统将其与共享内存的连接数清零
+    sleep 0.5
+    
+    # 4. 彻底扫除任何大小超过 10000000 字节且无连接的共享内存段
+    clean_shm
+    
+    # 恢复终端正常状态（防止因为进程修改 TTY 导致终端回车变阶梯）
+    stty sane 2>/dev/null
+    echo -e "${COLOR_SYS}[系统] 脚本已安全退出，环境清理完毕。${COLOR_RESET}"
     exit 0
 }
 
@@ -137,42 +156,6 @@ case "${1:-all}" in
         ;;
 esac
 
-# 定义清理函数：用于关闭所有后台进程并清理环境（退出时保障）
-cleanup() {
-    # 移除 trap 避免死循环
-    trap - EXIT SIGINT SIGTERM
-    
-    # \r 保证不管终端当前状态如何，都能回到行首打印
-    echo -e "\r\n${COLOR_SYS}[系统] 正在关闭所有相关后台进程并清理环境...${COLOR_RESET}"
-    
-    # 1. 优先杀掉已知 PID 
-    if [ -n "$PID1" ]; then
-        echo -e "${COLOR_SYS}[系统] 正在停止界面进程 (PID: $PID1)...${COLOR_RESET}\r"
-        sudo kill -9 "$PID1" 2>/dev/null
-    fi
-    if [ -n "$PID2" ]; then
-        echo -e "${COLOR_SYS}[系统] 正在停止实时进程 (PID: $PID2)...${COLOR_RESET}\r"
-        sudo kill -9 "$PID2" 2>/dev/null
-    fi
-    
-    # 2. 兜底扫描，保证【绝对】没有存活的同名进程
-    local LEFT_PIDS=$(ps -eo pid,comm | awk -v mypid="$$" '$1 != mypid && ($2 ~ /^cnc_rt/ || $2 == "cnc_hmi_v3") {print $1}')
-    if [ -n "$LEFT_PIDS" ]; then
-        sudo kill -9 $LEFT_PIDS 2>/dev/null
-    fi
-    
-    # 3. 等待 0.5 秒，确保进程死亡后，操作系统将其与共享内存的连接数清零
-    sleep 0.5
-    
-    # 4. 彻底扫除任何大小超过 10000000 字节且无连接的共享内存段
-    clean_shm
-    
-    # 恢复终端正常状态（防止因为进程修改 TTY 导致终端回车变阶梯）
-    stty sane 2>/dev/null
-    echo -e "${COLOR_SYS}[系统] 脚本已安全退出，环境清理完毕。${COLOR_RESET}"
-    exit 0
-}
-
 
 echo " "
 echo "${COLOR_SYS}=========================================="
@@ -182,39 +165,42 @@ echo " "
 echo "${COLOR_SYS}[TIPS] 按 Ctrl+C 可以关闭系统。              "
 echo " "
 
-
 # 捕获 Ctrl+C (SIGINT)、终止信号 (SIGTERM) 以及脚本正常退出事件 (EXIT)
 trap cleanup EXIT SIGINT SIGTERM
 
-# 4. 启动界面进程（后台运行，使用 awk 强制行缓冲并添加 \r 修复错位）
+# 4. 启动界面进程（使用 sudo env 强制穿透环境变量过滤）
 cd "$HMI_BIN_DIR"
-sudo -E LD_LIBRARY_PATH="${HMI_DIRS[0]}/include/cncshm/bin/" stdbuf -oL -eL "${HMI_DIRS[0]}/bin/cnc_hmi_v3" ${HMI_PAR} 2>&1 | \
-    awk -v prefix="${COLOR_HMI}[HMI]${COLOR_RESET}" '{sub(/\r$/, ""); print prefix " " $0 "\r"; fflush()}' &
+sudo env LD_LIBRARY_PATH="${HMI_DIRS[0]}/include/cncshm/bin/" stdbuf -oL -eL "${HMI_DIRS[0]}/bin/cnc_hmi_v3" ${HMI_PAR} 2>&1 | \
+    while IFS= read -r line; do
+        printf "%s %s\r\n" "${COLOR_HMI}[HMI]${COLOR_RESET}" "${line%$'\r'}"
+    done &
 PID1=$! 
-echo "${COLOR_SYS}[系统] 界面已在后台启动，PID: $PID1${COLOR_RESET}"
+echo "${COLOR_SYS}[系统] 界面已在后台启动。${COLOR_RESET}"
 
 # 5. 延时 1 秒
 echo "${COLOR_SYS}[系统] 等待 1 秒...${COLOR_RESET}"
 sleep 1
 
-# 6. 启动实时进程（后台运行，使用 awk 强制行缓冲并添加 \r 修复错位）
+# 6. 启动实时进程（使用 sudo env 强制穿透环境变量过滤）
 cd "$RT_BIN_DIR"
-sudo -E LD_LIBRARY_PATH="${RT_DIRS[0]}/lib/cncshm/bin/" stdbuf -oL -eL "${RT_DIRS[0]}/bin/${RT_PAR}" 2>&1 | \
-    awk -v prefix="${COLOR_RT}[RT]${COLOR_RESET}" '{sub(/\r$/, ""); print prefix " " $0 "\r"; fflush()}' &
+sudo env LD_LIBRARY_PATH="${RT_DIRS[0]}/lib/cncshm/bin/" stdbuf -oL -eL "${RT_DIRS[0]}/bin/${RT_PAR}" 2>&1 | \
+    while IFS= read -r line; do
+        printf "%s %s\r\n" "${COLOR_RT}[RT]${COLOR_RESET}" "${line%$'\r'}"
+    done &
 PID2=$! 
-echo "${COLOR_SYS}[系统] 实时进程已在后台启动，PID: $PID2${COLOR_RESET}"
+echo "${COLOR_SYS}[系统] 实时进程已在后台启动。${COLOR_RESET}"
 
 echo "${COLOR_SYS}[系统] 两个进程均已启动，开始监控运行状态。${COLOR_RESET}"
 
 # 7. 循环监控：若任何一个进程意外退出，则关闭另一个并退出脚本
 while true; do
-    # 检查进程1是否存在
+    # 检查管道进程1是否存在
     if ! sudo kill -0 "$PID1" 2>/dev/null; then
-        echo -e "\r\n${COLOR_SYS}[系统] 检测到 [CNC] 界面进程已意外退出。${COLOR_RESET}"
+        echo -e "\r\n${COLOR_SYS}[系统] 检测到 [HMI] 界面进程已意外退出。${COLOR_RESET}"
         cleanup
     fi
     
-    # 检查进程2是否存在
+    # 检查管道进程2是否存在
     if ! sudo kill -0 "$PID2" 2>/dev/null; then
         echo -e "\r\n${COLOR_SYS}[系统] 检测到 [RT] 实时进程已意外退出。${COLOR_RESET}"
         cleanup

@@ -23,6 +23,7 @@
 #include "comp_data.h"
 #include "debug_mode.h"
 #include "master.h"
+#include <hmisysapi.h>
 
 static void check_for_fault();
 static void set_operating_mode();
@@ -73,6 +74,9 @@ void emcmotTrajPlan() {
         // 读取抽象层数据
         read_from_hal();
 
+        // 检查跟随误差
+        check_ferror_fault();
+
         // 判断运动模式
         set_operating_mode();
 
@@ -87,9 +91,6 @@ void emcmotTrajPlan() {
 
         // 预先检查插补位置是否超软限位
         check_for_soft_limit();
-
-        // 检查跟随误差
-        check_ferror_fault();
 
         // 更新抽象层数据
         output_to_hal();
@@ -228,6 +229,11 @@ static void check_for_fault() {
 // 检查轴跟随误差错误
 static void check_ferror_fault()
 {
+    // todo：检查跟随误差
+    // LOG(LOG_LEVEL_DEBUG, "wcs_cmd_pos:%f %f %f", rt_data->axis_data[0].wcs_cmd_pos_cur, rt_data->axis_data[1].wcs_cmd_pos_cur, rt_data->axis_data[2].wcs_cmd_pos_cur);
+    // LOG(LOG_LEVEL_DEBUG, "motor_cmd_pos:%f %f %f", rt_data->axis_data[0].motor_cmd_pos, rt_data->axis_data[1].motor_cmd_pos, rt_data->axis_data[2].motor_cmd_pos);
+    // LOG(LOG_LEVEL_DEBUG, "motor_act_pos:%f %f %f", rt_data->axis_data[0].motor_act_pos, rt_data->axis_data[1].motor_act_pos, rt_data->axis_data[2].motor_act_pos);       
+
     // 急停拍下情况、(空闲、编辑状态)时不检查跟随误差，避免上电无运动误报
     if (rt_data->sys_state[SYS_IS_ESTOP_ON] || rt_data->current_mode == MODE_IDLE ||
         rt_data->current_mode == MODE_EDIT)
