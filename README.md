@@ -80,9 +80,9 @@ ipcrm -m <shmid>
 
 ２ 执行方式，在 cnc_rt_x.x.xxxx/bin 打开终端运行
 
-sudo -E LD_LIBRARY_PATH=../lib/cncshm/bin ./rt_cnc_x（平台1、平台2、调试）
+sudo -E LD_LIBRARY_PATH=../lib/cncshm/bin ./cnc_rt_x（平台1、平台2、调试）
 
-解释：以root权限，指定动态库在指定路径查找，执行rt_cnc_x
+解释：以root权限，指定动态库在指定路径查找，执行cnc_rt_x
 
 
 ### 使用方法
@@ -130,13 +130,13 @@ sudo ./build.sh
 4、运行实时
 
 cd bin
-sudo ./rt_cnc
+sudo ./cnc_rt
 
 
 5、调试模式
 
 cd bin
-sudo ./rt_cnc_d
+sudo ./cnc_rt_d
 
 
 ### 不同平台master和ENI文件配置
@@ -261,7 +261,7 @@ ctrl+X 回车 保存退出.
 3、运行命令：
 
 1. 进入bin文件夹内
-2. 输入命令: sudo LD_LIBRARY_PATH=../lib/cncshm/bin/:../lib/log/bin/ ./RT_CNC
+2. 输入命令: sudo LD_LIBRARY_PATH=../lib/cncshm/bin/:../lib/log/bin/ ./CNC_RT
 
 
 
@@ -325,8 +325,8 @@ ctrl+X 回车 保存退出.
 编译命令:
 使用 CONFIG+=debug_mode 启用调试模式编译
 使用 CONFIG+=release 或不加参数使用实时模式编译
-调试模式编译: cd build/debug && qmake ../../RT_CNC.pro CONFIG+=debug_mode && make -j$(nproc)
-实时模式编译: cd build/release && qmake ../../RT_CNC.pro && make -j$(nproc)
+调试模式编译: cd build/debug && qmake ../../CNC_RT.pro CONFIG+=debug_mode && make -j$(nproc)
+实时模式编译: cd build/release && qmake ../../CNC_RT.pro && make -j$(nproc)
 使用编译脚本可直接编译两个版本: sudo ./build.sh，有问题可以使用 ./build.sh help 查看帮助
 
 权限问题不能调试：
@@ -336,7 +336,7 @@ ctrl+X 回车 保存退出.
 
 运行命令：
 1. 进入 bin 文件夹内
-2. 输入命令: sudo LD_LIBRARY_PATH=../lib/cncshm/bin/:../lib/log/bin/ ./rt_cnc
+2. 输入命令: sudo LD_LIBRARY_PATH=../lib/cncshm/bin/:../lib/log/bin/ ./cnc_rt
 
 生成compile_commands.json命令：
 1. 修改 build.sh 中的make -j$(nproc) 。改为 bear -- make -j$(nproc)
@@ -346,5 +346,5 @@ ctrl+X 回车 保存退出.
 先尝试sudo ./build.sh clean
 
 sudo ./build.sh 
-cd bin && ./rt_cnc
+cd bin && ./cnc_rt
 

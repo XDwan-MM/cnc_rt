@@ -19,7 +19,7 @@ extern "C" {
 #include "gm_errcode.h"
 
 // =============== 程序配置参数 ===============
-//#define XMLPATH "/home/gree/Desktop/CNC/RT_CNC/rt_inter/ENI/speed_mode.xml"  //ENI文件路径
+//#define XMLPATH "/home/gree/Desktop/CNC/CNC_RT/rt_inter/ENI/speed_mode.xml"  //ENI文件路径
 #define SERVONUM 4                      //电机数
 #define IO_NUM 1                        //IO模块数
 #define CONTROL_NUM 1                   //控制面板数

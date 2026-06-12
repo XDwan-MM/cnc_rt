@@ -1,5 +1,5 @@
 #!/bin/bash
-# rt_cnc 构建脚本
+# cnc_rt 构建脚本
 # 用法: ./build.sh [debug|release|all|debug_run|run|run2|clean|help]
 
 set -e
@@ -24,18 +24,18 @@ NC='\033[0m' # No Color
 
 print_help() {
     echo ""
-    echo "rt_cnc 构建脚本"
+    echo "cnc_rt 构建脚本"
     echo "==============="
     echo ""
     echo "用法: ./build.sh [选项]"
     echo ""
     echo "选项:"
-    echo "  debug      编译调试模式 (生成 rt_cnc_d，无需硬件)"
-    echo "  release    编译实时模式 (生成 rt_cnc，需要EtherCAT硬件)"
+    echo "  debug      编译调试模式 (生成 cnc_rt_d，无需硬件)"
+    echo "  release    编译实时模式 (生成 cnc_rt，需要EtherCAT硬件)"
     echo "  all        同时编译调试和实时模式 (默认)"
-    echo "  debug_run  编译调试模式并自动运行 rt_cnc_d"
-    echo "  run        编译实时模式平台1并运行 rt_cnc_1"
-    echo "  run2       编译实时模式平台2并运行 rt_cnc_2"
+    echo "  debug_run  编译调试模式并自动运行 cnc_rt_d"
+    echo "  run        编译实时模式平台1并运行 cnc_rt_1"
+    echo "  run2       编译实时模式平台2并运行 cnc_rt_2"
     echo "  clean      清理所有构建文件"
     echo "  help       显示此帮助信息"
     echo ""
@@ -44,8 +44,8 @@ print_help() {
     echo "    ├── debug/    调试模式构建文件"
     echo "    └── release/  实时模式构建文件"
     echo "  bin/"
-    echo "    ├── rt_cnc_d  调试版本可执行文件"
-    echo "    └── rt_cnc    实时版本可执行文件"
+    echo "    ├── cnc_rt_d  调试版本可执行文件"
+    echo "    └── cnc_rt    实时版本可执行文件"
     echo ""
     echo "示例:"
     echo "  ./build.sh          # 编译所有版本"
@@ -75,7 +75,7 @@ build_debug() {
     mkdir -p "$BUILD_DIR_DEBUG"
     cd "$BUILD_DIR_DEBUG"
 
-    qmake "$SCRIPT_DIR/RT_CNC.pro" "CONFIG+=debug_mode"
+    qmake "$SCRIPT_DIR/CNC_RT.pro" "CONFIG+=debug_mode"
     make -j$(nproc)
 
     if [ $? -eq 0 ]; then
@@ -93,7 +93,7 @@ build_release_1() {
     mkdir -p "$BUILD_DIR_RELEASE1"
     cd "$BUILD_DIR_RELEASE1"
 
-    qmake "$SCRIPT_DIR/RT_CNC.pro" "CONFIG+=release_platform_1"
+    qmake "$SCRIPT_DIR/CNC_RT.pro" "CONFIG+=release_platform_1"
     make -j$(nproc)
 
     if [ $? -eq 0 ]; then
@@ -111,7 +111,7 @@ build_release_2() {
     mkdir -p "$BUILD_DIR_RELEASE2"
     cd "$BUILD_DIR_RELEASE2"
 
-    qmake "$SCRIPT_DIR/RT_CNC.pro" "CONFIG+=release_platform_2"
+    qmake "$SCRIPT_DIR/CNC_RT.pro" "CONFIG+=release_platform_2"
     make -j$(nproc)
 
     if [ $? -eq 0 ]; then
@@ -138,19 +138,19 @@ build_all() {
     echo -e "${BLUE}========== 编译结果 ==========${NC}"
 
     if [ $debug_ok -eq 1 ]; then
-        echo -e "  调试版本: ${GREEN}[OK]${NC} $BIN_DIR/rt_cnc_d"
+        echo -e "  调试版本: ${GREEN}[OK]${NC} $BIN_DIR/cnc_rt_d"
     else
         echo -e "  调试版本: ${RED}[FAIL]${NC}"
     fi
 
     if [ $release1_ok -eq 1 ]; then
-        echo -e "  实时版本平台1: ${GREEN}[OK]${NC} $BIN_DIR/rt_cnc_1"
+        echo -e "  实时版本平台1: ${GREEN}[OK]${NC} $BIN_DIR/cnc_rt_1"
     else
         echo -e "  实时版本平台1: ${RED}[FAIL]${NC}"
     fi
 
     if [ $release2_ok -eq 1 ]; then
-        echo -e "  实时版本平台2: ${GREEN}[OK]${NC} $BIN_DIR/rt_cnc_2"
+        echo -e "  实时版本平台2: ${GREEN}[OK]${NC} $BIN_DIR/cnc_rt_2"
     else
         echo -e "  实时版本平台2: ${RED}[FAIL]${NC}"
     fi
@@ -168,21 +168,21 @@ run() {
     build_shm_lib
     build_release_1
     cd $BIN_DIR
-    sudo -E LD_LIBRARY_PATH=../lib/cncshm/bin ./rt_cnc_1
+    sudo -E LD_LIBRARY_PATH=../lib/cncshm/bin ./cnc_rt_1
 }
 
 run2() {
     build_shm_lib
     build_release_2
     cd $BIN_DIR
-    sudo -E LD_LIBRARY_PATH=../lib/cncshm/bin ./rt_cnc_2
+    sudo -E LD_LIBRARY_PATH=../lib/cncshm/bin ./cnc_rt_2
 }
 
 run_debug() {
     build_shm_lib
     build_debug
     cd $BIN_DIR
-    sudo -E LD_LIBRARY_PATH=../lib/cncshm/bin ./rt_cnc_d
+    sudo -E LD_LIBRARY_PATH=../lib/cncshm/bin ./cnc_rt_d
 }
 
 clean_build() {
@@ -226,21 +226,21 @@ clean_build() {
     fi
 
     # 清理可执行文件
-    if [ -f "$BIN_DIR/rt_cnc" ]; then
-        rm -f "$BIN_DIR/rt_cnc"
-        echo "  已清理: $BIN_DIR/rt_cnc"
+    if [ -f "$BIN_DIR/cnc_rt" ]; then
+        rm -f "$BIN_DIR/cnc_rt"
+        echo "  已清理: $BIN_DIR/cnc_rt"
     fi
-    if [ -f "$BIN_DIR/rt_cnc_1" ]; then
-        rm -f "$BIN_DIR/rt_cnc_1"
-        echo "  已清理: $BIN_DIR/rt_cnc_1"
+    if [ -f "$BIN_DIR/cnc_rt_1" ]; then
+        rm -f "$BIN_DIR/cnc_rt_1"
+        echo "  已清理: $BIN_DIR/cnc_rt_1"
     fi
-    if [ -f "$BIN_DIR/rt_cnc_2" ]; then
-        rm -f "$BIN_DIR/rt_cnc_2"
-        echo "  已清理: $BIN_DIR/rt_cnc_2"
+    if [ -f "$BIN_DIR/cnc_rt_2" ]; then
+        rm -f "$BIN_DIR/cnc_rt_2"
+        echo "  已清理: $BIN_DIR/cnc_rt_2"
     fi
-    if [ -f "$BIN_DIR/rt_cnc_d" ]; then
-        rm -f "$BIN_DIR/rt_cnc_d"
-        echo "  已清理: $BIN_DIR/rt_cnc_d"
+    if [ -f "$BIN_DIR/cnc_rt_d" ]; then
+        rm -f "$BIN_DIR/cnc_rt_d"
+        echo "  已清理: $BIN_DIR/cnc_rt_d"
     fi
 
     echo -e "${GREEN}清理完成!${NC}"
@@ -252,19 +252,19 @@ case "${1:-all}" in
         build_shm_lib
         build_debug
         echo ""
-        echo -e "可执行文件: ${YELLOW}$BIN_DIR/rt_cnc_d${NC}"
+        echo -e "可执行文件: ${YELLOW}$BIN_DIR/cnc_rt_d${NC}"
         ;;
     release)
         build_shm_lib
         build_release_1
         build_release_2
         echo ""
-        echo -e "可执行文件: ${YELLOW}$BIN_DIR/rt_cnc${NC}"
+        echo -e "可执行文件: ${YELLOW}$BIN_DIR/cnc_rt${NC}"
         ;;
     check)
         build_release_1
         echo ""
-        echo -e "可执行文件: ${YELLOW}$BIN_DIR/rt_cnc${NC}"
+        echo -e "可执行文件: ${YELLOW}$BIN_DIR/cnc_rt${NC}"
         ;;
     all)
         build_shm_lib

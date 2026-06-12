@@ -45,11 +45,11 @@
     - cd ./lib/cncshm
     - ./build.sh
     - echo "✅ Compiled Submodules Success!"
-    # 3.编译rt_cnc
+    # 3.编译cnc_rt
     - cd ../../
     - echo "⏳ Compiling Main Project..."
     - ./build.sh check
-    - ls -l bin/rt_cnc_1
+    - ls -l bin/cnc_rt_1
     - echo "✅ Compiled Main Project Success!"
   only:
     - merge_request
@@ -71,7 +71,7 @@
     - cd ./lib/cncshm
     - ./build.sh
     - echo "✅ Compiled Submodules Success!"
-    # 3.编译rt_cnc
+    # 3.编译cnc_rt
     - cd ../../
     - echo "⏳ Compiling Main Project..."
     - ./build.sh release
@@ -100,7 +100,7 @@
     - cd ./lib/cncshm
     - ./build.sh
     - echo "✅ Compiled Submodules Success!"
-    # 3.编译rt_cnc
+    # 3.编译cnc_rt
     - cd ../../
     - echo "⏳ Compiling Main Project..."
     - ./build.sh
@@ -132,7 +132,7 @@
     - cd ./lib/cncshm
     - ./build.sh
     - echo "✅ Compiled Submodules Success!"
-    # 3.编译rt_cnc
+    # 3.编译cnc_rt
     - cd ../../
     - echo "⏳ Compiling Main Project..."
     - ./build.sh release
@@ -164,7 +164,7 @@
     - cd ./lib/cncshm
     - ./build.sh
     - echo "✅ Compiled Submodules Success!"
-    # 3.编译rt_cnc
+    # 3.编译cnc_rt
     - cd ../../
     - echo "⏳ Compiling Main Project..."
     - ./build.sh release
