@@ -30,7 +30,6 @@ do { \
 } \
 } while (0)
 
-bool sp_start_sem = false;
 int master_error_code = 0;
 bool reset_sem = 0;
 static char* drv_names[] = {"X","Y","Z","主"};
@@ -256,7 +255,6 @@ void Master_Run()
             else if((statis[0] & 0x27f) == 0x237 && (spindle.state == DRV_STATE_SWITCHED_ON))
             {
                 spindle.state = DRV_STATE_OPERATION_ENABLED;
-                CHECK_FUNC(GM_RxPdoEntry_Write(ControlWord[0], 0x1f));
             }
         }
         else
@@ -264,7 +262,6 @@ void Master_Run()
             if(spindle.state != DRV_STATE_READY_TO_SWITCHED_ON)
             {
                 CHECK_FUNC(GM_RxPdoEntry_Write(ControlWord[0], 0x00));
-                sp_start_sem = false;
             }
         }
 
