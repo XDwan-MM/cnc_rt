@@ -87,6 +87,7 @@ lib/CNC_ErrorComp/tests
 lib/CNC_ErrorComp/docs
 lib/CNC_ErrorComp/.clang-format
 lib/CNC_ErrorComp/.gitignore
+lib/CNC_ErrorComp/.gitattributes
 lib/CNC_ErrorComp/build.sh
 lib/CNC_ErrorComp/CMakeLists.txt
 lib/CNC_ErrorComp/README.md
