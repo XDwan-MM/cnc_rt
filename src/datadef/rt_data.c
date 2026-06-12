@@ -1,5 +1,6 @@
 #include "rt_data.h"
 #include "global.h"
+#include <hmisysapi.h>
 
 extern RT_DATA* rt_data;
 
@@ -99,14 +100,12 @@ void nc_set_resetted(){
         case MODE_MDI: // MDI
         case MODE_MEM: // 记忆
         case MODE_DNC:
-            if(rt_data->nc_reset.is_resetting && cycle_tp->mem_exec_state == EXEC_IDLE){
-                setVarChanInt(0, VAR_CHAN_IS_RESETTING, 0, 0);
+            if(rt_data->nc_reset.is_resetting && cycle_tp->mem_exec_state == EXEC_IDLE && IsEqualTo(spindle.actual_vel, 0)){
                 rt_data->nc_reset.is_resetted = 1;
             }
             break;
         case MODE_HOMING: // 回零
-            if(rt_data->nc_reset.is_resetting && !var_chan[0][VAR_CHAN_IS_HOMING].value.i){
-                setVarChanInt(0, VAR_CHAN_IS_RESETTING, 0, 0);
+            if(rt_data->nc_reset.is_resetting && !var_chan[0][VAR_CHAN_IS_HOMING].value.i && IsEqualTo(spindle.actual_vel, 0)){
                 rt_data->nc_reset.is_resetted = 1;
             }
             break;
@@ -115,8 +114,7 @@ void nc_set_resetted(){
         case MODE_IDLE: // 空闲状态
         case MODE_EDIT: // 编辑
         default: // error
-            if(rt_data->nc_reset.is_resetting){
-                setVarChanInt(0, VAR_CHAN_IS_RESETTING, 0, 0);
+            if(rt_data->nc_reset.is_resetting && IsEqualTo(spindle.actual_vel, 0)){
                 rt_data->nc_reset.is_resetted = 1;
             }
             break;

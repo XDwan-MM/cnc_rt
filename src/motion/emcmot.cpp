@@ -23,6 +23,7 @@
 #include "comp_data.h"
 #include "debug_mode.h"
 #include "master.h"
+#include <hmisysapi.h>
 
 static void check_for_fault();
 static void set_operating_mode();
@@ -75,6 +76,9 @@ void emcmotTrajPlan() {
         // 读取抽象层数据
         read_from_hal();
 
+        // 检查跟随误差
+        check_ferror_fault();
+
         // 判断运动模式
         set_operating_mode();
 
@@ -95,9 +99,6 @@ void emcmotTrajPlan() {
 
         // 预先检查插补位置是否超软限位
         check_for_soft_limit();
-
-        // 检查跟随误差
-        check_ferror_fault();
 
         // 更新抽象层数据
         output_to_hal();

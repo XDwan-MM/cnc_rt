@@ -102,7 +102,6 @@ static double mem_cal_pinc(VELPLAN_TYPE velplan_mode, double ncu_cycle, double c
                         gcode_handle_reset();
                         // setVarChanInt(0, VAR_CHAN_RUN_ROW, 0, 0); 
                         auto_check_soft_limit_del_done();
-                        LOG(LOG_LEVEL_DEBUG, "完成复位");
                     }else{
                         setVarChanInt(0, VAR_CHAN_IS_MOVING, 0, 0);               
                     }                             
@@ -155,6 +154,7 @@ static bool mem_check_res(GNC_RES res){
         // 运行中无数据，则进入等待 
         if(mem_check_running()){
             if(queue_is_empty(pretreat_queue) && gcode_queue_is_empty(gcode_queue)){
+                // if(!rt_get_chan_state(0, CHAN_IS_GCODE_END)) LOG(LOG_LEVEL_DEBUG, "gcode is empty");
                 rt_set_chan_state(0, CHAN_IS_GCODE_END, true);
                 cycle_tp->is_arrive_at_the_end = false;
             }

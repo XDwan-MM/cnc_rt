@@ -20,7 +20,7 @@ static bool detect_falling_edge(bool current_value ,int i);
 
 void Axis_Limit_Manager_Init(void)
 {
-       for (int i = 0; i < 3; i++)
+    for (int i = 0; i < 3; i++)
     {
         //level 1
         runtime[i].config.level1.is_enabled = 1;
@@ -41,8 +41,7 @@ void Axis_Limit_Manager_Init(void)
         rt_data->axis_data[i].axis_status.is_decel_done = 0;
         runtime[i].is_first_run = 1;
         runtime[i].axis = i;
-        update_pos_flag = 0;
-
+        // update_pos_flag = 0;
     }
 }
 
