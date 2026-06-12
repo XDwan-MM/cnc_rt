@@ -7,7 +7,7 @@
 
 ### 2、修改test.pro文件
 
-如果 RT_CNC.pro 增加头文件和源文件，请同步更新 test.pro
+如果 CNC_RT.pro 增加头文件和源文件，请同步更新 test.pro
 
 
 ### 3、运行 build.sh

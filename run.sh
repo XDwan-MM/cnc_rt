@@ -39,7 +39,7 @@ clean_shm() {
 echo -e "${COLOR_SYS}[系统] 正在检查运行环境...${COLOR_RESET}"
 
 # 寻找残留进程（排除当前脚本进程自身）
-EXISTING_PIDS=$(ps -eo pid,comm | awk -v mypid="$$" '$1 != mypid && ($2 ~ /^rt_cnc/ || $2 == "cnc_hmi_v3") {print $1}')
+EXISTING_PIDS=$(ps -eo pid,comm | awk -v mypid="$$" '$1 != mypid && ($2 ~ /^cnc_rt/ || $2 == "cnc_hmi_v3") {print $1}')
 
 if [ -n "$EXISTING_PIDS" ]; then
     # 将多个 PID 转为单行空格分隔，方便显示

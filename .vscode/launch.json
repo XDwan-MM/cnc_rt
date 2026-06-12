@@ -5,7 +5,7 @@
             "name": "gdb",
             "type": "cppdbg",
             "request": "launch",
-            "program": "${workspaceFolder}/bin/rt_cnc_d", 
+            "program": "${workspaceFolder}/bin/cnc_rt_d", 
             "args": [],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}/bin",

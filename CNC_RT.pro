@@ -21,7 +21,7 @@ debug_mode {
     CONFIG += debug
     QMAKE_CXXFLAGS += -g -O0
     QMAKE_CFLAGS += -g -O0
-    TARGET = rt_cnc_d
+    TARGET = cnc_rt_d
 }
 
 release_platform_1 {
@@ -32,7 +32,7 @@ release_platform_1 {
     DEFINES += MASTER_RUN_ON
     QMAKE_CXXFLAGS += -O0
     QMAKE_CFLAGS += -O0
-    TARGET = rt_cnc_1
+    TARGET = cnc_rt_1
 }
 
 release_platform_2{
@@ -42,7 +42,7 @@ release_platform_2{
     DEFINES += MASTER_RUN_ON
     QMAKE_CXXFLAGS += -O0
     QMAKE_CFLAGS += -O0
-    TARGET = rt_cnc_2
+    TARGET = cnc_rt_2
 }
 
 # 检查编译缓存工具 ccache 是否可用
