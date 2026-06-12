@@ -133,8 +133,10 @@ static void pmc_output_reset()
         else
         {
             clearRegBit(REG_F, 1, 1);
+            setVarChanInt(0, VAR_CHAN_IS_RESETTING, 0, 0);
             rt_data->nc_reset.is_reset_delaying = false;
             rt_data->nc_reset.reset_tic = 0;
+            LOG(LOG_LEVEL_DEBUG, "完成复位");
         }
     }
 }
