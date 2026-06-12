@@ -18,10 +18,10 @@ extern "C"
 typedef struct
 {
     double current_output;    /* 当前实际输出的补偿量 (mm) */
-    double last_vel_sign;     /* 上周期速度符号: +1.0 / 0.0 / -1.0 */
-    int last_backlash_enable; /* 上周期使能状态，用于检测参数切换 */
+    double last_vel_sign;     /* 上周期速度符号: +1.0 / 0.0 / -1.0，静止时保持 */
+    int    last_backlash_enable; /* 上周期使能状态，用于检测参数切换 */
     double last_bl_target;    /* 上周期目标补偿幅值 (mm)，用于检测 bl_value/bl_value2 在线修改 */
-    bool has_moved;           /* 上电后是否已经发生过运动 */
+    bool   has_moved;         /* 上电后是否已经发生过运动 */
     CompPhase phase;          /* 状态机当前阶段: IDLE / RAMPING / ACTIVE */
 } BacklashCompState;
 

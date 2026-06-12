@@ -20,7 +20,7 @@ typedef struct
 
     bool last_perp1_enabled; /* 记录上一周期项1是否使能 */
     bool last_perp2_enabled; /* 记录上一周期项2是否使能 */
-    bool has_moved;          /* 关键：记录上电后是否已经发生过运动 */
+    bool has_moved;          /* 记录上电后是否已经发生过运动 */
 
     CompPhase phase; /* 状态机当前阶段: IDLE / RAMPING / ACTIVE / WAIT_MOTION */
 
