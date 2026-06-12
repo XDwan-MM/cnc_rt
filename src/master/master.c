@@ -30,7 +30,6 @@ do { \
 } \
 } while (0)
 
-bool sp_start_sem = false;
 int master_error_code = 0;
 bool reset_sem = 0;
 static char* drv_names[] = {"X","Y","Z","主"};
@@ -209,12 +208,14 @@ void Master_Run()
             {
                 CHECK_FUNC(GM_RxPdoEntry_Write(OperationMode[i], 0x08)); // 设置操作模式
                 CHECK_FUNC(GM_RxPdoEntry_Write(ControlWord[i], 0x06));
+                dri_manager.drivers[i]->state = DRV_STATE_SWITCHED_ON_DISABLE;
             }
             else if((statis[i] & 0x6f) == 0x21)
             {
                 CHECK_FUNC(GM_RxPdoEntry_Write(ControlWord[i], 0x07));
                 CHECK_FUNC(GM_RxPdoEntry_Write(PurPos[i], pos[i]));
                 pos_cmd[i] = pos[i];
+                dri_manager.drivers[i]->state = DRV_STATE_READY_TO_SWITCHED_ON;
             }
             else if((statis[i] & 0x6f) == 0x23)
             {
@@ -224,7 +225,6 @@ void Master_Run()
             else if((statis[i] & 0x27f) == 0x237)
             {
                 dri_manager.drivers[i]->state = DRV_STATE_OPERATION_ENABLED;
-                CHECK_FUNC(GM_RxPdoEntry_Write(ControlWord[i], 0x1f));
             }
         }
         //主轴上电
@@ -236,6 +236,7 @@ void Master_Run()
             {
                 CHECK_FUNC(GM_RxPdoEntry_Write(ControlWord[0], 0x06));
                 CHECK_FUNC(GM_TxPdoEntry_Read(CurPos[0], &pos[0], 4));
+                spindle.state = DRV_STATE_SWITCHED_ON_DISABLE;
             }
             else if((statis[0] & 0x6f) == 0x21)
             {
@@ -244,7 +245,7 @@ void Master_Run()
                     CHECK_FUNC(GM_RxPdoEntry_Write(OperationMode[0], 0x09));// 设置操作模式
                     CHECK_FUNC(GM_RxPdoEntry_Write(ControlWord[0], 0x07));
                 }
-                spindle.state = DRV_STATE_NOT_READY;
+                spindle.state = DRV_STATE_READY_TO_SWITCHED_ON;
             }
             else if((statis[0] & 0x6f) == 0x23)
             {
@@ -254,19 +255,13 @@ void Master_Run()
             else if((statis[0] & 0x27f) == 0x237 && (spindle.state == DRV_STATE_SWITCHED_ON))
             {
                 spindle.state = DRV_STATE_OPERATION_ENABLED;
-                CHECK_FUNC(GM_RxPdoEntry_Write(ControlWord[0], 0x1f));
             }
-//            if(spindle.state != DRV_STATE_SWITCHED_ON)
-//            {
-//                sp_start_sem = 0;
-//            }
         }
         else
         {
-            if(spindle.state != DRV_STATE_NOT_READY)
+            if(spindle.state != DRV_STATE_READY_TO_SWITCHED_ON)
             {
                 CHECK_FUNC(GM_RxPdoEntry_Write(ControlWord[0], 0x00));
-                sp_start_sem = false;
             }
         }
 

@@ -76,24 +76,32 @@ hal_retcode_t Hal_Driver_Array_Init(void)
             Hal_Driver_Register(&spindle);
             spindle.axis_id = id_sp;//xml对应值
             spindle.initialized = true;
+            spindle.state = DRV_STATE_NOT_READY;
+            spindle.mode = DRV_MODE_DISABLED;
         }
         if(physical_x)
         {
             Hal_Driver_Register(&x_axis_driver);
             x_axis_driver.axis_id = id_x;//xml对应值
             x_axis_driver.initialized = true;
+            x_axis_driver.state = DRV_STATE_NOT_READY;
+            x_axis_driver.mode = DRV_MODE_DISABLED;
         }
         if(physical_y)
         {
             Hal_Driver_Register(&y_axis_driver);
             y_axis_driver.axis_id = id_y;//xml对应值
             y_axis_driver.initialized = true;
+            y_axis_driver.state = DRV_STATE_NOT_READY;
+            y_axis_driver.mode = DRV_MODE_DISABLED;
         }
         if(physical_z)
         {
             Hal_Driver_Register(&z_axis_driver);
             z_axis_driver.axis_id = id_z;//xml对应值
             z_axis_driver.initialized = true;
+            z_axis_driver.state = DRV_STATE_NOT_READY;
+            z_axis_driver.mode = DRV_MODE_DISABLED;
         }
     }
     return HAL_DRIVER_SUCCESS;
