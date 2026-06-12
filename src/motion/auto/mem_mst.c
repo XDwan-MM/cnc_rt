@@ -70,13 +70,11 @@ static void nc_deal_mcode(){
             break;
         case M03: // 主轴正转
             setRegValue8(REG_F, 10, 0x03); 
-            spl_data.emot_speed = mcode_data->mcode_block[i].spindle.speed;
             spl_data.mcp_target_speed = mcode_data->mcode_block[i].spindle.speed;
             spl_data.mcode_feedback = false;
             break;
         case M04: // 主轴反转
             setRegValue8(REG_F, 10, 0x04); 
-            spl_data.emot_speed = -1.0 * mcode_data->mcode_block[i].spindle.speed;
             spl_data.mcp_target_speed = mcode_data->mcode_block[i].spindle.speed;
             spl_data.mcode_feedback = false;
             break;
