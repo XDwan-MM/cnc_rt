@@ -58,7 +58,7 @@ void emcmotTrajPlan() {
             // 复位状态：2.外部复位信号ERS 4.按下MDI上的RESET键
             nc_set_resetting();
             // 复位生效参数
-            Axis_Limit_Manager_Init();
+            // Axis_Limit_Manager_Init();
             // 清除警告
             cleanAllAlarm(ALARM_TYPE_ALL, ALARM_WARNING);
         }
