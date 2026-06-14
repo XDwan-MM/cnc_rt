@@ -17,7 +17,6 @@ extern "C" {
 #include "datatype.h"
 #include "motiondata.h"
 #include "ncitpdatadef.h"
-
 #include <pthread.h>
 
 #define DCD_BUF_SIZE 200

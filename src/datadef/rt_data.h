@@ -47,8 +47,6 @@ typedef enum{
     CHAN_IS_GCODE_END,           // G代码是否结束 is_gcode_end   
     CHAN_IS_MCODE_END,           // M代码是否结束 is_mcode_end
     CHAN_IS_FIRST_RUN,           // 是否为第一次运行 is_first_run
-    CHAN_IS_EXACT_STOP,          // 模式到达检测 is_exact_stop
-    CHAN_IS_MODE_ARRIVE,         // 模式到达参考店检测 is_mode_arrive
 } ChanStateIndex;
 
 typedef struct {
