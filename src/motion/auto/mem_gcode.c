@@ -34,6 +34,7 @@ static GNC_RES cycle_tp_look_ahead(VELPLAN_TYPE vplan_mode, double ncu_cycle, do
 static bool cycle_block_axis_arrive_check(PLAN_BLOCK* current_block);
 static bool cycle_block_arrive_check();
 static bool cycle_tp_is_zerovel_and_zerorate(double current_vel);
+static bool cycle_tp_check_switching_dist(VELPLAN_TYPE vplan_mode, double current_vel, double target_vel);
 static void block_cal_exact_stop_vel(PLAN_BLOCK* current_block);
 static void block_cal_tap_vel(PLAN_BLOCK* current_block);
 static void block_cal_chop_vel(PLAN_BLOCK* current_block);
@@ -280,7 +281,6 @@ static GNC_RES cycle_tp_update_pausing_tp(VELPLAN_TYPE vplan_mode, double ncu_cy
     }
     res = cycle_tp_update_block(vplan_mode, ncu_cycle, current_vel, current_pos);
     if(res != GNC_CAL_SUCCESS) return res;
-    // todo：如果加速或减速的距离很小，当前速度 = 目标速度
     res = cycle_tp_update_vp(vplan_mode, ncu_cycle, current_vel, target_vel);
     if(res != VP_CAL_SUCCESS) return res;
     return res;
@@ -299,16 +299,31 @@ static GNC_RES cycle_tp_update_running_tp(VELPLAN_TYPE vplan_mode, double ncu_cy
             LOG(LOG_LEVEL_DEBUG, "在%d程序段无法满足目标速度%f, 按原速度曲线减速到%f", cycle_tp->plan_block->line_number, cycle_tp->max_vel, cycle_tp->plan_block->end_vel);
             return VP_DELCINE_TO_END;
         }
-        else cycle_tp->is_arrive_at_the_end = false;
+        else {
+            // 如果加速或减速的距离很小，当前速度 = 目标速度
+            if(cycle_tp_check_switching_dist(vplan_mode, current_vel, cycle_tp->max_vel)) current_vel = cycle_tp->max_vel;
+            cycle_tp->is_arrive_at_the_end = false;
+        }
     }
     res = cycle_tp_update_block(vplan_mode, ncu_cycle, current_vel, current_pos);
     if(res != GNC_CAL_SUCCESS) return res;
     // 如果加工段允许最大速度为0（倍率为0）
     if(IsEqualTo(cycle_tp->plan_block->max_vel, 0) && cycle_tp->plan_block->mode != PMC_MODE_PAUSE) return VP_MAX_VEL_IS_ZERO;
-    // todo：如果加速或减速的距离很小，当前速度 = 目标速度
     res = cycle_tp_update_vp(vplan_mode, ncu_cycle, current_vel, cycle_tp->max_vel);
     if(res != VP_CAL_SUCCESS) return res;
     return res;
+}
+
+static bool cycle_tp_check_switching_dist(VELPLAN_TYPE vplan_mode, double current_vel, double target_vel){
+    double remain_s = cycle_tp->plan_block->length;
+    double amax = cycle_tp->plan_block->max_acc;
+    double jmax = cycle_tp->plan_block->max_jerk;
+    double decline_s = vp_cal_decel_dist(vplan_mode, current_vel, target_vel, amax, jmax);
+    if(IsLessThanOrEqual(fabs(decline_s), 0)){ // 当减速距离非常小
+        LOG(LOG_LEVEL_DEBUG, "变速距离极小:%f,当前速度:%f,目标速度:%f", decline_s, current_vel, target_vel);
+        return true;
+    }
+    return false;
 }
 
 static GNC_RES cycle_tp_update_params(VELPLAN_TYPE velplan_type, double cycle_time){
@@ -398,7 +413,8 @@ static GNC_RES cycle_tp_update_block(VELPLAN_TYPE vplan_mode, double ncu_cycle, 
 
 static GNC_RES cycle_tp_update_vp(VELPLAN_TYPE vplan_mode, double ncu_cycle, double current_vel, double target_vel){
     GNC_RES res = VP_CAL_SUCCESS;
-    if(current_vel > target_vel){
+    // LOG(LOG_LEVEL_DEBUG, "current_vel:%f, target_vel:%f", current_vel, target_vel);
+    if(IsGreaterThan(current_vel, target_vel)){
         res = cycle_tp_cal_pausing(vplan_mode, ncu_cycle, current_vel, target_vel);
     }else{
         res = cycle_tp_cal_running(vplan_mode, ncu_cycle);
@@ -482,7 +498,7 @@ static GNC_RES cycle_tp_cal_pausing(VELPLAN_TYPE vplan_mode, double ncu_cycle, d
         cycle_tp->vel_profile->t_cycle = 0;
         cycle_tp->traj_data->v = ve;
         cycle_tp->is_paused_inside_block = true;
-        // LOG(LOG_LEVEL_DEBUG, "decline_s %f", decline_s);
+        LOG(LOG_LEVEL_DEBUG, "减速距离极小:%f,当前速度:%f,目标速度:%f", decline_s, vs, ve);
         return VP_LENGTH_IS_ZERO;
     }
     if (decline_s > remain_s){ // 在当前段无法减速到ve 
