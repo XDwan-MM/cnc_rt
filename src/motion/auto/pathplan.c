@@ -98,14 +98,13 @@ static void block_cal_pos(GCODE_BLOCK* gcode_block, PLAN_BLOCK* current_block, P
 }
 
 // 计算段最大允许速度
-// todo：速度 mm/min，加速度 g/s^2，加加速度，需统一单位
 static void block_cal_vel(PLAN_BLOCK* current_block){
     switch(current_block->type){
         case RAPID:
             current_block->feed_vel = MIN3(par_axis[0][PAR_AX_RAPID_SPD].value.val_real, par_axis[1][PAR_AX_RAPID_SPD].value.val_real, par_axis[2][PAR_AX_RAPID_SPD].value.val_real);  // G00最大速度为设置的快速进给速度
             current_block->max_vel = current_block->feed_vel;
             current_block->max_acc = MIN3(par_axis[0][PAR_AX_RAPID_ACC].value.val_real, par_axis[1][PAR_AX_RAPID_ACC].value.val_real, par_axis[2][PAR_AX_RAPID_ACC].value.val_real);
-            current_block->max_jerk = MIN3(par_axis[0][PAR_AX_RAPID_JK].value.val_real, par_axis[1][PAR_AX_RAPID_ACC].value.val_real, par_axis[2][PAR_AX_RAPID_JK].value.val_real);
+            current_block->max_jerk = MIN3(par_axis[0][PAR_AX_RAPID_JK].value.val_real, par_axis[1][PAR_AX_RAPID_JK].value.val_real, par_axis[2][PAR_AX_RAPID_JK].value.val_real);
             break;
         case CIRCLE_CCW:
         case CIRCLE_CW:
@@ -126,7 +125,11 @@ static double cal_two_vectors_angle(VECTOR* vector1, VECTOR* vector2){
     double norm2 = POS_Norm(*vector2);
     // 注意：如果norm为0，该段长度为0
     if(IsEqualTo(norm1, 0) || IsEqualTo(norm2, 0)) return 0;
-    return acos(POS_Dot(*vector1, *vector2) / (norm1 * norm2));
+    double cos_angle = POS_Dot(*vector1, *vector2) / (norm1 * norm2);
+    // 对于数值误差导致的cos_angle超出[-1, 1]范围进行修正，避免acos函数返回NaN
+    if(cos_angle > 1.0) cos_angle = 1.0;
+    else if(cos_angle < -1.0) cos_angle = -1.0;
+    return acos(cos_angle);
 }
 
 // 根据切失计算两段之间的衔接角度

@@ -73,10 +73,10 @@ static POS interpolate_circle(POS current_pos, PLAN_BLOCK* current_block, double
         case PLANE_XZ:
             interp_pos.x = current_block->circular_block.center_pos.x + current_block->circular_block.radius * cos(angle_interp);
             interp_pos.y = current_pos.y;
-            interp_pos.z = current_block->circular_block.center_pos.y + current_block->circular_block.radius * sin(angle_interp);
+            interp_pos.z = current_block->circular_block.center_pos.z + current_block->circular_block.radius * sin(angle_interp);
             break;
         case PLANE_YZ:
-            interp_pos.x = current_pos.z;
+            interp_pos.x = current_pos.x;
             interp_pos.y = current_block->circular_block.center_pos.y + current_block->circular_block.radius * cos(angle_interp);
             interp_pos.z = current_block->circular_block.center_pos.z + current_block->circular_block.radius * sin(angle_interp);
             break;
