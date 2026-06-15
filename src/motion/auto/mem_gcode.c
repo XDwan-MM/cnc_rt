@@ -547,22 +547,30 @@ static bool cycle_block_is_arrived(POS current_pos){
 
 static bool cycle_block_axis_arrive_check(PLAN_BLOCK* current_block){
     int res = 0;
+    bool is_arrived = true;
     if((fabs(current_block->end_pos.x - rt_data->axis_data[AXIS_X].motor_act_pos)) > par_axis[AXIS_X][PAR_AX_POS_TOL].value.val_real) {
+        is_arrived = false;
         res = setAlarm(ALARM_AX, ALARM_WARNING, 103);
-        if (res != -8) LOG(LOG_LEVEL_ERR, "X轴定位%f超过%f允差", fabs(current_block->end_pos.x - rt_data->axis_data[AXIS_X].motor_act_pos), par_axis[AXIS_X][PAR_AX_POS_TOL].value.val_real);
-        return false;
+        if (res != -8) LOG(LOG_LEVEL_DEBUG, "X轴定位%f超过%f允差,等待到位...", fabs(current_block->end_pos.x - rt_data->axis_data[AXIS_X].motor_act_pos), par_axis[AXIS_X][PAR_AX_POS_TOL].value.val_real);
     }
     if((fabs(current_block->end_pos.y - rt_data->axis_data[AXIS_Y].motor_act_pos)) > par_axis[AXIS_Y][PAR_AX_POS_TOL].value.val_real) {
+        is_arrived = false;
         res = setAlarm(ALARM_AX, ALARM_WARNING, 104);
-        if (res != -8) LOG(LOG_LEVEL_ERR, "Y轴定位%f超过%f允差", fabs(current_block->end_pos.y - rt_data->axis_data[AXIS_Y].motor_act_pos), par_axis[AXIS_Y][PAR_AX_POS_TOL].value.val_real);
-        return false;
+        if (res != -8) LOG(LOG_LEVEL_DEBUG, "Y轴定位%f超过%f允差,等待到位...", fabs(current_block->end_pos.y - rt_data->axis_data[AXIS_Y].motor_act_pos), par_axis[AXIS_Y][PAR_AX_POS_TOL].value.val_real);
     }
     if((fabs(current_block->end_pos.z - rt_data->axis_data[AXIS_Z].motor_act_pos)) > par_axis[AXIS_Z][PAR_AX_POS_TOL].value.val_real) {
+        is_arrived = false;
         res = setAlarm(ALARM_AX, ALARM_WARNING, 105);
-        if (res != -8) LOG(LOG_LEVEL_ERR, "Z轴定位%f超过%f允差", fabs(current_block->end_pos.z - rt_data->axis_data[AXIS_Z].motor_act_pos), par_axis[AXIS_Z][PAR_AX_POS_TOL].value.val_real);
+        if (res != -8) LOG(LOG_LEVEL_DEBUG, "Z轴定位%f超过%f允差,等待到位...", fabs(current_block->end_pos.z - rt_data->axis_data[AXIS_Z].motor_act_pos), par_axis[AXIS_Z][PAR_AX_POS_TOL].value.val_real);
+    }
+    if(is_arrived){
+        delAlarm(ALARM_AX, ALARM_WARNING, 103);
+        delAlarm(ALARM_AX, ALARM_WARNING, 104);
+        delAlarm(ALARM_AX, ALARM_WARNING, 105);
+        return true;
+    }else{
         return false;
     }
-    return true;
 }
 
 static bool cycle_block_arrive_check(){
