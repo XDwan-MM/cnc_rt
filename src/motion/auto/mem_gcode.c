@@ -31,7 +31,10 @@ static GNC_RES cycle_tp_cal_running(VELPLAN_TYPE vplan_mode, double ncu_cycle);
 static GNC_RES cycle_tp_cal_pausing(VELPLAN_TYPE vplan_mode, double ncu_cycle, double vs, double ve);
 static GNC_RES cycle_tp_add_block();
 static GNC_RES cycle_tp_look_ahead(VELPLAN_TYPE vplan_mode, double ncu_cycle, double vs);
+static bool cycle_block_axis_arrive_check(PLAN_BLOCK* current_block);
+static bool cycle_block_arrive_check();
 static bool cycle_tp_is_zerovel_and_zerorate(double current_vel);
+static bool cycle_tp_check_switching_dist(VELPLAN_TYPE vplan_mode, double current_vel, double target_vel);
 static void block_cal_exact_stop_vel(PLAN_BLOCK* current_block);
 static void block_cal_tap_vel(PLAN_BLOCK* current_block);
 static void block_cal_chop_vel(PLAN_BLOCK* current_block);
@@ -165,6 +168,13 @@ static bool mem_check_res(GNC_RES res){
     case VP_LENGTH_IS_ZERO:
         return false;
 
+    case GNC_ARRIVE_CHECK_FAIL:
+        if(cycle_tp->is_resetting){
+            gcode_handle_reset();
+            return false;
+        }
+        return false;
+
     case GNC_DATA_NULL:
     case GNC_PARAM_UNVALID:
     case VP_IS_NULL:
@@ -270,14 +280,13 @@ static GNC_RES cycle_tp_update_pausing_tp(VELPLAN_TYPE vplan_mode, double ncu_cy
         if(cycle_tp_is_newvel_unvalid(vplan_mode, current_vel, target_vel)){
             if(IsEqualTo(cycle_tp->vel_profile->ve, 0)) cycle_tp->is_paused_inside_block = true;
             else cycle_tp->is_paused_inside_block = false;
-            LOG(LOG_LEVEL_DEBUG, "在%d程序段无法满足目标速度%f, 按原速度曲线减速到%f", cycle_tp->plan_block->line_number, cycle_tp->max_vel, cycle_tp->plan_block->end_vel);
+            LOG(LOG_LEVEL_DEBUG, "在%d程序段无法满足目标速度%f, 按原速度曲线减速到%f", cycle_tp->plan_block->line_number, target_vel, cycle_tp->plan_block->end_vel);
             return VP_DELCINE_TO_END;
         }
         else cycle_tp->is_arrive_at_the_end = false;
     }
     res = cycle_tp_update_block(vplan_mode, ncu_cycle, current_vel, current_pos);
     if(res != GNC_CAL_SUCCESS) return res;
-    // todo：如果加速或减速的距离很小，当前速度 = 目标速度
     res = cycle_tp_update_vp(vplan_mode, ncu_cycle, current_vel, target_vel);
     if(res != VP_CAL_SUCCESS) return res;
     return res;
@@ -296,16 +305,31 @@ static GNC_RES cycle_tp_update_running_tp(VELPLAN_TYPE vplan_mode, double ncu_cy
             LOG(LOG_LEVEL_DEBUG, "在%d程序段无法满足目标速度%f, 按原速度曲线减速到%f", cycle_tp->plan_block->line_number, cycle_tp->max_vel, cycle_tp->plan_block->end_vel);
             return VP_DELCINE_TO_END;
         }
-        else cycle_tp->is_arrive_at_the_end = false;
+        else {
+            // 如果加速或减速的距离很小，当前速度 = 目标速度
+            if(cycle_tp_check_switching_dist(vplan_mode, current_vel, cycle_tp->max_vel)) current_vel = cycle_tp->max_vel;
+            cycle_tp->is_arrive_at_the_end = false;
+        }
     }
     res = cycle_tp_update_block(vplan_mode, ncu_cycle, current_vel, current_pos);
     if(res != GNC_CAL_SUCCESS) return res;
     // 如果加工段允许最大速度为0（倍率为0）
     if(IsEqualTo(cycle_tp->plan_block->max_vel, 0) && cycle_tp->plan_block->mode != PMC_MODE_PAUSE) return VP_MAX_VEL_IS_ZERO;
-    // todo：如果加速或减速的距离很小，当前速度 = 目标速度
     res = cycle_tp_update_vp(vplan_mode, ncu_cycle, current_vel, cycle_tp->max_vel);
     if(res != VP_CAL_SUCCESS) return res;
     return res;
+}
+
+static bool cycle_tp_check_switching_dist(VELPLAN_TYPE vplan_mode, double current_vel, double target_vel){
+    double remain_s = cycle_tp->plan_block->length;
+    double amax = cycle_tp->plan_block->max_acc;
+    double jmax = cycle_tp->plan_block->max_jerk;
+    double decline_s = vp_cal_decel_dist(vplan_mode, current_vel, target_vel, amax, jmax);
+    if(IsLessThanOrEqual(fabs(decline_s), 0)){ // 当减速距离非常小
+        LOG(LOG_LEVEL_DEBUG, "变速距离极小:%f,当前速度:%f,目标速度:%f", decline_s, current_vel, target_vel);
+        return true;
+    }
+    return false;
 }
 
 static GNC_RES cycle_tp_update_params(VELPLAN_TYPE velplan_type, double cycle_time){
@@ -375,13 +399,14 @@ static GNC_RES cycle_tp_update_block(VELPLAN_TYPE vplan_mode, double ncu_cycle, 
     GNC_RES res = GNC_CAL_SUCCESS;
     // 如果到达加工段终点
     if(cycle_block_is_arrived(current_pos)){
-        res = plan_block_get_next();
+        if(cycle_block_arrive_check()) res = plan_block_get_next();
+        else res = GNC_ARRIVE_CHECK_FAIL;
         // LOG(LOG_LEVEL_INFO, "获取下一个插补段");
     }else{
         res = plan_block_get_update(current_vel, current_pos);
         // LOG(LOG_LEVEL_INFO, "更新当前插补段");
     }
-    if(res == GNC_DATA_EMPTY) return GNC_DATA_EMPTY;
+    if(res != GNC_CAL_SUCCESS) return res;
     if(cycle_tp_look_ahead(vplan_mode, ncu_cycle, current_vel) == GNC_DATA_EMPTY) return GNC_DATA_EMPTY;
     // 更新当前行信息
     queue_copy_block(plan_queue, 0, cycle_tp->plan_block);
@@ -394,7 +419,8 @@ static GNC_RES cycle_tp_update_block(VELPLAN_TYPE vplan_mode, double ncu_cycle, 
 
 static GNC_RES cycle_tp_update_vp(VELPLAN_TYPE vplan_mode, double ncu_cycle, double current_vel, double target_vel){
     GNC_RES res = VP_CAL_SUCCESS;
-    if(current_vel > target_vel){
+    // LOG(LOG_LEVEL_DEBUG, "current_vel:%f, target_vel:%f", current_vel, target_vel);
+    if(IsGreaterThan(current_vel, target_vel)){
         res = cycle_tp_cal_pausing(vplan_mode, ncu_cycle, current_vel, target_vel);
     }else{
         res = cycle_tp_cal_running(vplan_mode, ncu_cycle);
@@ -478,7 +504,7 @@ static GNC_RES cycle_tp_cal_pausing(VELPLAN_TYPE vplan_mode, double ncu_cycle, d
         cycle_tp->vel_profile->t_cycle = 0;
         cycle_tp->traj_data->v = ve;
         cycle_tp->is_paused_inside_block = true;
-        // LOG(LOG_LEVEL_DEBUG, "decline_s %f", decline_s);
+        LOG(LOG_LEVEL_DEBUG, "减速距离极小:%f,当前速度:%f,目标速度:%f", decline_s, vs, ve);
         return VP_LENGTH_IS_ZERO;
     }
     if (decline_s > remain_s){ // 在当前段无法减速到ve 
@@ -516,14 +542,45 @@ static bool cycle_block_is_arrived(POS current_pos){
     }
     // LOG(LOG_LEVEL_DEBUG, "is arrive: %d, line number: %d, length: %f", cycle_tp->is_arrive_at_the_end, cycle_tp->plan_block->line_number, head_block->length);
     if(!cycle_tp->is_arrive_at_the_end) return false;
-    // 如果是到位检测模组，发送到位信号
-    if(head_block->mode == PMC_MODE_ARRIVE_CHECK){
-        rt_set_chan_state(0, CHAN_IS_MODE_ARRIVE, true);
-        LOG(LOG_LEVEL_DEBUG,  "到位检测 pos:%f %f %f vel:%f", head_block->end_pos.x, head_block->end_pos.y, head_block->end_pos.z, head_block->end_vel);
+    return true;
+}
+
+static bool cycle_block_axis_arrive_check(PLAN_BLOCK* current_block){
+    int res = 0;
+    if((fabs(current_block->end_pos.x - rt_data->axis_data[AXIS_X].motor_act_pos)) > par_axis[AXIS_X][PAR_AX_POS_TOL].value.val_real) {
+        res = setAlarm(ALARM_AX, ALARM_WARNING, 103);
+        if (res != -8) LOG(LOG_LEVEL_ERR, "X轴定位%f超过%f允差", fabs(current_block->end_pos.x - rt_data->axis_data[AXIS_X].motor_act_pos), par_axis[AXIS_X][PAR_AX_POS_TOL].value.val_real);
+        return false;
     }
-    if(head_block->mode == PMC_MODE_EXACT_STOP) {
-        rt_set_chan_state(0, CHAN_IS_EXACT_STOP, true);
-        LOG(LOG_LEVEL_DEBUG,  "精准停 pos:%f %f %f vel:%f", head_block->end_pos.x, head_block->end_pos.y, head_block->end_pos.z, head_block->end_vel);
+    if((fabs(current_block->end_pos.y - rt_data->axis_data[AXIS_Y].motor_act_pos)) > par_axis[AXIS_Y][PAR_AX_POS_TOL].value.val_real) {
+        res = setAlarm(ALARM_AX, ALARM_WARNING, 104);
+        if (res != -8) LOG(LOG_LEVEL_ERR, "Y轴定位%f超过%f允差", fabs(current_block->end_pos.y - rt_data->axis_data[AXIS_Y].motor_act_pos), par_axis[AXIS_Y][PAR_AX_POS_TOL].value.val_real);
+        return false;
+    }
+    if((fabs(current_block->end_pos.z - rt_data->axis_data[AXIS_Z].motor_act_pos)) > par_axis[AXIS_Z][PAR_AX_POS_TOL].value.val_real) {
+        res = setAlarm(ALARM_AX, ALARM_WARNING, 105);
+        if (res != -8) LOG(LOG_LEVEL_ERR, "Z轴定位%f超过%f允差", fabs(current_block->end_pos.z - rt_data->axis_data[AXIS_Z].motor_act_pos), par_axis[AXIS_Z][PAR_AX_POS_TOL].value.val_real);
+        return false;
+    }
+    return true;
+}
+
+static bool cycle_block_arrive_check(){
+    // LOG(LOG_LEVEL_DEBUG, "motor_cmd_pos:%f %f %f", rt_data->axis_data[0].motor_cmd_pos, rt_data->axis_data[1].motor_cmd_pos, rt_data->axis_data[2].motor_cmd_pos);
+    // LOG(LOG_LEVEL_DEBUG, "motor_act_pos:%f %f %f", rt_data->axis_data[0].motor_act_pos, rt_data->axis_data[1].motor_act_pos, rt_data->axis_data[2].motor_act_pos);       
+    PLAN_BLOCK* current_block = queue_peak(plan_queue);
+    // 如果是到位检测模组，发送到位信号
+    if(current_block->mode == PMC_MODE_ARRIVE_CHECK){
+        if(!cycle_block_axis_arrive_check(current_block)) return false;
+        LOG(LOG_LEVEL_DEBUG,  "到位检测 pos:%f %f %f vel:%f", rt_data->axis_data[AXIS_X].motor_act_pos, rt_data->axis_data[AXIS_Y].motor_act_pos, rt_data->axis_data[AXIS_Z].motor_act_pos, current_block->end_vel);
+    }
+    if(current_block->mode == PMC_MODE_EXACT_STOP) {
+        if(!cycle_block_axis_arrive_check(current_block)) return false;
+        LOG(LOG_LEVEL_DEBUG,  "精准停 pos:%f %f %f vel:%f", rt_data->axis_data[AXIS_X].motor_act_pos, rt_data->axis_data[AXIS_Y].motor_act_pos, rt_data->axis_data[AXIS_Z].motor_act_pos, current_block->end_vel);
+    }
+    // 判断到位宽度
+    if(current_block->type == RAPID){
+        return cycle_block_axis_arrive_check(current_block);
     }
     return true;
 }

@@ -58,7 +58,7 @@ void emcmotTrajPlan() {
             // 复位状态：2.外部复位信号ERS 4.按下MDI上的RESET键
             nc_set_resetting();
             // 复位生效参数
-            Axis_Limit_Manager_Init();
+            // Axis_Limit_Manager_Init();
             // 清除警告
             cleanAllAlarm(ALARM_TYPE_ALL, ALARM_WARNING);
         }
@@ -300,12 +300,18 @@ static void check_ferror_fault()
 
 static void read_from_hal() {
     // 读取实际位置
+    #ifdef DEBUG_MODE_ENABLED
+    rt_data->axis_data[AXIS_X].motor_act_pos =  rt_data->axis_data[AXIS_X].motor_cmd_pos;
+    rt_data->axis_data[AXIS_Y].motor_act_pos =  rt_data->axis_data[AXIS_Y].motor_cmd_pos;
+    rt_data->axis_data[AXIS_Z].motor_act_pos =  rt_data->axis_data[AXIS_Z].motor_cmd_pos;
+    #else
     Hal_Driver_Get_Actual_Pos(&x_axis_driver, &x_target_pos);
     rt_data->axis_data[AXIS_X].motor_act_pos = pulses_to_position(x_target_pos, par_axis[AXIS_X]);
     Hal_Driver_Get_Actual_Pos(&y_axis_driver, &y_target_pos);
     rt_data->axis_data[AXIS_Y].motor_act_pos = pulses_to_position(y_target_pos, par_axis[AXIS_Y]);
     Hal_Driver_Get_Actual_Pos(&z_axis_driver, &z_target_pos);
     rt_data->axis_data[AXIS_Z].motor_act_pos = pulses_to_position(z_target_pos, par_axis[AXIS_Z]);
+    #endif
 
     // 第一次运行，初始化位置
     if (!update_pos_flag) {

@@ -50,6 +50,7 @@ typedef enum result {
     GNC_PARSER_OVER = 301,      // 译码结束
     GNC_PARSER_WAIT = 302,      // 等待译码
     GNC_PARSER_OVER_AND_WAIT = 303, // 译码结束且等待
+    GNC_ARRIVE_CHECK_FAIL,      // 轴定位超差
     VP_CAL_SUCCESS = 400,
     VP_IS_NULL,
     VP_PARAM_UNVALID,
@@ -61,6 +62,7 @@ typedef enum result {
     VP_CAL_S_ERROR,
     VP_CAL_V_ERROR,
     VP_DELCINE_TO_END,
+    
 } GNC_RES;
 
 typedef enum {

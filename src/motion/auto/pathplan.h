@@ -18,7 +18,6 @@ extern "C" {
 #include "plan_queue.h"
 
 #define PRE_TREAT_SIZE 200      // 预处理的最大点数
-#define CIRCLE_ANGLE_TOL 0.02   // 整圆判断阈值 1° = 0.0174rad
 
 /// @brief 将译码结果转换成插补段
 /// @return 
