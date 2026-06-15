@@ -30,11 +30,11 @@ static void set_operating_mode();
 static void spindle_control();
 static void get_cmd_pos();
 static void update_status();
-static void check_ferror_fault();
 static void output_to_hal();
 static void read_from_hal();
 static void check_for_soft_limit();
-static void compute_screw_comp();
+static void compute_error_comp();
+static void calcul_mac_cmd_pos();
 
 static int32_t x_cmd_Pulses, y_cmd_Pulses, z_cmd_Pulses;
 static int32_t x_target_pos, y_target_pos, z_target_pos;
@@ -59,6 +59,8 @@ void emcmotTrajPlan() {
             nc_set_resetting();
             // 复位生效参数
             Axis_Limit_Manager_Init();
+            // 清除跟随误差标志
+            reset_ferror_control();
             // 清除警告
             cleanAllAlarm(ALARM_TYPE_ALL, ALARM_WARNING);
         }
@@ -86,6 +88,12 @@ void emcmotTrajPlan() {
         // 根据运动模式计算运动位置
         get_cmd_pos();
 
+        // 计算mac_cmd_pos
+        calcul_mac_cmd_pos();
+
+        // 误差补偿
+        compute_error_comp();
+
         //更新轴状态
         Axis_Status_Update();
 
@@ -100,7 +108,7 @@ void emcmotTrajPlan() {
 
         // 清除事件
         rt_data->nc_event = SYS_EVENT_NONE;
-    }
+        }
 }
 
 // 路径规划
@@ -226,78 +234,6 @@ static void check_for_fault() {
     }
 }
 
-// 检查轴跟随误差错误
-static void check_ferror_fault()
-{
-    // todo：检查跟随误差
-    // LOG(LOG_LEVEL_DEBUG, "wcs_cmd_pos:%f %f %f", rt_data->axis_data[0].wcs_cmd_pos_cur, rt_data->axis_data[1].wcs_cmd_pos_cur, rt_data->axis_data[2].wcs_cmd_pos_cur);
-    // LOG(LOG_LEVEL_DEBUG, "motor_cmd_pos:%f %f %f", rt_data->axis_data[0].motor_cmd_pos, rt_data->axis_data[1].motor_cmd_pos, rt_data->axis_data[2].motor_cmd_pos);
-    // LOG(LOG_LEVEL_DEBUG, "motor_act_pos:%f %f %f", rt_data->axis_data[0].motor_act_pos, rt_data->axis_data[1].motor_act_pos, rt_data->axis_data[2].motor_act_pos);       
-
-    // 急停拍下情况、(空闲、编辑状态)时不检查跟随误差，避免上电无运动误报
-    if (rt_data->sys_state[SYS_IS_ESTOP_ON] || rt_data->current_mode == MODE_IDLE ||
-        rt_data->current_mode == MODE_EDIT)
-    {
-        return;
-    }
-    /* 指令速度不为0时，检测跟随误差 */
-    // x轴
-    if (fabs(var_axis[AXIS_X][VAR_AXIS_CMD_VEL].value.f) > SPEED_THRESHOLD)
-    {
-        // 指令速度 指令位置 反馈位置
-        double vel_cmd_x = var_axis[AXIS_X][VAR_AXIS_CMD_VEL].value.f;
-        double pos_cmd_x = rt_data->axis_data[AXIS_X].motor_cmd_pos;
-        double pos_fb_x = rt_data->axis_data[AXIS_X].motor_act_pos;
-        // 计算跟随误差
-        updata_axis_ferror(&ferror_control[AXIS_X], par_axis[AXIS_X], pos_cmd_x, pos_fb_x, vel_cmd_x);
-        // 跟随误差报警处理
-        if (ferror_control[AXIS_X].error_flag)
-        {
-            int res = setAlarm(ALARM_AX, ALARM_ERROR, 100);
-            if (res == -8)
-                return;
-            // 上述代码逻辑是让下面LOG只打印一次；返回值-8：表示该报警已存在。
-            LOG(LOG_LEVEL_ERR, "X轴跟随误差过大");
-        }
-    }
-    // y轴
-    if (fabs(var_axis[AXIS_Y][VAR_AXIS_CMD_VEL].value.f) > SPEED_THRESHOLD)
-    {
-        // 指令速度 指令位置 反馈位置
-        double vel_cmd_y = var_axis[AXIS_Y][VAR_AXIS_CMD_VEL].value.f;
-        double pos_cmd_y = rt_data->axis_data[AXIS_Y].motor_cmd_pos;
-        double pos_fb_y = rt_data->axis_data[AXIS_Y].motor_act_pos;
-        // 计算跟随误差
-        updata_axis_ferror(&ferror_control[AXIS_Y], par_axis[AXIS_Y], pos_cmd_y, pos_fb_y, vel_cmd_y);
-        // 跟随误差报警处理
-        if (ferror_control[AXIS_Y].error_flag)
-        {
-            int res = setAlarm(ALARM_AX, ALARM_ERROR, 101);
-            if (res == -8)
-                return;
-            LOG(LOG_LEVEL_ERR, "Y轴跟随误差过大");
-        }
-    }
-    // z轴
-    if (fabs(var_axis[AXIS_Z][VAR_AXIS_CMD_VEL].value.f) > SPEED_THRESHOLD)
-    {
-        // 指令速度 指令位置 反馈位置
-        double vel_cmd_z = var_axis[AXIS_Z][VAR_AXIS_CMD_VEL].value.f;
-        double pos_cmd_z = rt_data->axis_data[AXIS_Z].motor_cmd_pos;
-        double pos_fb_z = rt_data->axis_data[AXIS_Z].motor_act_pos;
-        // 计算跟随误差
-        updata_axis_ferror(&ferror_control[AXIS_Z], par_axis[AXIS_Z], pos_cmd_z, pos_fb_z, vel_cmd_z);
-        // 跟随误差报警处理
-        if (ferror_control[AXIS_Z].error_flag)
-        {
-            int res = setAlarm(ALARM_AX, ALARM_ERROR, 102);
-            if (res == -8)
-                return;
-            LOG(LOG_LEVEL_ERR, "Z轴跟随误差过大");
-        }
-    }
-}
-
 static void read_from_hal() {
     // 读取实际位置
     #ifdef DEBUG_MODE_ENABLED
@@ -320,37 +256,14 @@ static void read_from_hal() {
             rt_data->axis_data[i].wcs_cmd_pos_cur = rt_data->axis_data[i].motor_act_pos;
             rt_data->axis_data[i].wcs_cmd_pos_pre = rt_data->axis_data[i].motor_act_pos;
             rt_data->axis_data[i].mac_cmd_pos = rt_data->axis_data[i].motor_act_pos;
-            rt_data->axis_data[i].mac_comp_pos = rt_data->axis_data[i].motor_act_pos;
             rt_data->axis_data[i].motor_cmd_pos = rt_data->axis_data[i].motor_act_pos;
+            rt_data->axis_data[i].fb_pos_no_comp = rt_data->axis_data[i].motor_act_pos;
         }
         update_pos_flag = 1;
     }
 }
 
 static void output_to_hal() {
-    for (int i = 0; i < SYS_AXES_NUM; i++)
-    {
-        // 控制轴拆卸时绝对坐标不变
-        if(!rt_data->axis_data[i].axis_status.is_disable)
-        {
-            setVarAxisDouble(i, VAR_AXIS_CMD_POS_EX, rt_data->axis_data[i].wcs_cmd_pos_cur, 0);
-        }
-        // 机床锁住时机械坐标不变
-        if(!rt_data->sys_state[SYS_IS_MAC_LOCK] && !rt_data->axis_data[i].axis_status.is_disable)
-        {
-            rt_data->axis_data[i].mac_cmd_pos += rt_data->axis_data[i].wcs_cmd_pos_cur - rt_data->axis_data[i].wcs_cmd_pos_pre;
-            setVarAxisDouble(i, VAR_AXIS_ACT_POS_EX, rt_data->axis_data[i].mac_cmd_pos, 0);
-        }
-    }
-    // 误差补偿
-    // compute_screw_comp();
-    for (int i = 0; i < SYS_AXES_NUM; i++)
-    {
-        // 电机位置
-        rt_data->axis_data[i].motor_cmd_pos = rt_data->axis_data[i].mac_cmd_pos;
-        // 上一周期插补位置
-        rt_data->axis_data[i].wcs_cmd_pos_pre = rt_data->axis_data[i].wcs_cmd_pos_cur;
-    }
     // 发送给驱动器
     x_cmd_Pulses = position_to_pulses(rt_data->axis_data[AXIS_X].motor_cmd_pos, par_axis[AXIS_X]);
     Hal_Driver_Set_Target_Pos(&x_axis_driver, x_cmd_Pulses);
@@ -360,84 +273,123 @@ static void output_to_hal() {
     Hal_Driver_Set_Target_Pos(&z_axis_driver, z_cmd_Pulses);
 }
 
-static void compute_screw_comp() {
-    double pitch_comp_val_x, pitch_comp_val_y, pitch_comp_val_z;
-    double perp_comp_val_x, perp_comp_val_y, perp_comp_val_z;
+static void compute_error_comp() 
+{
+    double pitch_comp_val[3];
+    double backlash_comp_val[3];
+    double perp_comp_val[3];
 
     // Sync params from shared memory to library-compatible structs
-    // 暂时是立马同步螺补参数，后续改成复位生效应将函数移到复位逻辑．
-    comp_data_sync_params();
+    // 暂时是立马同步补偿参数，后续改成复位生效应将函数移到复位逻辑．
+    sync_comp_params();
 
-    // 螺距误差补偿值计算 (计算出来的补偿值 单位为:mm)
-    pitch_comp_val_x = calculate_pitch_compensation(
-        &pitch_rt[AXIS_X], &acmp_params[AXIS_X], &pitch_table[AXIS_X],
-        (double)var_axis[AXIS_X][VAR_AXIS_CMD_POS_EX].value.f,
-        (double)var_axis[AXIS_X][VAR_AXIS_CMD_VEL].value.f);
-    pitch_comp_val_y = calculate_pitch_compensation(
-        &pitch_rt[AXIS_Y], &acmp_params[AXIS_Y], &pitch_table[AXIS_Y],
-        (double)var_axis[AXIS_Y][VAR_AXIS_CMD_POS_EX].value.f,
-        (double)var_axis[AXIS_Y][VAR_AXIS_CMD_VEL].value.f);
-    pitch_comp_val_z = calculate_pitch_compensation(
-        &pitch_rt[AXIS_Z], &acmp_params[AXIS_Z], &pitch_table[AXIS_Z],
-        (double)var_axis[AXIS_Z][VAR_AXIS_CMD_POS_EX].value.f,
-        (double)var_axis[AXIS_Z][VAR_AXIS_CMD_VEL].value.f);
+    // TODO: check_and_rebuild_pitch_tables() 脏标记检测（预留）
+    // 后续 HMI 侧 par_table[] 接口就绪后，加 PAR_CMP_PITCH_TABLE_DIRTY 枚举并实现
 
-    // 垂直度误差补偿值计算 (计算出来的补偿值 单位为:mm)
-    perp_comp_val_x = 0;
-    perp_comp_val_y = 0;
-    perp_comp_val_z = 0;
+    bool is_rapid = false;
+    if(cycle_tp->plan_block->type == RAPID || rt_data->sys_state[SYS_IS_RAPID])
+    {
+        is_rapid = true;
+    }
 
-    // 当前周期插补+补偿后位置
-    rt_data->axis_data[AXIS_X].mac_comp_pos = rt_data->axis_data[AXIS_X].mac_cmd_pos + pitch_comp_val_x + perp_comp_val_x;
-    rt_data->axis_data[AXIS_Y].mac_comp_pos = rt_data->axis_data[AXIS_Y].mac_cmd_pos+ pitch_comp_val_y + perp_comp_val_y;
-    rt_data->axis_data[AXIS_Z].mac_comp_pos = rt_data->axis_data[AXIS_Z].mac_cmd_pos + pitch_comp_val_z + perp_comp_val_z;
-    // 反馈位置（去除补偿）
-    rt_data->axis_data[AXIS_X].fb_pos_no_comp = rt_data->axis_data[AXIS_X].motor_act_pos - pitch_comp_val_x - perp_comp_val_x;
-    rt_data->axis_data[AXIS_Y].fb_pos_no_comp = rt_data->axis_data[AXIS_Y].motor_act_pos - pitch_comp_val_y - perp_comp_val_y;
-    rt_data->axis_data[AXIS_Z].fb_pos_no_comp = rt_data->axis_data[AXIS_Z].motor_act_pos - pitch_comp_val_z - perp_comp_val_z;
+    // 构建 all_axis_pos[] 供垂直度等跨轴补偿使用
+    double all_axis_pos[3];
+    for (int i = 0; i < 3; i++) {
+        all_axis_pos[i] = rt_data->axis_data[i].mac_cmd_pos;
+    }
 
-    // 输出给VAR变量后面用
-    rt_data->axis_data[AXIS_X].pitch_comp_val = pitch_comp_val_x;
-    rt_data->axis_data[AXIS_Y].pitch_comp_val = pitch_comp_val_y;
-    rt_data->axis_data[AXIS_Z].pitch_comp_val = pitch_comp_val_z;
-    // printf("pitch_comp_val_x %f %f %f\n", pitch_comp_val_x, var_axis[AXIS_X][VAR_AXIS_CMD_POS_EX].value.f, rt_data->axis_data[AXIS_X].mac_comp_pos);
+    for (int i = 0; i < 3; i++) {
+        double vel_cmd = var_axis[i][VAR_AXIS_CMD_VEL].value.f;
+        double mac_cmd_pos = rt_data->axis_data[i].mac_cmd_pos;
 
-    rt_data->axis_data[AXIS_X].perp_comp_val = perp_comp_val_x;
-    rt_data->axis_data[AXIS_Y].perp_comp_val = perp_comp_val_y;
-    rt_data->axis_data[AXIS_Z].perp_comp_val = perp_comp_val_z;
+        // 螺距误差补偿值计算 (计算出来的补偿值 单位为:mm)
+        pitch_comp_val[i] = calculate_pitch_compensation(
+            &pitch_comp_state[i], &par_comp_lib[i], &pitch_comp_table[i],
+            mac_cmd_pos, vel_cmd);
+
+        // 反向间隙补偿值计算 (计算出来的补偿值 单位为:mm)
+        backlash_comp_val[i] = calculate_backlash_compensation(
+            &par_comp_lib[i], &backlash_comp_state[i],
+            vel_cmd, is_rapid);
+
+        // 垂直度误差补偿值计算 (计算出来的补偿值 单位为:mm)
+        perp_comp_val[i] = calculate_perpendicularity_total(
+            &par_comp_lib[i], &perp_comp_state[i],
+            i, all_axis_pos, vel_cmd);
+
+        // TODO: 直线度补偿值计算 (预留)
+        // straight_comp_val = calculate_straightness_compensation(...);
+
+        double total_comp = pitch_comp_val[i] + backlash_comp_val[i] + perp_comp_val[i];
+
+        // 当前周期插补+补偿后位置
+        rt_data->axis_data[i].motor_cmd_pos = mac_cmd_pos + total_comp;
+        // 反馈位置（去除补偿）
+        rt_data->axis_data[i].fb_pos_no_comp = rt_data->axis_data[i].motor_act_pos - total_comp;
+
+        rt_data->axis_data[i].pitch_comp_val    = pitch_comp_val[i];
+        rt_data->axis_data[i].backlash_comp_val = backlash_comp_val[i];
+        rt_data->axis_data[i].perp_comp_val     = perp_comp_val[i];
+
+        
+    }
+    // printf(
+    //     "Pos_nc%f, Pos_c%f, vel_cmd%f, luobu%f, bl%f\n",
+    //     rt_data->axis_data[0].mac_cmd_pos,
+    //     rt_data->axis_data[0].motor_cmd_pos,
+    //     var_axis[0][VAR_AXIS_CMD_VEL].value.f,
+    //     rt_data->axis_data[0].pitch_comp_val,
+    //     rt_data->axis_data[0].backlash_comp_val
+    // );
 }
 
-static void check_for_soft_limit() {
+static void calcul_mac_cmd_pos()
+{
+    for (int i = 0; i < SYS_AXES_NUM; i++)
+    {
+        // 机床锁住或者轴拆卸，不下发位置
+        if (!rt_data->sys_state[SYS_IS_MAC_LOCK] && !rt_data->axis_data[i].axis_status.is_disable)
+        {
+            rt_data->axis_data[i].mac_cmd_pos += rt_data->axis_data[i].wcs_cmd_pos_cur - rt_data->axis_data[i].wcs_cmd_pos_pre;
+        }
+        // 上一周期插补位置
+        rt_data->axis_data[i].wcs_cmd_pos_pre = rt_data->axis_data[i].wcs_cmd_pos_cur;
+    }
+}
+
+static void check_for_soft_limit()
+{
     for (int var = 0; var < 3; ++var)
     {
-        if(runtime[var].is_first_run)
+        if (runtime[var].is_first_run)
         {
-            int levels = Check_Axis_Limit_Violation(&runtime[var], rt_data->axis_data[var].wcs_cmd_pos_cur, RESET_CHEAK_USED);
+            int levels = Check_Axis_Limit_Violation(&runtime[var], rt_data->axis_data[var].mac_cmd_pos, RESET_CHEAK_USED);
             runtime[var].temp_config = runtime[var].config;
-            runtime[var].limit_pos = rt_data->axis_data[var].wcs_cmd_pos_cur;
-            if(!levels)
+            runtime[var].limit_pos = rt_data->axis_data[var].mac_cmd_pos;
+            if (!levels)
             {
                 runtime[var].limit_type = NO_LIMIT_TRIGGERED;
             }
             runtime[var].is_first_run = 0;
         }
 
-        if(rt_data->axis_data[var].axis_status.is_moving)
+        if (rt_data->axis_data[var].axis_status.is_moving)
         {
-            if((runtime[var].limit_type == 0) ||
-               (!rt_data->axis_data[var].axis_status.is_decel_done))
+            if ((runtime[var].limit_type == 0) ||
+                (!rt_data->axis_data[var].axis_status.is_decel_done))
             {
-                runtime[var].active_levels = Check_Axis_Limit_Violation(&runtime[var], rt_data->axis_data[var].wcs_cmd_pos_cur, SOFT_CHEAK_USED);
-                runtime[var].limit_pos = rt_data->axis_data[var].wcs_cmd_pos_cur;
+                runtime[var].active_levels = Check_Axis_Limit_Violation(&runtime[var], rt_data->axis_data[var].mac_cmd_pos, SOFT_CHEAK_USED);
+                runtime[var].limit_pos = rt_data->axis_data[var].mac_cmd_pos;
             }
             switch (runtime[var].limit_type)
             {
             case LEVEL1_FWD_LIMIT:
                 runtime[var].temp_config.level1.positive_limit = runtime[var].limit_pos;
-                runtime[var].active_levels = Check_Axis_Limit_Violation(&runtime[var], rt_data->axis_data[var].wcs_cmd_pos_cur, ALARM_CHEAK_USED);                    break;
+                runtime[var].active_levels = Check_Axis_Limit_Violation(&runtime[var], rt_data->axis_data[var].mac_cmd_pos, ALARM_CHEAK_USED);
+                break;
             case LEVEL1_REV_LIMIT:
                 runtime[var].temp_config.level1.negative_limit = runtime[var].limit_pos;
-                runtime[var].active_levels = Check_Axis_Limit_Violation(&runtime[var], rt_data->axis_data[var].wcs_cmd_pos_cur, ALARM_CHEAK_USED);
+                runtime[var].active_levels = Check_Axis_Limit_Violation(&runtime[var], rt_data->axis_data[var].mac_cmd_pos, ALARM_CHEAK_USED);
                 break;
             case LEVEL2_FWD_LIMIT:
                 if (runtime[var].config.level2_mode == 0)
@@ -448,7 +400,7 @@ static void check_for_soft_limit() {
                 {
                     runtime[var].temp_config.level2.negative_limit = runtime[var].limit_pos;
                 }
-                runtime[var].active_levels = Check_Axis_Limit_Violation(&runtime[var], rt_data->axis_data[var].wcs_cmd_pos_cur, ALARM_CHEAK_USED);
+                runtime[var].active_levels = Check_Axis_Limit_Violation(&runtime[var], rt_data->axis_data[var].mac_cmd_pos, ALARM_CHEAK_USED);
                 break;
             case LEVEL2_REV_LIMIT:
                 if (runtime[var].config.level2_mode == 0)
@@ -459,19 +411,19 @@ static void check_for_soft_limit() {
                 {
                     runtime[var].temp_config.level2.positive_limit = runtime[var].limit_pos;
                 }
-                runtime[var].active_levels = Check_Axis_Limit_Violation(&runtime[var], rt_data->axis_data[var].wcs_cmd_pos_cur, ALARM_CHEAK_USED);
+                runtime[var].active_levels = Check_Axis_Limit_Violation(&runtime[var], rt_data->axis_data[var].mac_cmd_pos, ALARM_CHEAK_USED);
                 break;
             case LEVEL3_FWD_LIMIT:
                 runtime[var].temp_config.level3.negative_limit = runtime[var].limit_pos;
-                runtime[var].active_levels = Check_Axis_Limit_Violation(&runtime[var], rt_data->axis_data[var].wcs_cmd_pos_cur, ALARM_CHEAK_USED);
+                runtime[var].active_levels = Check_Axis_Limit_Violation(&runtime[var], rt_data->axis_data[var].mac_cmd_pos, ALARM_CHEAK_USED);
                 break;
             case LEVEL3_REV_LIMIT:
                 runtime[var].temp_config.level3.positive_limit = runtime[var].limit_pos;
-                runtime[var].active_levels = Check_Axis_Limit_Violation(&runtime[var], rt_data->axis_data[var].wcs_cmd_pos_cur, ALARM_CHEAK_USED);
+                runtime[var].active_levels = Check_Axis_Limit_Violation(&runtime[var], rt_data->axis_data[var].mac_cmd_pos, ALARM_CHEAK_USED);
                 break;
             default:
                 break;
-                }
+            }
         }
     }
 }

@@ -222,6 +222,16 @@ GNC_RES shm_var_update(){
         if(fabs(par_axis[i][PAR_AX_HOME_CRDS].value.val_real - var_axis[i][VAR_AXIS_CMD_POS_EX].value.f) > HOMEF_TOL){
             setVarAxisInt(i, VAR_AXIS_IS_HOMEF, 0, 0);
         }
+        // 绝对坐标显示
+        if (!rt_data->axis_data[i].axis_status.is_disable)
+        {
+            setVarAxisDouble(i, VAR_AXIS_CMD_POS_EX, rt_data->axis_data[i].wcs_cmd_pos_cur, 0);
+        }
+        // 机械坐标显示（机床锁住或者轴拆卸 位置不变）
+        if (!rt_data->sys_state[SYS_IS_MAC_LOCK] && !rt_data->axis_data[i].axis_status.is_disable)
+        {
+            setVarAxisDouble(i, VAR_AXIS_ACT_POS_EX, rt_data->axis_data[i].fb_pos_no_comp, 0);
+        }
     }
     for (int i = 0; i < SYS_CHAN_NUM; i++)
     {

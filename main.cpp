@@ -65,24 +65,9 @@ int main() {
     PlcTask::instance();
     RT_LOG(INFO,  "初始化PLC单例成功");
     LOG(LOG_LEVEL_INFO, "初始化PLC单例成功");
-#ifdef DEBUG_MODE_ENABLED
-    // 注入螺距误差补偿测试数据 (单位: um)
-    // X轴: 11个测量点, 正向[0..10] + 反向[11..21]
-    {
-        float test_pitch[PITCH_COUNT_MAX] = {0};
-        float fwd[] = {1, 10, 20};
-        float rev[] = {-1, -10, -20};
-        memcpy(test_pitch + 0,  fwd, sizeof(fwd));
-        memcpy(test_pitch + 3, rev, sizeof(rev));
-        setAllPitChData(test_pitch);
-        RT_LOG(INFO, "调试模式: 已注入螺距补偿测试数据");
-        LOG(LOG_LEVEL_INFO, "调试模式: 已注入螺距补偿测试数据");
-    }
-#endif
-    // 初始化螺距误差补偿
+    // 同步补偿参数(同步补偿参数和建立螺距补偿表)
     comp_data_init();
-    RT_LOG(INFO, "初始化螺距误差补偿成功");
-    LOG(LOG_LEVEL_INFO, "初始化螺距误差补偿成功");
+    RT_LOG(INFO, "同步补偿参数和建立螺补表成功");
     // 初始化译码器
     parser_new();
     RT_LOG(INFO, "初始化译码器成功");
