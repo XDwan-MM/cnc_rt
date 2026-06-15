@@ -62,8 +62,8 @@ void check_ferror_fault(void)
                 alarm_code = i * 10 + 100;   /* 报警号 移动时: X=100, Y=110, Z=120 */
                 fault_type = "移动时";
             } else {
-                alarm_code = i * 10 + 101;   /* 报警号 停止时: X=101, Y=111, Z=121 */
-                fault_type = "停止时";
+                alarm_code = i * 10 + 101;   /* 报警号 静止时: X=101, Y=111, Z=121 */
+                fault_type = "静止时";
             }
             int res = setAlarm(ALARM_AX, ALARM_ERROR, alarm_code);
             if (res == -8)
