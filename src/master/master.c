@@ -186,6 +186,9 @@ void Master_Run()
                 if((statis[i] & 0x0f) == 0x08)
                 {
                     CHECK_FUNC(GM_RxPdoEntry_Write(ControlWord[i], 0x80));
+                }
+                else
+                {
                     dri_manager.drivers[i]->state = DRV_STATE_NOT_READY;
                     dri_manager.drivers[i]->mode = DRV_MODE_DISABLED;
                 }
@@ -259,7 +262,7 @@ void Master_Run()
         }
         else
         {
-            if(spindle.state != DRV_STATE_READY_TO_SWITCHED_ON)
+            if(spindle.state != DRV_STATE_FAULT)
             {
                 CHECK_FUNC(GM_RxPdoEntry_Write(ControlWord[0], 0x00));
             }
@@ -269,12 +272,12 @@ void Master_Run()
         for (int i = 0; i < 4; i++)
         {
             CHECK_FUNC(GM_TxPdoEntry_Read(ErrorNumb[i], &error_code[i], 2)); // 获取状态字
-            dri_manager.drivers[i]->state = DRV_STATE_FAULT;
             if (i == 0)
             {
                 if (error_code[0] != 0 && !rt_data->axis_data[3].axis_status.is_disable)
                 {
                     rt_data->axis_data[3].axis_status.is_error = 1;
+                    dri_manager.drivers[i]->state = DRV_STATE_FAULT;
                 }
                 else
                 {
@@ -283,16 +286,15 @@ void Master_Run()
             }
             else
             {
-                // printf("i:%d %d \n ",i,rt_data->axis_data[i-1].axis_status.is_disable);
                 if (error_code[i] != 0 && !rt_data->axis_data[i-1].axis_status.is_disable)
                 {
                     rt_data->axis_data[i-1].axis_status.is_error = 1;
+                    dri_manager.drivers[i]->state = DRV_STATE_FAULT;
                 }
                 else
                 {
                     rt_data->axis_data[i-1].axis_status.is_error = 0;
                 }
-                // printf("rt_data->axis_data[i-1].axis_status.is_error:%d\n",rt_data->axis_data[i-1].axis_status.is_error);
             }
 
             if (rt_data->axis_data[i].axis_status.is_disable)
