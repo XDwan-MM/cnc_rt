@@ -43,6 +43,12 @@ void check_ferror_fault(void)
     }
 
     for (int i = 0; i < SYS_AXES_NUM; i++) {
+        // 控制轴拆卸或者机床锁住不进行检查
+        if (rt_data->sys_state[SYS_IS_MAC_LOCK] || rt_data->axis_data[i].axis_status.is_disable)
+        {
+            continue;
+        }
+
         double vel_cmd = var_axis[i][VAR_AXIS_CMD_VEL].value.f;
         double pos_cmd = rt_data->axis_data[i].motor_cmd_pos;
         double pos_fb  = rt_data->axis_data[i].motor_act_pos;
