@@ -168,6 +168,13 @@ static bool mem_check_res(GNC_RES res){
     case VP_LENGTH_IS_ZERO:
         return false;
 
+    case GNC_ARRIVE_CHECK_FAIL:
+        if(cycle_tp->is_resetting){
+            gcode_handle_reset();
+            return false;
+        }
+        return false;
+
     case GNC_DATA_NULL:
     case GNC_PARAM_UNVALID:
     case VP_IS_NULL:
@@ -181,7 +188,6 @@ static bool mem_check_res(GNC_RES res){
 
     case GNC_CAL_ERROR:
     case GNC_OPERATOR_ERROR:
-    case GNC_ARRIVE_CHECK_FAIL:
     case VP_CAL_ERROR:
     case VP_CAL_S_ERROR:
     case VP_CAL_V_ERROR:
@@ -540,19 +546,20 @@ static bool cycle_block_is_arrived(POS current_pos){
 }
 
 static bool cycle_block_axis_arrive_check(PLAN_BLOCK* current_block){
+    int res = 0;
     if((fabs(current_block->end_pos.x - rt_data->axis_data[AXIS_X].motor_act_pos)) > par_axis[AXIS_X][PAR_AX_POS_TOL].value.val_real) {
-        LOG(LOG_LEVEL_ERR, "X轴定位%f超过%f允差", fabs(current_block->end_pos.x - rt_data->axis_data[AXIS_X].motor_act_pos), par_axis[AXIS_X][PAR_AX_POS_TOL].value.val_real);
-        setAlarm(ALARM_AX, ALARM_ERROR, 103);
+        res = setAlarm(ALARM_AX, ALARM_WARNING, 103);
+        if (res != -8) LOG(LOG_LEVEL_ERR, "X轴定位%f超过%f允差", fabs(current_block->end_pos.x - rt_data->axis_data[AXIS_X].motor_act_pos), par_axis[AXIS_X][PAR_AX_POS_TOL].value.val_real);
         return false;
     }
     if((fabs(current_block->end_pos.y - rt_data->axis_data[AXIS_Y].motor_act_pos)) > par_axis[AXIS_Y][PAR_AX_POS_TOL].value.val_real) {
-        LOG(LOG_LEVEL_ERR, "Y轴定位%f超过%f允差", fabs(current_block->end_pos.y - rt_data->axis_data[AXIS_Y].motor_act_pos), par_axis[AXIS_Y][PAR_AX_POS_TOL].value.val_real);
-        setAlarm(ALARM_AX, ALARM_ERROR, 104);
+        res = setAlarm(ALARM_AX, ALARM_WARNING, 104);
+        if (res != -8) LOG(LOG_LEVEL_ERR, "Y轴定位%f超过%f允差", fabs(current_block->end_pos.y - rt_data->axis_data[AXIS_Y].motor_act_pos), par_axis[AXIS_Y][PAR_AX_POS_TOL].value.val_real);
         return false;
     }
     if((fabs(current_block->end_pos.z - rt_data->axis_data[AXIS_Z].motor_act_pos)) > par_axis[AXIS_Z][PAR_AX_POS_TOL].value.val_real) {
-        LOG(LOG_LEVEL_ERR, "Z轴定位%f超过%f允差", fabs(current_block->end_pos.z - rt_data->axis_data[AXIS_Z].motor_act_pos), par_axis[AXIS_Z][PAR_AX_POS_TOL].value.val_real);
-        setAlarm(ALARM_AX, ALARM_ERROR, 105);
+        res = setAlarm(ALARM_AX, ALARM_WARNING, 105);
+        if (res != -8) LOG(LOG_LEVEL_ERR, "Z轴定位%f超过%f允差", fabs(current_block->end_pos.z - rt_data->axis_data[AXIS_Z].motor_act_pos), par_axis[AXIS_Z][PAR_AX_POS_TOL].value.val_real);
         return false;
     }
     return true;
