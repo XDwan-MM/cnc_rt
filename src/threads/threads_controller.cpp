@@ -57,6 +57,8 @@ void* soft_plc_thread_func(void*) {
         sem_wait(&plc_sem);
         if (thread_exit_flag) break;
 
+        long long start_time = get_ns();
+
         #ifndef DEBUG_MODE_ENABLED
         // 将IO和MCP输入数据写至X变量
         uint32_t io_input = 0;
@@ -100,6 +102,14 @@ void* soft_plc_thread_func(void*) {
         
         pmc_g_input_scan_cycle();
         pmc_a_input_scan_cycle();
+
+        #ifndef DEBUG_MODE_ENABLED
+        long long end_time = get_ns();
+        if(end_time - start_time > 1e6 * 0.9 ) {
+            setAlarm(ALARM_PC, ALARM_ERROR, 1);
+            LOG(LOG_LEVEL_ERR, "PLC线程耗时 %10f ms", (end_time - start_time) / 1e6);
+        }
+        #endif
     }
     return NULL;
 }

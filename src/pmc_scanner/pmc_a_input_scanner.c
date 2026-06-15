@@ -53,12 +53,12 @@ void pmc_a_input_scan_cycle(void)
                 // 检测上升沿 (0 -> 1): 产生报警
                 if (SIGNAL_RISING(current_a_status[i], last_a_status[i], bit))
                 {
-                    setAlarm(ALARM_PC, ALARM_ERROR, alarm_no);
+                    setAlarm(ALARM_UP, ALARM_ERROR, alarm_no);
                 }
                 // 检测下降沿 (1 -> 0): 消除报警
                 else if (SIGNAL_FALLING(current_a_status[i], last_a_status[i], bit))
                 {
-                    delAlarm(ALARM_PC, ALARM_ERROR, alarm_no);
+                    delAlarm(ALARM_UP, ALARM_ERROR, alarm_no);
                 }
             }
             else
@@ -76,12 +76,12 @@ void pmc_a_input_scan_cycle(void)
                 // 检测上升沿 (0 -> 1): 产生提示
                 if (SIGNAL_RISING(current_a_status[i], last_a_status[i], bit))
                 {
-                    setAlarm(ALARM_PC, ALARM_WARNING, warning_no);
+                    setAlarm(ALARM_UP, ALARM_WARNING, warning_no);
                 }
                 // 检测下降沿 (1 -> 0): 消除提示
                 else if (SIGNAL_FALLING(current_a_status[i], last_a_status[i], bit))
                 {
-                    delAlarm(ALARM_PC, ALARM_WARNING, warning_no);
+                    delAlarm(ALARM_UP, ALARM_WARNING, warning_no);
                 }
             }
         }

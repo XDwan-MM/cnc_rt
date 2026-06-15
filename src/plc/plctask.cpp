@@ -97,6 +97,8 @@ void PlcTask::initDispatchTable() {
     // 定时器
     _dispatchTable[OP_TMRB] = &PlcTask::handleTMRB;
     _dispatchTable[OP_STMR] = &PlcTask::handleSTMR;
+    // 计数器
+    _dispatchTable[OP_CTRC] = &PlcTask::handleCTRC;
     // 移位操作
     _dispatchTable[OP_MOV]  = &PlcTask::handleMOV;
 }
@@ -556,8 +558,6 @@ void PlcTask::handleLBL(const LadInstr& instr) {
 
 void PlcTask::handleJMP(const LadInstr& instr) {
     if (static_cast<bool>(_currCtx->_logicStack & 1)) {
-        // 将当前 PC 入栈
-        _currCtx->_callStack.push(_currCtx->pc);
         Q_ASSERT(_labelPositions[_ladData.regs[instr.regIdx].idx] != -1);
         // 跳转到标签位置
         _currCtx->pc = _labelPositions[_ladData.regs[instr.regIdx].idx];
@@ -902,6 +902,31 @@ void PlcTask::handleSTMR(const LadInstr& instr) {
         }
     }
     timers[timerId] = 0;
+}
+
+void PlcTask::handleCTRC(const LadInstr& instr) {
+    int counterId = getValue(_ladData.regs[instr.regIdx]);
+    int presetVal = getValue(_ladData.regs[instr.regIdx + 1]);
+    _regData.regC[counterId+ REG_C_NUM] = presetVal;
+
+    bool rst = static_cast<bool>(_currCtx->_logicStack & 1);
+    _currCtx->_logicStack >>= 1;
+    bool act = static_cast<bool>(_currCtx->_logicStack & 1);
+
+    if (act) {
+        if (_regData.regC[counterId] < presetVal) {
+            _regData.regC[counterId]++;
+        }
+    }
+    if (rst) {
+        _regData.regC[counterId] = 0;
+    }
+
+    if (_regData.regC[counterId] >= presetVal) {
+        _currCtx->_logicStack |= 1;
+    } else {
+        _currCtx->_logicStack &= ~1;
+    }
 }
 
 void PlcTask::handleMOV(const LadInstr& instr) {
