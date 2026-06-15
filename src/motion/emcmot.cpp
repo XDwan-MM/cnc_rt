@@ -324,7 +324,11 @@ static void compute_error_comp()
         rt_data->axis_data[i].pitch_comp_val    = pitch_comp_val[i];
         rt_data->axis_data[i].backlash_comp_val = backlash_comp_val[i];
         rt_data->axis_data[i].perp_comp_val     = perp_comp_val[i];
+
+        
     }
+    // printf("luobu%f %f %f, bl%f %f %f\n", rt_data->axis_data[0].pitch_comp_val, rt_data->axis_data[1].pitch_comp_val,rt_data->axis_data[2].pitch_comp_val,
+    //     rt_data->axis_data[0].backlash_comp_val, rt_data->axis_data[1].backlash_comp_val, rt_data->axis_data[2].backlash_comp_val);
 }
 
 static void calcul_mac_cmd_pos()
