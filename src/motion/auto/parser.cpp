@@ -4,21 +4,21 @@
 #include <alarmapi.h>
 #include <string.h> 
 
-STATIC void parser_macro_init();
-STATIC GNC_RES parser_handle_recieve(pmc_data* motion_data, NcItpState *itp_state, int *line_no);
-STATIC GNC_RES parser_waiting_to_end();
-STATIC GNC_RES parser_waiting_for_motion();
-STATIC GNC_RES parser_waiting_for_buf();
-STATIC GNC_RES parser_handle_mcode(pmc_data* motion_data, NcItpState *itp_state, int *line_no);
-STATIC GNC_RES parser_handle_tcode(pmc_data* motion_data, NcItpState *itp_state, int *line_no);
-STATIC GNC_RES parser_handle_scode(pmc_data* motion_data, NcItpState *itp_state, int *line_no);
-STATIC GNC_RES parser_handle_gcode(pmc_data* motion_data, NcItpState *itp_state, int *line_no);
+static void parser_macro_init();
+static GNC_RES parser_handle_recieve(pmc_data* motion_data, NcItpState *itp_state, int *line_no);
+static GNC_RES parser_waiting_to_end();
+static GNC_RES parser_waiting_for_motion();
+static GNC_RES parser_waiting_for_buf();
+static GNC_RES parser_handle_mcode(pmc_data* motion_data, NcItpState *itp_state, int *line_no);
+static GNC_RES parser_handle_tcode(pmc_data* motion_data, NcItpState *itp_state, int *line_no);
+static GNC_RES parser_handle_scode(pmc_data* motion_data, NcItpState *itp_state, int *line_no);
+static GNC_RES parser_handle_gcode(pmc_data* motion_data, NcItpState *itp_state, int *line_no);
 static GNC_RES parser_set_content(NC_MODE nc_mode);
-STATIC bool parser_check_res(GNC_RES res);
+static bool parser_check_res(GNC_RES res);
 
 PARSER_DATA* parser_data;
 
-STATIC void parser_macro_init()
+static void parser_macro_init()
 {
     for (int i = 0; i < 30000; ++i) {
         parser_data->cmv[i] = 0;
@@ -197,7 +197,7 @@ GNC_RES parser_reading(){
     return res;
 }
 
-STATIC bool parser_check_res(GNC_RES res){
+static bool parser_check_res(GNC_RES res){
     switch(res){
         case GNC_PARSER_OVER:
             LOG(LOG_LEVEL_INFO, "译码结束");
@@ -234,7 +234,7 @@ STATIC bool parser_check_res(GNC_RES res){
     }
 }
 
-STATIC GNC_RES parser_handle_recieve(pmc_data* motion_data, NcItpState *itp_state, int *line_no){
+static GNC_RES parser_handle_recieve(pmc_data* motion_data, NcItpState *itp_state, int *line_no){
     GNC_RES res = GNC_OPERATOR_SUCCESS;
     // 模式
     switch(motion_data->mode){
@@ -256,7 +256,7 @@ STATIC GNC_RES parser_handle_recieve(pmc_data* motion_data, NcItpState *itp_stat
     return res;
 }
 
-STATIC GNC_RES parser_handle_gcode(pmc_data* motion_data, NcItpState *itp_state, int *line_no)
+static GNC_RES parser_handle_gcode(pmc_data* motion_data, NcItpState *itp_state, int *line_no)
 {
     GCODE_BLOCK gcode_block;
     // 插补类型
@@ -318,7 +318,7 @@ STATIC GNC_RES parser_handle_gcode(pmc_data* motion_data, NcItpState *itp_state,
     return GNC_OPERATOR_SUCCESS;
 }
 
-STATIC GNC_RES parser_handle_mcode(pmc_data* motion_data, NcItpState *itp_state, int *line_no){
+static GNC_RES parser_handle_mcode(pmc_data* motion_data, NcItpState *itp_state, int *line_no){
     MCODE_BLOCK mcode_block;
     // 子程序调用M98和M99
     if(motion_data->m_code == 98 || motion_data->m_code == 99){

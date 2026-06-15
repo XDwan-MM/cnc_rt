@@ -61,12 +61,10 @@ static void nc_deal_mcode(){
         case M02: // 复位
             setRegValue8(REG_F, 10, 0x02); 
             setRegBit(REG_F, 9, 5);  
-            setVarChanInt(0, VAR_CHAN_RUN_ROW, 0, 0);
             break;
         case M30: // 复位
             setRegValue8(REG_F, 10, 0x1e); 
             setRegBit(REG_F, 9, 4);  
-            setVarChanInt(0, VAR_CHAN_RUN_ROW, 0, 0);
             break;
         case M03: // 主轴正转
             setRegValue8(REG_F, 10, 0x03); 
@@ -194,6 +192,8 @@ static void nc_check_fin(){
     getRegBit(REG_G, 4, 3, &mcode_data->signal_fin);
     // FIN为1时，nc侧将MF选通信号置为0
     if(mcode_data->signal_fin){
+        // 程序运行行光标回到首行
+        if(mcode_data->mcode_block[0].m_code == M02 || mcode_data->mcode_block[0].m_code == M30) setVarChanInt(0, VAR_CHAN_RUN_ROW, 0, 0);
         // 完成信号宽幅时间，缺省值2ms
         if(mcode_data->tfin_count >= par_chan[0][PAR_CH_TFIN_DELEY].value.val_int){
             // FIN为1，MF为0后，nc侧将代码信号置为0

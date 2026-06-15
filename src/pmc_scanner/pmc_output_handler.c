@@ -15,6 +15,7 @@ static void pmc_output_auto();
 static void pmc_output_reset();
 static void pmc_output_axis_status();
 static void pmc_outpus_spl_vel_status();
+
 void pmc_output_feedback()
 {
     pmc_output_alarm();

@@ -31,7 +31,7 @@ static int sys_close_rt = 0;
 
 // Ctrl + C 终止程序触发
 void sigint_handler([[maybe_unused]] int sig) {
-    LOG(LOG_LEVEL_INFO, "收到 Ctrl + C 按键信号");
+    RT_LOG(INFO, "收到 Ctrl + C 按键信号");
     exit_flag = 1;
 }
 

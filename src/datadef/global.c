@@ -120,11 +120,6 @@ static GNC_RES shm_var_init(){
         setVarChanInt(i, VAR_CHAN_IS_ESTOP, 0, 0);              // 急停
         setVarChanInt(i, VAR_CHAN_IS_RESETTING, 0, 0);          // 复位中
         setVarChanInt(i, VAR_CHAN_IS_MOVING, 0, 0);             // 轴移动中
-        #ifdef DEBUG_MODE_ENABLED
-        setVarChanDouble(i, VAR_CHAN_FEED_OVERRIDE, 100.0, 0);    // 进给倍率    
-        setVarChanDouble(i, VAR_CHAN_RAPID_OVERRIDE, 100.0, 0);   // 快速进给倍率
-        setVarChanDouble(i, VAR_CHAN_SPDL_OVERRIDE, 100.0, 0);    // 主轴倍率
-        #endif
     }
     // 坐标轴数据
     for(int i = 0; i < SYS_AXES_NUM; i++){    

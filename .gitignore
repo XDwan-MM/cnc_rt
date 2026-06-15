@@ -95,6 +95,9 @@ lib/CNC_ErrorComp/README.md
 lib/cncshm/bin/
 lib/log/bin/
 
+lib/kinematic/*.c
+lib/kinematic/test/
+
 # data
 data/
 
