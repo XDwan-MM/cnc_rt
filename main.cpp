@@ -6,7 +6,7 @@
 #include "main_demo.h"
 #include "shmapi.h"
 #include "rt_sem.h"
-#include "src/plc/plctask.h"
+#include "plctask.h"
 #include "threads_api.h"
 #include "threads_controller.h"
 #include "debug_mode.h"
