@@ -168,6 +168,7 @@ GNC_RES parser_reading(){
     rt_set_parser_state(error_no, parser_data->itp_line_no);
     if (error_no >= 0)
     {
+        LOG(LOG_LEVEL_DEBUG, "error line: %d", parser_data->itp_line_no);
         return GNC_PARSER_OVER;
     }
     if (parser_data->itp_datas.count <= 0)
@@ -302,7 +303,6 @@ static GNC_RES parser_handle_gcode(pmc_data* motion_data, NcItpState *itp_state,
     gcode_block.line_number = *line_no;
     // 暂停时间
     gcode_block.pause_time = motion_data->pause_time;
-    // LOG(LOG_LEVEL_DEBUG,　"pos %f %f %f mode %d no %d", motion_data->position.x, motion_data->position.y, motion_data->position.z, gcode_block.mode, gcode_block.line_number);
     // 加入队列
     if(gcode_queue_is_full(gcode_queue)){
         return GNC_DATA_FULL;
@@ -312,6 +312,12 @@ static GNC_RES parser_handle_gcode(pmc_data* motion_data, NcItpState *itp_state,
     {
         return GNC_PARSER_WAIT;
     }
+    // ======= 测试 ===========
+    // if(gcode_block.type == CIRCLE_CW || gcode_block.type == CIRCLE_CCW ){
+    //     LOG(LOG_LEVEL_DEBUG, "center pos %f %f %f no %d", gcode_block.center_pos.x, gcode_block.center_pos.y, gcode_block.center_pos.z, gcode_block.line_number);  
+    // }
+    // LOG(LOG_LEVEL_DEBUG, "end pos %f %f %f mode %d type:%d no %d", motion_data->position.x, motion_data->position.y, motion_data->position.z, gcode_block.mode, gcode_block.type, gcode_block.line_number);
+    // ======= 测试 ===========
     gcode_queue_push(gcode_queue, &gcode_block);
     rt_set_chan_state(0, CHAN_IS_GCODE_END, false);
     // printf("type: %d, feed_vel: %.2f, pos:(%.2f, %.2f, %.2f)\n", gcode_block.type, gcode_block.feed_vel, gcode_block.pos.x, gcode_block.pos.y, gcode_block.pos.z);

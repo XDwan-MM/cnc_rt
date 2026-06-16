@@ -31,7 +31,7 @@ static GNC_RES cycle_tp_cal_running(VELPLAN_TYPE vplan_mode, double ncu_cycle);
 static GNC_RES cycle_tp_cal_pausing(VELPLAN_TYPE vplan_mode, double ncu_cycle, double vs, double ve);
 static GNC_RES cycle_tp_add_block();
 static GNC_RES cycle_tp_look_ahead(VELPLAN_TYPE vplan_mode, double ncu_cycle, double vs);
-static bool cycle_block_axis_arrive_check(PLAN_BLOCK* current_block);
+static bool cycle_block_axis_arrive_check();
 static bool cycle_block_arrive_check();
 static bool cycle_tp_is_zerovel_and_zerorate(double current_vel);
 static bool cycle_tp_check_switching_dist(VELPLAN_TYPE vplan_mode, double current_vel, double target_vel);
@@ -545,23 +545,23 @@ static bool cycle_block_is_arrived(POS current_pos){
     return true;
 }
 
-static bool cycle_block_axis_arrive_check(PLAN_BLOCK* current_block){
+static bool cycle_block_axis_arrive_check(){
     int res = 0;
     bool is_arrived = true;
-    if((fabs(current_block->end_pos.x - rt_data->axis_data[AXIS_X].motor_act_pos)) > par_axis[AXIS_X][PAR_AX_POS_TOL].value.val_real) {
+    if((fabs(cycle_tp->plan_block->end_pos.x - rt_data->axis_data[AXIS_X].motor_act_pos)) > par_axis[AXIS_X][PAR_AX_POS_TOL].value.val_real) {
         is_arrived = false;
         res = setAlarm(ALARM_AX, ALARM_WARNING, 103);
-        if (res != -8) LOG(LOG_LEVEL_DEBUG, "X轴定位%f超过%f允差,等待到位...", fabs(current_block->end_pos.x - rt_data->axis_data[AXIS_X].motor_act_pos), par_axis[AXIS_X][PAR_AX_POS_TOL].value.val_real);
+        if (res != -8) LOG(LOG_LEVEL_DEBUG, "X轴终点%f,实际偏差%f超过目标%f允差,等待到位...", cycle_tp->plan_block->end_pos.x, fabs(cycle_tp->plan_block->end_pos.x - rt_data->axis_data[AXIS_X].motor_act_pos), par_axis[AXIS_X][PAR_AX_POS_TOL].value.val_real);
     }
-    if((fabs(current_block->end_pos.y - rt_data->axis_data[AXIS_Y].motor_act_pos)) > par_axis[AXIS_Y][PAR_AX_POS_TOL].value.val_real) {
+    if((fabs(cycle_tp->plan_block->end_pos.y - rt_data->axis_data[AXIS_Y].motor_act_pos)) > par_axis[AXIS_Y][PAR_AX_POS_TOL].value.val_real) {
         is_arrived = false;
         res = setAlarm(ALARM_AX, ALARM_WARNING, 104);
-        if (res != -8) LOG(LOG_LEVEL_DEBUG, "Y轴定位%f超过%f允差,等待到位...", fabs(current_block->end_pos.y - rt_data->axis_data[AXIS_Y].motor_act_pos), par_axis[AXIS_Y][PAR_AX_POS_TOL].value.val_real);
+        if (res != -8) LOG(LOG_LEVEL_DEBUG, "Y轴终点%f,实际偏差%f超过目标%f允差,等待到位...", cycle_tp->plan_block->end_pos.y, fabs(cycle_tp->plan_block->end_pos.y - rt_data->axis_data[AXIS_Y].motor_act_pos), par_axis[AXIS_Y][PAR_AX_POS_TOL].value.val_real);
     }
-    if((fabs(current_block->end_pos.z - rt_data->axis_data[AXIS_Z].motor_act_pos)) > par_axis[AXIS_Z][PAR_AX_POS_TOL].value.val_real) {
+    if((fabs(cycle_tp->plan_block->end_pos.z - rt_data->axis_data[AXIS_Z].motor_act_pos)) > par_axis[AXIS_Z][PAR_AX_POS_TOL].value.val_real) {
         is_arrived = false;
         res = setAlarm(ALARM_AX, ALARM_WARNING, 105);
-        if (res != -8) LOG(LOG_LEVEL_DEBUG, "Z轴定位%f超过%f允差,等待到位...", fabs(current_block->end_pos.z - rt_data->axis_data[AXIS_Z].motor_act_pos), par_axis[AXIS_Z][PAR_AX_POS_TOL].value.val_real);
+        if (res != -8) LOG(LOG_LEVEL_DEBUG, "Z轴终点%f,实际偏差%f超过目标%f允差,等待到位...", cycle_tp->plan_block->end_pos.z, fabs(cycle_tp->plan_block->end_pos.z - rt_data->axis_data[AXIS_Z].motor_act_pos), par_axis[AXIS_Z][PAR_AX_POS_TOL].value.val_real);
     }
     if(is_arrived){
         delAlarm(ALARM_AX, ALARM_WARNING, 103);
@@ -576,19 +576,20 @@ static bool cycle_block_axis_arrive_check(PLAN_BLOCK* current_block){
 static bool cycle_block_arrive_check(){
     // LOG(LOG_LEVEL_DEBUG, "motor_cmd_pos:%f %f %f", rt_data->axis_data[0].motor_cmd_pos, rt_data->axis_data[1].motor_cmd_pos, rt_data->axis_data[2].motor_cmd_pos);
     // LOG(LOG_LEVEL_DEBUG, "motor_act_pos:%f %f %f", rt_data->axis_data[0].motor_act_pos, rt_data->axis_data[1].motor_act_pos, rt_data->axis_data[2].motor_act_pos);       
-    PLAN_BLOCK* current_block = queue_peak(plan_queue);
     // 如果是到位检测模组，发送到位信号
-    if(current_block->mode == PMC_MODE_ARRIVE_CHECK){
-        if(!cycle_block_axis_arrive_check(current_block)) return false;
-        LOG(LOG_LEVEL_DEBUG,  "到位检测 pos:%f %f %f vel:%f", rt_data->axis_data[AXIS_X].motor_act_pos, rt_data->axis_data[AXIS_Y].motor_act_pos, rt_data->axis_data[AXIS_Z].motor_act_pos, current_block->end_vel);
+    if(cycle_tp->plan_block->mode == PMC_MODE_ARRIVE_CHECK){
+        if(!cycle_block_axis_arrive_check()) return false;
+        LOG(LOG_LEVEL_DEBUG,  "到位检测 目标pos:%f %f %f vel:%f", rt_data->axis_data[AXIS_X].motor_cmd_pos, rt_data->axis_data[AXIS_Y].motor_cmd_pos, rt_data->axis_data[AXIS_Z].motor_cmd_pos, cycle_tp->plan_block->end_vel);
+        LOG(LOG_LEVEL_DEBUG,  "到位检测 实际pos:%f %f %f vel:%f", rt_data->axis_data[AXIS_X].motor_act_pos, rt_data->axis_data[AXIS_Y].motor_act_pos, rt_data->axis_data[AXIS_Z].motor_act_pos, cycle_tp->plan_block->end_vel);
     }
-    if(current_block->mode == PMC_MODE_EXACT_STOP) {
-        if(!cycle_block_axis_arrive_check(current_block)) return false;
-        LOG(LOG_LEVEL_DEBUG,  "精准停 pos:%f %f %f vel:%f", rt_data->axis_data[AXIS_X].motor_act_pos, rt_data->axis_data[AXIS_Y].motor_act_pos, rt_data->axis_data[AXIS_Z].motor_act_pos, current_block->end_vel);
+    if(cycle_tp->plan_block->mode == PMC_MODE_EXACT_STOP) {
+        if(!cycle_block_axis_arrive_check()) return false;
+        LOG(LOG_LEVEL_DEBUG,  "精准停 目标pos:%f %f %f vel:%f", rt_data->axis_data[AXIS_X].motor_cmd_pos, rt_data->axis_data[AXIS_Y].motor_cmd_pos, rt_data->axis_data[AXIS_Z].motor_cmd_pos, cycle_tp->plan_block->end_vel);
+        LOG(LOG_LEVEL_DEBUG,  "精准停 实际pos:%f %f %f vel:%f", rt_data->axis_data[AXIS_X].motor_act_pos, rt_data->axis_data[AXIS_Y].motor_act_pos, rt_data->axis_data[AXIS_Z].motor_act_pos, cycle_tp->plan_block->end_vel);
     }
     // 判断到位宽度
-    if(current_block->type == RAPID){
-        return cycle_block_axis_arrive_check(current_block);
+    if(cycle_tp->plan_block->type == RAPID){
+        return cycle_block_axis_arrive_check();
     }
     return true;
 }

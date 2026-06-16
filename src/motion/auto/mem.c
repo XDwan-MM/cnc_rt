@@ -69,8 +69,8 @@ static void auto_set_state(){
         if(!reset_trigger){
             reset_trigger = true;
             auto_handle_alarm();
-            return;
         }
+        return;
     }else reset_trigger = false;
     switch(rt_data->nc_event){
         case SYS_EVENT_NONE:
