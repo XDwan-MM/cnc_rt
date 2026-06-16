@@ -53,6 +53,20 @@ int main() {
         RT_LOG(INFO,  "共享内存初始化成功");
         LOG(LOG_LEVEL_INFO, "共享内存初始化成功");
     }
+    // 等待实时开始初始化信号
+    RT_LOG(INFO, "等待实时启动信号");
+    LOG(LOG_LEVEL_INFO, "等待实时启动信号");
+    // 如果想脱离界面进行调试，请解除注释
+    // #ifdef DEBUG_MODE_ENABLED
+    // setSysCommInt(SYS_START_RT, 1, 0);
+    // #endif
+    while (true) {
+        getSysCommInt(SYS_START_RT, &sys_start_rt, 0);
+        if(sys_start_rt) break;
+        sleep(1);
+    }
+    RT_LOG(INFO, "获取到实时启动信号");
+    LOG(LOG_LEVEL_INFO, "获取到实时启动信号");
     // 初始化实时全局变量
     if(rt_global_init() != GNC_OPERATOR_SUCCESS){
         RT_LOG(ERROR,  "全局变量初始化失败");
@@ -81,20 +95,6 @@ int main() {
     //初始化行程检查功能
     Axis_Limit_Manager_Init();
     signal(SIGINT, sigint_handler);
-    // 等待实时开始初始化信号
-    RT_LOG(INFO, "等待实时启动信号");
-    LOG(LOG_LEVEL_INFO, "等待实时启动信号");
-    // 如果想脱离界面进行调试，请解除注释
-    // #ifdef DEBUG_MODE_ENABLED
-    // setSysCommInt(SYS_START_RT, 1, 0);
-    // #endif
-    while (true) {
-        getSysCommInt(SYS_START_RT, &sys_start_rt, 0);
-        if(sys_start_rt) break;
-        sleep(1);
-    }
-    RT_LOG(INFO, "获取到实时启动信号");
-    LOG(LOG_LEVEL_INFO, "获取到实时启动信号");
     // 启动主站
 #ifndef DEBUG_MODE_ENABLED
     if (Master_Start() < 0) {
