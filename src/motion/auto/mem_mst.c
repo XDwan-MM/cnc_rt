@@ -5,6 +5,7 @@
 #include "spl_control.h"
 #include "regapi.h"
 #include <hmisysapi.h>  
+#include <alarmapi.h>
 
 static void nc_deal_mcode();
 static void nc_output_mf();
@@ -12,6 +13,8 @@ static void nc_check_fin();
 static void nc_clear_msignal();
 static void mcode_data_mend();
 static void mstb_lock_on();
+static void mstb_fin_alert();
+static void mstb_fin_reset();
 
 void auto_execute_mcode(){
     switch (mcode_data->mcode_state)
@@ -144,6 +147,7 @@ static void nc_output_mf(){
                     setRegBit(REG_F, 7, 0);
                     mcode_data->signal_mf = true;
                     LOG(LOG_LEVEL_DEBUG, "2、延时%dms后输出MF信号", par_chan[0][PAR_CH_TMF_DELAY].value.val_int);
+                    mstb_fin_alert();
                 }
             }
             else mcode_data->tmf_count ++;
@@ -157,6 +161,7 @@ static void nc_output_mf(){
                     setRegBit(REG_F, 8, 4);
                     mcode_data->signal_mf = true;
                     LOG(LOG_LEVEL_DEBUG, "2、延时%dms后输出MF信号", par_chan[0][PAR_CH_TMF_DELAY].value.val_int);
+                    mstb_fin_alert();
                 }
             }
             else mcode_data->tmf_count ++;
@@ -171,6 +176,7 @@ static void nc_output_mf(){
                     setRegBit(REG_F, 8, 5);
                     mcode_data->signal_mf = true;
                     LOG(LOG_LEVEL_DEBUG, "2、延时%dms后输出MF信号", par_chan[0][PAR_CH_TMF_DELAY].value.val_int);
+                    mstb_fin_alert();
                 }
             }
             else mcode_data->tmf_count ++;
@@ -192,6 +198,7 @@ static void nc_check_fin(){
     getRegBit(REG_G, 4, 3, &mcode_data->signal_fin);
     // FIN为1时，nc侧将MF选通信号置为0
     if(mcode_data->signal_fin){
+        mstb_fin_reset();
         // 程序运行行光标回到首行
         if(mcode_data->mcode_block[0].m_code == M02 || mcode_data->mcode_block[0].m_code == M30) setVarChanInt(0, VAR_CHAN_RUN_ROW, 0, 0);
         // 完成信号宽幅时间，缺省值2ms
@@ -203,6 +210,18 @@ static void nc_check_fin(){
         }
         else mcode_data->tfin_count ++;
     }
+}
+
+// 等待FIN信号的提示
+static void mstb_fin_alert(){
+    var_chan[0][VAR_CHAN_FIN_SIGNAL].value.i = 1;
+    setAlarm(ALARM_CH, ALARM_WARNING, 0);
+    LOG(LOG_LEVEL_DEBUG, "M%d获取不到FIN信号,等待中...", mcode_data->mcode_block[0].m_code);
+}
+
+static void mstb_fin_reset(){
+    var_chan[0][VAR_CHAN_FIN_SIGNAL].value.i = 0;
+    delAlarm(ALARM_CH, ALARM_WARNING, 0);
 }
 
 // 开启辅助功能锁住

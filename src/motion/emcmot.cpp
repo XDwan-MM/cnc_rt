@@ -108,7 +108,7 @@ void emcmotTrajPlan() {
 
         // 清除事件
         rt_data->nc_event = SYS_EVENT_NONE;
-        }
+    }
 }
 
 // 路径规划
