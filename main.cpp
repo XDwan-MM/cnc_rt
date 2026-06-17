@@ -96,7 +96,7 @@ int main() {
     Axis_Limit_Manager_Init();
     signal(SIGINT, sigint_handler);
     // 启动主站
-#ifndef DEBUG_MODE_ENABLED
+    #ifndef DEBUG_MODE_ENABLED
     if (Master_Start() < 0) {
         RT_LOG(ERROR, "EtherCAT主站启动失败，请检查ENI文件是否正确");
         LOG(LOG_LEVEL_ERR, "EtherCAT主站启动失败，请检查ENI文件是否正确");
@@ -104,7 +104,7 @@ int main() {
     }
     RT_LOG(INFO, "启动EtherCAT主站");
     LOG(LOG_LEVEL_INFO, "启动EtherCAT主站");
-#endif
+    #endif
     // 创建信号量，需要放在线程启动（threads_start函数）前
     init_rt_sem();
     // 启动各个线程，pdo线程运行master_run，给各实时线程发送信号量
@@ -150,13 +150,12 @@ int main() {
     // 释放线程
     threads_joint();
     destroy_rt_sem();
-    // 关闭主站
-    int error_code = ethercat_close();
-    if ( error_code < 0) {
-        RT_LOG(ERROR,  "关闭EtherCAT失败，错误码 %d", error_code);
-        LOG(LOG_LEVEL_ERR, "关闭EtherCAT失败，错误码 %d", error_code);
-        return -1;
-    }
+    #ifndef DEBUG_MODE_ENABLED
+    // 关闭主轴
+    Master_Close();
+    RT_LOG(INFO, "收到退出信号，关闭主站");
+    LOG(LOG_LEVEL_INFO, "收到退出信号，关闭主站");
+    #endif
     RT_LOG(INFO,  "退出实时程序");
     LOG(LOG_LEVEL_INFO, "退出实时程序");
     RT_LOG(INFO, "********************************************************");

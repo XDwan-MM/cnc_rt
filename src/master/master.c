@@ -49,6 +49,15 @@ int Master_Start() {
     return 1;
 }
 
+int Master_Close() {
+    int error_code = ethercat_close();
+    if ( error_code < 0) {
+        RT_LOG(ERROR,  "关闭EtherCAT失败，错误码 %d", error_code);
+        LOG(LOG_LEVEL_ERR, "关闭EtherCAT失败，错误码 %d", error_code);
+        return -1;
+    }
+}
+
 static void Master_Receive(){
     slavernum = Hal_Driver_Get_Count();
     statis = (uint16_t*)malloc(slavernum * sizeof(uint16_t));
