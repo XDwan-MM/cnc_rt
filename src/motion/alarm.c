@@ -10,6 +10,8 @@ void handle_estop_cmd(){
     if(!rt_data->sys_state[SYS_IS_ESTOP_ON])
     {
         rt_data->sys_state[SYS_IS_ESTOP_ON] = true;
+        // 实时急停报警
+        setAlarm(ALARM_SY, ALARM_ERROR, 0);
         // 系统事件置为NONE
         rt_data->nc_event = SYS_EVENT_NONE;
         // 人机交互状态栏显示急停报警

@@ -7,6 +7,7 @@
 #include "global.h"
 #include <hmisysapi.h>
 #include "spl_control.h"
+#include "alarmapi.h"
 
 static void pmc_output_alarm();
 static void pmc_output_mode();
@@ -28,8 +29,11 @@ void pmc_output_feedback()
 }
 
 static void pmc_output_alarm(){
-    // 报警中
-    if (rt_data->sys_state[SYS_IS_ALARMING])
+    // F1.0 报警中：TH报警、TV报警、PS报警、超程报警、过热报警、伺服报警，不包括急停报警
+    int ax_cnt, dv_cnt = 0;
+    getAlarmCount(ALARM_AX, ALARM_ERROR, &ax_cnt);
+    getAlarmCount(ALARM_SV, ALARM_ERROR, &dv_cnt);
+    if (ax_cnt || dv_cnt || rt_get_sys_state(SYS_IS_ESTOP_PRESS))
         setRegBit(REG_F, 1, 0);
     else
         clearRegBit(REG_F, 1, 0);
@@ -128,7 +132,6 @@ static void pmc_output_reset()
         if (rt_data->nc_reset.reset_tic < par_mac[PAR_MAC_HARD_RESET_DELAY].value.val_int)
         {
             rt_data->nc_reset.reset_tic++;
-            setRegBit(REG_F, 1, 1);
             // LOG(LOG_LEVEL_DEBUG, "复位减速后延时 %d", rt_data->nc_reset.reset_tic);
         }
         else

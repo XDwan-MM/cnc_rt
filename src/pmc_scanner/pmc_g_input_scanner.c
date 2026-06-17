@@ -95,7 +95,8 @@ void pmc_g_input_scan_cycle(void)
     if (SIGNAL_FALLING(curr_g.g_regs[8], last_g.g_regs[8], 4))
     {
         // 急停按键拍下
-        rt_data->sys_state[SYS_IS_ESTOP_PRESS] = true;
+        // rt_data->sys_state[SYS_IS_ESTOP_PRESS] = true;
+        rt_set_sys_state(SYS_IS_ESTOP_PRESS, true);
         LOG(LOG_LEVEL_INFO, "扫描到急停按键: 拍下");
     }
     // 检测急停释放 0->1（上升沿）
@@ -103,7 +104,8 @@ void pmc_g_input_scan_cycle(void)
     {
         // 急停按键释放
         // 复位后实时内部急停标志rt_data->sys_state[SYS_IS_ESTOP_ON]置为false
-        rt_data->sys_state[SYS_IS_ESTOP_PRESS] = false;
+        // rt_data->sys_state[SYS_IS_ESTOP_PRESS] = false;
+        rt_set_sys_state(SYS_IS_ESTOP_PRESS, false);
         LOG(LOG_LEVEL_INFO, "扫描到急停按键: 释放");
     }
 
