@@ -53,12 +53,9 @@ static void auto_check_prog_end(){
             LOG(LOG_LEVEL_INFO, "error line: %d", error_line);
             LOG(LOG_LEVEL_ERR, "译码错误 %d", error_no);
         }else{
-            // 加工计数
-            setVarChanInt(0, VAR_CHAN_PART_CNTR, var_chan[0][VAR_CHAN_PART_CNTR].value.i + 1, 0);
-            LOG(LOG_LEVEL_INFO, "加工计数 %d", var_chan[0][VAR_CHAN_PART_CNTR].value.i);
             gcode_handle_reset();
             mcode_handle_reset();
-            LOG(LOG_LEVEL_INFO, "程序运行结束");
+            LOG(LOG_LEVEL_DEBUG, "程序结束");
         } 
     }
 }
@@ -69,8 +66,8 @@ static void auto_set_state(){
         if(!reset_trigger){
             reset_trigger = true;
             auto_handle_alarm();
-            return;
         }
+        return;
     }else reset_trigger = false;
     switch(rt_data->nc_event){
         case SYS_EVENT_NONE:

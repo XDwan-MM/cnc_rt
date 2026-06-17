@@ -17,6 +17,8 @@ void Master_Wait_Sync();
 void Master_Reset();
 // 检查驱动器报错
 void Check_Driver_Error();
+// 关闭主站
+int Master_Close();
 
 #ifdef __cplusplus
 }

@@ -96,6 +96,7 @@ void nc_set_resetting(){
 }
 
 void nc_set_resetted(){
+    if(rt_data->sys_state[SYS_IS_ALARMING]) return;
     switch (rt_data->current_mode) {
         case MODE_MDI: // MDI
         case MODE_MEM: // 记忆

@@ -38,7 +38,7 @@ help|--help|-h|-H
 
 
 
-### 实时调试
+### 实时单独启动
 
 如果想脱离界面，只启动实时进行调试，可继续使用之前的启动方式 sudo ./build.sh debug
 
@@ -52,6 +52,14 @@ help|--help|-h|-H
     // setSysCommInt(SYS_START_RT, 1, 0);
     // #endif
 ```
+
+
+### 调试
+
+如果想要启动界面，然后在实时调试
+
+界面启动：sudo -E LD_LIBRARY_PATH=../include/cncshm/bin ./cnc_hmi_v3 -p
+
 
 
 ### 共享内存

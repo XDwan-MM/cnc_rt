@@ -130,7 +130,7 @@ void emcmotPathPlan() {
 
 static void set_operating_mode() {
     // 急停拍下时不允许切换模式
-    if (rt_data->sys_state[SYS_IS_ESTOP_PRESS]) return;
+    if (rt_get_sys_state(SYS_IS_ESTOP_PRESS)) return;
     // 如果没有切换，不进行操作
     if (rt_data->current_mode == rt_data->target_mode) {
         rt_data->sys_state[SYS_IS_SWITCHING_MODE] = false;
@@ -216,7 +216,7 @@ static void get_cmd_pos() {
 }
 
 static void check_for_fault() {
-    if(rt_data->sys_state[SYS_IS_ESTOP_PRESS]){
+    if(rt_get_sys_state(SYS_IS_ESTOP_PRESS)){
         handle_estop_cmd();
     }
     //　检查系统报警和内部急停标志
