@@ -157,7 +157,7 @@ static bool mem_check_res(GNC_RES res){
         // 运行中无数据，则进入等待 
         if(mem_check_running()){
             if(queue_is_empty(pretreat_queue) && gcode_queue_is_empty(gcode_queue)){
-                // if(!rt_get_chan_state(0, CHAN_IS_GCODE_END)) LOG(LOG_LEVEL_DEBUG, "gcode is empty");
+                if(!rt_get_chan_state(0, CHAN_IS_GCODE_END)) LOG(LOG_LEVEL_DEBUG, "gcode队列为空");
                 rt_set_chan_state(0, CHAN_IS_GCODE_END, true);
                 cycle_tp->is_arrive_at_the_end = false;
             }
@@ -434,11 +434,12 @@ static GNC_RES cycle_tp_update_vp(VELPLAN_TYPE vplan_mode, double ncu_cycle, dou
 }
 
 static GNC_RES plan_block_get_next(){
+    cycle_tp->is_arrive_at_the_end = false;
     PLAN_BLOCK* head_block = NULL;
     while(true){
         head_block = queue_peak(plan_queue);
         setVarChanInt(0, VAR_CHAN_RUN_ROW, head_block->line_number, 0);
-        // LOG(LOG_LEVEL_INFO, "gline: %d", head_block->line_number);
+        // LOG(LOG_LEVEL_INFO, "gline: %d vel :%f end pos: %f", head_block->line_number, head_block->end_vel, head_block->end_pos.z);
         queue_pop(plan_queue);
         if(queue_is_empty(plan_queue)) return GNC_DATA_EMPTY;
         head_block = queue_peak(plan_queue);
@@ -504,6 +505,7 @@ static GNC_RES cycle_tp_cal_pausing(VELPLAN_TYPE vplan_mode, double ncu_cycle, d
         cycle_tp->vel_profile->t_cycle = 0;
         cycle_tp->traj_data->v = ve;
         cycle_tp->is_paused_inside_block = true;
+        cycle_tp->is_arrive_at_the_end = true;
         LOG(LOG_LEVEL_DEBUG, "减速距离极小:%f,当前速度:%f,目标速度:%f", decline_s, vs, ve);
         return VP_LENGTH_IS_ZERO;
     }
@@ -541,8 +543,7 @@ static bool cycle_block_is_arrived(POS current_pos){
         else return false;
     }
     // LOG(LOG_LEVEL_DEBUG, "is arrive: %d, line number: %d, length: %f", cycle_tp->is_arrive_at_the_end, cycle_tp->plan_block->line_number, head_block->length);
-    if(!cycle_tp->is_arrive_at_the_end) return false;
-    return true;
+    return cycle_tp->is_arrive_at_the_end;
 }
 
 static bool cycle_block_axis_arrive_check(){
