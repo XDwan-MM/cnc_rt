@@ -1,5 +1,14 @@
 #!/bin/bash
 
+# ==================== 颜色定义 ====================
+COLOR_HMI=$'\e[1;32m'    # 绿色 (加粗)
+COLOR_RT=$'\e[1;33m'     # 黄色 (加粗)
+COLOR_SYS=$'\e[1;36m'    # 青色 (加粗)
+COLOR_ERR=$'\e[1;31m'    # 红色 (加粗)
+COLOR_RESET=$'\e[0m'     # 重置颜色
+RED=$'\e[1;31m'
+NC=$'\e[0m'
+
 # 获取当前脚本所在目录
 SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
 
@@ -33,6 +42,8 @@ clean_shm() {
             sudo ipcrm -m "$id" 2>/dev/null
         done
     fi
+
+    sudo rm -rf /temp/qipc_s*
 }
 
 # ==================== 新增：启动前环境检查 ====================
@@ -63,15 +74,10 @@ fi
 clean_shm
 
 # 去除路径末尾的 '/'，安全拼接 bin 目录
-HMI_BIN_DIR="${HMI_DIRS[0]%/}/bin"
-RT_BIN_DIR="${RT_DIRS[0]%/}/bin"
-
-# ==================== 颜色定义 ====================
-COLOR_HMI=$'\e[1;32m'    # 绿色 (加粗)
-COLOR_RT=$'\e[1;33m'     # 黄色 (加粗)
-COLOR_SYS=$'\e[1;36m'    # 青色 (加粗)
-COLOR_ERR=$'\e[1;31m'    # 红色 (加粗)
-COLOR_RESET=$'\e[0m'     # 重置颜色
+HMI_ROOT="${HMI_DIRS[0]%/}"
+RT_ROOT="${RT_DIRS[0]%/}"
+HMI_BIN_DIR="${HMI_ROOT}/bin"
+RT_BIN_DIR="${RT_ROOT}/bin"
 
 # ==================== 运行与监控部分 ====================
 
@@ -168,9 +174,9 @@ echo " "
 # 捕获 Ctrl+C (SIGINT)、终止信号 (SIGTERM) 以及脚本正常退出事件 (EXIT)
 trap cleanup EXIT SIGINT SIGTERM
 
-# 4. 启动界面进程（使用 sudo env 强制穿透环境变量过滤）
+# 4. 启动界面进程（两个进程统一使用 sudo，避免一个 root 一个普通用户）
 cd "$HMI_BIN_DIR"
-sudo env LD_LIBRARY_PATH="${HMI_DIRS[0]}/include/cncshm/bin/" stdbuf -oL -eL "${HMI_DIRS[0]}/bin/cnc_hmi_v3" ${HMI_PAR} 2>&1 | \
+sudo env stdbuf -oL -eL "${HMI_ROOT}/bin/cnc_hmi_v3" ${HMI_PAR} 2>&1 | \
     while IFS= read -r line; do
         printf "%s %s\r\n" "${COLOR_HMI}[HMI]${COLOR_RESET}" "${line%$'\r'}"
     done &
@@ -181,16 +187,16 @@ echo "${COLOR_SYS}[系统] 界面已在后台启动。${COLOR_RESET}"
 echo "${COLOR_SYS}[系统] 等待 1 秒...${COLOR_RESET}"
 sleep 1
 
-# 6. 启动实时进程（使用 sudo env 强制穿透环境变量过滤）
+# 6. 启动实时进程（两个进程统一使用 sudo，避免一个 root 一个普通用户）
 cd "$RT_BIN_DIR"
-sudo env LD_LIBRARY_PATH="${RT_DIRS[0]}/lib/cncshm/bin/" stdbuf -oL -eL "${RT_DIRS[0]}/bin/${RT_PAR}" 2>&1 | \
+sudo env stdbuf -oL -eL "${RT_ROOT}/bin/${RT_PAR}" 2>&1 | \
     while IFS= read -r line; do
         printf "%s %s\r\n" "${COLOR_RT}[RT]${COLOR_RESET}" "${line%$'\r'}"
     done &
 PID2=$! 
 echo "${COLOR_SYS}[系统] 实时进程已在后台启动。${COLOR_RESET}"
 
-echo "${COLOR_SYS}[系统] 两个进程均已启动，开始监控运行状态。${COLOR_RESET}"
+echo "${COLOR_SYS}[系统] 两个进程均已启动，开始监控运行状态。按 Ctrl+C 可以同时停止它们。${COLOR_RESET}"
 
 # 7. 循环监控：若任何一个进程意外退出，则关闭另一个并退出脚本
 while true; do

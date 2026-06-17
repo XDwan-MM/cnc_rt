@@ -168,21 +168,21 @@ run() {
     build_shm_lib
     build_release_1
     cd $BIN_DIR
-    sudo -E LD_LIBRARY_PATH=../lib/cncshm/bin ./cnc_rt_1
+    sudo -E ./cnc_rt_1
 }
 
 run2() {
     build_shm_lib
     build_release_2
     cd $BIN_DIR
-    sudo -E LD_LIBRARY_PATH=../lib/cncshm/bin ./cnc_rt_2
+    sudo -E ./cnc_rt_2
 }
 
 run_debug() {
     build_shm_lib
     build_debug
     cd $BIN_DIR
-    sudo -E LD_LIBRARY_PATH=../lib/cncshm/bin ./cnc_rt_d
+    sudo -E ./cnc_rt_d
 }
 
 clean_build() {
