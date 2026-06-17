@@ -198,11 +198,17 @@ static void nc_check_fin(){
     getRegBit(REG_G, 4, 3, &mcode_data->signal_fin);
     // FIN为1时，nc侧将MF选通信号置为0
     if(mcode_data->signal_fin){
-        mstb_fin_reset();
-        // 程序运行行光标回到首行
-        if(mcode_data->mcode_block[0].m_code == M02 || mcode_data->mcode_block[0].m_code == M30) setVarChanInt(0, VAR_CHAN_RUN_ROW, 0, 0);
         // 完成信号宽幅时间，缺省值2ms
         if(mcode_data->tfin_count >= par_chan[0][PAR_CH_TFIN_DELEY].value.val_int){
+            if(mcode_data->mcode_block[0].m_code == M02 || mcode_data->mcode_block[0].m_code == M30) {
+                // 程序运行行光标回到首行
+                setVarChanInt(0, VAR_CHAN_RUN_ROW, 0, 0);
+                // M02和M30结尾的进行加工计数
+                setVarChanInt(0, VAR_CHAN_PART_CNTR, var_chan[0][VAR_CHAN_PART_CNTR].value.i + 1, 0);
+                LOG(LOG_LEVEL_INFO, "加工计数：%d", var_chan[0][VAR_CHAN_PART_CNTR].value.i);
+                LOG(LOG_LEVEL_INFO, "程序运行结束");
+            }
+            mstb_fin_reset();
             // FIN为1，MF为0后，nc侧将代码信号置为0
             nc_clear_msignal();
             mcode_data_mend();
