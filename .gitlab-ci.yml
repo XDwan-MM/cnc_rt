@@ -70,7 +70,8 @@
     - git submodule init && git submodule update --init --recursive
     - echo "⏳ Compiling Submodule..."
     - cd ./lib/cncshm
-    - ./build.sh
+    - qmake ./shm.pro CONFIG+=debug
+    - make -j$(nproc)
     - echo "✅ Compiled Submodules Success!"
     # 3.编译cnc_rt
     - cd ../../
@@ -99,7 +100,8 @@
     - git submodule init && git submodule update --init --recursive
     - echo "⏳ Compiling Submodule..."
     - cd ./lib/cncshm
-    - ./build.sh
+    - qmake ./shm.pro CONFIG+=debug
+    - make -j$(nproc)
     - echo "✅ Compiled Submodules Success!"
     # 3.编译cnc_rt
     - cd ../../
@@ -131,7 +133,8 @@
     - git submodule init && git submodule update --init --recursive
     - echo "⏳ Compiling Submodule..."
     - cd ./lib/cncshm
-    - ./build.sh
+    - qmake ./shm.pro CONFIG+=debug
+    - make -j$(nproc)
     - echo "✅ Compiled Submodules Success!"
     # 3.编译cnc_rt
     - cd ../../
@@ -163,7 +166,8 @@
     - git submodule init && git submodule update --remote lib/cnc_plc
     - echo "⏳ Compiling Submodule..."
     - cd ./lib/cncshm
-    - ./build.sh
+    - qmake ./shm.pro CONFIG+=debug
+    - make -j$(nproc)
     - echo "✅ Compiled Submodules Success!"
     # 3.编译cnc_rt
     - cd ../../
