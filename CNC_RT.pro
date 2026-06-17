@@ -67,7 +67,8 @@ unix:!macx {
 
 # 添加共享内存库
 include(lib/cncshm/api/apishm.pri)
-LIBS += -L"$$PWD/lib/cncshm/bin/" -lshm
+unix:!macx: LIBS += "$$PWD/lib/cncshm/bin/libshm.a"
+else: LIBS += -L"$$PWD/lib/cncshm/bin/" -lshm
 INCLUDEPATH += $$PWD/lib/cncshm/api $$PWD/lib/cncshm
 
 # 添加译码
