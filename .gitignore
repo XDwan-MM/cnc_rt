@@ -74,6 +74,7 @@ CMakeLists.txt.user*
 .pch/
 .rcc/
 .uic/
+.cla*/
 /build*/
 build*/
 
@@ -100,5 +101,3 @@ data/
 
 *.log
 compile_commands.json
-
-/.claude/

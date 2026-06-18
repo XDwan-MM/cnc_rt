@@ -11,7 +11,7 @@ IndentWidth: 4
 # ========================================
 # 1. 解决: if 语句大括号单独一行
 # ========================================
-BreakBeforeBraces: Custom
+BreakBeforeBraces: Allman
 BraceWrapping:
   # 在 if/for/while/switch 等控制语句后的大括号强制换行
   AfterControlStatement: Always
