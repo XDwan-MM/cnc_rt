@@ -64,11 +64,6 @@ void emcmotTrajPlan() {
             // 清除警告
             cleanAllAlarm(ALARM_TYPE_ALL, ALARM_WARNING);
         }
-        
-        #ifndef DEBUG_MODE_ENABLED
-        //检查驱动器是否存在报警
-        Check_Driver_Error();
-        #endif
 
         // 检查系统是否有异常
         check_for_fault();

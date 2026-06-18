@@ -196,10 +196,13 @@ void Master_Run()
                 {
                     CHECK_FUNC(GM_RxPdoEntry_Write(ControlWord[i], 0x80));
                 }
-                else
+                else if(dri_manager.drivers[i]->state == DRV_STATE_FAULT)
                 {
                     dri_manager.drivers[i]->state = DRV_STATE_NOT_READY;
                     dri_manager.drivers[i]->mode = DRV_MODE_DISABLED;
+                    int res = delAlarm(ALARM_AX, ALARM_ERROR, 30 + i);
+                    if(res == 0)
+                        LOG(LOG_LEVEL_INFO, "%d 轴驱动器报错已清除",i);
                 }
             }
             if (((statis[0] & 0x0f) != 0x08 || rt_data->axis_data[3].axis_status.is_disable)
@@ -319,6 +322,12 @@ void Master_Run()
             }
         }
 
+        
+        #ifndef DEBUG_MODE_ENABLED
+        //检查驱动器是否存在报警
+        Check_Driver_Error();
+        #endif
+
         debug("=============================发送主站周期数据==============================\n");
         rc = GM_Master_Send(1);
         CHECK_RC(rc, "发送主站周期数据失败", err_close);
@@ -334,20 +343,17 @@ void Master_Reset()
 
 void Check_Driver_Error()
 {
-    for (int i = 0; i < 4; i++)
+    if (!reset_sem)
     {
-        if(rt_data->axis_data[i].axis_status.is_error)
+        for (int i = 0; i < 4; i++)
         {
-            int res = setAlarm(ALARM_AX, ALARM_ERROR, 30 + i);
-            if(res != -8) 
-            LOG(LOG_LEVEL_ERR, "%s 轴驱动器报错",drv_names[i]);
-        }   
-        if(!rt_data->axis_data[i].axis_status.is_error)
-        {
-            int res = delAlarm(ALARM_AX, ALARM_ERROR, 30 + i);
-            if(res == 0)
-            LOG(LOG_LEVEL_INFO, "%s 轴驱动器报错已清除",drv_names[i]);
-        }  
+            if (rt_data->axis_data[i].axis_status.is_error)
+            {
+                int res = setAlarm(ALARM_AX, ALARM_ERROR, 30 + i);
+                if (res != -8)
+                    LOG(LOG_LEVEL_ERR, "%s 轴驱动器报错", drv_names[i]);
+            }
+        }
     }
 }
 
