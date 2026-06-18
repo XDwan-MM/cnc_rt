@@ -57,6 +57,7 @@ void emcmotTrajPlan() {
         {
             // 复位状态：2.外部复位信号ERS 4.按下MDI上的RESET键
             nc_set_resetting();
+            setVarChanInt(0, VAR_CHAN_IS_RESETTING, 1, 0);
             // 复位生效参数
             Axis_Limit_Manager_Init();
             // 清除跟随误差标志
@@ -166,7 +167,6 @@ static void set_operating_mode() {
             if(!var_chan[0][VAR_CHAN_IS_RUNNING].value.i){
                 rt_data->current_mode = rt_data->target_mode;
                 rt_data->sys_state[SYS_IS_SWITCHING_MODE] = false;
-                mcode_handle_reset();
                 LOG(LOG_LEVEL_INFO, "系统模式切换为 %s", mode_names[rt_data->current_mode]);
             }
             break;
