@@ -99,9 +99,9 @@ sudo -E LD_LIBRARY_PATH=../lib/cncshm/bin ./cnc_rt_x（平台1、平台2、调�
 
 sudo rm -rf ./lib/cncshm/ （如报错文件已存在）
 
-拉取当前版本
+拉取当前子模块代码（将子模块的代码切换到主项目所记录的特定提交（而不是子模块的最新提交））
 
-git submodule init && git submodule update --init --recursive
+git submodule update --init --recursive
 
 更新到最新版本（请勿轻易使用，除非确认需要更新到子模块最新版本）
 
