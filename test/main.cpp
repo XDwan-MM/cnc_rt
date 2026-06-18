@@ -1,21 +1,46 @@
 /********************************************************************
  * @file        main.cpp
- * @brief       单元测试统一入口
- *              遍历 test_registry 中注册的全部测试类并依次运行，
- *              任一测试失败则整体返回非 0。
+ * @brief       GoogleTest 单元测试统一入口
 ********************************************************************/
 
-#include <QtTest>
-#include "test_registry.h"
+#include <gtest/gtest.h>
+
+#include "test_env.h"
+
+#include "datatype.h"
+#include "global.h"
+#include <shmapi.h>
+
+namespace {
+
+class RtTestEnvironment : public ::testing::Environment {
+public:
+    void SetUp() override
+    {
+        if (!shmInit()) {
+            testEnvSetReady(false, "共享内存未就绪");
+            return;
+        }
+
+        GNC_RES res = rt_global_init();
+        if (res == GNC_OPERATOR_SUCCESS) {
+            testEnvSetReady(true);
+        } else {
+            testEnvSetReady(false, "rt_global_init 失败(" + std::to_string(res) + ")");
+        }
+    }
+
+    void TearDown() override
+    {
+        rt_global_delete();
+    }
+};
+
+} // namespace
 
 int main(int argc, char *argv[])
 {
-    int status = 0;
-    for (const TestFactory &factory : testRegistry()) {
-        QObject *test = factory();
-        // 共享同一组命令行参数（如 -v2），各测试独立累计返回码
-        status |= QTest::qExec(test, argc, argv);
-        delete test;
-    }
-    return status;
+    ::testing::InitGoogleTest(&argc, argv);
+    ::testing::AddGlobalTestEnvironment(new RtTestEnvironment);
+    return RUN_ALL_TESTS();
 }

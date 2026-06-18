@@ -21,14 +21,6 @@ extern "C" {
 #define PROJECT_ROOT_DIR "."
 #endif
 
-// 单元测试
-#define UNIT_TEST
-#ifdef UNIT_TEST
-#define STATIC
-#else
-#define STATIC static
-#endif
-
 #define CHECK_RES(res) \
     if (!res) break;
 

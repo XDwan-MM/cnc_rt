@@ -56,7 +56,7 @@ GNC_RES queue_pop(PLAN_QUEUE* queue){
 }
 
 GNC_RES queue_push(PLAN_QUEUE* queue, const PLAN_BLOCK* pl_block){
-    if(queue == NULL || pl_block == NULL) return GNC_DATA_NULL;
+    if(queue == NULL || queue->pl_block == NULL || pl_block == NULL) return GNC_DATA_NULL;
     pthread_mutex_lock(&queue->mutex);
     if(queue->size == PLAN_QUEUE_SIZE){
         pthread_mutex_unlock(&queue->mutex);
@@ -70,7 +70,7 @@ GNC_RES queue_push(PLAN_QUEUE* queue, const PLAN_BLOCK* pl_block){
 }
 
 GNC_RES queue_soft_push(PLAN_QUEUE* queue){
-    if(queue == NULL) return GNC_DATA_NULL;
+    if(queue == NULL || queue->pl_block == NULL) return GNC_DATA_NULL;
     if(queue->size == PLAN_QUEUE_SIZE) return GNC_DATA_FULL;
     queue->tail = (queue->tail + 1) % PLAN_QUEUE_SIZE;
     pthread_mutex_lock(&queue->mutex);
@@ -81,11 +81,13 @@ GNC_RES queue_soft_push(PLAN_QUEUE* queue){
 
 PLAN_BLOCK* queue_peak(const PLAN_QUEUE* queue){
     if(queue == NULL || queue->pl_block == NULL) return NULL;
+    if(queue->size == 0) return NULL;
     return &queue->pl_block[queue->head];
 }
 
 PLAN_BLOCK* queue_peak_tail(const PLAN_QUEUE* queue){
     if(queue == NULL || queue->pl_block == NULL) return NULL;
+    if(queue->size == PLAN_QUEUE_SIZE) return NULL;
     return &queue->pl_block[queue->tail];
 }
 

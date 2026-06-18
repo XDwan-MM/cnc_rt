@@ -6,6 +6,7 @@
 #include "regapi.h"
 #include <hmisysapi.h>  
 #include <alarmapi.h>
+#include <stdlib.h>
 
 static void nc_deal_mcode();
 static void nc_output_mf();
@@ -271,15 +272,33 @@ static void nc_clear_msignal(){
 
 GNC_RES mcode_data_init(){
     GNC_RES res = GNC_OPERATOR_SUCCESS;
-    mcode_queue = (MCODE_QUEUE*)malloc(sizeof(MCODE_QUEUE));
+    mcode_data_delete();
+    mcode_queue = (MCODE_QUEUE*)calloc(sizeof(MCODE_QUEUE), 1);
+    if(mcode_queue == NULL) return GNC_DATA_NULL;
     res = mcode_queue_init(mcode_queue);
-    if(res != GNC_OPERATOR_SUCCESS) return res;
-    mcode_data = (MCODE_DATA*)malloc(sizeof(MCODE_DATA));
-    if(mcode_data == NULL) return GNC_DATA_NULL;
+    if(res != GNC_OPERATOR_SUCCESS){
+        mcode_data_delete();
+        return res;
+    }
+    mcode_data = (MCODE_DATA*)calloc(sizeof(MCODE_DATA), 1);
+    if(mcode_data == NULL){
+        mcode_data_delete();
+        return GNC_DATA_NULL;
+    }
     mcode_data->mcode_size = 0;
     mcode_data->pmc_end = true;
     mcode_data->tfin_count = 0;
     return res;
+}
+
+void mcode_data_delete(){
+    if(mcode_queue != NULL){
+        mcode_queue_delete(mcode_queue);
+        free(mcode_queue);
+        mcode_queue = NULL;
+    }
+    free(mcode_data);
+    mcode_data = NULL;
 }
 
 static void mcode_data_mend(){

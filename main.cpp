@@ -141,8 +141,8 @@ int main() {
     RT_LOG(INFO, "发送实时关闭完成信号");
     LOG(LOG_LEVEL_INFO, "发送实时关闭完成信号");
     thread_exit_flag = 1;
-    RT_LOG(INFO, "收到退出信号，关闭线程");
-    LOG(LOG_LEVEL_INFO, "收到退出信号，关闭线程");
+    RT_LOG(INFO, "关闭线程");
+    LOG(LOG_LEVEL_INFO, "关闭线程");
     // 唤醒所有阻塞在信号量上的线程，让它们能够检查 thread_exit_flag 并退出
     for (int i = 0; i < 3; i++) {
         post_rt_sem_all();
@@ -153,9 +153,13 @@ int main() {
     #ifndef DEBUG_MODE_ENABLED
     // 关闭主轴
     Master_Close();
-    RT_LOG(INFO, "收到退出信号，关闭主站");
-    LOG(LOG_LEVEL_INFO, "收到退出信号，关闭主站");
+    RT_LOG(INFO, "关闭主站");
+    LOG(LOG_LEVEL_INFO, "关闭主站");
     #endif
+    // 释放全局变量
+    rt_global_delete();
+    RT_LOG(INFO, "释放全局变量");
+    LOG(LOG_LEVEL_INFO, "释放全局变量");
     RT_LOG(INFO,  "退出实时程序");
     LOG(LOG_LEVEL_INFO, "退出实时程序");
     RT_LOG(INFO, "********************************************************");

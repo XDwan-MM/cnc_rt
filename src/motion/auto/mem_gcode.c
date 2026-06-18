@@ -1,6 +1,7 @@
 #include <time.h>
 #include <stdio.h>
 #include <stdbool.h>
+#include <stdlib.h>
 #include <math.h>
 #include "mem_gcode.h"
 #include "global.h"
@@ -43,6 +44,17 @@ static void block_cal_lookahead_vel(PLAN_BLOCK* current_block);
 static GNC_RES vp_cal_g04_vel_profile(VELPLAN_TYPE velplan_type, PLAN_BLOCK* plan_block, VEL_PROFILE* vel_profile, double cycle_time);
 static GNC_RES vp_cal_g04_pause_profile(VELPLAN_TYPE velplan_type, PLAN_BLOCK* plan_block, VEL_PROFILE* vel_profile, double cycle_time);
 static void check_traj_data_valid(TRAJ_PARAMS* traj_data);
+
+#ifdef UNIT_TEST
+static CYCLE_BLOCK_AXIS_ARRIVE_CHECK_HOOK cycle_block_axis_arrive_check_hook = NULL;
+static void* cycle_block_axis_arrive_check_hook_ctx = NULL;
+
+void cycle_block_axis_arrive_check_set_hook(CYCLE_BLOCK_AXIS_ARRIVE_CHECK_HOOK hook, void* ctx)
+{
+    cycle_block_axis_arrive_check_hook = hook;
+    cycle_block_axis_arrive_check_hook_ctx = ctx;
+}
+#endif
 
 // G指令执行流程：处理开始和暂停 → 计算插补距离 → 计算插补空间坐标
 void auto_execute_gcode(){
@@ -233,7 +245,9 @@ static bool cycle_tp_is_finished(){
     if(cycle_tp->interp_cycle > cycle_tp->vel_profile->t_cycle){
         cycle_tp->plan_block->type = UNKNOWN;
         PLAN_BLOCK* head_block = queue_peak(plan_queue);
-        head_block->pause_time -= cycle_tp->vel_profile->t_cycle;
+        if(head_block != NULL){
+            head_block->pause_time -= cycle_tp->vel_profile->t_cycle;
+        }
         cycle_tp->interp_cycle = 1;
         cycle_tp->vel_profile->t_cycle = 0;
         cycle_tp->current_distance = 0;
@@ -243,33 +257,6 @@ static bool cycle_tp_is_finished(){
         return true;
     }
     return false;
-}
-
-void cycle_tp_init(){
-    cycle_tp = (COORD_TP*)calloc(sizeof(COORD_TP), 1);
-    cycle_tp->plan_block = (PLAN_BLOCK*)calloc(sizeof(PLAN_BLOCK), 1);
-    cycle_tp->vel_profile = (VEL_PROFILE*)calloc(sizeof(VEL_PROFILE), 1);
-    cycle_tp->traj_data = (TRAJ_PARAMS*)calloc(sizeof(TRAJ_PARAMS), 1);
-    cycle_tp->plan_block->type = UNKNOWN;
-    cycle_tp->is_event_trigger = false;
-    cycle_tp->interp_cycle = 1;
-    cycle_tp->is_paused_inside_block = true;
-}
-
-void cycle_tp_reset(){
-    cycle_tp->mem_exec_state = EXEC_IDLE;
-    cycle_tp->plan_block->type = UNKNOWN;
-    memset(cycle_tp->traj_data, 0, sizeof(TRAJ_PARAMS));
-    cycle_tp->is_event_trigger = false;
-    cycle_tp->is_paused_inside_block = true;
-    cycle_tp->is_arrive_at_the_end = false;
-    cycle_tp->is_resetting = 0;
-    cycle_tp->interp_cycle = 1;
-    cycle_tp->vel_profile->t_cycle = 0;
-    cycle_tp->current_distance = 0;
-    cycle_tp->target_distance = 0;
-    cycle_tp->accum_distance = 0;
-    cycle_tp->remain_distance = 0;
 }
 
 static GNC_RES cycle_tp_update_pausing_tp(VELPLAN_TYPE vplan_mode, double ncu_cycle, double current_vel, POS current_pos, double target_vel){
@@ -438,6 +425,7 @@ static GNC_RES plan_block_get_next(){
     PLAN_BLOCK* head_block = NULL;
     while(true){
         head_block = queue_peak(plan_queue);
+        if(head_block == NULL) return GNC_DATA_EMPTY;
         setVarChanInt(0, VAR_CHAN_RUN_ROW, head_block->line_number, 0);
         // LOG(LOG_LEVEL_INFO, "gline: %d vel :%f end pos: %f", head_block->line_number, head_block->end_vel, head_block->end_pos.z);
         queue_pop(plan_queue);
@@ -547,6 +535,11 @@ static bool cycle_block_is_arrived(POS current_pos){
 }
 
 static bool cycle_block_axis_arrive_check(){
+#ifdef UNIT_TEST
+    if(cycle_block_axis_arrive_check_hook != NULL){
+        cycle_block_axis_arrive_check_hook(cycle_block_axis_arrive_check_hook_ctx);
+    }
+#endif
     int res = 0;
     bool is_arrived = true;
     if((fabs(cycle_tp->plan_block->end_pos.x - rt_data->axis_data[AXIS_X].motor_act_pos)) > par_axis[AXIS_X][PAR_AX_POS_TOL].value.val_real) {
@@ -577,19 +570,20 @@ static bool cycle_block_axis_arrive_check(){
 static bool cycle_block_arrive_check(){
     // LOG(LOG_LEVEL_DEBUG, "motor_cmd_pos:%f %f %f", rt_data->axis_data[0].motor_cmd_pos, rt_data->axis_data[1].motor_cmd_pos, rt_data->axis_data[2].motor_cmd_pos);
     // LOG(LOG_LEVEL_DEBUG, "motor_act_pos:%f %f %f", rt_data->axis_data[0].motor_act_pos, rt_data->axis_data[1].motor_act_pos, rt_data->axis_data[2].motor_act_pos);       
+    PLAN_BLOCK* current_block = queue_peak(plan_queue);
     // 如果是到位检测模组，发送到位信号
-    if(cycle_tp->plan_block->mode == PMC_MODE_ARRIVE_CHECK){
+    if(current_block->mode == PMC_MODE_ARRIVE_CHECK){
         if(!cycle_block_axis_arrive_check()) return false;
-        LOG(LOG_LEVEL_DEBUG,  "到位检测 目标pos:%f %f %f vel:%f", rt_data->axis_data[AXIS_X].motor_cmd_pos, rt_data->axis_data[AXIS_Y].motor_cmd_pos, rt_data->axis_data[AXIS_Z].motor_cmd_pos, cycle_tp->plan_block->end_vel);
-        LOG(LOG_LEVEL_DEBUG,  "到位检测 实际pos:%f %f %f vel:%f", rt_data->axis_data[AXIS_X].motor_act_pos, rt_data->axis_data[AXIS_Y].motor_act_pos, rt_data->axis_data[AXIS_Z].motor_act_pos, cycle_tp->plan_block->end_vel);
+        LOG(LOG_LEVEL_DEBUG,  "到位检测 目标pos:%f %f %f vel:%f", rt_data->axis_data[AXIS_X].motor_cmd_pos, rt_data->axis_data[AXIS_Y].motor_cmd_pos, rt_data->axis_data[AXIS_Z].motor_cmd_pos, current_block->end_vel);
+        LOG(LOG_LEVEL_DEBUG,  "到位检测 实际pos:%f %f %f vel:%f", rt_data->axis_data[AXIS_X].motor_act_pos, rt_data->axis_data[AXIS_Y].motor_act_pos, rt_data->axis_data[AXIS_Z].motor_act_pos,current_block->end_vel);
     }
-    if(cycle_tp->plan_block->mode == PMC_MODE_EXACT_STOP) {
+    if(current_block->mode == PMC_MODE_EXACT_STOP) {
         if(!cycle_block_axis_arrive_check()) return false;
-        LOG(LOG_LEVEL_DEBUG,  "精准停 目标pos:%f %f %f vel:%f", rt_data->axis_data[AXIS_X].motor_cmd_pos, rt_data->axis_data[AXIS_Y].motor_cmd_pos, rt_data->axis_data[AXIS_Z].motor_cmd_pos, cycle_tp->plan_block->end_vel);
-        LOG(LOG_LEVEL_DEBUG,  "精准停 实际pos:%f %f %f vel:%f", rt_data->axis_data[AXIS_X].motor_act_pos, rt_data->axis_data[AXIS_Y].motor_act_pos, rt_data->axis_data[AXIS_Z].motor_act_pos, cycle_tp->plan_block->end_vel);
+        LOG(LOG_LEVEL_DEBUG,  "精准停 目标pos:%f %f %f vel:%f", rt_data->axis_data[AXIS_X].motor_cmd_pos, rt_data->axis_data[AXIS_Y].motor_cmd_pos, rt_data->axis_data[AXIS_Z].motor_cmd_pos, current_block->end_vel);
+        LOG(LOG_LEVEL_DEBUG,  "精准停 实际pos:%f %f %f vel:%f", rt_data->axis_data[AXIS_X].motor_act_pos, rt_data->axis_data[AXIS_Y].motor_act_pos, rt_data->axis_data[AXIS_Z].motor_act_pos, current_block->end_vel);
     }
     // 判断到位宽度
-    if(cycle_tp->plan_block->type == RAPID){
+    if(current_block->type == RAPID){
         return cycle_block_axis_arrive_check();
     }
     return true;
@@ -870,4 +864,52 @@ static void check_traj_data_valid(TRAJ_PARAMS* traj_data){
     if(IsLessThan(traj_data->v, 0)){
         traj_data->v = 0;
     }
+}
+
+GNC_RES cycle_tp_init(){
+    GNC_RES res = GNC_OPERATOR_SUCCESS;
+    cycle_tp_delete();
+    cycle_tp = (COORD_TP*)calloc(sizeof(COORD_TP), 1);
+    if(cycle_tp == NULL) return GNC_DATA_NULL;
+    cycle_tp->plan_block = (PLAN_BLOCK*)calloc(sizeof(PLAN_BLOCK), 1);
+    cycle_tp->vel_profile = (VEL_PROFILE*)calloc(sizeof(VEL_PROFILE), 1);
+    cycle_tp->traj_data = (TRAJ_PARAMS*)calloc(sizeof(TRAJ_PARAMS), 1);
+    if(cycle_tp->plan_block == NULL || cycle_tp->vel_profile == NULL || cycle_tp->traj_data == NULL){
+        cycle_tp_delete();
+        return GNC_DATA_NULL;
+    }
+    cycle_tp->plan_block->type = UNKNOWN;
+    cycle_tp->is_event_trigger = false;
+    cycle_tp->interp_cycle = 1;
+    cycle_tp->is_paused_inside_block = true;
+    return res;
+}
+
+void cycle_tp_delete(){
+    if(cycle_tp == NULL) return;
+    free(cycle_tp->plan_block);
+    cycle_tp->plan_block = NULL;
+    free(cycle_tp->vel_profile);
+    cycle_tp->vel_profile = NULL;
+    free(cycle_tp->traj_data);
+    cycle_tp->traj_data = NULL;
+    free(cycle_tp);
+    cycle_tp = NULL;
+}
+
+void cycle_tp_reset(){
+    if(cycle_tp == NULL || cycle_tp->plan_block == NULL || cycle_tp->traj_data == NULL || cycle_tp->vel_profile == NULL) return;
+    cycle_tp->mem_exec_state = EXEC_IDLE;
+    cycle_tp->plan_block->type = UNKNOWN;
+    memset(cycle_tp->traj_data, 0, sizeof(TRAJ_PARAMS));
+    cycle_tp->is_event_trigger = false;
+    cycle_tp->is_paused_inside_block = true;
+    cycle_tp->is_arrive_at_the_end = false;
+    cycle_tp->is_resetting = 0;
+    cycle_tp->interp_cycle = 1;
+    cycle_tp->vel_profile->t_cycle = 0;
+    cycle_tp->current_distance = 0;
+    cycle_tp->target_distance = 0;
+    cycle_tp->accum_distance = 0;
+    cycle_tp->remain_distance = 0;
 }

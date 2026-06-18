@@ -3,6 +3,8 @@
 #include "global.h"
 #include <hmisysapi.h>
 #include <alarmapi.h>
+#include <stdlib.h>
+#include <string.h>
 #include "stored_stroke_check.h"
 
 static void homing_set_state();
@@ -348,12 +350,19 @@ static void reset_pos_at_home(AXIS_TYPE axis_type){
     rt_data->axis_data[axis_type].mac_cmd_pos = par_axis[axis_type][PAR_AX_HOME_CRDS].value.val_real;
 }
 
-void homing_tp_init(){
+GNC_RES homing_tp_init(){
+    GNC_RES res = GNC_OPERATOR_SUCCESS;
+    homing_tp_delete();
     homing_tp = (HOMING_TP*)calloc(SYS_AXES_NUM * sizeof(HOMING_TP), 1);
+    if(homing_tp == NULL) return GNC_DATA_NULL;
     for(int i = 0; i < SYS_AXES_NUM; i++){
         homing_tp[i].homing_block = (PLAN_BLOCK*)calloc(sizeof(PLAN_BLOCK), 1);
         homing_tp[i].homing_profile = (VEL_PROFILE*)calloc(sizeof(VEL_PROFILE), 1);
         homing_tp[i].traj_data = (TRAJ_PARAMS*)calloc(sizeof(TRAJ_PARAMS), 1);
+        if(homing_tp[i].homing_block == NULL || homing_tp[i].homing_profile == NULL || homing_tp[i].traj_data == NULL){
+            homing_tp_delete();
+            return GNC_DATA_NULL;
+        }
         homing_tp[i].homing_block->type = LINE;
         homing_tp[i].homing_state = ABS_EXEC_IDLE;
         homing_tp[i].homing_block->max_vel = par_axis[i][PAR_AX_RAPID_SPD].value.val_real;
@@ -363,10 +372,27 @@ void homing_tp_init(){
         homing_tp[i].homing_block->end_vel = 0;
         homing_tp[i].homing_direction = AXIS_HOMING_POSITIVE;
     }
+    return res;
+}
+
+void homing_tp_delete(){
+    if(homing_tp == NULL) return;
+    for(int i = 0; i < SYS_AXES_NUM; i++){
+        free(homing_tp[i].homing_block);
+        homing_tp[i].homing_block = NULL;
+        free(homing_tp[i].homing_profile);
+        homing_tp[i].homing_profile = NULL;
+        free(homing_tp[i].traj_data);
+        homing_tp[i].traj_data = NULL;
+    }
+    free(homing_tp);
+    homing_tp = NULL;
 }
 
 void homing_tp_reset(){
+    if(homing_tp == NULL) return;
     for(int i = 0; i < SYS_AXES_NUM; i++){
+        if(homing_tp[i].traj_data == NULL) continue;
         homing_tp[i].homing_state = ABS_EXEC_IDLE;
         homing_tp[i].is_ref_on = false;
         memset(homing_tp[i].traj_data, 0, sizeof(TRAJ_PARAMS));

@@ -116,6 +116,7 @@ extern MCODE_DATA *mcode_data;
 extern pthread_mutex_t shm_mutex;
 
 GNC_RES rt_global_init();
+GNC_RES rt_global_delete();
 GNC_RES tp_reset();
 GNC_RES shm_var_update();
 GNC_RES shm_var_update_prog();

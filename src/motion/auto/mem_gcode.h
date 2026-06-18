@@ -49,11 +49,17 @@ typedef struct{
     bool is_ve_zero;                // 加工段末速度为0
 }COORD_TP;
 
-void cycle_tp_init();
+GNC_RES cycle_tp_init();
+void cycle_tp_delete();
 void cycle_tp_reset();
 void auto_execute_gcode();
 void gcode_handle_estop();
 void gcode_handle_reset();
+
+#ifdef UNIT_TEST
+typedef void (*CYCLE_BLOCK_AXIS_ARRIVE_CHECK_HOOK)(void* ctx);
+void cycle_block_axis_arrive_check_set_hook(CYCLE_BLOCK_AXIS_ARRIVE_CHECK_HOOK hook, void* ctx);
+#endif
 
 #ifdef __cplusplus
 }
