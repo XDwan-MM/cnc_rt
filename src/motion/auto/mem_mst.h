@@ -41,6 +41,7 @@ typedef struct{
 }MCODE_DATA;
 
 GNC_RES mcode_data_init();
+void mcode_data_delete();
 void auto_execute_mcode();
 void mcode_handle_estop();
 void mcode_handle_reset();

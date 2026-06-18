@@ -53,7 +53,8 @@ typedef struct{
     bool is_ref_on;                 // 回零状态（1回零，0停止）
 }HOMING_TP;
 
-void homing_tp_init();
+GNC_RES homing_tp_init();
+void homing_tp_delete();
 void homing_tp_reset();
 void handle_homing_cmd();
 void homing_handle_estop();

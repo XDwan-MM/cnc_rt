@@ -2,6 +2,7 @@
 #include "task.h"
 #include <stdio.h>
 #include <string.h>
+#include <stdlib.h>
 #include <shmapi.h>
 #include <vardatadef.h>
 #include <varapi.h>
@@ -79,25 +80,12 @@ MCODE_DATA *mcode_data;
 // 读写共享内存锁（路径规划读时加锁）
 pthread_mutex_t shm_mutex;
 
+// ==============全局变量定义===============
+
 static GNC_RES shm_var_init(); 
 static GNC_RES shm_par_init();
 static GNC_RES tp_init();
-
-GNC_RES rt_global_init(){
-    GNC_RES res = GNC_OPERATOR_SUCCESS;
-    res = shm_var_init();
-    if(res != GNC_OPERATOR_SUCCESS) return res;
-    res = shm_par_init();
-    if(res != GNC_OPERATOR_SUCCESS) return res;
-    res = rt_data_init();
-    if(res != GNC_OPERATOR_SUCCESS) return res;
-    res = tp_init();
-    if(res != GNC_OPERATOR_SUCCESS) return res;
-    res = task_mq_init();
-    if(res != GNC_OPERATOR_SUCCESS) return res;
-    pthread_mutex_init(&shm_mutex, NULL);
-    return GNC_OPERATOR_SUCCESS;
-}
+static bool shm_mutex_initialized = false;
 
 static GNC_RES shm_var_init(){
     var_data = getVarDataPtr();
@@ -146,28 +134,111 @@ static GNC_RES shm_par_init(){
 
 static GNC_RES tp_init(){
     GNC_RES res = GNC_OPERATOR_SUCCESS;
-    homing_tp_init();
-    cycle_tp_init();
+    res = homing_tp_init();
+    if(res != GNC_OPERATOR_SUCCESS) return res;
+    res = cycle_tp_init();
+    if(res != GNC_OPERATOR_SUCCESS) return res;
     res = mcode_data_init();
     if(res != GNC_OPERATOR_SUCCESS) return res;
-    gcode_queue = (GCODE_QUEUE*)malloc(sizeof(GCODE_QUEUE));
+    gcode_queue = (GCODE_QUEUE*)calloc(sizeof(GCODE_QUEUE), 1);
+    if(gcode_queue == NULL) return GNC_DATA_NULL;
     res = gcode_queue_init(gcode_queue);
     if(res != GNC_OPERATOR_SUCCESS) return res;
-    pretreat_queue = (PLAN_QUEUE*)malloc(sizeof(PLAN_QUEUE));
+    pretreat_queue = (PLAN_QUEUE*)calloc(sizeof(PLAN_QUEUE), 1);
+    if(pretreat_queue == NULL) return GNC_DATA_NULL;
     res = queue_init(pretreat_queue);
     if(res != GNC_OPERATOR_SUCCESS) return res;
-    plan_queue = (PLAN_QUEUE*)malloc(sizeof(PLAN_QUEUE));
+    plan_queue = (PLAN_QUEUE*)calloc(sizeof(PLAN_QUEUE), 1);
+    if(plan_queue == NULL) return GNC_DATA_NULL;
     res = queue_init(plan_queue);
     if(res != GNC_OPERATOR_SUCCESS) return res;
     return GNC_OPERATOR_SUCCESS;
 }
 
 GNC_RES tp_reset(){
-    homing_tp_reset(homing_tp);
+    homing_tp_reset();
     cycle_tp_reset();
     gcode_queue_reset(gcode_queue);
     queue_reset(pretreat_queue);
     queue_reset(plan_queue);
+    return GNC_OPERATOR_SUCCESS;
+}
+
+GNC_RES rt_global_init(){
+    GNC_RES res = GNC_OPERATOR_SUCCESS;
+    res = shm_var_init();
+    if(res != GNC_OPERATOR_SUCCESS) return res;
+    res = shm_par_init();
+    if(res != GNC_OPERATOR_SUCCESS) return res;
+    res = rt_data_init();
+    if(res != GNC_OPERATOR_SUCCESS){
+        rt_global_delete();
+        return res;
+    }
+    res = tp_init();
+    if(res != GNC_OPERATOR_SUCCESS){
+        rt_global_delete();
+        return res;
+    }
+    res = task_mq_init();
+    if(res != GNC_OPERATOR_SUCCESS){
+        rt_global_delete();
+        return res;
+    }
+    if(pthread_mutex_init(&shm_mutex, NULL) != 0){
+        rt_global_delete();
+        return GNC_OPERATOR_ERROR;
+    }
+    shm_mutex_initialized = true;
+    return GNC_OPERATOR_SUCCESS;
+}
+
+GNC_RES rt_global_delete(){
+    if(event_queue != NULL){
+        event_queue_delete(event_queue);
+        free(event_queue);
+        event_queue = NULL;
+    }
+    if(gcode_queue != NULL){
+        gcode_queue_delete(gcode_queue);
+        free(gcode_queue);
+        gcode_queue = NULL;
+    }
+    if(pretreat_queue != NULL){
+        queue_delete(pretreat_queue);
+        free(pretreat_queue);
+        pretreat_queue = NULL;
+    }
+    if(plan_queue != NULL){
+        queue_delete(plan_queue);
+        free(plan_queue);
+        plan_queue = NULL;
+    }
+    mcode_data_delete();
+    cycle_tp_delete();
+    homing_tp_delete();
+    if(rt_data != NULL){
+        pthread_mutex_destroy(&rt_data->mutex);
+        free(rt_data);
+        rt_data = NULL;
+    }
+    if(shm_mutex_initialized){
+        pthread_mutex_destroy(&shm_mutex);
+        shm_mutex_initialized = false;
+    }
+    var_data = NULL;
+    var_axis = NULL;
+    var_chan = NULL;
+    var_sys = NULL;
+    par_data = NULL;
+    par_ncu = NULL;
+    par_mac = NULL;
+    par_chan = NULL;
+    par_axis = NULL;
+    par_acmp = NULL;
+    par_cfg = NULL;
+    par_table = NULL;
+    sys_data = NULL;
     return GNC_OPERATOR_SUCCESS;
 }
 
@@ -532,4 +603,3 @@ GNC_RES shm_var_update(){
 //     par_acmp[AXIS_Z].perp2_comp_ang = par_union.value.val_real; //第2项垂直度补偿角度 (单位：um/m)
 //     return GNC_OPERATOR_SUCCESS;
 // }
-

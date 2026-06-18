@@ -1,23 +1,35 @@
-QT += testlib
-QT += core
+QT += core gui
 
-CONFIG += qt console warn_on depend_includepath testcase
+CONFIG += qt console warn_on depend_includepath c++17
 CONFIG -= app_bundle
 
 DEFINES += PLATFORM_1
 DEFINES += MASTER_RUN_ON
+DEFINES += UNIT_TEST
 
 TEMPLATE = app
 
 TARGET = tests
 
-# 测试注册头所在目录（test_registry.h / main.cpp）
+# 测试辅助头所在目录
 INCLUDEPATH += $$PWD
 
+# GoogleTest / GoogleMock
+exists(/usr/include/gtest/gtest.h):exists(/usr/include/gmock/gmock.h) {
+    message(Using system GoogleTest/GoogleMock)
+    LIBS += -lgmock -lgtest
+} else:exists(/usr/local/include/gtest/gtest.h):exists(/usr/local/include/gmock/gmock.h) {
+    message(Using system GoogleTest/GoogleMock from /usr/local)
+    INCLUDEPATH += /usr/local/include
+    LIBS += -L/usr/local/lib -lgmock -lgtest
+} else {
+    message(Using bundled lightweight GoogleTest/GoogleMock compatibility headers)
+    INCLUDEPATH += $$PWD/gtest_compat
+}
+
 # 添加共享内存库
-include(lib/cncshm/api/apishm.pri)
-unix:!macx: LIBS += "$$PWD/../lib/cncshm/bin/libshm.a"
-else: LIBS += -L"$$PWD/../lib/cncshm/bin/" -lshm
+include($$PWD/../lib/cncshm/api/apishm.pri)
+LIBS += "$$PWD/../lib/cncshm/bin/libshm.a"
 INCLUDEPATH += $$PWD/../lib/cncshm/api $$PWD/../lib/cncshm
 
 # 添加译码
@@ -29,7 +41,7 @@ LIBS += -L"$$PWD/../lib/kinematic/bin/" -lkinematic
 INCLUDEPATH += $$PWD/../lib/kinematic/include $$PWD/../lib/kinematic
 
 # 添加误差补偿库
-LIBS += -L"$$PWD/../lib/CNC_ErrorComp/bin" -lCNC_ErrorComp
+LIBS += -L"$$PWD/../lib/CNC_ErrorComp/lib" -lCNC_ErrorComp
 INCLUDEPATH += $$PWD/../lib/CNC_ErrorComp/include $$PWD/../lib/CNC_ErrorComp
 
 unix:!macx: {
@@ -69,14 +81,14 @@ HEADERS += \
     ../src/motion/ferror_control.h \
     ../src/motion/handwheel.h \
     ../src/motion/homing.h \
-    ../src/motion/jog.h \
-    ../src/motion/jog_planner.h \
+    ../src/motion/jog/jog.h \
+    ../src/motion/jog/jog_planner.h \
     ../src/motion/stored_stroke_check.h \
-    ../src/plc/pmc_a_input_scanner.h \
-    ../src/plc/pmc_g_input_scanner.h \
-    ../src/plc/pmc_io_map.h \
-    ../src/plc/pmc_output_handler.h \
-    ../src/plc/signal_utils.h \
+    ../src/pmc_scanner/pmc_a_input_scanner.h \
+    ../src/pmc_scanner/pmc_g_input_scanner.h \
+    ../src/pmc_scanner/pmc_io_map.h \
+    ../src/pmc_scanner/pmc_output_handler.h \
+    ../src/pmc_scanner/signal_utils.h \
     ../src/task/task.h \
     ../src/threads/threads_api.h \
     ../src/threads/thread_manager.h \
@@ -113,12 +125,12 @@ SOURCES += \
     ../src/motion/ferror_control.c \
     ../src/motion/handwheel.c \
     ../src/motion/homing.c \
-    ../src/motion/jog.c \
-    ../src/motion/jog_planner.c \
+    ../src/motion/jog/jog.c \
+    ../src/motion/jog/jog_planner.c \
     ../src/motion/stored_stroke_check.c \
-    ../src/plc/pmc_a_input_scanner.c \
-    ../src/plc/pmc_g_input_scanner.c \
-    ../src/plc/pmc_output_handler.c \
+    ../src/pmc_scanner/pmc_a_input_scanner.c \
+    ../src/pmc_scanner/pmc_g_input_scanner.c \
+    ../src/pmc_scanner/pmc_output_handler.c \
     ../src/task/task.c \
     ../src/threads/thread_manager.cpp \
     ../src/threads/threads.cpp \
@@ -136,8 +148,10 @@ INCLUDEPATH += \
     ../src/master \
     ../src/motion \
     ../src/motion/auto \
+    ../src/motion/jog \
     ../src/motion/spindle \
     ../src/monitor \
+    ../src/pmc_scanner \
     ../src/plc \
     ../src/task \
     ../src/threads \
@@ -148,13 +162,16 @@ INCLUDEPATH += \
 
 # ============================================================
 # 单元测试
-# 统一入口：遍历 test_registry 中注册的所有测试类
-SOURCES += main.cpp
-HEADERS += test_registry.h
+# 统一入口：GoogleTest 自动注册并运行所有 TEST/TEST_F
+SOURCES += main.cpp test_env.cpp
+HEADERS += \
+    test_env.h \
+    gtest_compat/gtest/gtest.h \
+    gtest_compat/gmock/gmock.h
 
 # 自动查找所有 test_* 子目录下的测试源文件（tst_*.cpp）
 for(dir, $$list($$files($$PWD/test_*))) {
-    !exists($$dir/*):next()           # 跳过非目录（如 test_registry.h 若命名匹配）
+    !exists($$dir/*):next()
     files = $$files($$dir/tst_*.cpp)
     SOURCES += $$files
     INCLUDEPATH += $$dir
