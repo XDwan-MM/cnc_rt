@@ -60,9 +60,7 @@ void emcmotTrajPlan() {
             setVarChanInt(0, VAR_CHAN_IS_RESETTING, 1, 0);
             // 复位生效参数
             Axis_Limit_Manager_Init();
-            // 清除跟随误差标志
-            reset_ferror_control();
-            // 清除警告
+            // 清除警告提示
             cleanAllAlarm(ALARM_TYPE_ALL, ALARM_WARNING);
         }
 

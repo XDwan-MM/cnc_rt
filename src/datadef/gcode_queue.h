@@ -19,7 +19,7 @@ extern "C" {
 #include "ncitpdatadef.h"
 #include <pthread.h>
 
-#define DCD_BUF_SIZE 200
+#define DCD_BUF_SIZE 1000
 
 // 解释器译码结果
 typedef struct gcode_block{

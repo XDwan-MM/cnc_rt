@@ -34,6 +34,7 @@ void auto_execute_mcode(){
     case MCODE_EXECUTE_RESET: 
         // todo：HMI的复位和M30均直接重置M代码F变量状态
         if(mcode_data->mcode_block[0].m_code == M02 || mcode_data->mcode_block[0].m_code == M30) {
+            LOG(LOG_LEVEL_DEBUG, "3、接收到FIN信号, 执行下一指令");
             // 程序运行行光标回到首行
             setVarChanInt(0, VAR_CHAN_RUN_ROW, 0, 0);
             // M02和M30结尾的进行加工计数
