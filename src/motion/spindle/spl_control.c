@@ -20,7 +20,7 @@ static double target_speed;
 
 void spindle_set_state(){
     // 如果急停或按下复位
-    if(rt_data->sys_state[SYS_IS_ESTOP_ON] || rt_data->nc_event == SYS_EVENT_RESET)
+    if(rt_data->sys_state[SYS_IS_ESTOP_ON] || rt_data->nc_event == SYS_EVENT_RESET || rt_data->sys_state[SYS_IS_ALARMING] )
     {
         spl_data.spl_event = SPINDLE_EVENT_STOP;
         spl_data.emot_speed = 0;
