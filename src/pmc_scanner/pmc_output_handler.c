@@ -303,7 +303,7 @@ static void pmc_output_axis_status()
 }
 static void pmc_outpus_spl_vel_status()
 {
-    if (spl_data.spl_vel_state == SPINDLE_VEL_ARRIVED)
+    if(spl_data.spl_vel_state == SPINDLE_VEL_ARRIVED)
     {
         setRegBit(REG_F, 45, 3);
     }
@@ -311,9 +311,18 @@ static void pmc_outpus_spl_vel_status()
     {
         clearRegBit(REG_F, 45, 3);
     }
-    if (spl_data.spl_vel_state == SPINDLE_VEL_ZERO)
+//    if(spl_data.spl_vel_state == SPINDLE_VEL_ZERO)
+//    {
+//        setRegBit(REG_F, 45, 1);
+//    }
+//    else
+//    {
+//        clearRegBit(REG_F, 45, 1);
+//    }
+    if(spindle.actual_vel < 5)
     {
         setRegBit(REG_F, 45, 1);
+        spl_data.spl_vel_state = SPINDLE_VEL_ZERO;
     }
     else
     {
