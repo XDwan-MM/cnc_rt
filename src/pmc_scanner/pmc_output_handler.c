@@ -16,6 +16,8 @@ static void pmc_output_auto();
 static void pmc_output_reset();
 static void pmc_output_axis_status();
 static void pmc_outpus_spl_vel_status();
+static void pmc_outpus_spl_vel();
+
 
 void pmc_output_feedback()
 {
@@ -26,6 +28,7 @@ void pmc_output_feedback()
     pmc_output_reset();
     pmc_output_axis_status();
     pmc_outpus_spl_vel_status();
+    pmc_outpus_spl_vel();
 }
 
 static void pmc_output_alarm(){
@@ -316,4 +319,20 @@ static void pmc_outpus_spl_vel_status()
     {
         clearRegBit(REG_F, 45, 1);
     }
+}
+static void pmc_outpus_spl_vel()
+{
+    uint8_t bytes[4];
+    uint32_t vel = (uint32_t)var_chan[0][VAR_CHAN_S_CODE].value.i;
+
+    bytes[0] = (uint8_t)(vel & 0xff);
+    bytes[1] = (uint8_t)((vel >> 8) & 0xff);
+    bytes[2] = (uint8_t)((vel >> 16) & 0xff);
+    bytes[3] = (uint8_t)((vel >> 24) & 0xff);
+
+    setRegValue8(REG_F, 22, bytes[0]);
+    setRegValue8(REG_F, 23, bytes[1]);
+    setRegValue8(REG_F, 24, bytes[2]);
+    setRegValue8(REG_F, 25, bytes[3]);
+
 }
