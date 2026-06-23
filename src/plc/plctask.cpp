@@ -101,6 +101,8 @@ void PlcTask::initDispatchTable() {
     _dispatchTable[OP_CTRC] = &PlcTask::handleCTRC;
     // 移位操作
     _dispatchTable[OP_MOV]  = &PlcTask::handleMOV;
+    // 旋转操作
+    _dispatchTable[OP_ROT] = &PlcTask::handleROT;
 }
 
 void PlcTask::resetContext() {
@@ -905,13 +907,13 @@ void PlcTask::handleSTMR(const LadInstr& instr) {
 }
 
 void PlcTask::handleCTRC(const LadInstr& instr) {
-    int counterId = getValue(_ladData.regs[instr.regIdx]);
-    int presetVal = getValue(_ladData.regs[instr.regIdx + 1]);
-    _regData.regC[counterId+ REG_C_NUM] = presetVal;
-
     bool rst = static_cast<bool>(_currCtx->_logicStack & 1);
     _currCtx->_logicStack >>= 1;
     bool act = static_cast<bool>(_currCtx->_logicStack & 1);
+
+    int counterId = getValue(_ladData.regs[instr.regIdx]);
+    int presetVal = getValue(_ladData.regs[instr.regIdx + 1]);
+    _regData.regC[counterId+ REG_C_NUM] = presetVal;
 
     if (act) {
         if (_regData.regC[counterId] < presetVal) {
@@ -933,6 +935,84 @@ void PlcTask::handleMOV(const LadInstr& instr) {
     if (static_cast<bool>(_currCtx->_logicStack & 1)) {
         int val1 = getValue(_ladData.regs[instr.regIdx]);
         setValue(_ladData.regs[instr.regIdx + 1], val1);
+    }
+}
+
+void PlcTask::handleROT(const LadInstr& instr) {
+    bool inc = static_cast<bool>(_currCtx->_logicStack & 1);
+    _currCtx->_logicStack >>= 1;
+    bool pos = static_cast<bool>(_currCtx->_logicStack & 1);
+    _currCtx->_logicStack >>= 1;
+    bool dir = static_cast<bool>(_currCtx->_logicStack & 1);
+    _currCtx->_logicStack >>= 1;
+    bool rn0 = static_cast<bool>(_currCtx->_logicStack & 1);
+    _currCtx->_logicStack >>= 1;
+    bool act = static_cast<bool>(_currCtx->_logicStack & 1);
+
+    int rotorNum = getValue(_ladData.regs[instr.regIdx]);
+    int currPos = getValue(_ladData.regs[instr.regIdx + 1]);
+    int goalPos = getValue(_ladData.regs[instr.regIdx + 2]);
+    int result = -1;
+
+    if (act) {
+        if (rotorNum <= 0) {
+            return;
+        }
+        
+        // 将位置全部统一转化为 0-based 索引以便取模计算
+        if (rn0) {
+            currPos -= 1;
+            goalPos -= 1;
+        }
+
+        // 安全归一化到 [0, rotorNum - 1] 区间，防止异常输入
+        currPos = (currPos) % rotorNum;
+        goalPos = (goalPos % rotorNum + rotorNum) % rotorNum;
+
+        // 计算正转(增加)和反转(减小)的距离步数
+        int forDist = (goalPos - currPos + rotorNum) % rotorNum;
+        int revDist = (currPos - goalPos + rotorNum) % rotorNum;
+
+        // 决定旋转方向：isRev = true 为反转 (W1 = 1)
+        bool isRev = false;
+        if (dir) { // DIR=1: 启用最短路径选择
+            if (revDist < forDist) {
+                isRev = true;
+            }
+        }
+
+        // 根据 POS 条件确定最终要计算的目标位置
+        int targetPos0 = goalPos;
+        if (pos) { // POS=1: 计算目标位置的前一位置
+            if (isRev) {
+                // 反转时，目标前一位置比目标位置索引多 1
+                targetPos0 = (goalPos + 1) % rotorNum;
+            } else {
+                // 正转时，目标前一位置比目标位置索引少 1
+                targetPos0 = (goalPos - 1 + rotorNum) % rotorNum;
+            }
+        }
+
+        // 计算从当前位置到 targetPos0 需要走的步数
+        int steps = isRev ? (currPos - targetPos0 + rotorNum) % rotorNum 
+                            : (targetPos0 - currPos + rotorNum) % rotorNum;
+
+        // 根据 INC 条件决定输出的是步数还是位置
+        if (inc) {
+            result = steps;                      // INC=1: 输出所需步数
+        } else {
+            result = targetPos0 + (rn0 ? 1 : 0); // INC=0: 输出目标位置 (如果是 1-based 则加回 1)
+        }
+
+        setValue(_ladData.regs[instr.regIdx + 3], result);
+
+        // W1 = 0: 正向 (FOR), W1 = 1: 反向 (REV)
+        if (isRev) {
+            _currCtx->_logicStack |= 1;
+        } else {
+            _currCtx->_logicStack &= ~1;
+        }
+        
     }
 }
 

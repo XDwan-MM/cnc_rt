@@ -114,6 +114,7 @@ private:
     inline void handleSTMR(const LadInstr& instr);
     inline void handleCTRC(const LadInstr& instr);
     inline void handleMOV(const LadInstr& instr);
+    inline void handleROT(const LadInstr& instr);
 
     inline void setBit(LadReg& reg, bool value);
     inline bool getBit(LadReg& reg);
