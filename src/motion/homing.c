@@ -240,10 +240,11 @@ static double abs_homing_tp_pinc(AXIS_TYPE axis_type){
                 // 检查是否回零
                 if(abs_homing_is_axis_homed(axis_type)){
                     homing_tp[axis_type].homing_state = ABS_EXEC_IDLE;
+                    homing_tp[axis_type].is_ref_on = false;
                     // 判断是否在允差范围内到达零点
                     // if(abs_homing_check_axis_arrive(axis_type)) LOG(LOG_LEVEL_INFO, "轴%d到达零点", axis_type);
                     // else{
-                    //     LOG(LOG_LEVEL_ERR, "轴%d定位%f超过%f允差", axis_type, fabs(par_axis[axis_type][PAR_AX_HOME_CRDS].value.val_real - rt_data->axis_data[axis_type].motor_act_pos), par_axis[AXIS_Z][PAR_AX_POS_TOL].value.val_real);
+                    //     LOG(LOG_LEVEL_ERR, "轴%d定位%f超过%f允差", axis_type, fabs(par_axis[axis_type][PAR_AX_HOME_CRDS].value.val_real - rt_data->axis_data[axis_type].fb_pos_no_comp), par_axis[AXIS_Z][PAR_AX_POS_TOL].value.val_real);
                     //     setAlarm(ALARM_AX, ALARM_ERROR, 103 + axis_type);
                     //     break;
                     // }
@@ -278,6 +279,7 @@ static double abs_homing_tp_pinc(AXIS_TYPE axis_type){
             if(abs_homing_is_tp_finished(axis_type)){
                 homing_tp[axis_type].homing_state = ABS_EXEC_IDLE;
                 homing_tp[axis_type].is_resetting = false;
+                homing_tp[axis_type].is_ref_on = false;
                 manual_check_soft_limit_del_done(axis_type);
                 break;
             }
@@ -331,7 +333,7 @@ static bool abs_homing_is_tp_finished(AXIS_TYPE axis_type){
 // 检查轴是否已回零
 static bool abs_homing_is_axis_homed(AXIS_TYPE axis_type){
     double home_crds = par_axis[axis_type][PAR_AX_HOME_CRDS].value.val_real;
-    double current_pos = rt_data->axis_data[axis_type].wcs_cmd_pos_cur;
+    double current_pos = rt_data->axis_data[axis_type].mac_cmd_pos;
     if (fabs(home_crds - current_pos) < par_chan[0][PAR_CH_HOMED_ANG].value.val_real) return true;
     return false;
 }
@@ -348,6 +350,7 @@ static void reset_pos_at_home(AXIS_TYPE axis_type){
     rt_data->axis_data[axis_type].wcs_cmd_pos_cur = par_axis[axis_type][PAR_AX_HOME_CRDS].value.val_real;
     rt_data->axis_data[axis_type].wcs_cmd_pos_pre = par_axis[axis_type][PAR_AX_HOME_CRDS].value.val_real;
     rt_data->axis_data[axis_type].mac_cmd_pos = par_axis[axis_type][PAR_AX_HOME_CRDS].value.val_real;
+    // LOG(LOG_LEVEL_DEBUG, "wcs_cmd_pos_cur %f, mac_cmd_pos %f home_pos:%f", rt_data->axis_data[axis_type].wcs_cmd_pos_cur, rt_data->axis_data[axis_type].mac_cmd_pos, par_axis[axis_type][PAR_AX_HOME_CRDS].value.val_real);
 }
 
 GNC_RES homing_tp_init(){
@@ -407,7 +410,8 @@ GNC_RES abs_homing_tp_update_params(AXIS_TYPE axis_type, double current_vel, dou
     homing_tp[axis_type].homing_block->max_jerk = par_axis[axis_type][PAR_AX_RAPID_JK].value.val_real;
     // 如果新速度不满足，不更新新速度
     if(!homing_tp_new_vel_valid(axis_type, target_vel)) return res;
-    homing_tp[axis_type].homing_block->length = fabs(par_axis[axis_type][PAR_AX_HOME_CRDS].value.val_real - rt_data->axis_data[axis_type].wcs_cmd_pos_cur); // 设置的x轴零点与当前位置之间的距离
+    homing_tp[axis_type].homing_block->length = fabs(par_axis[axis_type][PAR_AX_HOME_CRDS].value.val_real - rt_data->axis_data[axis_type].mac_cmd_pos); // 设置的x轴零点与当前位置之间的距离
+    // LOG(LOG_LEVEL_DEBUG, "wcs_cmd_pos_cur %f, mac_cmd_pos %f home_pos:%f length %f", rt_data->axis_data[axis_type].wcs_cmd_pos_cur, rt_data->axis_data[axis_type].mac_cmd_pos, par_axis[axis_type][PAR_AX_HOME_CRDS].value.val_real, homing_tp[axis_type].homing_block->length);
     homing_tp[axis_type].homing_block->start_vel = fabs(var_axis[axis_type][VAR_AXIS_CMD_VEL].value.f);  // 当前速度
     homing_tp[axis_type].homing_distance = homing_tp[axis_type].homing_block->length;
     if(current_vel > homing_tp[axis_type].homing_block->max_vel) homing_tp[axis_type].homing_block->max_vel = current_vel;   
@@ -436,7 +440,7 @@ void abs_homing_tp_update_traj(VELPLAN_TYPE velplan_type, double cycle_time, AXI
 
 static bool homing_tp_new_vel_valid(AXIS_TYPE axis_type, double target_vel){
     double vs = fabs(var_axis[axis_type][VAR_AXIS_CMD_VEL].value.f); double ve = 0;
-    double remain_s = fabs(par_axis[axis_type][PAR_AX_HOME_CRDS].value.val_real - rt_data->axis_data[axis_type].wcs_cmd_pos_cur);
+    double remain_s = fabs(par_axis[axis_type][PAR_AX_HOME_CRDS].value.val_real - rt_data->axis_data[axis_type].mac_cmd_pos);
     double total_decline_length = 0;
     if(vs > target_vel && target_vel >= ve){
         double length1 = vp_cal_decel_dist(T_SHAPE, vs, target_vel, homing_tp[axis_type].homing_block->max_acc, homing_tp[axis_type].homing_block->max_jerk);
@@ -456,7 +460,7 @@ static GNC_RES abs_homing_tp_init(AXIS_TYPE axis_type){
     homing_tp[axis_type].interp_cycle = 1;
     homing_tp[axis_type].accum_distance = 0;
     homing_tp[axis_type].remain_distance = homing_tp[axis_type].homing_block->length; // 单个轴的零点距离
-    if(par_axis[axis_type][PAR_AX_HOME_CRDS].value.val_real > rt_data->axis_data[axis_type].wcs_cmd_pos_cur) homing_tp[axis_type].homing_direction = AXIS_HOMING_POSITIVE;  // 回零移动方向
+    if(par_axis[axis_type][PAR_AX_HOME_CRDS].value.val_real > rt_data->axis_data[axis_type].mac_cmd_pos) homing_tp[axis_type].homing_direction = AXIS_HOMING_POSITIVE;  // 回零移动方向
     else homing_tp[axis_type].homing_direction = AXIS_HOMING_NEGATIVE;
     res = vp_cal_vel_profile(T_SHAPE, homing_tp[axis_type].homing_block, homing_tp[axis_type].homing_profile, ncu_cycle); 
     // if(res != VP_CAL_SUCCESS) LOG(LOG_LEVEL_ERR, "vp cal vel profile fail");
@@ -474,7 +478,7 @@ static GNC_RES abs_declining_tp_init(AXIS_TYPE axis_type, double target_vel){
     homing_tp[axis_type].interp_cycle = 1;
     homing_tp[axis_type].accum_distance = 0;
     homing_tp[axis_type].remain_distance = homing_tp[axis_type].homing_block->length; // 单个轴的零点距离
-    if(par_axis[axis_type][PAR_AX_HOME_CRDS].value.val_real > rt_data->axis_data[axis_type].wcs_cmd_pos_cur) homing_tp[axis_type].homing_direction = AXIS_HOMING_POSITIVE;  // 回零移动方向
+    if(par_axis[axis_type][PAR_AX_HOME_CRDS].value.val_real > rt_data->axis_data[axis_type].mac_cmd_pos) homing_tp[axis_type].homing_direction = AXIS_HOMING_POSITIVE;  // 回零移动方向
     else homing_tp[axis_type].homing_direction = AXIS_HOMING_NEGATIVE;
     // todo：如果减速距离极小
     if(IsEqualTo(homing_tp[axis_type].homing_block->length, 0)){

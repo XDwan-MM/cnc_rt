@@ -91,7 +91,6 @@ bool rt_get_chan_state(int chan_index, ChanStateIndex state){
 }
 
 void nc_set_resetting(){
-    setVarChanInt(0, VAR_CHAN_IS_RESETTING, 1, 0);
     rt_data->nc_reset.is_resetting = 1;
 }
 

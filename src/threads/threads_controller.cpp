@@ -144,6 +144,10 @@ void* motion_controller_thread_func(void*) {
 void* path_plan_thread_func(void*) {
     while (!thread_exit_flag)
     {
+        // if(gcode_queue_is_full(gcode_queue)){
+        //     usleep(1);
+        //     return NULL;
+        // }
         // todo：不需要信号量
         sem_wait(&path_plan_sem);
         if (thread_exit_flag) break;
