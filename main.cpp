@@ -32,7 +32,17 @@ static int sys_close_rt = 0;
 // Ctrl + C 终止程序触发
 void sigint_handler([[maybe_unused]] int sig) {
     RT_LOG(INFO, "收到 Ctrl + C 按键信号");
-    exit_flag = 1;
+    main_exit_flag = 1;
+}
+
+void setup_signal_handler() {
+    struct sigaction sa;
+    sa.sa_handler = sigint_handler;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = SA_RESTART;
+    if (sigaction(SIGINT, &sa, nullptr) == -1) {
+        perror("sigaction failed");
+    }
 }
 
 int main() {  
@@ -94,7 +104,6 @@ int main() {
     LOG(LOG_LEVEL_INFO, "初始化硬件抽象层成功");
     //初始化行程检查功能
     Axis_Limit_Manager_Init();
-    signal(SIGINT, sigint_handler);
     // 启动主站
     #ifndef DEBUG_MODE_ENABLED
     if (Master_Start() < 0) {
@@ -122,6 +131,8 @@ int main() {
     // 主循环
     RT_LOG(INFO, "等待实时关闭信号");
     LOG(LOG_LEVEL_INFO, "等待实时关闭信号");
+    signal(SIGINT, sigint_handler);
+    // setup_signal_handler();
     #ifndef DEBUG_MODE_ENABLED
     while (!main_exit_flag) {
         // 等待实时关闭信号
@@ -130,7 +141,7 @@ int main() {
         sleep(1);
     }
     #else
-    while (!exit_flag) {
+    while (!main_exit_flag) {
         sleep(1);
     }
     #endif
