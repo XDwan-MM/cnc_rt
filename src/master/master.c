@@ -125,16 +125,24 @@ static void Master_Receive(){
     GM_TxPdoEntry_Get_By_Pos(&CurPos[3], slave_list, 5, 0, 3);
 
 #else
-    for (int i = 0; i < 4; i++) {
-        CHECK_FUNC(GM_RxPdoEntry_Get_By_Pos(&PurVel[i], slave_list, i + drivers_slave_bias, 1, 0));
-        CHECK_FUNC(GM_RxPdoEntry_Get_By_Pos(&ControlWord[i], slave_list, i + drivers_slave_bias, 0, 0));     // 获取控制字entry信息
-        CHECK_FUNC(GM_RxPdoEntry_Get_By_Pos(&OperationMode[i], slave_list, i + drivers_slave_bias, 1, 1));   // 获取操作模式entry信息
-        CHECK_FUNC(GM_RxPdoEntry_Get_By_Pos(&PurPos[i], slave_list, i + drivers_slave_bias, 0, 1));
+    GM_RxPdoEntry_Get_By_Pos(&ControlWord[0], slave_list, drivers_slave_bias, 0, 0);
+    GM_RxPdoEntry_Get_By_Pos(&PurPos[0], slave_list, drivers_slave_bias, 0, 1);
+    GM_RxPdoEntry_Get_By_Pos(&OperationMode[0], slave_list, drivers_slave_bias, 0, 2);
+    GM_RxPdoEntry_Get_By_Pos(&PurVel[0], slave_list, drivers_slave_bias, 0, 3);
 
-        CHECK_FUNC(GM_TxPdoEntry_Get_By_Pos(&StatusWord[i], slave_list, i + drivers_slave_bias, 0, 0));      // 获取状态字entry信息
-        CHECK_FUNC(GM_TxPdoEntry_Get_By_Pos(&CurPos[i], slave_list, i + drivers_slave_bias, 0, 1));          // 获取当前位置entry信息
-        CHECK_FUNC(GM_TxPdoEntry_Get_By_Pos(&CurVel[i], slave_list, i + drivers_slave_bias, 1, 0));
-        CHECK_FUNC(GM_TxPdoEntry_Get_By_Pos(&ErrorNumb[i], slave_list, i + drivers_slave_bias, 2, 0));
+    GM_TxPdoEntry_Get_By_Pos(&StatusWord[0], slave_list, drivers_slave_bias, 0, 0);
+    GM_TxPdoEntry_Get_By_Pos(&CurPos[0], slave_list, drivers_slave_bias, 0, 1);
+    GM_TxPdoEntry_Get_By_Pos(&ErrorNumb[0], slave_list, drivers_slave_bias, 0, 5);
+
+    GM_TxPdoEntry_Get_By_Pos(&CurVel[0], slave_list, drivers_slave_bias, 0, 2);
+    for (int i = 1; i < 4; i++) {
+        GM_RxPdoEntry_Get_By_Pos(&ControlWord[i], slave_list, i + drivers_slave_bias, 0, 0);
+        GM_RxPdoEntry_Get_By_Pos(&PurPos[i], slave_list, i + drivers_slave_bias, 0, 1);
+        GM_RxPdoEntry_Get_By_Pos(&OperationMode[i], slave_list, i + drivers_slave_bias, 0, 2);
+
+        GM_TxPdoEntry_Get_By_Pos(&StatusWord[i], slave_list, i + drivers_slave_bias, 0, 0);
+        GM_TxPdoEntry_Get_By_Pos(&CurPos[i], slave_list, i + drivers_slave_bias, 0, 1);
+        GM_TxPdoEntry_Get_By_Pos(&ErrorNumb[i], slave_list, i + drivers_slave_bias, 0, 2);
     }
 #endif
 
