@@ -159,7 +159,7 @@ static bool mem_check_res(GNC_RES res){
             memset(cycle_tp->traj_data, 0, sizeof(TRAJ_PARAMS));
             return false;
         }
-        break;
+        return false;
 
     case GNC_DATA_EMPTY:
         if(cycle_tp->is_resetting){
