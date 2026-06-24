@@ -73,12 +73,6 @@ void spindle_cal_speed(){
         break;
     }
     Hal_Driver_Set_Target_Vel(&spindle, (int32_t)spl_data.current_speed);
-#ifdef DEBUG_MODE_ENABLED
-    setVarChanInt(0, VAR_CHAN_S_CODE, spl_data.current_speed, 0);
-#else
-    setVarChanInt(0, VAR_CHAN_S_CODE, spindle.actual_vel, 0);
-#endif
-
 }
 
 bool spindle_is_stopped(){
