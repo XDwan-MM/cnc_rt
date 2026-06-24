@@ -208,17 +208,18 @@ void Axis_Status_Update()
         rt_data->axis_data[var].axis_status.current_pos = rt_data->axis_data[var].wcs_cmd_pos_cur;
         double delta = rt_data->axis_data[var].axis_status.current_pos - rt_data->axis_data[var].axis_status.last_pos;
         rt_data->axis_data[var].axis_status.last_pos = rt_data->axis_data[var].axis_status.current_pos;
+
         if(!rt_data->axis_data[var].axis_status.is_init)
         {
             rt_data->axis_data[var].axis_status.is_init = 1;
             return ;
         }
-        if(delta > 0)
+        if(delta > 0.00001)
         {
             rt_data->axis_data[var].axis_status.is_moving = 1;
             rt_data->axis_data[var].axis_status.direction = 1;
         }
-        else if(delta < 0)
+        else if(delta < 0.00001)
         {
             rt_data->axis_data[var].axis_status.is_moving = 1;
             rt_data->axis_data[var].axis_status.direction = 0;

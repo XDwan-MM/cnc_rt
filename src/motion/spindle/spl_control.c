@@ -73,7 +73,6 @@ void spindle_cal_speed(){
         break;
     }
     Hal_Driver_Set_Target_Vel(&spindle, (int32_t)spl_data.current_speed);
-    setVarChanInt(0, VAR_CHAN_S_CODE, spl_data.current_speed, 0);
 }
 
 bool spindle_is_stopped(){
@@ -93,15 +92,9 @@ static void Spindle_Stop(SPINDLE_DATA *spl_data)
     {
         Spindle_Ccw(spl_data);
     }
-    if(spl_data->current_speed == 0 )
+    if(spl_data->spl_vel_state == SPINDLE_VEL_ZERO)
     {
-        int32_t vel = 0;
-        Hal_Driver_Get_Actual_Vel(&spindle,&vel);
-        if(vel == 0)
-        {
-            spindle.mode = DRV_MODE_DISABLED;
-        }
-        spl_data->spl_vel_state = SPINDLE_VEL_ZERO;
+        spindle.mode = DRV_MODE_DISABLED;
         spindle_mcode_feedback();
     }
 }

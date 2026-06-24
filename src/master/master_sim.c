@@ -15,6 +15,8 @@ void simulate_hal_data(void) {
     x_axis_driver.actual_pos = x_axis_driver.target_pos;
     y_axis_driver.actual_pos = y_axis_driver.target_pos;
     z_axis_driver.actual_pos = z_axis_driver.target_pos;
+    spindle.actual_vel = spindle.target_vel;
+
 
     // 模拟状态字（已使能状态）
     x_axis_driver.state = DRV_STATE_OPERATION_ENABLED;
