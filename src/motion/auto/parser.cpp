@@ -173,7 +173,17 @@ GNC_RES parser_reading(){
     }
     if (parser_data->itp_datas.count <= 0)
     {
-        // LOG(LOG_LEVEL_WARN, "译码为空"); // 空包
+        // todo：多线程操作
+        // 空包也需要更新运行行和模态信息
+        VarUnion set_modal;
+        set_modal.type = 0;
+        for (int i = 0; i < MODAL_GROUP; ++i)
+        {
+            set_modal.value.i = parser_data->itp_state.modal[i];
+            setVarChanValue(0, VAR_CHAN_MODAL, i, &set_modal, 0);
+        }
+        setVarChanInt(0, VAR_CHAN_RUN_ROW, parser_data->itp_line_no, 0);
+        LOG(LOG_LEVEL_DEBUG, "译码为空: %d", parser_data->itp_line_no);
     }
     else
     {
