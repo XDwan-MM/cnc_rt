@@ -1,6 +1,6 @@
 #include "jog.h"
-#include "global.h"
 #include "ferror_control.h" // 必须引入以获取具体的跟随误差状态
+#include "global.h"
 #include <math.h>
 #include <string.h>
 
@@ -11,18 +11,25 @@ jog_planner_t jog_tp[SYS_AXES_NUM_JOG];
 static JOG_AXIS_CTRL jog_ctrls[SYS_AXES_NUM_JOG] = {
     {JOG_STATE_IDLE, JOG_DIR_NONE},
     {JOG_STATE_IDLE, JOG_DIR_NONE},
-    {JOG_STATE_IDLE, JOG_DIR_NONE}};
+    {JOG_STATE_IDLE, JOG_DIR_NONE}
+};
 
 /* 在 jog.c 的文件头部定义 */
 static NC_MODE last_sys_mode = MODE_IDLE; // 记录进入当前模式前，上一次的操作模式
 
-/* 本地按键保持状态 -- 由 nc_event 边沿更新，替代原先 rt_data 中的 is_jog_pos_req / is_jog_neg_req */
+/* 本地按键保持状态 -- 由 nc_event 边沿更新，替代原先 rt_data 中的 is_jog_pos_req / is_jog_neg_req
+ */
 static bool jog_pos_held[SYS_AXES_NUM_JOG];
 static bool jog_neg_held[SYS_AXES_NUM_JOG];
 
 /* 内部私有函数声明 */
 static void update_axis_state(int i, JOG_AXIS_CTRL *jog_axis_ctrl, bool global_fatal);
-static void execute_axis_motion(int i, JOG_AXIS_CTRL *jog_axis_ctrl, jog_planner_t *axis_jog_tp, const bool is_rapid);
+static void execute_axis_motion(
+    int i,
+    JOG_AXIS_CTRL *jog_axis_ctrl,
+    jog_planner_t *axis_jog_tp,
+    const bool is_rapid
+);
 static void sync_jog_on_mode_entry();
 static bool check_all_axes_idle_jog();
 
@@ -66,8 +73,10 @@ void handle_jog_cmd()
         {
             if (rt_data->axis_data[j].axis_status.is_error || ferror_control[j].error_flag)
                 any_non_limit = true;
-            else if (rt_data->axis_data[j].axis_status.is_fwd_limit ||
-                     rt_data->axis_data[j].axis_status.is_rev_limit)
+            else if (
+                rt_data->axis_data[j].axis_status.is_fwd_limit ||
+                rt_data->axis_data[j].axis_status.is_rev_limit
+            )
                 any_pure_limit = true;
         }
         global_fatal = (any_non_limit || !any_pure_limit);
@@ -106,7 +115,8 @@ void handle_jog_cmd()
     for (int i = 0; i < SYS_AXES_NUM_JOG; i++)
     {
         if (fabs(var_axis[i][VAR_AXIS_CMD_VEL].value.f) < SPEED_THRESHOLD &&
-            (rt_data->axis_data[i].axis_status.is_fwd_limit || rt_data->axis_data[i].axis_status.is_rev_limit))
+            (rt_data->axis_data[i].axis_status.is_fwd_limit ||
+             rt_data->axis_data[i].axis_status.is_rev_limit))
         {
             rt_data->axis_data[i].axis_status.is_decel_done = 1;
         }
@@ -232,8 +242,25 @@ static void update_axis_state(int i, JOG_AXIS_CTRL *jog_axis_ctrl, bool global_f
     else if (neg_held && !pos_held)
         desired_dir = JOG_DIR_NEGATIVE;
 
+    /* 软限位前瞻：预测刹车距离，若超出限位则阻止该方向运动 */
+    bool soft_limit_blocked = false;
+    {
+        double p_limit = par_axis[i][PAR_AX_PLMT].value.val_real;
+        double n_limit = par_axis[i][PAR_AX_NLMT].value.val_real;
+        // p_limit > n_limit 视为有限位直线轴；相等(如全0)视为无限旋转轴，跳过检查
+        if (p_limit > n_limit && jog_tp[i].max_acc > 0.0)
+        {
+            double curr_v = jog_tp[i].curr_vel;
+            double stop_dist = (curr_v * curr_v) / (2.0 * jog_tp[i].max_acc) * BRAKE_FACTOR;
+            if (desired_dir == JOG_DIR_POSITIVE)
+                soft_limit_blocked = ((jog_tp[i].curr_pos + stop_dist) >= p_limit);
+            else if (desired_dir == JOG_DIR_NEGATIVE)
+                soft_limit_blocked = ((jog_tp[i].curr_pos - stop_dist) <= n_limit);
+        }
+    }
+
     bool dir_blocked = (desired_dir == JOG_DIR_POSITIVE && is_fwd_limit) ||
-                       (desired_dir == JOG_DIR_NEGATIVE && is_rev_limit);
+                       (desired_dir == JOG_DIR_NEGATIVE && is_rev_limit) || soft_limit_blocked;
 
     /* 5. 状态机切换 */
     switch (jog_axis_ctrl->state)
@@ -282,7 +309,8 @@ static void update_axis_state(int i, JOG_AXIS_CTRL *jog_axis_ctrl, bool global_f
  * @brief 轴运动执行逻辑 (带前瞻软限位拦截)
  * 根据快速标志位选择 运动类型：快速JOG/普通JOG。
  */
-static void execute_axis_motion(int i, JOG_AXIS_CTRL *jog_axis_ctrl, jog_planner_t *axis_jog_tp, bool is_rapid)
+static void
+execute_axis_motion(int i, JOG_AXIS_CTRL *jog_axis_ctrl, jog_planner_t *axis_jog_tp, bool is_rapid)
 {
     switch (jog_axis_ctrl->state)
     {
@@ -292,11 +320,15 @@ static void execute_axis_motion(int i, JOG_AXIS_CTRL *jog_axis_ctrl, jog_planner
         axis_jog_tp->enable = 1; // 保持使能开启
 
         /* 1. 更新运动参数 */
-        // 根据模式选择速度与加速度参数  普通jog：1）慢速点动速度 2）加工加速度；  快速：1）快速点动速度 2）快速加速度
-        double base_vel = is_rapid ? par_axis[i][PAR_AX_JOG_FASTSPD].value.val_real : par_axis[i][PAR_AX_JOG_LOWSPD].value.val_real;
-        double base_acc = is_rapid ? par_axis[i][PAR_AX_RAPID_ACC].value.val_real : par_axis[i][PAR_AX_FEED_ACC].value.val_real;
+        // 根据模式选择速度与加速度参数  普通jog：1）慢速点动速度 2）加工加速度；
+        // 快速：1）快速点动速度 2）快速加速度
+        double base_vel = is_rapid ? par_axis[i][PAR_AX_JOG_FASTSPD].value.val_real
+                                   : par_axis[i][PAR_AX_JOG_LOWSPD].value.val_real;
+        double base_acc = is_rapid ? par_axis[i][PAR_AX_RAPID_ACC].value.val_real
+                                   : par_axis[i][PAR_AX_FEED_ACC].value.val_real;
         // 设置目标速度：实时获取倍率，设定带方向的目标速度
-        double current_override = is_rapid ? (var_chan[0][VAR_CHAN_RAPID_OVERRIDE].value.f / 100.0) : (var_chan[0][VAR_CHAN_FEED_OVERRIDE].value.f / 100.0);
+        double current_override = is_rapid ? (var_chan[0][VAR_CHAN_RAPID_OVERRIDE].value.f / 100.0)
+                                           : (var_chan[0][VAR_CHAN_FEED_OVERRIDE].value.f / 100.0);
         axis_jog_tp->target_vel = base_vel * current_override * jog_axis_ctrl->direction;
         axis_jog_tp->max_acc = base_acc;
 
@@ -313,7 +345,7 @@ static void execute_axis_motion(int i, JOG_AXIS_CTRL *jog_axis_ctrl, jog_planner
 
             // 计算理论刹车距离，乘以 1.05 作为安全余量，防止浮点累加误差导致轻微越界
             // 减小系数，就可以超过限位
-            double stop_dist = (curr_v * curr_v) / (2.0 * decel) * 0.9999;
+            double stop_dist = (curr_v * curr_v) / (2.0 * decel) * BRAKE_FACTOR;
 
             bool is_limit = false;
             if (jog_axis_ctrl->direction == JOG_DIR_POSITIVE)
