@@ -1,7 +1,7 @@
 #include "comp_data.h"
 #include "global.h"
-#include <stdint.h>
 #include <hmisysapi.h>
+#include <stdint.h>
 
 // 螺距误差补偿数据
 PitchCompState pitch_comp_state[3];       // XYZ轴 螺距补偿状态机
@@ -43,14 +43,14 @@ void sync_comp_params(void)
         // printf("PAR_CMP_PITCH_TABLE %d\n", par_acmp[axis][PAR_CMP_PITCH_TABLE].value.val_int);
 
         // 垂直度补偿参数
-        par_comp_lib[axis].squ1_enable   = par_acmp[axis][PAR_CMP_SQU1_ENABLE].value.val_int;
+        par_comp_lib[axis].squ1_enable = par_acmp[axis][PAR_CMP_SQU1_ENABLE].value.val_int;
         par_comp_lib[axis].squ1_input_ax = par_acmp[axis][PAR_CMP_SQU1_INPUT_AX].value.val_int;
-        par_comp_lib[axis].squ1_refn     = par_acmp[axis][PAR_CMP_SQU1_REFN].value.val_real;
-        par_comp_lib[axis].squ1_ang      = par_acmp[axis][PAR_CMP_SQU1_ANG].value.val_real;
-        par_comp_lib[axis].squ2_enable   = par_acmp[axis][PAR_CMP_SQU2_ENABLE].value.val_int;
+        par_comp_lib[axis].squ1_refn = par_acmp[axis][PAR_CMP_SQU1_REFN].value.val_real;
+        par_comp_lib[axis].squ1_ang = par_acmp[axis][PAR_CMP_SQU1_ANG].value.val_real;
+        par_comp_lib[axis].squ2_enable = par_acmp[axis][PAR_CMP_SQU2_ENABLE].value.val_int;
         par_comp_lib[axis].squ2_input_ax = par_acmp[axis][PAR_CMP_SQU2_INPUT_AX].value.val_int;
-        par_comp_lib[axis].squ2_refn     = par_acmp[axis][PAR_CMP_SQU2_REFN].value.val_real;
-        par_comp_lib[axis].squ2_ang      = par_acmp[axis][PAR_CMP_SQU2_ANG].value.val_real;
+        par_comp_lib[axis].squ2_refn = par_acmp[axis][PAR_CMP_SQU2_REFN].value.val_real;
+        par_comp_lib[axis].squ2_ang = par_acmp[axis][PAR_CMP_SQU2_ANG].value.val_real;
 
         // 直线度补偿参数 (预留)
         // TODO: stra1_input_ax, stra1_type, stra1_start, stra1_num, stra1_step,
@@ -86,13 +86,15 @@ void establish_pitch_comp_table(void)
     {
         CompParams *par = &par_comp_lib[axis];
         // 补偿点数为0 重置螺补表
-        if (par->pitch_num <= 0){
+        if (par->pitch_num <= 0)
+        {
             pitch_comp_table[axis].entries = 0;
             pitch_comp_table[axis].entry = &pitch_comp_table[axis].array[0];
             continue;
         }
         // 非单向或双向 重置补偿表
-        if (par->pitch_type != 1 && par->pitch_type != 2){
+        if (par->pitch_type != 1 && par->pitch_type != 2)
+        {
             pitch_comp_table[axis].entries = 0;
             pitch_comp_table[axis].entry = &pitch_comp_table[axis].array[0];
             continue;
@@ -105,37 +107,65 @@ void establish_pitch_comp_table(void)
         // 补偿表起始号
         int table_start = par->pitch_table;
 
-        // 螺补表中的数据：人机交互传下来的16位整型数据(-32768 到 32767)，单位：um
-        int16_t fwd_comp_arr_um[num];
-        int16_t rev_comp_arr_um[num];
+        // 螺补表中的数据 单位：um
+        int fwd_comp_arr_um[num];
+        int rev_comp_arr_um[num];
         double meas_pos_arr_mm[num];
 
-        // 等待人机交互将下发补偿数据的接口写好，暂时用固定值测试
+        /**
+         * @brief getPitchData 获取指定范围内的螺补数组
+         * @param[in] start     获取数组的起点
+         * @param[in] num       获取数组的个数
+         * @param[out] pitchData    得到数组
+         * @return
+         */
+        // 正向/负向补偿数组赋值
+        getPitchData(table_start, num, fwd_comp_arr_um);
+        getPitchData(table_start + num, num, rev_comp_arr_um);
+#ifdef DEBUG_MODE_ENABLED
         for (int i = 0; i < num; i++)
         {
-            fwd_comp_arr_um[i] = (int16_t)((i + 1) * 10);  // 10, 20, 30, 40, ...
-            rev_comp_arr_um[i] = (int16_t)(-(i + 1) * 10); // -10, -20, -30, -40, ...
+            printf("fwd%d rev%d\n", fwd_comp_arr_um[i], rev_comp_arr_um[i]);
         }
+#endif
         // 生成测量位置数组
         for (int i = 0; i < num; i++)
         {
             meas_pos_arr_mm[i] = par->pitch_start + (double)i * par->pitch_step;
         }
+
         // 建立实时中螺距误差补偿表
-        pitch_comp_table_status[axis] = generate_pitch_comp_table(&pitch_comp_table[axis], meas_pos_arr_mm, fwd_comp_arr_um, rev_comp_arr_um, num);
+        pitch_comp_table_status[axis] = generate_pitch_comp_table(
+            &pitch_comp_table[axis],
+            meas_pos_arr_mm,
+            fwd_comp_arr_um,
+            rev_comp_arr_um,
+            num
+        );
 
         if (pitch_comp_table_status[axis] != PITCH_TABLE_OK)
         {
             const char *reason;
             switch (pitch_comp_table_status[axis])
             {
-            case PITCH_TABLE_ERR_NULL_PTR:   reason = "null pointer"; break;
-            case PITCH_TABLE_ERR_NUM_POINTS: reason = "invalid point count"; break;
-            case PITCH_TABLE_ERR_NOT_ASCENDING: reason = "positions not ascending"; break;
-            default:                         reason = "unknown error"; break;
+            case PITCH_TABLE_ERR_NULL_PTR:
+                reason = "null pointer";
+                break;
+            case PITCH_TABLE_ERR_NUM_POINTS:
+                reason = "invalid point count";
+                break;
+            case PITCH_TABLE_ERR_NOT_ASCENDING:
+                reason = "positions not ascending";
+                break;
+            default:
+                reason = "unknown error";
+                break;
             }
-            LOG(LOG_LEVEL_ERR, "%s轴的螺距补偿表建立失败，原因: %s (status=%d)",
-                axis_names[axis], reason, pitch_comp_table_status[axis]);
+            LOG(LOG_LEVEL_ERR,
+                "%s轴的螺距补偿表建立失败，原因: %s (status=%d)",
+                axis_names[axis],
+                reason,
+                pitch_comp_table_status[axis]);
 
             pitch_comp_table[axis].entries = 0;
             pitch_comp_table[axis].entry = &pitch_comp_table[axis].array[0];

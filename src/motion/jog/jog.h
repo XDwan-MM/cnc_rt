@@ -15,6 +15,9 @@
 #define SPEED_THRESHOLD  (1.0e-5)  /* 停止速度判断阈值 */
 #define SYS_AXES_NUM_JOG (3)       /* 轴数 */
 
+/* 减速刹车系数，默认为1 （减小系数，就可以超过限位；增大系数走到限位前停止） */
+#define BRAKE_FACTOR (0.9999)
+
 #ifdef __cplusplus
 extern "C" {
 #endif
