@@ -187,8 +187,8 @@ void handle_mpg_cmd() {
     }
     if (!mpg_statis) {
         rt_data->axis_data[axis].wcs_cmd_pos_cur = simple_tp[axis].joint.pos_cmd;
-        setVarAxisDouble(axis, VAR_AXIS_CMD_VEL_EX, abs(simple_tp[axis].curr_vel) * 60, 0);
-        setVarChanDouble(0, VAR_CHAN_CMD_FEEDRATE, abs(simple_tp[axis].curr_vel) * 60, 0);
+        setVarAxisDouble(axis, VAR_AXIS_CMD_VEL_EX, fabs(simple_tp[axis].curr_vel) * 60, 0);
+        setVarChanDouble(0, VAR_CHAN_CMD_FEEDRATE, fabs(simple_tp[axis].curr_vel) * 60, 0);
     }
     last_axis = axis;
     last_rate = rate;
