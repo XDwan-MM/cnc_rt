@@ -18,7 +18,7 @@ static bool mem_check_running();
 static double mem_cal_pinc(VELPLAN_TYPE velplan_mode, double ncu_cycle, double current_vel, POS current_pos);
 static bool cycle_tp_is_finished();
 static void mem_cal_axis_vel(POS *current_pos, POS *target_pos, double interp_pinc, double target_vel);
-
+static void gcode_update_var(double line_no);
 static GNC_RES cycle_tp_update_pausing_tp(VELPLAN_TYPE vplan_mode, double ncu_cycle, double current_vel, POS current_pos, double target_vel);
 static GNC_RES cycle_tp_update_running_tp(VELPLAN_TYPE vplan_mode, double ncu_cycle, double current_vel, POS current_pos);
 static GNC_RES cycle_tp_update_params(VELPLAN_TYPE velplan_type, double cycle_time);
@@ -115,7 +115,6 @@ static double mem_cal_pinc(VELPLAN_TYPE velplan_mode, double ncu_cycle, double c
                     // 复位
                     if(cycle_tp->is_resetting){
                         gcode_handle_reset();
-                        // setVarChanInt(0, VAR_CHAN_RUN_ROW, 0, 0); 
                         auto_check_soft_limit_del_done();
                     }else{
                         setVarChanInt(0, VAR_CHAN_IS_MOVING, 0, 0);               
@@ -397,7 +396,7 @@ static GNC_RES cycle_tp_update_block(VELPLAN_TYPE vplan_mode, double ncu_cycle, 
     if(cycle_tp_look_ahead(vplan_mode, ncu_cycle, current_vel) == GNC_DATA_EMPTY) return GNC_DATA_EMPTY;
     // 更新当前行信息
     queue_copy_block(plan_queue, 0, cycle_tp->plan_block);
-    setVarChanInt(0, VAR_CHAN_RUN_ROW, cycle_tp->plan_block->line_number, 0);
+    gcode_update_var(cycle_tp->plan_block->line_number);
     // LOG(LOG_LEVEL_INFO, "gline: %d", cycle_tp->plan_block->line_number);
     // 对插补段终点进行行程限位检查
     lookahead_check_soft_limit(&cycle_tp->plan_block->end_pos);
@@ -426,7 +425,7 @@ static GNC_RES plan_block_get_next(){
     while(true){
         head_block = queue_peak(plan_queue);
         if(head_block == NULL) return GNC_DATA_EMPTY;
-        setVarChanInt(0, VAR_CHAN_RUN_ROW, head_block->line_number, 0);
+        gcode_update_var(head_block->line_number);
         // LOG(LOG_LEVEL_INFO, "gline: %d vel :%f end pos: %f", head_block->line_number, head_block->end_vel, head_block->end_pos.z);
         queue_pop(plan_queue);
         if(queue_is_empty(plan_queue)) return GNC_DATA_EMPTY;
@@ -912,4 +911,17 @@ void cycle_tp_reset(){
     cycle_tp->target_distance = 0;
     cycle_tp->accum_distance = 0;
     cycle_tp->remain_distance = 0;
+}
+
+static void gcode_update_var(double line_no){
+    // 运行模态
+    VarUnion set_modal;
+    set_modal.type = 0;
+    for (int i = 0; i < MODAL_GROUP; ++i)
+    {
+        set_modal.value.i = cycle_tp->plan_block->state.modal[i];
+        setVarChanValue(0, VAR_CHAN_MODAL, i, &set_modal, 0);
+    }
+    // 运行行号
+    setVarChanInt(0, VAR_CHAN_RUN_ROW, line_no, 0);
 }

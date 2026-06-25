@@ -242,7 +242,7 @@ GNC_RES rt_global_delete(){
     return GNC_OPERATOR_SUCCESS;
 }
 
-GNC_RES shm_var_update(){
+void shm_var_update(){
     VarUnion crds_type_var = {0};
     double crds_remain = 0.0;
     double crds_oft = 0.0;
@@ -252,14 +252,6 @@ GNC_RES shm_var_update(){
         if(rt_data->current_mode == MODE_MEM || rt_data->current_mode == MODE_MDI || rt_data->current_mode == MODE_DNC){
             // 剩余移动量
             crds_remain = var_axis[i][VAR_AXIS_PROG_POS_EX].value.f - var_axis[i][VAR_AXIS_CMD_POS_EX].value.f;
-            // 运行模态
-            VarUnion set_modal;
-            set_modal.type = 0;
-            for (int i = 0; i < MODAL_GROUP; ++i)
-            {
-                set_modal.value.i = cycle_tp->plan_block->state.modal[i];
-                setVarChanValue(0, VAR_CHAN_MODAL, i, &set_modal, 0);
-            }
             // 机床指令位置
             if(queue_is_empty(plan_queue)){
                 setVarAxisDouble(AXIS_X, VAR_AXIS_PROG_POS_EX, var_axis[0][VAR_AXIS_CMD_POS_EX].value.f, 0);
@@ -313,6 +305,7 @@ GNC_RES shm_var_update(){
         rt_data->chan_data[i].act_jk = rt_data->chan_data[i].cmd_jk;
     }
 }
+
 
 // todo：待删除
 // static GNC_RES shm_par_init(){

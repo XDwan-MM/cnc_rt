@@ -23,7 +23,7 @@ static void parser_macro_init()
     for (int i = 0; i < 30000; ++i) {
         parser_data->cmv[i] = 0;
     }
-    parser_data->cmv[18004] = 0.001; // 设置半径值超差
+    parser_data->cmv[18004] = 0.1; // 设置半径值超差
     parser_data->cmv[17031] = 0.0;  // 设置坐标旋转1轴运动计算方式
     parser_data->cmv[5410] = -90.0; // 设置坐标旋转默认角度
     parser_data->cmv[17028] = 1.0;  // 默认米制单位
