@@ -214,12 +214,12 @@ void Axis_Status_Update()
             rt_data->axis_data[var].axis_status.is_init = 1;
             return ;
         }
-        if(abs(delta) > 0.00001 && delta > 0)
+        if(fabs(delta) > 0.00001 && delta > 0)
         {
             rt_data->axis_data[var].axis_status.is_moving = 1;
             rt_data->axis_data[var].axis_status.direction = 1;
         }
-        else if(abs(delta) > 0.00001 && delta < 0)
+        else if(fabs(delta) > 0.00001 && delta < 0)
         {
             rt_data->axis_data[var].axis_status.is_moving = 1;
             rt_data->axis_data[var].axis_status.direction = 0;
