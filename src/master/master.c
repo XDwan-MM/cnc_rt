@@ -32,7 +32,7 @@ do { \
 
 int master_error_code = 0;
 bool reset_sem = 0;
-static char* drv_names[] = {"X","Y","Z","主"};
+static char* drv_names[] = {"主","X","Y","Z"};
 
 static void Master_Receive();
 static void Master_Error(int code);
@@ -204,13 +204,18 @@ void Master_Run()
                 {
                     CHECK_FUNC(GM_RxPdoEntry_Write(ControlWord[i], 0x80));
                 }
-                else if(dri_manager.drivers[i]->state == DRV_STATE_FAULT)
+                else if(dri_manager.drivers[i]->state == DRV_STATE_FAULT && (statis[i] & 0x0f) != 0x08)
                 {
                     dri_manager.drivers[i]->state = DRV_STATE_NOT_READY;
                     dri_manager.drivers[i]->mode = DRV_MODE_DISABLED;
-                    int res = delAlarm(ALARM_AX, ALARM_ERROR, 30 + i);
-                    if(res == 0)
-                        LOG(LOG_LEVEL_INFO, "%d 轴驱动器报错已清除",i);
+                    if(i = 0)
+                    {
+                        delAlarm(ALARM_AX, ALARM_ERROR, 33);
+                    }
+                    else
+                    {
+                        delAlarm(ALARM_AX, ALARM_ERROR, 29 + i);
+                    }
                 }
             }
             if (((statis[0] & 0x0f) != 0x08 || rt_data->axis_data[3].axis_status.is_disable)
@@ -297,7 +302,9 @@ void Master_Run()
                 if (error_code[0] != 0 && !rt_data->axis_data[3].axis_status.is_disable)
                 {
                     rt_data->axis_data[3].axis_status.is_error = 1;
-                    dri_manager.drivers[i]->state = DRV_STATE_FAULT;
+                    int res = setAlarm(ALARM_AX, ALARM_ERROR, 33);
+                    if (res != -8)
+                    LOG(LOG_LEVEL_ERR, "%s 轴驱动器报错", drv_names[i]);
                 }
                 else
                 {
@@ -309,7 +316,9 @@ void Master_Run()
                 if (error_code[i] != 0 && !rt_data->axis_data[i-1].axis_status.is_disable)
                 {
                     rt_data->axis_data[i-1].axis_status.is_error = 1;
-                    dri_manager.drivers[i]->state = DRV_STATE_FAULT;
+                    int res = setAlarm(ALARM_AX, ALARM_ERROR, 29 + i);
+                    if (res != -8)
+                    LOG(LOG_LEVEL_ERR, "%s 轴驱动器报错", drv_names[i]);
                 }
                 else
                 {
@@ -357,9 +366,14 @@ void Check_Driver_Error()
         {
             if (rt_data->axis_data[i].axis_status.is_error)
             {
-                int res = setAlarm(ALARM_AX, ALARM_ERROR, 30 + i);
-                if (res != -8)
-                    LOG(LOG_LEVEL_ERR, "%s 轴驱动器报错", drv_names[i]);
+                if(i = 3)
+                {
+                    dri_manager.drivers[0]->state = DRV_STATE_FAULT;
+                }
+                else
+                {
+                    dri_manager.drivers[i-1]->state = DRV_STATE_FAULT;
+                }
             }
         }
     }
