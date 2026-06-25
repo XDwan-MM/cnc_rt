@@ -93,7 +93,7 @@ static void nc_deal_mcode(){
             break;
         case M05: // 主轴停止
             setRegValue8(REG_F, 10, 0x05);
-            spl_data.emot_speed = 0;
+            spl_data.mcp_target_speed = 0;
             spl_data.mcode_feedback = false;
             break;
         case M19: // 主轴定位
