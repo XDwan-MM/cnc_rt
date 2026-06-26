@@ -182,20 +182,6 @@ static void auto_set_state(){
                 }
             }
             break;
-
-        // case SYS_EVENT_SINGLE_BLOCK_ON:
-        //     LOG(LOG_LEVEL_INFO, "自动模式处理开启单段");
-        //     cycle_tp->is_ve_zero = false;
-        //     if(cycle_tp->mem_exec_state == EXEC_RUNNING){
-        //         if(!queue_is_empty(plan_queue)){
-        //             if(cycle_tp->plan_block->mode == PMC_MODE_PAUSE) break;
-        //             if(cycle_tp->plan_block->mode != PMC_MODE_TAP){
-        //                 cycle_tp->max_vel = 0;
-        //                 cycle_tp->is_event_trigger = true;
-        //             };
-        //         }
-        //     }
-        //     break;
         
         case SYS_EVENT_DRY_RUN_OFF:
         // case SYS_EVENT_SINGLE_BLOCK_OFF:
@@ -212,6 +198,56 @@ static void auto_set_state(){
                 }
             }
             break;
+
+        case SYS_EVENT_BLOCK_SKIP_ON:
+            if(cycle_tp->mem_exec_state == EXEC_IDLE) {
+                rt_set_sys_state(SYS_IS_BLOCK_SKIP, true);
+                LOG(LOG_LEVEL_INFO, "自动模式开启跳段");
+                break;
+            }
+            LOG(LOG_LEVEL_WARN, "自动模式下不允许加工中开启跳段");
+            break;
+
+        case SYS_EVENT_BLOCK_SKIP_OFF:
+            if(cycle_tp->mem_exec_state == EXEC_IDLE) {
+                rt_set_sys_state(SYS_IS_BLOCK_SKIP, false);
+                LOG(LOG_LEVEL_INFO, "自动模式关闭机跳段");
+                break;
+            }
+            LOG(LOG_LEVEL_WARN, "自动模式下不允许加工中关闭跳段");
+            break;
+
+        case SYS_EVENT_MAC_LOCK_ON:
+            if(cycle_tp->mem_exec_state == EXEC_IDLE) {
+                rt_data->sys_state[SYS_IS_MAC_LOCK] = true;
+                LOG(LOG_LEVEL_INFO, "自动模式开启机械锁住");
+                break;
+            }
+            LOG(LOG_LEVEL_WARN, "自动模式下不允许加工中开启机械锁住");
+            break;
+
+        case SYS_EVENT_MAC_LOCK_OFF:
+            if(cycle_tp->mem_exec_state == EXEC_IDLE) {
+                rt_data->sys_state[SYS_IS_MAC_LOCK] = false;
+                LOG(LOG_LEVEL_INFO, "自动模式关闭机械锁住");
+                break;
+            }
+            LOG(LOG_LEVEL_WARN, "自动模式下不允许加工中关闭机械锁住");
+            break;
+
+        // case SYS_EVENT_SINGLE_BLOCK_ON:
+        //     LOG(LOG_LEVEL_INFO, "自动模式处理开启单段");
+        //     cycle_tp->is_ve_zero = false;
+        //     if(cycle_tp->mem_exec_state == EXEC_RUNNING){
+        //         if(!queue_is_empty(plan_queue)){
+        //             if(cycle_tp->plan_block->mode == PMC_MODE_PAUSE) break;
+        //             if(cycle_tp->plan_block->mode != PMC_MODE_TAP){
+        //                 cycle_tp->max_vel = 0;
+        //                 cycle_tp->is_event_trigger = true;
+        //             };
+        //         }
+        //     }
+        //     break;
 
         case SYS_EVENT_X_POS_PRESS:
         case SYS_EVENT_Y_POS_PRESS:

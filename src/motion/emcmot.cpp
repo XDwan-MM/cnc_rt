@@ -35,6 +35,8 @@ static void read_from_hal();
 static void check_for_soft_limit();
 static void compute_error_comp();
 static void calcul_mac_cmd_pos();
+static void manual_unset_sys_state();
+static void reset_clean_warning();
 
 static int32_t x_cmd_Pulses, y_cmd_Pulses, z_cmd_Pulses;
 static int32_t x_target_pos, y_target_pos, z_target_pos;
@@ -53,16 +55,8 @@ void emcmotTrajPlan() {
         // 当前活动通道
         setVarSysInt(VAR_SYS_ACTIVE_CHAN, i, 0);
         
-        if(rt_data->nc_event == SYS_EVENT_RESET)
-        {
-            // 复位状态：2.外部复位信号ERS 4.按下MDI上的RESET键
-            nc_set_resetting();
-            setVarChanInt(0, VAR_CHAN_IS_RESETTING, 1, 0);
-            // 复位生效参数
-            Axis_Limit_Manager_Init();
-            // 清除警告提示
-            cleanAllAlarm(ALARM_TYPE_ALL, ALARM_WARNING);
-        }
+        // 复位清除警告
+        reset_clean_warning();
 
         // 检查系统是否有异常
         check_for_fault();
@@ -189,6 +183,8 @@ static void spindle_control(){
 
 // 不同加工模式的运动控制
 static void get_cmd_pos() {
+    // todo：临时，机械锁住第一阶段，不支持手动模式
+    manual_unset_sys_state();
     switch (rt_data->current_mode) {
         case MODE_EDIT: // 编辑
             handle_edit_cmd();
@@ -433,3 +429,37 @@ static void update_status() {
     nc_set_resetted();
 }
 
+static void reset_clean_warning(){
+    if(rt_data->nc_event == SYS_EVENT_RESET)
+    {
+        // 复位状态：2.外部复位信号ERS 4.按下MDI上的RESET键
+        nc_set_resetting();
+        setVarChanInt(0, VAR_CHAN_IS_RESETTING, 1, 0);
+        // 复位生效参数
+        Axis_Limit_Manager_Init();
+        // 清除警告提示
+        cleanAllAlarm(ALARM_TYPE_ALL, ALARM_WARNING);
+    }
+}
+
+static void manual_unset_sys_state(){
+    if(rt_data->current_mode == MODE_MDI || rt_data->current_mode == MODE_MEM || rt_data->current_mode == MODE_DNC) return;
+    // todo：手动模式暂不支持机械锁住
+    if(rt_data->sys_state[SYS_IS_MAC_LOCK]) rt_data->sys_state[SYS_IS_MAC_LOCK] = false;
+    switch (rt_data->nc_event)
+    {
+    case SYS_EVENT_MAC_LOCK_ON:
+    case SYS_EVENT_MAC_LOCK_OFF:
+        LOG(LOG_LEVEL_WARN, "手动模式暂不支持机械锁住");
+        rt_data->sys_state[SYS_IS_MAC_LOCK] = false;
+        break;
+    case SYS_EVENT_BLOCK_SKIP_ON:
+        rt_set_sys_state(SYS_IS_BLOCK_SKIP, true);
+        break;
+    case SYS_EVENT_BLOCK_SKIP_OFF:
+        rt_set_sys_state(SYS_IS_BLOCK_SKIP, false);
+        break;
+    default:
+        break;
+    } 
+}

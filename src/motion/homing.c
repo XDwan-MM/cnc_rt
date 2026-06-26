@@ -242,14 +242,8 @@ static double abs_homing_tp_pinc(AXIS_TYPE axis_type){
                     homing_tp[axis_type].homing_state = ABS_EXEC_IDLE;
                     homing_tp[axis_type].is_ref_on = false;
                     // 判断是否在允差范围内到达零点
-                    // if(abs_homing_check_axis_arrive(axis_type)) LOG(LOG_LEVEL_INFO, "轴%d到达零点", axis_type);
-                    // else{
-                    //     LOG(LOG_LEVEL_ERR, "轴%d定位%f超过%f允差", axis_type, fabs(par_axis[axis_type][PAR_AX_HOME_CRDS].value.val_real - rt_data->axis_data[axis_type].fb_pos_no_comp), par_axis[AXIS_Z][PAR_AX_POS_TOL].value.val_real);
-                    //     setAlarm(ALARM_AX, ALARM_ERROR, 103 + axis_type);
-                    //     break;
-                    // }
                     setVarAxisInt(axis_type, VAR_AXIS_IS_HOMEF, 1, 0);
-                    // reset_pos_at_home(axis_type);
+                    reset_pos_at_home(axis_type);
                     LOG(LOG_LEVEL_INFO, "轴%d完成回零", axis_type);
                     break;
                 }
@@ -296,9 +290,8 @@ static double abs_homing_tp_pinc(AXIS_TYPE axis_type){
 }
 
 static void abs_homing_do_home(AXIS_TYPE axis_type){
-    double axis_cmd_pos = rt_data->axis_data[axis_type].wcs_cmd_pos_cur;
-    axis_cmd_pos = axis_cmd_pos + abs_homing_tp_pinc(axis_type);
-    rt_data->axis_data[axis_type].wcs_cmd_pos_cur = axis_cmd_pos;
+    double axis_homing_pinc = abs_homing_tp_pinc(axis_type);
+    rt_data->axis_data[axis_type].wcs_cmd_pos_cur += axis_homing_pinc;
 }
 
 static void relative_homing_do_home(AXIS_TYPE axis_type){
@@ -350,7 +343,6 @@ static void reset_pos_at_home(AXIS_TYPE axis_type){
     rt_data->axis_data[axis_type].wcs_cmd_pos_cur = par_axis[axis_type][PAR_AX_HOME_CRDS].value.val_real;
     rt_data->axis_data[axis_type].wcs_cmd_pos_pre = par_axis[axis_type][PAR_AX_HOME_CRDS].value.val_real;
     rt_data->axis_data[axis_type].mac_cmd_pos = par_axis[axis_type][PAR_AX_HOME_CRDS].value.val_real;
-    // LOG(LOG_LEVEL_DEBUG, "wcs_cmd_pos_cur %f, mac_cmd_pos %f home_pos:%f", rt_data->axis_data[axis_type].wcs_cmd_pos_cur, rt_data->axis_data[axis_type].mac_cmd_pos, par_axis[axis_type][PAR_AX_HOME_CRDS].value.val_real);
 }
 
 GNC_RES homing_tp_init(){
