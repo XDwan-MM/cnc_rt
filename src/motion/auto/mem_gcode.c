@@ -36,9 +36,9 @@ static bool cycle_block_axis_arrive_check();
 static bool cycle_block_arrive_check();
 static bool cycle_tp_is_zerovel_and_zerorate(double current_vel);
 static bool cycle_tp_check_switching_dist(VELPLAN_TYPE vplan_mode, double current_vel, double target_vel);
-static void block_cal_exact_stop_vel(PLAN_BLOCK* current_block);
-static void block_cal_tap_vel(PLAN_BLOCK* current_block);
-static void block_cal_chop_vel(PLAN_BLOCK* current_block);
+static void block_cal_exact_stop_vel(PLAN_BLOCK* current_block, double max_rapid_feed, double max_feed);
+static void block_cal_tap_vel(PLAN_BLOCK* current_block, double max_rapid_feed, double max_feed);
+static void block_cal_chop_vel(PLAN_BLOCK* current_block, double max_rapid_feed, double max_feed);
 static void block_cal_lookahead_vel(PLAN_BLOCK* current_block);
 // todo：修改位置
 static GNC_RES vp_cal_g04_vel_profile(VELPLAN_TYPE velplan_type, PLAN_BLOCK* plan_block, VEL_PROFILE* vel_profile, double cycle_time);
@@ -639,20 +639,22 @@ static GNC_RES cycle_tp_look_ahead(VELPLAN_TYPE vplan_mode, double ncu_cycle, do
 
 // 计算段的首末速度、最大速度、加速度、加加速度
 static void block_cal_lookahead_vel(PLAN_BLOCK* current_block){
+    double max_rapid_feed = MIN3(par_axis[0][PAR_AX_RAPID_SPD].value.val_real, par_axis[1][PAR_AX_RAPID_SPD].value.val_real, par_axis[2][PAR_AX_RAPID_SPD].value.val_real); 
+    double max_feed = MIN3(par_axis[0][PAR_AX_FEED_SPD].value.val_real, par_axis[1][PAR_AX_FEED_SPD].value.val_real, par_axis[2][PAR_AX_FEED_SPD].value.val_real);
     switch (current_block->mode)
     {
         // 切削方式 G64
         case PMC_MODE_CHOP:
-            block_cal_chop_vel(current_block);
+            block_cal_chop_vel(current_block, max_rapid_feed, max_feed);
             break;
         // 攻丝方式 G63
         case PMC_MODE_TAP:
-            block_cal_tap_vel(current_block);
+            block_cal_tap_vel(current_block, max_rapid_feed, max_feed);
             break;
         // 准确停止、到位检测 G09、G61、G27、G28
         case PMC_MODE_ARRIVE_CHECK:
         case PMC_MODE_EXACT_STOP:
-            block_cal_exact_stop_vel(current_block);
+            block_cal_exact_stop_vel(current_block, max_rapid_feed, max_feed);
             break;
         default:
             break;
@@ -660,16 +662,16 @@ static void block_cal_lookahead_vel(PLAN_BLOCK* current_block){
 }
 
 // 精准停：终点减速，到位检测
-static void block_cal_exact_stop_vel(PLAN_BLOCK* current_block){
+static void block_cal_exact_stop_vel(PLAN_BLOCK* current_block, double max_rapid_feed, double max_feed){
     switch(current_block->type){
         case RAPID:
             // 当参数RDR（No.1401#6）的值为1时为空运行速度×JV，其值为0时则为快速移动速度
             if (rt_get_sys_state(SYS_IS_DRY_RUN))
             {
-                current_block->max_vel = par_chan[0][PAR_CH_DRYRUN_SPD].value.val_real * var_chan[0][VAR_CHAN_RAPID_OVERRIDE].value.f / OVERRIDE_PERCENT;        
+                current_block->max_vel = MIN(par_chan[0][PAR_CH_DRYRUN_SPD].value.val_real * var_chan[0][VAR_CHAN_RAPID_OVERRIDE].value.f / OVERRIDE_PERCENT, max_rapid_feed);        
             }
             else{
-                current_block->max_vel = current_block->feed_vel * var_chan[0][VAR_CHAN_RAPID_OVERRIDE].value.f / OVERRIDE_PERCENT;
+                current_block->max_vel = MIN(current_block->feed_vel * var_chan[0][VAR_CHAN_RAPID_OVERRIDE].value.f / OVERRIDE_PERCENT, max_rapid_feed);
             }
             current_block->start_vel = 0;
             current_block->end_vel = 0;
@@ -679,13 +681,12 @@ static void block_cal_exact_stop_vel(PLAN_BLOCK* current_block){
         case CIRCLE_CW:
         case LINE:
             // 被钳制在最大切削进给速度上
-            double min_feed = MIN3(par_axis[0][PAR_AX_FEED_SPD].value.val_real, par_axis[1][PAR_AX_FEED_SPD].value.val_real, par_axis[2][PAR_AX_FEED_SPD].value.val_real);
             if (rt_get_sys_state(SYS_IS_DRY_RUN))
             {
-                current_block->max_vel = par_chan[0][PAR_CH_DRYRUN_SPD].value.val_real * var_chan[0][VAR_CHAN_FEED_OVERRIDE].value.f / OVERRIDE_PERCENT;
+                current_block->max_vel = MIN(par_chan[0][PAR_CH_DRYRUN_SPD].value.val_real * var_chan[0][VAR_CHAN_FEED_OVERRIDE].value.f / OVERRIDE_PERCENT, max_feed);
             }
             else{
-                current_block->max_vel = MIN(current_block->feed_vel * var_chan[0][VAR_CHAN_FEED_OVERRIDE].value.f / OVERRIDE_PERCENT, min_feed);
+                current_block->max_vel = MIN(current_block->feed_vel * var_chan[0][VAR_CHAN_FEED_OVERRIDE].value.f / OVERRIDE_PERCENT, max_feed);
             }
             current_block->start_vel = 0;
             current_block->end_vel = 0;
@@ -696,15 +697,15 @@ static void block_cal_exact_stop_vel(PLAN_BLOCK* current_block){
 }
 
 // 攻丝方式：终点不减速执行下一程序段，进给倍率和进给暂停无效
-static void block_cal_tap_vel(PLAN_BLOCK* current_block){
+static void block_cal_tap_vel(PLAN_BLOCK* current_block, double max_rapid_feed, double max_feed){
     switch(current_block->type){
         case RAPID:
             if (rt_get_sys_state(SYS_IS_DRY_RUN))
             {
-                current_block->max_vel = par_chan[0][PAR_CH_DRYRUN_SPD].value.val_real;
+                current_block->max_vel = MIN(par_chan[0][PAR_CH_DRYRUN_SPD].value.val_real, max_rapid_feed);
             }
             else{
-                current_block->max_vel = current_block->feed_vel;
+                current_block->max_vel = MIN(current_block->feed_vel, max_rapid_feed);
             }
             current_block->start_vel = current_block->end_vel = 0;
             break;
@@ -714,10 +715,10 @@ static void block_cal_tap_vel(PLAN_BLOCK* current_block){
         case LINE:
             if (rt_get_sys_state(SYS_IS_DRY_RUN))
             {
-                current_block->max_vel = par_chan[0][PAR_CH_DRYRUN_SPD].value.val_real;
+                current_block->max_vel = MIN(par_chan[0][PAR_CH_DRYRUN_SPD].value.val_real, max_feed);
             }
             else{
-                current_block->max_vel = current_block->feed_vel;
+                current_block->max_vel = MIN(current_block->feed_vel, max_feed);
             }
             if(rt_get_sys_state(SYS_IS_SINGLE_BLOCK)) current_block->start_vel = current_block->end_vel = 0;
             else current_block->start_vel = current_block->end_vel = current_block->max_vel;    
@@ -728,15 +729,15 @@ static void block_cal_tap_vel(PLAN_BLOCK* current_block){
 }
 
 // 切削方式：终点不减速执行下一程序段
-static void block_cal_chop_vel(PLAN_BLOCK* current_block){
+static void block_cal_chop_vel(PLAN_BLOCK* current_block, double max_rapid_feed, double max_feed){
     switch(current_block->type){
         case RAPID:
             if (rt_get_sys_state(SYS_IS_DRY_RUN))
             {
-                current_block->max_vel = par_chan[0][PAR_CH_DRYRUN_SPD].value.val_real * var_chan[0][VAR_CHAN_RAPID_OVERRIDE].value.f / OVERRIDE_PERCENT;
+                current_block->max_vel = MIN(par_chan[0][PAR_CH_DRYRUN_SPD].value.val_real * var_chan[0][VAR_CHAN_RAPID_OVERRIDE].value.f / OVERRIDE_PERCENT, max_rapid_feed);
             }
             else{
-                current_block->max_vel = current_block->feed_vel * var_chan[0][VAR_CHAN_RAPID_OVERRIDE].value.f / OVERRIDE_PERCENT;
+                current_block->max_vel = MIN(current_block->feed_vel * var_chan[0][VAR_CHAN_RAPID_OVERRIDE].value.f / OVERRIDE_PERCENT, max_rapid_feed);
             }
             current_block->start_vel = current_block->end_vel = 0;
             break;
@@ -744,13 +745,12 @@ static void block_cal_chop_vel(PLAN_BLOCK* current_block){
         case CIRCLE_CCW:
         case CIRCLE_CW:
         case LINE:
-            double min_feed = MIN3(par_axis[0][PAR_AX_FEED_SPD].value.val_real, par_axis[1][PAR_AX_FEED_SPD].value.val_real, par_axis[2][PAR_AX_FEED_SPD].value.val_real);
             if (rt_get_sys_state(SYS_IS_DRY_RUN))
             {
-                current_block->max_vel = par_chan[0][PAR_CH_DRYRUN_SPD].value.val_real * var_chan[0][VAR_CHAN_FEED_OVERRIDE].value.f / OVERRIDE_PERCENT;
+                current_block->max_vel = MIN(par_chan[0][PAR_CH_DRYRUN_SPD].value.val_real * var_chan[0][VAR_CHAN_FEED_OVERRIDE].value.f / OVERRIDE_PERCENT, max_feed);
             }
             else{
-                current_block->max_vel = MIN(current_block->feed_vel * var_chan[0][VAR_CHAN_FEED_OVERRIDE].value.f / OVERRIDE_PERCENT, min_feed);
+                current_block->max_vel = MIN(current_block->feed_vel * var_chan[0][VAR_CHAN_FEED_OVERRIDE].value.f / OVERRIDE_PERCENT, max_feed);
             }
             if(rt_get_sys_state(SYS_IS_SINGLE_BLOCK)) current_block->start_vel = current_block->end_vel = 0;
             else current_block->start_vel = current_block->end_vel = current_block->max_vel;  
