@@ -101,7 +101,7 @@ static void block_cal_pos(GCODE_BLOCK* gcode_block, PLAN_BLOCK* current_block, P
 static void block_cal_vel(PLAN_BLOCK* current_block){
     switch(current_block->type){
         case RAPID:
-            current_block->feed_vel = MIN3(par_axis[0][PAR_AX_RAPID_SPD].value.val_real, par_axis[1][PAR_AX_RAPID_SPD].value.val_real, par_axis[2][PAR_AX_RAPID_SPD].value.val_real);  // G00最大速度为设置的快速进给速度
+            current_block->feed_vel = MIN3(par_axis[0][PAR_AX_JOG_LOWSPD].value.val_real, par_axis[1][PAR_AX_JOG_LOWSPD].value.val_real, par_axis[2][PAR_AX_JOG_LOWSPD].value.val_real);  // G00最大速度为设置的快速进给速度
             current_block->max_vel = current_block->feed_vel;
             current_block->max_acc = MIN3(par_axis[0][PAR_AX_RAPID_ACC].value.val_real, par_axis[1][PAR_AX_RAPID_ACC].value.val_real, par_axis[2][PAR_AX_RAPID_ACC].value.val_real);
             current_block->max_jerk = MIN3(par_axis[0][PAR_AX_RAPID_JK].value.val_real, par_axis[1][PAR_AX_RAPID_JK].value.val_real, par_axis[2][PAR_AX_RAPID_JK].value.val_real);
