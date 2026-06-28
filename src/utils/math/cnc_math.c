@@ -209,6 +209,24 @@ GNC_RES Matrix_Inv(double *X, int n)
     return GNC_RES;
 }
 
+/// @brief 算方程的最小正数根
+/// @param rootCount 个数 
+/// @param x 实数根
+/// @param min_real_roots 最小正数根
+/// @return min_real_roots 最小正数根
+/// @author 许晓婷
+/// @version 1.0
+/// @date 2026/06/28
+double get_min_positive_real_root(int rootCount, double roots[]){
+    // VALIDATE_ARGUMENT(rootCount != 0, "rootCount", "rootCount must be greater than 0");
+    double min_root = INF;
+    for(int i = 0; i < rootCount; i++){
+        if(IsGreaterThan(roots[i], 0.0) && IsLessThan(roots[i], min_root)){
+            min_root = roots[i];
+        }
+    }
+    return min_root;
+}
 
 /// @brief 计算方程的最小非负数根
 /// @param rootCount 个数 
@@ -222,7 +240,7 @@ double get_min_nonnegative_real_root(int rootCount, double roots[]){
     // VALIDATE_ARGUMENT(rootCount != 0, "rootCount", "rootCount must be greater than 0");
     double min_root = INF;
     for(int i = 0; i < rootCount; i++){
-        if(roots[i] >= 0.0 && roots[i] < min_root){
+        if(IsGreaterThanOrEqual(roots[i], 0.0) && IsLessThan(roots[i], min_root)){
             min_root = roots[i];
         }
     }

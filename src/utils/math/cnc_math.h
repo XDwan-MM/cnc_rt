@@ -83,6 +83,9 @@ int solve_quartic_equation(double a, double b, double c, double d, double e, dou
 // 计算最小非负数实数根
 double get_min_nonnegative_real_root(int rootCount, double roots[]);
 
+// 计算方程的最小正数根
+double get_min_positive_real_root(int rootCount, double roots[]);
+
 #ifdef __cplusplus
 }
 #endif

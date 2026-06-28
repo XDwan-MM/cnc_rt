@@ -54,7 +54,12 @@ typedef enum result {
     VP_CAL_S_ERROR,
     VP_CAL_V_ERROR,
     VP_DELCINE_TO_END,
-    
+    VP_VS_LESS_THAN_ZERO,
+    VP_VE_LESS_THAN_ZERO,
+    VP_VMAX_LESS_THAN_VS,
+    VP_VMAX_LESS_THAN_VE,
+    VP_VP_LESS_THAN_VS,
+    VP_VP_LESS_THAN_VE,
 } GNC_RES;
 
 typedef enum {
@@ -92,6 +97,13 @@ typedef enum velplan_type {
     S_SHAPE = 1,
     SIN_SHAPE = 2,
 } VELPLAN_TYPE;
+
+// 求解方式
+typedef enum solve_type {
+    DICHOTOMY = 0,  // 二分法逼近
+    EQUATION = 1,   // 解析法
+} SOLVE_TYPE;
+
 
 // 回零方式
 typedef enum {

@@ -18,7 +18,6 @@ extern "C" {
 #include "trajectory.h"
 
 #define MEM_END_TOL 0.001    
-#define CIRCLE_END_TOL 0.004
 #define LOOK_AHEAD_SIZE 200  // 速度前瞻的最大段数
 
 typedef enum mem_exec_state
