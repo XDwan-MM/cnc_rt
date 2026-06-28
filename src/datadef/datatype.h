@@ -93,17 +93,12 @@ typedef POS VECTOR;
 
 // 加减速类型
 typedef enum velplan_type {
-    T_SHAPE = 0,
-    S_SHAPE = 1,
-    SIN_SHAPE = 2,
+    T_SHAPE = 0,                // T型
+    S_SHAPE_DICHOTOMY = 1,      // S型二分法
+    SIN_SHAPE_DICHOTOMY = 2,    // SIN型二分法
+    S_SHAPE_EQUATION = 3,       // S型解析法
+    SIN_SHAPE_EQUATION = 4,     // SIN型解析法
 } VELPLAN_TYPE;
-
-// 求解方式
-typedef enum solve_type {
-    DICHOTOMY = 0,  // 二分法逼近
-    EQUATION = 1,   // 解析法
-} SOLVE_TYPE;
-
 
 // 回零方式
 typedef enum {

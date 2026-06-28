@@ -298,7 +298,7 @@ static GNC_RES cycle_tp_update_running_tp(VELPLAN_TYPE vplan_mode, double ncu_cy
         }
     }
     res = cycle_tp_update_block(vplan_mode, ncu_cycle, current_vel, current_pos);
-        // 对插补段终点进行行程限位检查
+    // 对插补段终点进行行程限位检查
     lookahead_check_soft_limit(&cycle_tp->plan_block->end_pos);
     if(res != GNC_CAL_SUCCESS) return res;
     // 如果加工段允许最大速度为0（倍率为0）
@@ -437,9 +437,9 @@ static GNC_RES plan_block_get_next(){
         head_block = queue_peak(plan_queue);
         // todo：在路径规划消除奇异点
         // 如果长度大于等于0
-        // if(IsGreaterThan(head_block->length, 0) || head_block->mode == PMC_MODE_PAUSE) return GNC_CAL_SUCCESS;
+        if(IsGreaterThan(head_block->length, 0) || head_block->mode == PMC_MODE_PAUSE) return GNC_CAL_SUCCESS;
         // 如果长度大于等于阈值
-        if(IsGreaterThanOrEqual(head_block->length, MEM_END_TOL) || head_block->mode == PMC_MODE_PAUSE) return GNC_CAL_SUCCESS;
+        // if(IsGreaterThanOrEqual(head_block->length, MEM_END_TOL) || head_block->mode == PMC_MODE_PAUSE) return GNC_CAL_SUCCESS;
     }
 }
 
@@ -802,8 +802,10 @@ static GNC_RES vp_cal_g04_vel_profile(VELPLAN_TYPE velplan_type, PLAN_BLOCK* pla
             vel_profile->s[1] = 0;
             vel_profile->s[2] = 0;
             break;
-        case S_SHAPE:
-        case SIN_SHAPE:
+        case S_SHAPE_DICHOTOMY:
+        case S_SHAPE_EQUATION:
+        case SIN_SHAPE_DICHOTOMY:
+        case SIN_SHAPE_EQUATION:
             vel_profile->t[0] = vel_profile->t_cycle;
             vel_profile->t[1] = vel_profile->t_cycle;
             vel_profile->t[2] = vel_profile->t_cycle;
@@ -837,8 +839,10 @@ static GNC_RES vp_cal_g04_pause_profile(VELPLAN_TYPE velplan_type, PLAN_BLOCK* p
     vel_profile->ve = 0;
     switch(velplan_type){
         case T_SHAPE:
-        case S_SHAPE:
-        case SIN_SHAPE:
+        case S_SHAPE_DICHOTOMY:
+        case S_SHAPE_EQUATION:
+        case SIN_SHAPE_DICHOTOMY:
+        case SIN_SHAPE_EQUATION:
             vel_profile->t[0] = 0;
             vel_profile->t[1] = 0;
             vel_profile->t[2] = 0;

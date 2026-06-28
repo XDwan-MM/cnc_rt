@@ -116,6 +116,7 @@ static void auto_set_state(){
                 // 译码正在运行，译码结束译码器将其置false
                 rt_set_chan_state(0, CHAN_IS_PARSERING, true);
                 setVarChanInt(0, VAR_CHAN_RUN_ROW, 0, 0);
+                LOG(LOG_LEVEL_DEBUG, "开始加工，速度规划模式 %d", par_chan[0][PAR_CH_VPLAN_MODE].value.val_int);
             }
             else if(cycle_tp->mem_exec_state == EXEC_PAUSING && !cycle_tp->is_resetting){
                 cycle_tp->mem_exec_state = EXEC_RUNNING;
