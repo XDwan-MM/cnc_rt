@@ -298,7 +298,7 @@ static GNC_RES cycle_tp_update_running_tp(VELPLAN_TYPE vplan_mode, double ncu_cy
         }
     }
     res = cycle_tp_update_block(vplan_mode, ncu_cycle, current_vel, current_pos);
-        // 对插补段终点进行行程限位检查
+    // 对插补段终点进行行程限位检查
     lookahead_check_soft_limit(&cycle_tp->plan_block->end_pos);
     if(res != GNC_CAL_SUCCESS) return res;
     // 如果加工段允许最大速度为0（倍率为0）
@@ -331,14 +331,16 @@ static GNC_RES cycle_tp_update_params(VELPLAN_TYPE velplan_type, double cycle_ti
         vp_cal_traj_data(velplan_type, cycle_tp->vel_profile, cycle_tp->interp_cycle, cycle_tp->traj_data, cycle_time);
         cycle_tp->current_distance = cycle_tp->target_distance;
         cycle_tp->target_distance = cycle_tp->traj_data->s - cycle_tp->accum_distance;
+        if(IsLessThan(cycle_tp->target_distance, 0)){
+            LOG(LOG_LEVEL_ERR, "在插补段%d插补距离计算失败", cycle_tp->plan_block->line_number);
+            LOG(LOG_LEVEL_DEBUG, "vs:%.10f, ve:%.10f, vmax:%.10f, vpeak:%.10f, acc:%.10f, jerk:%.10f, length:%.10f\n", cycle_tp->vel_profile->vs,  cycle_tp->vel_profile->ve, cycle_tp->plan_block->max_vel,cycle_tp->vel_profile->vpeak, cycle_tp->plan_block->max_acc,  cycle_tp->plan_block->max_jerk, cycle_tp->plan_block->length);
+            LOG(LOG_LEVEL_DEBUG, "target %f, s %f, accum_distance %f, t_cycle %f, t[0] %f, ", cycle_tp->target_distance, cycle_tp->traj_data->s, cycle_tp->accum_distance, cycle_tp->vel_profile->t_cycle, cycle_tp->vel_profile->t[0]);
+            return VP_CAL_S_ERROR;
+        }
         cycle_tp->accum_distance = cycle_tp->traj_data->s;
         cycle_tp->remain_distance = cycle_tp->plan_block->length - cycle_tp->accum_distance;
     }
     cycle_tp->interp_cycle += 1;
-    if(IsLessThan(cycle_tp->target_distance, 0)){
-        LOG(LOG_LEVEL_DEBUG, "VP_CAL_S_ERROR: cycle_tp->target_distance %f", cycle_tp->target_distance);
-        return VP_CAL_S_ERROR;
-    }
     return GNC_CAL_SUCCESS;
 }
 
@@ -412,6 +414,8 @@ static GNC_RES cycle_tp_update_vp(VELPLAN_TYPE vplan_mode, double ncu_cycle, dou
         res = cycle_tp_cal_running(vplan_mode, ncu_cycle);
     }
     if(res != VP_CAL_SUCCESS){
+        LOG(LOG_LEVEL_ERR, "在插补段%d速度曲线计算失败", cycle_tp->plan_block->line_number);
+        LOG(LOG_LEVEL_DEBUG, "vs:%.10f, ve:%.10f, vmax:%.10f, vpeak:%.10f, acc:%.10f, jerk:%.10f, length:%.10f\n", cycle_tp->vel_profile->vs,  cycle_tp->vel_profile->ve, cycle_tp->plan_block->max_vel,cycle_tp->vel_profile->vpeak, cycle_tp->plan_block->max_acc,  cycle_tp->plan_block->max_jerk, cycle_tp->plan_block->length);
         return res;
     }
     if(IsEqualTo(cycle_tp->vel_profile->ve, 0)) cycle_tp->is_paused_inside_block = true;
@@ -422,6 +426,7 @@ static GNC_RES cycle_tp_update_vp(VELPLAN_TYPE vplan_mode, double ncu_cycle, dou
 static GNC_RES plan_block_get_next(){
     cycle_tp->is_arrive_at_the_end = false;
     PLAN_BLOCK* head_block = NULL;
+    // todo：修改此次while处理
     while(true){
         head_block = queue_peak(plan_queue);
         if(head_block == NULL) return GNC_DATA_EMPTY;
@@ -430,8 +435,11 @@ static GNC_RES plan_block_get_next(){
         queue_pop(plan_queue);
         if(queue_is_empty(plan_queue)) return GNC_DATA_EMPTY;
         head_block = queue_peak(plan_queue);
-        // 如果长度小于等于0
+        // todo：在路径规划消除奇异点
+        // 如果长度大于等于0
         if(IsGreaterThan(head_block->length, 0) || head_block->mode == PMC_MODE_PAUSE) return GNC_CAL_SUCCESS;
+        // 如果长度大于等于阈值
+        // if(IsGreaterThanOrEqual(head_block->length, MEM_END_TOL) || head_block->mode == PMC_MODE_PAUSE) return GNC_CAL_SUCCESS;
     }
 }
 
@@ -451,7 +459,7 @@ static GNC_RES plan_block_get_update(double current_vel, POS current_pos){
     block_cal_length(head_block);
     // LOG(LOG_LEVEL_INFO, "head_block->length: %f", head_block->length);
     // 如果长度小于阈值
-    if(IsLessThanOrEqual(head_block->length, MEM_END_TOL)) res = plan_block_get_next();
+    if(IsLessThan(head_block->length, MEM_END_TOL)) res = plan_block_get_next();
     return res;
 }  
 
@@ -633,7 +641,8 @@ static GNC_RES cycle_tp_look_ahead(VELPLAN_TYPE vplan_mode, double ncu_cycle, do
             cur_block->end_vel = del_vel;
         }
     }
-    // LOG(LOG_LEVEL_INFO, "2 %f %f", cur_block->length, cur_block->feed_vel);
+    // LOG(LOG_LEVEL_DEBUG, "2 %f %f", cur_block->length, cur_block->feed_vel);
+    // LOG(LOG_LEVEL_DEBUG, "start_vel:%f end_vel:%f", cur_block->start_vel, cur_block->end_vel);
     return GNC_CAL_SUCCESS;
 }
 
@@ -793,8 +802,10 @@ static GNC_RES vp_cal_g04_vel_profile(VELPLAN_TYPE velplan_type, PLAN_BLOCK* pla
             vel_profile->s[1] = 0;
             vel_profile->s[2] = 0;
             break;
-        case S_SHAPE:
-        case SIN_SHAPE:
+        case S_SHAPE_DICHOTOMY:
+        case S_SHAPE_EQUATION:
+        case SIN_SHAPE_DICHOTOMY:
+        case SIN_SHAPE_EQUATION:
             vel_profile->t[0] = vel_profile->t_cycle;
             vel_profile->t[1] = vel_profile->t_cycle;
             vel_profile->t[2] = vel_profile->t_cycle;
@@ -828,8 +839,10 @@ static GNC_RES vp_cal_g04_pause_profile(VELPLAN_TYPE velplan_type, PLAN_BLOCK* p
     vel_profile->ve = 0;
     switch(velplan_type){
         case T_SHAPE:
-        case S_SHAPE:
-        case SIN_SHAPE:
+        case S_SHAPE_DICHOTOMY:
+        case S_SHAPE_EQUATION:
+        case SIN_SHAPE_DICHOTOMY:
+        case SIN_SHAPE_EQUATION:
             vel_profile->t[0] = 0;
             vel_profile->t[1] = 0;
             vel_profile->t[2] = 0;

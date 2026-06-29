@@ -54,7 +54,12 @@ typedef enum result {
     VP_CAL_S_ERROR,
     VP_CAL_V_ERROR,
     VP_DELCINE_TO_END,
-    
+    VP_VS_LESS_THAN_ZERO,
+    VP_VE_LESS_THAN_ZERO,
+    VP_VMAX_LESS_THAN_VS,
+    VP_VMAX_LESS_THAN_VE,
+    VP_VP_LESS_THAN_VS,
+    VP_VP_LESS_THAN_VE,
 } GNC_RES;
 
 typedef enum {
@@ -88,9 +93,11 @@ typedef POS VECTOR;
 
 // 加减速类型
 typedef enum velplan_type {
-    T_SHAPE = 0,
-    S_SHAPE = 1,
-    SIN_SHAPE = 2,
+    T_SHAPE = 0,                // T型
+    S_SHAPE_DICHOTOMY = 1,      // S型二分法
+    SIN_SHAPE_DICHOTOMY = 2,    // SIN型二分法
+    S_SHAPE_EQUATION = 3,       // S型解析法
+    SIN_SHAPE_EQUATION = 4,     // SIN型解析法
 } VELPLAN_TYPE;
 
 // 回零方式

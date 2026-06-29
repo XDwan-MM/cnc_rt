@@ -44,6 +44,13 @@ TEST_F(TestMath, Compare)
     EXPECT_TRUE(!IsLessThan(NAN, 1.0));
 }
 
+TEST_F(TestMath, get_min_positive_real_root)
+{
+    double roots[4] = {-0.2, 0, 3, 2};
+    double min_pos_root = get_min_positive_real_root(4, roots);
+    EXPECT_EQ(min_pos_root, 2);
+}
+
 // ---------------- 整数/浮点运算 ----------------
 
 TEST_F(TestMath, Factorial)
