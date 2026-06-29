@@ -775,7 +775,7 @@ static void mem_cal_axis_vel(POS *current_pos, POS *target_pos, double interp_pi
     double y_axis_vel = 0;
     double z_axis_vel = 0;
     if(IsGreaterThan(interp_pinc, 0)){
-        VECTOR vec = POS_VECTOR(target_pos, current_pos);
+        VECTOR vec = POS_VECTOR(current_pos, target_pos);
         x_axis_vel = target_vel * vec.x / interp_pinc;
         y_axis_vel = target_vel * vec.y / interp_pinc;
         z_axis_vel = target_vel * vec.z / interp_pinc;
