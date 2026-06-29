@@ -112,7 +112,9 @@ private:
     inline void handleROR(const LadInstr& instr);
     inline void handleTMRB(const LadInstr& instr);
     inline void handleSTMR(const LadInstr& instr);
+    inline void handleCTR(const LadInstr& instr);
     inline void handleCTRC(const LadInstr& instr);
+    inline void handleCTUD(const LadInstr& instr);
     inline void handleMOV(const LadInstr& instr);
     inline void handleROT(const LadInstr& instr);
 

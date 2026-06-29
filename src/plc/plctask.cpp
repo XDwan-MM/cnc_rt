@@ -98,7 +98,9 @@ void PlcTask::initDispatchTable() {
     _dispatchTable[OP_TMRB] = &PlcTask::handleTMRB;
     _dispatchTable[OP_STMR] = &PlcTask::handleSTMR;
     // 计数器
+    _dispatchTable[OP_CTR] = &PlcTask::handleCTR;
     _dispatchTable[OP_CTRC] = &PlcTask::handleCTRC;
+    _dispatchTable[OP_CTUD] = &PlcTask::handleCTUD;
     // 移位操作
     _dispatchTable[OP_MOV]  = &PlcTask::handleMOV;
     // 旋转操作
@@ -906,6 +908,51 @@ void PlcTask::handleSTMR(const LadInstr& instr) {
     timers[timerId] = 0;
 }
 
+void PlcTask::handleCTR(const LadInstr& instr) {
+    bool rst = static_cast<bool>(_currCtx->_logicStack & 1);
+    _currCtx->_logicStack >>= 1;
+    bool upd = static_cast<bool>(_currCtx->_logicStack & 1);
+    _currCtx->_logicStack >>= 1;
+    bool cn0 = static_cast<bool>(_currCtx->_logicStack & 1);
+    _currCtx->_logicStack >>= 1;
+    bool act = static_cast<bool>(_currCtx->_logicStack & 1);
+
+    int currentVal = getValue(_ladData.regs[instr.regIdx]);
+    int presetVal = getValue(_ladData.regs[instr.regIdx + 1]);
+
+    if (act) {
+        if (!upd && currentVal < presetVal) {
+            setValue(_ladData.regs[instr.regIdx], currentVal + 1);
+        }
+        
+        if (upd &&  currentVal > cn0 ? 1 : 0) {
+            setValue(_ladData.regs[instr.regIdx], currentVal - 1);
+        }
+    }
+
+    if (rst) {
+        if (upd) {
+            setValue(_ladData.regs[instr.regIdx], presetVal);
+        } else {
+            setValue(_ladData.regs[instr.regIdx], cn0 ? 1 : 0);
+        }
+    }
+
+    if (upd) {
+        if (currentVal <= cn0 ? 1 : 0) {
+            _currCtx->_logicStack |= 1;
+        } else {
+            _currCtx->_logicStack &= ~1;
+        }
+    } else {
+        if (currentVal >= presetVal)  {
+            _currCtx->_logicStack |= 1;
+        } else {
+            _currCtx->_logicStack &= ~1;
+        }
+    }
+}
+
 void PlcTask::handleCTRC(const LadInstr& instr) {
     bool rst = static_cast<bool>(_currCtx->_logicStack & 1);
     _currCtx->_logicStack >>= 1;
@@ -920,6 +967,7 @@ void PlcTask::handleCTRC(const LadInstr& instr) {
             _regData.regC[counterId]++;
         }
     }
+
     if (rst) {
         _regData.regC[counterId] = 0;
     }
@@ -928,6 +976,52 @@ void PlcTask::handleCTRC(const LadInstr& instr) {
         _currCtx->_logicStack |= 1;
     } else {
         _currCtx->_logicStack &= ~1;
+    }
+}
+
+void PlcTask::handleCTUD(const LadInstr& instr) {
+    bool rst = static_cast<bool>(_currCtx->_logicStack & 1);
+    _currCtx->_logicStack >>= 1;
+    bool upd = static_cast<bool>(_currCtx->_logicStack & 1);
+    _currCtx->_logicStack >>= 1;
+    bool cn0 = static_cast<bool>(_currCtx->_logicStack & 1);
+    _currCtx->_logicStack >>= 1;
+    bool act = static_cast<bool>(_currCtx->_logicStack & 1);
+
+    int counterId = getValue(_ladData.regs[instr.regIdx]);
+    int presetVal = getValue(_ladData.regs[instr.regIdx + 1]);
+    _regData.regC[counterId+ REG_C_NUM] = presetVal;
+
+    if (act) {
+        if (!upd && _regData.regC[counterId] < presetVal) {
+            _regData.regC[counterId]++;
+        }
+        
+        if (upd &&  _regData.regC[counterId] > cn0 ? 1 : 0) {
+            _regData.regC[counterId]--;
+        }
+    }
+    
+    if (rst) {
+        if (upd) {
+            _regData.regC[counterId] = presetVal;
+        } else {
+            _regData.regC[counterId] = cn0 ? 1 : 0;
+        }
+    }
+
+    if (upd) {
+        if (_regData.regC[counterId] <= cn0 ? 1 : 0) {
+            _currCtx->_logicStack |= 1;
+        } else {
+            _currCtx->_logicStack &= ~1;
+        }
+    } else {
+        if (_regData.regC[counterId] >= presetVal)  {
+            _currCtx->_logicStack |= 1;
+        } else {
+            _currCtx->_logicStack &= ~1;
+        }
     }
 }
 
