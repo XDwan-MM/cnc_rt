@@ -32,6 +32,11 @@ void auto_execute_mcode(){
         nc_check_fin();
         break;
     case MCODE_EXECUTE_RESET: 
+        // 无M代码时按复位
+        if(mcode_data->mcode_size == 0) {
+            mcode_data->mcode_state = MCODE_EXECUTE_IDLE;
+            return;
+        }
         // todo：HMI的复位和M30均直接重置M代码F变量状态
         if(mcode_data->mcode_block[0].m_code == M02 || mcode_data->mcode_block[0].m_code == M30) {
             LOG(LOG_LEVEL_DEBUG, "3、接收到FIN信号, 执行下一指令");
