@@ -332,12 +332,11 @@ static void compute_error_comp()
         
     }
     // printf(
-    //     "Pos_nc%f, Pos_c%f, vel_cmd%f, luobu%f, bl%f\n",
+    //     "Pos_nc%f, Pos_c%f, vel_cmd%f, luobu%f\n",
     //     rt_data->axis_data[0].mac_cmd_pos,
     //     rt_data->axis_data[0].motor_cmd_pos,
     //     var_axis[0][VAR_AXIS_CMD_VEL].value.f,
-    //     rt_data->axis_data[0].pitch_comp_val,
-    //     rt_data->axis_data[0].backlash_comp_val
+    //     rt_data->axis_data[0].pitch_comp_val
     // );
 }
 
