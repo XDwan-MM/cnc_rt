@@ -17,10 +17,10 @@ extern "C"
 typedef struct
 {
     double nominal;  /* 名义位置 */
-    float fwd_comp;  /* 正向补偿值 */
-    float rev_comp;  /* 负向补偿值 */
-    float fwd_slope; /* 正向表当前点至下一点的补偿曲线斜率 (预计算) */
-    float rev_slope; /* 负向表当前点至下一点的补偿曲线斜率 (预计算) */
+    double fwd_comp;  /* 正向补偿值 */
+    double rev_comp;  /* 负向补偿值 */
+    double fwd_slope; /* 正向表当前点至下一点的补偿曲线斜率 (预计算) */
+    double rev_slope; /* 负向表当前点至下一点的补偿曲线斜率 (预计算) */
 } pitch_comp_entry_t;
 
 /**
@@ -62,19 +62,19 @@ void pitch_comp_init(PitchCompState *state, double step_limit);
 /**
  * @brief 生成螺距误差补偿表
  *
- * 接收 HMI 下发的 int16_t 原始补偿数据（单位 μm），内部转换为 mm 后建表。
+ * 接收 HMI 下发的 int 原始补偿数据（单位 μm），内部转换为 mm 后建表。
  *
  * @param table              输出：构建完成的补偿表
  * @param meas_pos_arr_mm    测量点名义位置数组 (mm)
- * @param fwd_comp_arr_um    正向补偿值数组 (int16_t, 单位 μm, 1 LSB = 0.001mm)
- * @param rev_comp_arr_um    负向补偿值数组 (int16_t, 单位 μm, 1 LSB = 0.001mm)
+ * @param fwd_comp_arr_um    正向补偿值数组 (单位 μm, 1 LSB = 0.001mm)
+ * @param rev_comp_arr_um    负向补偿值数组 (单位 μm, 1 LSB = 0.001mm)
  * @param num_points         测量点数量
  * @return PitchTableStatus 枚举值，0 (PITCH_TABLE_OK) 表示成功，负值表示错误
  */
 PitchTableStatus generate_pitch_comp_table(pitch_comp_table_t *table,
                                            const double *meas_pos_arr_mm,
-                                           const int16_t *fwd_comp_arr_um,
-                                           const int16_t *rev_comp_arr_um,
+                                           const int *fwd_comp_arr_um,
+                                           const int *rev_comp_arr_um,
                                            int num_points);
 
 /**
