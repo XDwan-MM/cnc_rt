@@ -17,10 +17,10 @@ extern "C"
 typedef struct
 {
     double nominal;  /* 名义位置 */
-    float fwd_comp;  /* 正向补偿值 */
-    float rev_comp;  /* 负向补偿值 */
-    float fwd_slope; /* 正向表当前点至下一点的补偿曲线斜率 (预计算) */
-    float rev_slope; /* 负向表当前点至下一点的补偿曲线斜率 (预计算) */
+    double fwd_comp;  /* 正向补偿值 */
+    double rev_comp;  /* 负向补偿值 */
+    double fwd_slope; /* 正向表当前点至下一点的补偿曲线斜率 (预计算) */
+    double rev_slope; /* 负向表当前点至下一点的补偿曲线斜率 (预计算) */
 } pitch_comp_entry_t;
 
 /**
