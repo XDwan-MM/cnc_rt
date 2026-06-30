@@ -197,7 +197,7 @@ GNC_RES parser_reading(){
     if (ItpIsOver())
     {
         // LOG(LOG_LEVEL_WARN, "译码结束");
-        if (res == GNC_CAL_SUCCESS || res == GNC_OPERATOR_SUCCESS)
+        if (res == GNC_CAL_SUCCESS || res == GNC_OPERATOR_SUCCESS || res == GNC_PARSER_OVER)
         {
             return GNC_PARSER_OVER;
         }
@@ -296,7 +296,10 @@ static GNC_RES parser_handle_gcode(pmc_data* motion_data, NcItpState *itp_state,
             gcode_block.plane = (PLANE)(motion_data->plane);
             break;
         default:
-            break;
+            // 未支持的插补类型
+            rt_set_parser_state(244, *line_no);
+            LOG(LOG_LEVEL_DEBUG, "不支持该插补类型: %d", motion_data->interp);
+            return GNC_PARSER_OVER;
     }
     // 进给速度
     gcode_block.feed_vel = motion_data->feed.value;
