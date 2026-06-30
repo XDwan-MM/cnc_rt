@@ -259,6 +259,11 @@ static void update_axis_state(int i, JOG_AXIS_CTRL *jog_axis_ctrl, bool global_f
         }
     }
 
+    /* dir_blocked 是一个方向阻塞标志，用于判断当前期望的运动方向是否被禁止 */
+    // 三个条件，任一为true即阻塞：
+    // desired_dir == JOG_DIR_POSITIVE && is_fwd_limit	想往正向走，但正向硬件限位开关已触发
+    // desired_dir == JOG_DIR_NEGATIVE && is_rev_limit	想往负向走，但负向硬件限位开关已触发
+    // soft_limit_blocked	想走的方向，软限位前瞻预测会冲过限位
     bool dir_blocked = (desired_dir == JOG_DIR_POSITIVE && is_fwd_limit) ||
                        (desired_dir == JOG_DIR_NEGATIVE && is_rev_limit) || soft_limit_blocked;
 
