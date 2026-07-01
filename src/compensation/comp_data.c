@@ -68,7 +68,7 @@ void comp_data_init(void)
 {
     for (int axis = 0; axis < 3; axis++)
     {
-        pitch_comp_init(&pitch_comp_state[axis], 0.005);
+        pitch_comp_init(&pitch_comp_state[axis], 0.001);
         backlash_comp_init(&backlash_comp_state[axis]);
         perp_comp_init(&perp_comp_state[axis], 0.001);
     }
