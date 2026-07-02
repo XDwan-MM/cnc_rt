@@ -15,7 +15,9 @@ struct EdgeState {
     bool lastState;
     bool currState;
     int instrIdx;
-    EdgeState(bool last, bool curr, int idx) : lastState(last), currState(curr), instrIdx(idx) {}
+    bool isFlow;
+    EdgeState(bool last, bool curr, int idx, bool flow)
+        : lastState(last), currState(curr), instrIdx(idx), isFlow(flow) {}
 };
 
 class PlcTask {
@@ -30,6 +32,26 @@ public:
     void execute();
 
 private:
+    struct CtrInputs {
+        bool act;
+        bool cn0;
+        bool upd;
+        bool rst;
+    };
+
+    struct CtrcInputs {
+        bool act;
+        bool rst;
+    };
+
+    struct RotInputs {
+        bool act;
+        bool rn0;
+        bool dir;
+        bool pos;
+        bool inc;
+    };
+
     LadData& _ladData;
     RegData& _regData;
     bool _isRunning;
@@ -39,6 +61,10 @@ private:
     PlcContext* _currCtx;
     std::vector<EdgeState> _edgeStates; // 上升沿下降沿状态
     std::vector<int> _edgeIdxs; // 上升沿下降沿索引
+    std::vector<char> _altStates; // ALT指令输出状态
+    std::vector<int> _loopNexts; // LOOP对应的NEXT索引
+    std::vector<int> _nextLoops; // NEXT对应的LOOP索引
+    std::vector<int> _loopCounts; // LOOP剩余循环次数
     typedef void (PlcTask::*OpHandler)(const LadInstr&);
     OpHandler _dispatchTable[OP_TOTAL];
     int timers[REG_T_NUM] = {0};
@@ -71,6 +97,8 @@ private:
     inline void handleANDF(const LadInstr& instr);
     inline void handleORP(const LadInstr& instr);
     inline void handleORF(const LadInstr& instr);
+    inline void handlePLS(const LadInstr& instr);
+    inline void handlePLF(const LadInstr& instr);
     inline void handleOUT(const LadInstr& instr);
     inline void handleOOUT(const LadInstr& instr);
     inline void handleSET(const LadInstr& instr);
@@ -86,6 +114,8 @@ private:
     inline void handleRETN(const LadInstr& instr);
     inline void handleJMP(const LadInstr& instr);
     inline void handleLBL(const LadInstr& instr);
+    inline void handleLOOP(const LadInstr& instr);
+    inline void handleNEXT(const LadInstr& instr);
     inline void handleADD(const LadInstr& instr);
     inline void handleSUB(const LadInstr& instr);
     inline void handleMUL(const LadInstr& instr);
@@ -116,8 +146,39 @@ private:
     inline void handleCTRC(const LadInstr& instr);
     inline void handleCTUD(const LadInstr& instr);
     inline void handleMOV(const LadInstr& instr);
+    inline void handleXMOV(const LadInstr& instr);
+    inline void handleBMOV(const LadInstr& instr);
+    inline void handleFMOV(const LadInstr& instr);
+    inline void handleSER(const LadInstr& instr);
+    inline void handleASSEM(const LadInstr& instr);
+    inline void handleDISAS(const LadInstr& instr);
+    inline void handleALT(const LadInstr& instr);
     inline void handleROT(const LadInstr& instr);
 
+    inline EdgeState& edgeState(int instrIdx);
+    inline bool isRisingEdge(int instrIdx);
+    inline bool isFallingEdge(int instrIdx);
+    inline bool updateFlowRisingEdge(int instrIdx, bool currState);
+    inline bool updateFlowFallingEdge(int instrIdx, bool currState);
+    inline bool logicTop() const;
+    inline bool logicAt(int offset) const;
+    inline void pushLogic(bool value);
+    inline bool popLogic();
+    inline void setLogicTop(bool value);
+    inline void replaceLogicTop(bool value);
+    inline void andLogicTop(bool value);
+    inline void orLogicTop(bool value);
+    inline CtrInputs popCtrInputs();
+    inline CtrcInputs popCtrcInputs();
+    inline RotInputs popRotInputs();
+    inline int regCount(RegType type);
+    inline bool isRegRangeValid(const LadReg& reg, int offset, int count);
+    inline int byteRegCount(RegType type);
+    inline int wordRegCount(RegType type);
+    inline unsigned char getByteValue(const LadReg& reg, int offset);
+    inline void setByteValue(const LadReg& reg, int offset, unsigned char value);
+    inline uint32_t getWordValue(const LadReg& reg);
+    inline void setWordValue(const LadReg& reg, uint32_t value);
     inline void setBit(LadReg& reg, bool value);
     inline bool getBit(LadReg& reg);
     inline void setBit(LadReg& reg);
