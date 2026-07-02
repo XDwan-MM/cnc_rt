@@ -10,6 +10,8 @@
 #include "datatype.h"
 #include "global.h"
 #include <shmapi.h>
+#include <QByteArray>
+#include <QtGlobal>
 
 namespace {
 
@@ -40,6 +42,9 @@ public:
 
 int main(int argc, char *argv[])
 {
+    qputenv("CNC_SHM_KEY", QByteArray("NcDataTestRt"));
+    qputenv("CNC_SHM_ALLOW_NON_ROOT", QByteArray("1"));
+
     ::testing::InitGoogleTest(&argc, argv);
     ::testing::AddGlobalTestEnvironment(new RtTestEnvironment);
     return RUN_ALL_TESTS();
