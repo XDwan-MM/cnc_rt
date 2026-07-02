@@ -43,6 +43,7 @@ char* get_master_eni_path(){
         char* last_slash = strrchr(cwd, '/');
         if(last_slash != NULL){
             *last_slash = '\0';
+            // 测试平台1
             snprintf(eni_path, sizeof(eni_path), "%s/%s", cwd, "config/ENI/speed.xml");
         }
     }else{
@@ -53,7 +54,10 @@ char* get_master_eni_path(){
         char* last_slash = strrchr(cwd, '/');
         if(last_slash != NULL){
             *last_slash = '\0';
+            // 856
             snprintf(eni_path, sizeof(eni_path), "%s/%s", cwd, "config/ENI/850_120.xml");
+            // 测试平台2
+            // snprintf(eni_path, sizeof(eni_path), "%s/%s", cwd, "config/ENI/gugao_io.xml");
         }
     }else{
         RT_LOG(ERROR, "无法打开ENI %s 文件", cwd);
