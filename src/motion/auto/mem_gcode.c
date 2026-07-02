@@ -575,6 +575,8 @@ static bool cycle_block_axis_arrive_check(){
 }
 
 static bool cycle_block_arrive_check(){
+    // 机械锁住时不进行到位检测
+    if(rt_data->sys_state[SYS_IS_MAC_LOCK]) return true;
     PLAN_BLOCK* current_block = queue_peak(plan_queue);
     // 如果是到位检测模组，发送到位信号
     if(current_block->mode == PMC_MODE_ARRIVE_CHECK){
