@@ -45,7 +45,6 @@ typedef struct{
     bool is_arrive_at_the_end;      // 到达段终点
     bool is_event_trigger;          // 触发重新计算
     bool is_resetting;              // 复位中
-    bool is_ve_zero;                // 加工段末速度为0
 }COORD_TP;
 
 GNC_RES cycle_tp_init();
