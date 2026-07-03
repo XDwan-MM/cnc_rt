@@ -297,7 +297,7 @@ static GNC_RES parser_handle_gcode(pmc_data* motion_data, NcItpState *itp_state,
             break;
         default:
             // 未支持的插补类型
-            rt_set_parser_state(244, *line_no);
+            rt_set_parser_state(3001, *line_no);
             LOG(LOG_LEVEL_DEBUG, "不支持该插补类型: %d", motion_data->interp);
             return GNC_PARSER_OVER;
     }
