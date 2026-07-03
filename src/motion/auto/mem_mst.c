@@ -107,7 +107,7 @@ static void nc_deal_mcode(){
         default:
             // 判断Ｍ代码大小
             if(mcode_data->mcode_block[i].m_code > 300){
-                rt_set_parser_state(243, mcode_data->mcode_block[i].line_number);
+                rt_set_parser_state(3002, mcode_data->mcode_block[i].line_number);
                 rt_set_chan_state(0, CHAN_IS_PARSER_RESET, true);
                 mcode_queue_reset(mcode_queue);
                 mcode_handle_reset();
