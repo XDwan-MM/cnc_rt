@@ -28,6 +28,7 @@ typedef struct mcode_block{
     int m_code;             // 代码信号 M00~M31
     int line_number;        // 运行行号
     pmc_spindle spindle;    // 主轴
+    int tool_number;        // 刀具号
 }MCODE_BLOCK;
 
 typedef struct

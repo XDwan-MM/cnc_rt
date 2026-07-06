@@ -350,6 +350,8 @@ static GNC_RES parser_handle_mcode(pmc_data* motion_data, NcItpState *itp_state,
     mcode_block.state = *itp_state;
     // 行号
     mcode_block.line_number = *line_no;
+    // 刀号
+    mcode_block.tool_number = motion_data->tool_number; 
     if (mcode_queue_is_full(mcode_queue))
     {
         return GNC_DATA_FULL;
