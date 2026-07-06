@@ -306,10 +306,15 @@ static GNC_RES task_handle_pmc_event(PMC_EVENT *event_data)
             LOG(LOG_LEVEL_INFO, "处理辅助功能锁住事件");
             break;
         case SINGLE_BLOCK:
-            // rt_data->sys_state[SYS_IS_SINGLE_BLOCK] = event_data->enable_payload.enable_state;
-            // if(rt_data->sys_state[SYS_IS_SINGLE_BLOCK]) rt_data->nc_event = SYS_EVENT_SINGLE_BLOCK_ON;
-            // else rt_data->nc_event = SYS_EVENT_SINGLE_BLOCK_OFF;
-            // LOG(LOG_LEVEL_INFO, "处理单段事件");
+            rt_data->sys_state[SYS_IS_SINGLE_BLOCK] = event_data->enable_payload.enable_state;
+            if(rt_data->sys_state[SYS_IS_SINGLE_BLOCK]) {
+                rt_data->nc_event = SYS_EVENT_SINGLE_BLOCK_ON;
+                LOG(LOG_LEVEL_INFO, "处理单段开启事件");
+            }
+            else{
+                rt_data->nc_event = SYS_EVENT_SINGLE_BLOCK_OFF;
+                LOG(LOG_LEVEL_INFO, "处理单段关闭事件");
+            }
             break;
         default:
             break;

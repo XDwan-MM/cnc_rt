@@ -229,6 +229,11 @@ static void nc_check_fin(){
             nc_clear_msignal();
             mcode_data_mend();
             LOG(LOG_LEVEL_DEBUG, "3、接收到FIN信号, 执行下一指令");
+            if(rt_get_sys_state(SYS_IS_SINGLE_BLOCK)) {
+                mcode_data->mcode_state = MCODE_EXECUTE_PAUSING;
+                cycle_tp->mem_exec_state = EXEC_PAUSING;
+                LOG(LOG_LEVEL_DEBUG, "单段下停止在%d段", mcode_data->mcode_block->line_number);
+            }  
         }
         else mcode_data->tfin_count ++;
     }

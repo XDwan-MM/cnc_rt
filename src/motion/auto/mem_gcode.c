@@ -90,13 +90,6 @@ static double mem_cal_pinc(VELPLAN_TYPE velplan_mode, double ncu_cycle, double c
         case EXEC_RUNNING:
             // 完成一段的插补
             if (cycle_tp_is_finished() || cycle_tp->is_event_trigger){
-                // 如果单段使能
-                // if(rt_get_sys_state(SYS_IS_SINGLE_BLOCK) && cycle_tp->is_ve_zero){
-                //     cycle_tp->mem_exec_state = EXEC_PAUSING;
-                //     cycle_tp->is_ve_zero = false;
-                //     LOG(LOG_LEVEL_DEBUG, "单段下暂停");
-                //     break;
-                // }
                 res = cycle_tp_update_running_tp(velplan_mode, ncu_cycle, current_vel, current_pos);
                 CHECK_RES(mem_check_res(res));
                 cycle_tp->is_event_trigger = false; 
@@ -176,6 +169,13 @@ static bool mem_check_res(GNC_RES res){
         }
         return false;
 
+    case GNC_SBL_ARRIVE:
+        if(cycle_tp->is_resetting){
+            gcode_handle_reset();
+        }
+        return false;
+
+    case GNC_LENGTH_IS_ZERO:
     case VP_LENGTH_IS_ZERO:
         return false;
 
@@ -298,11 +298,11 @@ static GNC_RES cycle_tp_update_running_tp(VELPLAN_TYPE vplan_mode, double ncu_cy
         }
     }
     res = cycle_tp_update_block(vplan_mode, ncu_cycle, current_vel, current_pos);
-    // 对插补段终点进行行程限位检查
-    lookahead_check_soft_limit(&cycle_tp->plan_block->end_pos);
     if(res != GNC_CAL_SUCCESS) return res;
     // 如果加工段允许最大速度为0（倍率为0）
     if(IsEqualTo(cycle_tp->plan_block->max_vel, 0) && cycle_tp->plan_block->mode != PMC_MODE_PAUSE) return VP_MAX_VEL_IS_ZERO;
+    // 对插补段终点进行行程限位检查
+    lookahead_check_soft_limit(&cycle_tp->plan_block->end_pos);
     res = cycle_tp_update_vp(vplan_mode, ncu_cycle, current_vel, cycle_tp->max_vel);
     if(res != VP_CAL_SUCCESS) return res;
     return res;
@@ -355,22 +355,23 @@ static bool cycle_tp_is_zerovel_and_zerorate(double current_vel){
         cycle_tp->max_vel = 0;
         return true;
     }
+    double max_rapid_feed = MIN3(par_axis[0][PAR_AX_RAPID_SPD].value.val_real, par_axis[1][PAR_AX_RAPID_SPD].value.val_real, par_axis[2][PAR_AX_RAPID_SPD].value.val_real); 
+    double max_feed = MIN3(par_axis[0][PAR_AX_FEED_SPD].value.val_real, par_axis[1][PAR_AX_FEED_SPD].value.val_real, par_axis[2][PAR_AX_FEED_SPD].value.val_real);
     // 更新最大运行速度
     if(cycle_tp->plan_block->type == RAPID){
-        if(rt_get_sys_state(SYS_IS_DRY_RUN)) cycle_tp->max_vel = par_chan[0][PAR_CH_DRYRUN_SPD].value.val_real * var_chan[0][VAR_CHAN_RAPID_OVERRIDE].value.f / OVERRIDE_PERCENT;
-        else cycle_tp->max_vel = cycle_tp->plan_block->feed_vel * var_chan[0][VAR_CHAN_RAPID_OVERRIDE].value.f / OVERRIDE_PERCENT;
+        if(rt_get_sys_state(SYS_IS_DRY_RUN)) cycle_tp->max_vel = MIN(par_chan[0][PAR_CH_DRYRUN_SPD].value.val_real * var_chan[0][VAR_CHAN_RAPID_OVERRIDE].value.f / OVERRIDE_PERCENT, max_rapid_feed);
+        else cycle_tp->max_vel = MIN(cycle_tp->plan_block->feed_vel * var_chan[0][VAR_CHAN_RAPID_OVERRIDE].value.f / OVERRIDE_PERCENT, max_feed);
     };
     if(cycle_tp->plan_block->type != RAPID){
-        if(rt_get_sys_state(SYS_IS_DRY_RUN)) cycle_tp->max_vel = par_chan[0][PAR_CH_DRYRUN_SPD].value.val_real * var_chan[0][VAR_CHAN_FEED_OVERRIDE].value.f / OVERRIDE_PERCENT;
-        else cycle_tp->max_vel = cycle_tp->plan_block->feed_vel * var_chan[0][VAR_CHAN_FEED_OVERRIDE].value.f / OVERRIDE_PERCENT;
+        if(rt_get_sys_state(SYS_IS_DRY_RUN)) cycle_tp->max_vel = MIN(par_chan[0][PAR_CH_DRYRUN_SPD].value.val_real * var_chan[0][VAR_CHAN_FEED_OVERRIDE].value.f / OVERRIDE_PERCENT, max_rapid_feed);
+        else cycle_tp->max_vel = MIN(cycle_tp->plan_block->feed_vel * var_chan[0][VAR_CHAN_FEED_OVERRIDE].value.f / OVERRIDE_PERCENT, max_feed);
     }
     return false;
 }
 
 static bool cycle_tp_is_newvel_unvalid(VELPLAN_TYPE vplan_mode, double current_vel, double target_vel){
     PLAN_BLOCK* head_block = queue_peak(plan_queue);
-    if(head_block->mode == PMC_MODE_PAUSE) return false;
-    if(IsEqualTo(head_block->length, 0)) return false;
+    if(head_block->mode == PMC_MODE_PAUSE || IsEqualTo(head_block->length, 0)) return false;
     double vs = current_vel;
     double ve = head_block->end_vel;
     double remain_s = head_block->length - cycle_tp->accum_distance;
@@ -401,7 +402,6 @@ static GNC_RES cycle_tp_update_block(VELPLAN_TYPE vplan_mode, double ncu_cycle, 
     // 更新当前行信息
     queue_copy_block(plan_queue, 0, cycle_tp->plan_block);
     gcode_update_var(cycle_tp->plan_block->line_number);
-
     return res;
 }
 
@@ -414,7 +414,7 @@ static GNC_RES cycle_tp_update_vp(VELPLAN_TYPE vplan_mode, double ncu_cycle, dou
         res = cycle_tp_cal_running(vplan_mode, ncu_cycle);
     }
     if(res != VP_CAL_SUCCESS){
-        LOG(LOG_LEVEL_ERR, "在插补段%d速度曲线计算失败", cycle_tp->plan_block->line_number);
+        LOG(LOG_LEVEL_WARN, "在插补段%d速度曲线计算失败", cycle_tp->plan_block->line_number);
         LOG(LOG_LEVEL_DEBUG, "vs:%.10f, ve:%.10f, vmax:%.10f, vpeak:%.10f, acc:%.10f, jerk:%.10f, length:%.10f\n", cycle_tp->vel_profile->vs,  cycle_tp->vel_profile->ve, cycle_tp->plan_block->max_vel,cycle_tp->vel_profile->vpeak, cycle_tp->plan_block->max_acc,  cycle_tp->plan_block->max_jerk, cycle_tp->plan_block->length);
         return res;
     }
@@ -426,21 +426,26 @@ static GNC_RES cycle_tp_update_vp(VELPLAN_TYPE vplan_mode, double ncu_cycle, dou
 static GNC_RES plan_block_get_next(){
     cycle_tp->is_arrive_at_the_end = false;
     PLAN_BLOCK* head_block = NULL;
-    // todo：修改此次while处理
-    while(true){
-        head_block = queue_peak(plan_queue);
-        if(head_block == NULL) return GNC_DATA_EMPTY;
-        gcode_update_var(head_block->line_number);
-        // LOG(LOG_LEVEL_INFO, "gline: %d vel :%f end pos: %f", head_block->line_number, head_block->end_vel, head_block->end_pos.z);
-        queue_pop(plan_queue);
-        if(queue_is_empty(plan_queue)) return GNC_DATA_EMPTY;
-        head_block = queue_peak(plan_queue);
-        // todo：在路径规划消除奇异点
-        // 如果长度大于等于0
-        if(IsGreaterThan(head_block->length, 0) || head_block->mode == PMC_MODE_PAUSE) return GNC_CAL_SUCCESS;
-        // 如果长度大于等于阈值
-        // if(IsGreaterThanOrEqual(head_block->length, MEM_END_TOL) || head_block->mode == PMC_MODE_PAUSE) return GNC_CAL_SUCCESS;
+    head_block = queue_peak(plan_queue);
+    if(head_block == NULL) return GNC_DATA_EMPTY;
+    gcode_update_var(head_block->line_number);
+    // LOG(LOG_LEVEL_INFO, "gline: %d vel :%f end pos: %f", head_block->line_number, head_block->end_vel, head_block->end_pos.z);
+    queue_pop(plan_queue);
+    if(queue_is_empty(plan_queue)) return GNC_DATA_EMPTY;
+    // 如果单段使能
+    if(rt_get_sys_state(SYS_IS_SINGLE_BLOCK) && IsEqualTo(cycle_tp->plan_block->end_vel, 0)){
+        cycle_tp->mem_exec_state = EXEC_PAUSING;
+        mcode_data->mcode_state = MCODE_EXECUTE_PAUSING;
+        LOG(LOG_LEVEL_DEBUG, "单段下停止在%d段", head_block->line_number);
+        return GNC_SBL_ARRIVE;
     }
+    head_block = queue_peak(plan_queue);
+    // todo：在路径规划消除奇异点
+    // 如果长度大于等于阈值
+    // if(IsGreaterThanOrEqual(head_block->length, MEM_END_TOL) || head_block->mode == PMC_MODE_PAUSE) return GNC_CAL_SUCCESS;
+    // 如果长度大于等于0
+    if(IsGreaterThan(head_block->length, 0) || head_block->mode == PMC_MODE_PAUSE) return GNC_CAL_SUCCESS;
+    else return GNC_LENGTH_IS_ZERO;
 }
 
 static GNC_RES plan_block_get_update(double current_vel, POS current_pos){
@@ -477,9 +482,6 @@ static GNC_RES cycle_tp_cal_running(VELPLAN_TYPE vplan_mode, double ncu_cycle){
     }else{
         res = vp_cal_vel_profile(vplan_mode, cycle_tp->plan_block, cycle_tp->vel_profile, ncu_cycle); // 计算速度曲线
     }
-    // 该段末速度为0
-    if(IsEqualTo(cycle_tp->vel_profile->ve, 0)) cycle_tp->is_ve_zero = true;
-    else cycle_tp->is_ve_zero = false;
     cycle_tp->is_arrive_at_the_end = true;
     return res;
 }

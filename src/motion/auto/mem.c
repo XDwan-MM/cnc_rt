@@ -14,9 +14,9 @@ static bool reset_trigger = false;
 void handle_auto_cmd(){
     // 设置自动加工状态
     auto_set_state();
-    // 执行Ｍ代码
+    // 执行M代码
     auto_execute_mcode();
-    // 执行Ｇ代码
+    // 执行G代码
     auto_execute_gcode();
     // 检查程序是否结束
     auto_check_prog_end();
@@ -37,7 +37,7 @@ static void auto_handle_alarm(){
 
 static bool auto_check_running(){
     if(rt_get_chan_state(0, CHAN_IS_PARSERING)) return true;
-    if(!queue_is_empty(plan_queue) || !queue_is_empty(pretreat_queue) || !gcode_queue_is_empty(gcode_queue) || mcode_data->mcode_size != 0) return true;
+    if(!queue_is_empty(plan_queue) || !queue_is_empty(pretreat_queue) || !gcode_queue_is_empty(gcode_queue) || mcode_queue_is_empty(mcode_queue) || mcode_data->mcode_size != 0) return true;
     return false;
 }
 
@@ -78,7 +78,7 @@ static void auto_set_state(){
             LOG(LOG_LEVEL_INFO, "自动模式处理复位");
             if(cycle_tp->mem_exec_state == EXEC_RUNNING){
                 cycle_tp->mem_exec_state = EXEC_PAUSING;
-                cycle_tp->is_event_trigger = true;
+                cycle_tp->is_event_trigger = true; 
                 cycle_tp->is_resetting = 1;
             }else if(cycle_tp->mem_exec_state == EXEC_PAUSING){
                 cycle_tp->is_resetting = 1;
@@ -173,28 +173,30 @@ static void auto_set_state(){
             if(cycle_tp->mem_exec_state == EXEC_RUNNING){
                 if(!queue_is_empty(plan_queue)){
                     if(cycle_tp->plan_block->mode == PMC_MODE_PAUSE) break;
-                    if(cycle_tp->plan_block->type == RAPID){
-                        cycle_tp->max_vel = par_chan[0][PAR_CH_DRYRUN_SPD].value.val_real * var_chan[0][VAR_CHAN_RAPID_OVERRIDE].value.f / OVERRIDE_PERCENT;                       
-                    }else{
-                        cycle_tp->max_vel = par_chan[0][PAR_CH_DRYRUN_SPD].value.val_real * var_chan[0][VAR_CHAN_FEED_OVERRIDE].value.f / OVERRIDE_PERCENT;
-                    }
                     cycle_tp->is_event_trigger = true;
                 }
             }
             break;
         
         case SYS_EVENT_DRY_RUN_OFF:
-        // case SYS_EVENT_SINGLE_BLOCK_OFF:
             LOG(LOG_LEVEL_INFO, "自动模式处理关闭空运行");
             if(cycle_tp->mem_exec_state == EXEC_RUNNING){
                 if(!queue_is_empty(plan_queue)){
                     if(cycle_tp->plan_block->mode == PMC_MODE_PAUSE) break;
-                    if(cycle_tp->plan_block->type == RAPID){
-                        cycle_tp->max_vel = cycle_tp->plan_block->feed_vel * var_chan[0][VAR_CHAN_RAPID_OVERRIDE].value.f / OVERRIDE_PERCENT;
-                    }else{
-                        cycle_tp->max_vel = cycle_tp->plan_block->feed_vel * var_chan[0][VAR_CHAN_FEED_OVERRIDE].value.f / OVERRIDE_PERCENT;
-                    }
                     cycle_tp->is_event_trigger = true;
+                }
+            }
+            break;
+        
+        case SYS_EVENT_SINGLE_BLOCK_ON:
+        case SYS_EVENT_SINGLE_BLOCK_OFF:
+            LOG(LOG_LEVEL_INFO, "自动模式处理单段");
+            if(cycle_tp->mem_exec_state == EXEC_RUNNING){
+                if(!queue_is_empty(plan_queue)){
+                    if(cycle_tp->plan_block->mode == PMC_MODE_PAUSE) break;
+                    if(cycle_tp->plan_block->mode != PMC_MODE_TAP){
+                        cycle_tp->is_event_trigger = true;
+                    };
                 }
             }
             break;
@@ -234,20 +236,6 @@ static void auto_set_state(){
             }
             LOG(LOG_LEVEL_WARN, "自动模式下不允许加工中关闭机械锁住");
             break;
-
-        // case SYS_EVENT_SINGLE_BLOCK_ON:
-        //     LOG(LOG_LEVEL_INFO, "自动模式处理开启单段");
-        //     cycle_tp->is_ve_zero = false;
-        //     if(cycle_tp->mem_exec_state == EXEC_RUNNING){
-        //         if(!queue_is_empty(plan_queue)){
-        //             if(cycle_tp->plan_block->mode == PMC_MODE_PAUSE) break;
-        //             if(cycle_tp->plan_block->mode != PMC_MODE_TAP){
-        //                 cycle_tp->max_vel = 0;
-        //                 cycle_tp->is_event_trigger = true;
-        //             };
-        //         }
-        //     }
-        //     break;
 
         case SYS_EVENT_X_POS_PRESS:
         case SYS_EVENT_Y_POS_PRESS:

@@ -3,6 +3,8 @@ project(kinematic C CXX)
 
 # set(CMAKE_BUILD_TYPE Debug)
 
+# set(VERSION "1.11.0")
+
 set(CNC_RT_ROOT "" CACHE PATH "Path to cnc_rt root")
 if(NOT CNC_RT_ROOT)
     if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/../../src/utils/math/cnc_math.c")

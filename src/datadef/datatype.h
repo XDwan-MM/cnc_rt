@@ -43,6 +43,8 @@ typedef enum result {
     GNC_PARSER_WAIT = 302,      // 等待译码
     GNC_PARSER_OVER_AND_WAIT = 303, // 译码结束且等待
     GNC_ARRIVE_CHECK_FAIL,      // 轴定位超差
+    GNC_SBL_ARRIVE,
+    GNC_LENGTH_IS_ZERO,
     VP_CAL_SUCCESS = 400,
     VP_IS_NULL,
     VP_PARAM_UNVALID,
