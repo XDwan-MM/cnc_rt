@@ -37,7 +37,7 @@ static void auto_handle_alarm(){
 
 static bool auto_check_running(){
     if(rt_get_chan_state(0, CHAN_IS_PARSERING)) return true;
-    if(!queue_is_empty(plan_queue) || !queue_is_empty(pretreat_queue) || !gcode_queue_is_empty(gcode_queue) || mcode_queue_is_empty(mcode_queue) || mcode_data->mcode_size != 0) return true;
+    if(!queue_is_empty(plan_queue) || !queue_is_empty(pretreat_queue) || !gcode_queue_is_empty(gcode_queue) || mcode_data->mcode_size != 0) return true;
     return false;
 }
 
