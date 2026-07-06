@@ -330,7 +330,7 @@ void pmc_g_input_scan_cycle(void)
         pmc_dispatch_event(EV_MSG_ENANLE, MAC_LOCK, 0);
         LOG(LOG_LEVEL_INFO, "扫描到G4.1 发生下降沿");
     }
-    /* G54 */
+    /* G54 用户宏程序输入指令*/
     if (SIGNAL_BYTE_CHANGED(curr_g.g_regs[54], last_g.g_regs[54]))
     {
         for (int i = 0; i < 8; i++)
@@ -345,7 +345,7 @@ void pmc_g_input_scan_cycle(void)
             }
         }
     }
-    /* G55 */
+    /* G55 用户宏程序输入指令*/
     if (SIGNAL_BYTE_CHANGED(curr_g.g_regs[55], last_g.g_regs[55]))
     {
         for (int i = 0; i < 8; i++)

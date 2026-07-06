@@ -17,9 +17,9 @@
 extern "C" {
 #endif
 
-#define REG_F10 256
-#define REG_F11 65536
-#define REG_F12 4294967296
+#define REG_8BITE 256
+#define REG_16BITE 65536
+#define REG_24BITE 4294967296
 
 typedef enum mcode_state{
     MCODE_EXECUTE_IDLE = 0,
@@ -32,7 +32,9 @@ typedef struct{
     MCODE_STATE mcode_state;
     MCODE_BLOCK mcode_block[M_BUF_SIZE]; // 单程序段多个M指令
     int mcode_size;         // 多个辅助功能个数
-    bool signal_mf;         // 选通脉冲信号
+    bool signal_mf;         // 辅助功能选通脉冲信号
+    bool signal_sf;         // 主轴速度选通信号
+    bool signal_tf;         // 刀具功能选通信号
     bool signal_den;        // 分配结束信号
     bool signal_fin;        // 结束信号
     bool pmc_end;           // pmc侧动作完成

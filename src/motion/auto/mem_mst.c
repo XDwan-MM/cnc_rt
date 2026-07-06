@@ -16,6 +16,10 @@ static void mcode_data_mend();
 static void mstb_lock_on();
 static void mstb_fin_alert();
 static void mstb_fin_reset();
+static void set_mcode_signal(int index);
+static void set_scode_signal(int index);
+static void set_tcode_signal(int index);
+static void set_bcode_signal(int index);
 
 void auto_execute_mcode(){
     switch (mcode_data->mcode_state)
@@ -90,16 +94,24 @@ static void nc_deal_mcode(){
             setRegValue8(REG_F, 10, 0x03); 
             spl_data.mcp_target_speed = mcode_data->mcode_block[i].spindle.speed;
             spl_data.mcode_feedback = false;
+            set_scode_signal(i);
             break;
         case M04: // 主轴反转
             setRegValue8(REG_F, 10, 0x04); 
             spl_data.mcp_target_speed = mcode_data->mcode_block[i].spindle.speed;
             spl_data.mcode_feedback = false;
+            set_scode_signal(i);
             break;
         case M05: // 主轴停止
             setRegValue8(REG_F, 10, 0x05);
             spl_data.mcode_feedback = false;
+            set_scode_signal(i);
             break;
+        case M06: // 换刀
+            setRegValue8(REG_F, 10, 0x06);
+            spl_data.mcode_feedback = false;
+            set_tcode_signal(i);
+            break;    
         case M19: // 主轴定位
             setRegValue8(REG_F, 10, 0x13); 
             spl_data.spl_event = SPINDLE_EVENT_ORIENT;
@@ -113,30 +125,7 @@ static void nc_deal_mcode(){
                 mcode_handle_reset();
                 return;
             }
-            if(mcode_data->mcode_block[i].m_code < REG_F10){
-                setRegValue8(REG_F, 10, mcode_data->mcode_block[i].m_code);
-                setRegValue8(REG_F, 11, 0);
-                setRegValue8(REG_F, 12, 0);
-                setRegValue8(REG_F, 13, 0);
-            } 
-            else if(mcode_data->mcode_block[i].m_code < REG_F11){
-                setRegValue8(REG_F, 10, mcode_data->mcode_block[i].m_code & 0xFF);          // 低 8 位
-                setRegValue8(REG_F, 11, (mcode_data->mcode_block[i].m_code >> 8) & 0xFF);   // 高 8 位
-                setRegValue8(REG_F, 12, 0);
-                setRegValue8(REG_F, 13, 0);
-            }
-            else if(mcode_data->mcode_block[i].m_code < REG_F12){
-                setRegValue8(REG_F, 10, mcode_data->mcode_block[i].m_code & 0xFF);
-                setRegValue8(REG_F, 11, (mcode_data->mcode_block[i].m_code >> 8) & 0xFF);
-                setRegValue8(REG_F, 12, (mcode_data->mcode_block[i].m_code >> 16) & 0xFF);
-                setRegValue8(REG_F, 13, 0);
-            }
-            else{
-                setRegValue8(REG_F, 10, mcode_data->mcode_block[i].m_code & 0xFF);
-                setRegValue8(REG_F, 11, (mcode_data->mcode_block[i].m_code >> 8) & 0xFF);
-                setRegValue8(REG_F, 12, (mcode_data->mcode_block[i].m_code >> 16) & 0xFF);
-                setRegValue8(REG_F, 13, (mcode_data->mcode_block[i].m_code >> 24) & 0xFF);
-            }
+            set_mcode_signal(i);
             break;
         }
         LOG(LOG_LEVEL_DEBUG, "1、nc侧输出代码信号M%d", mcode_data->mcode_block[i].m_code);
@@ -155,11 +144,28 @@ static void nc_output_mf(){
     switch (mcode_data->mcode_size)
     {
     case 1:
-        // MF信号 F7.0
         if(mcode_data->signal_den){
             // 脉冲选通信号延时时间，缺省值2ms
             if(mcode_data->tmf_count >= par_chan[0][PAR_CH_TMF_DELAY].value.val_int){
                 if(! mcode_data->signal_mf){
+                    switch (mcode_data->mcode_block[0].m_code)
+                    {
+                    case M03:
+                    case M04:
+                    case M05:
+                        // SF主轴速度选通信号
+                        setRegBit(REG_F, 7, 2);
+                        mcode_data->signal_sf = true;
+                        break;
+                    case M06:
+                        // TF刀具功能选通信号
+                        setRegBit(REG_F, 7, 3);
+                        mcode_data->signal_tf = true;
+                        break;
+                    default:
+                        break;
+                    }
+                    // MF辅助功能选通信号
                     setRegBit(REG_F, 7, 0);
                     mcode_data->signal_mf = true;
                     LOG(LOG_LEVEL_DEBUG, "2、延时%dms后输出MF信号", par_chan[0][PAR_CH_TMF_DELAY].value.val_int);
@@ -276,18 +282,119 @@ static void mstb_lock_on(){
 
 // 当FIN信号后，nc侧将代码信号置为0
 static void nc_clear_msignal(){
-    setRegValue8(REG_F, 10, 0x00);     // 代码信号
+    // M代码信号
+    setRegValue8(REG_F, 10, 0x00);     
     setRegValue8(REG_F, 11, 0x00);
     setRegValue8(REG_F, 12, 0x00);
     setRegValue8(REG_F, 13, 0x00);
-    clearRegBit(REG_F, 9, 7);          // 解码信号
+    // S代码信号
+    setRegValue8(REG_F, 22, 0x00);     
+    setRegValue8(REG_F, 23, 0x00);
+    setRegValue8(REG_F, 24, 0x00);
+    setRegValue8(REG_F, 25, 0x00);
+    // T代码信号
+    setRegValue8(REG_F, 26, 0x00);     
+    setRegValue8(REG_F, 27, 0x00);
+    setRegValue8(REG_F, 28, 0x00);
+    setRegValue8(REG_F, 29, 0x00);
+    // 解码信号
+    clearRegBit(REG_F, 9, 7);          
     clearRegBit(REG_F, 9, 6);
     clearRegBit(REG_F, 9, 5);
     clearRegBit(REG_F, 9, 4);
-    clearRegBit(REG_F, 1, 3);          // 分配结束信号
-    clearRegBit(REG_F, 7, 0);
+    // 分配结束信号
+    clearRegBit(REG_F, 1, 3); 
+    // 辅助功能选通信号         
+    clearRegBit(REG_F, 7, 0);          
     clearRegBit(REG_F, 8, 4);
     clearRegBit(REG_F, 8, 5);
+    // 主轴速度选通信号
+    clearRegBit(REG_F, 7, 2);
+    // 刀具功能选通信号
+    clearRegBit(REG_F, 7, 3);
+}
+
+static void set_mcode_signal(int index){
+    if(mcode_data->mcode_block[index].m_code < REG_8BITE){
+        setRegValue8(REG_F, 10, mcode_data->mcode_block[index].m_code);
+        setRegValue8(REG_F, 11, 0);
+        setRegValue8(REG_F, 12, 0);
+        setRegValue8(REG_F, 13, 0);
+    } 
+    else if(mcode_data->mcode_block[index].m_code < REG_16BITE){
+        setRegValue8(REG_F, 10, mcode_data->mcode_block[index].m_code & 0xFF);          // 低 8 位
+        setRegValue8(REG_F, 11, (mcode_data->mcode_block[index].m_code >> 8) & 0xFF);   // 高 8 位
+        setRegValue8(REG_F, 12, 0);
+        setRegValue8(REG_F, 13, 0);
+    }
+    else if(mcode_data->mcode_block[index].m_code < REG_24BITE){
+        setRegValue8(REG_F, 10, mcode_data->mcode_block[index].m_code & 0xFF);
+        setRegValue8(REG_F, 11, (mcode_data->mcode_block[index].m_code >> 8) & 0xFF);
+        setRegValue8(REG_F, 12, (mcode_data->mcode_block[index].m_code >> 16) & 0xFF);
+        setRegValue8(REG_F, 13, 0);
+    }
+    else{
+        setRegValue8(REG_F, 10, mcode_data->mcode_block[index].m_code & 0xFF);
+        setRegValue8(REG_F, 11, (mcode_data->mcode_block[index].m_code >> 8) & 0xFF);
+        setRegValue8(REG_F, 12, (mcode_data->mcode_block[index].m_code >> 16) & 0xFF);
+        setRegValue8(REG_F, 13, (mcode_data->mcode_block[index].m_code >> 24) & 0xFF);
+    }
+}
+
+static void set_scode_signal(int index){
+    if(mcode_data->mcode_block[index].spindle.speed < REG_8BITE){
+        setRegValue8(REG_F, 22, mcode_data->mcode_block[index].spindle.speed);
+        setRegValue8(REG_F, 23, 0);
+        setRegValue8(REG_F, 24, 0);
+        setRegValue8(REG_F, 25, 0);
+    } 
+    else if(mcode_data->mcode_block[index].spindle.speed < REG_16BITE){
+        setRegValue8(REG_F, 22, mcode_data->mcode_block[index].spindle.speed & 0xFF);          // 低 8 位
+        setRegValue8(REG_F, 23, (mcode_data->mcode_block[index].spindle.speed >> 8) & 0xFF);   // 高 8 位
+        setRegValue8(REG_F, 24, 0);
+        setRegValue8(REG_F, 25, 0);
+    }
+    else if(mcode_data->mcode_block[index].spindle.speed < REG_24BITE){
+        setRegValue8(REG_F, 22, mcode_data->mcode_block[index].spindle.speed & 0xFF);
+        setRegValue8(REG_F, 23, (mcode_data->mcode_block[index].spindle.speed >> 8) & 0xFF);
+        setRegValue8(REG_F, 24, (mcode_data->mcode_block[index].spindle.speed >> 16) & 0xFF);
+        setRegValue8(REG_F, 25, 0);
+    }
+    else{
+        setRegValue8(REG_F, 22, mcode_data->mcode_block[index].spindle.speed & 0xFF);
+        setRegValue8(REG_F, 23, (mcode_data->mcode_block[index].spindle.speed >> 8) & 0xFF);
+        setRegValue8(REG_F, 24, (mcode_data->mcode_block[index].spindle.speed >> 16) & 0xFF);
+        setRegValue8(REG_F, 25, (mcode_data->mcode_block[index].spindle.speed >> 24) & 0xFF);
+    }
+    // LOG(LOG_LEVEL_DEBUG, "主轴转速 %d", mcode_data->mcode_block[index].spindle.speed);
+}
+
+static void set_tcode_signal(int index){
+    if(mcode_data->mcode_block[index].tool_number < REG_8BITE){
+        setRegValue8(REG_F, 26, mcode_data->mcode_block[index].tool_number);
+        setRegValue8(REG_F, 27, 0);
+        setRegValue8(REG_F, 28, 0);
+        setRegValue8(REG_F, 29, 0);
+    } 
+    else if(mcode_data->mcode_block[index].tool_number < REG_16BITE){
+        setRegValue8(REG_F, 26, mcode_data->mcode_block[index].tool_number & 0xFF);          // 低 8 位
+        setRegValue8(REG_F, 27, (mcode_data->mcode_block[index].tool_number >> 8) & 0xFF);   // 高 8 位
+        setRegValue8(REG_F, 28, 0);
+        setRegValue8(REG_F, 29, 0);
+    }
+    else if(mcode_data->mcode_block[index].tool_number < REG_24BITE){
+        setRegValue8(REG_F, 26, mcode_data->mcode_block[index].tool_number & 0xFF);
+        setRegValue8(REG_F, 27, (mcode_data->mcode_block[index].tool_number >> 8) & 0xFF);
+        setRegValue8(REG_F, 28, (mcode_data->mcode_block[index].tool_number >> 16) & 0xFF);
+        setRegValue8(REG_F, 29, 0);
+    }
+    else{
+        setRegValue8(REG_F, 26, mcode_data->mcode_block[index].tool_number & 0xFF);
+        setRegValue8(REG_F, 27, (mcode_data->mcode_block[index].tool_number >> 8) & 0xFF);
+        setRegValue8(REG_F, 28, (mcode_data->mcode_block[index].tool_number >> 16) & 0xFF);
+        setRegValue8(REG_F, 29, (mcode_data->mcode_block[index].tool_number >> 24) & 0xFF);
+    }
+    // LOG(LOG_LEVEL_DEBUG, "刀具编号 %d", mcode_data->mcode_block[index].tool_number);
 }
 
 GNC_RES mcode_data_init(){
@@ -325,6 +432,8 @@ static void mcode_data_mend(){
     mcode_queue_reset(mcode_queue);
     mcode_data->mcode_size = 0;
     mcode_data->signal_mf = false;
+    mcode_data->signal_sf = false;
+    mcode_data->signal_tf = false;
     mcode_data->signal_den = false;
     mcode_data->pmc_end = true;
     mcode_data->tfin_count = 0;
