@@ -7,6 +7,7 @@
 #include "cnc_math.h"
 #include <hmisysapi.h>
 #include "rt_data.h"
+#include <alarmapi.h>
 
 static void block_cal_pos(GCODE_BLOCK* gcode_block, PLAN_BLOCK* current_block, POS* start_pos);
 static void block_cal_vel(PLAN_BLOCK* current_block);
@@ -20,8 +21,6 @@ GNC_RES chan_add_block(){
     GCODE_BLOCK* gcode_block;
 
     if(gcode_queue_is_empty(gcode_queue)) return GNC_DATA_EMPTY;
-
-    // LOG(LOG_LEVEL_DEBUG, "获取到Ｇ指令");
 
     // 译码第一段类型为g00，起点为当前机床位置
     if(rt_get_chan_state(0, CHAN_IS_FIRST_RUN)){
@@ -51,7 +50,7 @@ GNC_RES chan_add_block(){
 
         // 构造成段
         pretreat_block->type = gcode_block->type;
-        pretreat_block->feed_vel = gcode_block->feed_vel / TIME_MINUS_2_S;
+        pretreat_block->max_vel = pretreat_block->feed_vel = gcode_block->feed_vel / TIME_MINUS_2_S;
         block_cal_pos(gcode_block, pretreat_block, &pretreat_queue->pre_pos);
 
         // 计算速度
@@ -99,21 +98,30 @@ static void block_cal_pos(GCODE_BLOCK* gcode_block, PLAN_BLOCK* current_block, P
 
 // 计算段最大允许速度
 static void block_cal_vel(PLAN_BLOCK* current_block){
+    // todo: 如果加速度、捷度、弓高误差为0，计算出的最大速度为0
+    double min_feed = MIN3(par_axis[0][PAR_AX_FEED_SPD].value.val_real, par_axis[1][PAR_AX_FEED_SPD].value.val_real, par_axis[2][PAR_AX_FEED_SPD].value.val_real);
+    double min_rapid_feed = MIN3(par_axis[0][PAR_AX_JOG_LOWSPD].value.val_real, par_axis[1][PAR_AX_JOG_LOWSPD].value.val_real, par_axis[2][PAR_AX_JOG_LOWSPD].value.val_real);  // G00最大速度为设置的快速进给速度
     switch(current_block->type){
         case RAPID:
-            current_block->feed_vel = MIN3(par_axis[0][PAR_AX_JOG_LOWSPD].value.val_real, par_axis[1][PAR_AX_JOG_LOWSPD].value.val_real, par_axis[2][PAR_AX_JOG_LOWSPD].value.val_real);  // G00最大速度为设置的快速进给速度
-            current_block->max_vel = current_block->feed_vel;
+            current_block->max_vel = current_block->feed_vel = min_feed;
             current_block->max_acc = MIN3(par_axis[0][PAR_AX_RAPID_ACC].value.val_real, par_axis[1][PAR_AX_RAPID_ACC].value.val_real, par_axis[2][PAR_AX_RAPID_ACC].value.val_real);
             current_block->max_jerk = MIN3(par_axis[0][PAR_AX_RAPID_JK].value.val_real, par_axis[1][PAR_AX_RAPID_JK].value.val_real, par_axis[2][PAR_AX_RAPID_JK].value.val_real);
             break;
-        case CIRCLE_CCW:
-        case CIRCLE_CW:
         case LINE:
-            double min_feed = MIN3(par_axis[0][PAR_AX_FEED_SPD].value.val_real, par_axis[1][PAR_AX_FEED_SPD].value.val_real, par_axis[2][PAR_AX_FEED_SPD].value.val_real);
-            current_block->feed_vel = MIN(current_block->feed_vel, min_feed);   // G01|G02|G03最大速度
-            current_block->max_vel = current_block->feed_vel;                   // 倍率在前瞻时计算
+            current_block->max_vel = current_block->feed_vel = MIN(current_block->feed_vel, min_feed);   // G01最大速度
             current_block->max_acc = MIN3(par_axis[0][PAR_AX_FEED_ACC].value.val_real, par_axis[1][PAR_AX_FEED_ACC].value.val_real, par_axis[2][PAR_AX_FEED_ACC].value.val_real);
             current_block->max_jerk = MIN3(par_axis[0][PAR_AX_FEED_JK].value.val_real, par_axis[1][PAR_AX_FEED_JK].value.val_real, par_axis[2][PAR_AX_FEED_JK].value.val_real);
+            break;
+        case CIRCLE_CCW:
+        case CIRCLE_CW:
+            current_block->max_acc = MIN3(par_axis[0][PAR_AX_FEED_ACC].value.val_real, par_axis[1][PAR_AX_FEED_ACC].value.val_real, par_axis[2][PAR_AX_FEED_ACC].value.val_real);
+            current_block->max_jerk = MIN3(par_axis[0][PAR_AX_FEED_JK].value.val_real, par_axis[1][PAR_AX_FEED_JK].value.val_real, par_axis[2][PAR_AX_FEED_JK].value.val_real);
+            double vc = vp_cal_circular_max_vel(current_block, par_chan[0][PAR_CH_PATH_TOLERANCE].value.val_real, (double)par_ncu[PAR_NCU_CYCLE].value.val_uint / TIME_US_2_S);
+            current_block->max_vel = current_block->feed_vel = MIN3(current_block->feed_vel, min_feed, vc);   // G02G03最大速度
+            if(IsEqualTo(current_block->max_vel, 0)) {
+                int res = setAlarm(ALARM_CH, ALARM_ERROR, 1000);
+                if(res != -8) LOG(LOG_LEVEL_WARN, "圆弧曲线速度约束: 圆弧最大速度为0");
+            }
             break;
         default:
             break;
@@ -237,15 +245,12 @@ static double block_cal_circle_length(PLAN_BLOCK* current_block){
     double angDelta = current_block->circular_block.end_rad - current_block->circular_block.statr_rad;
     switch(current_block->type){
         case CIRCLE_CW:
-            // if (angDelta >= 0) angDelta -= 2 * PI;
             if (IsGreaterThanOrEqual(angDelta, 0)) angDelta -= 2 * PI;
             break;
         case CIRCLE_CCW:
-            // if (angDelta <= 0) angDelta += 2 * PI;
             if (IsLessThanOrEqual(angDelta, 0)) angDelta += 2 * PI;
             break;
     }
-    // if(fabs(angDelta) < CIRCLE_ANGLE_TOL) angDelta = 2 * PI;
     current_block->circular_block.rad = fabs(angDelta);
     return current_block->circular_block.rad * current_block->circular_block.radius;
 }

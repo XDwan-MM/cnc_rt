@@ -636,7 +636,15 @@ static GNC_RES cycle_tp_look_ahead(VELPLAN_TYPE vplan_mode, double ncu_cycle, do
     cur_block->start_vel = vs;
     // 判断是否大于最大速度
     if(cur_block->start_vel > cur_block->max_vel) cur_block->max_vel = cur_block->start_vel;
-    vp_cal_bid_lookahead(vplan_mode, plan_queue, ncu_cycle);
+    
+    // 速度前瞻
+    vp_cal_bid_lookahead(vplan_mode, plan_queue, ncu_cycle, par_axis[0][PAR_AX_CORNER_VEL_DIFF].value.val_real, par_axis[1][PAR_AX_CORNER_VEL_DIFF].value.val_real, par_axis[2][PAR_AX_CORNER_VEL_DIFF].value.val_real);
+    // if(cur_block->type == CIRCLE_CW || cur_block->type == CIRCLE_CCW){
+    //     LOG(LOG_LEVEL_DEBUG, "速度前瞻 %d, angle:%f, length:%f, radius:%f, max_vel:%f, start_vel:%f end_vel:%f", cur_block->line_number, cur_block->angle_rad, cur_block->length, cur_block->circular_block.radius, cur_block->max_vel, cur_block->start_vel, cur_block->end_vel);
+    // }else{
+    //     LOG(LOG_LEVEL_DEBUG, "速度前瞻 %d, angle:%f, length:%f, max_vel:%f, start_vel:%f end_vel:%f", cur_block->line_number, cur_block->angle_rad, cur_block->length, cur_block->max_vel, cur_block->start_vel, cur_block->end_vel);
+    // }
+    
     // 如果无法减速到ve
     if(IsGreaterThan(vs, 0)){
         double del_dist = vp_cal_decel_dist(vplan_mode, cur_block->start_vel, cur_block->end_vel, cur_block->max_acc, cur_block->max_jerk);
@@ -645,8 +653,6 @@ static GNC_RES cycle_tp_look_ahead(VELPLAN_TYPE vplan_mode, double ncu_cycle, do
             cur_block->end_vel = del_vel;
         }
     }
-    // LOG(LOG_LEVEL_DEBUG, "2 %f %f", cur_block->length, cur_block->feed_vel);
-    // LOG(LOG_LEVEL_DEBUG, "start_vel:%f end_vel:%f", cur_block->start_vel, cur_block->end_vel);
     return GNC_CAL_SUCCESS;
 }
 

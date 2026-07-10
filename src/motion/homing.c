@@ -25,7 +25,6 @@ static bool homing_tp_new_vel_valid(AXIS_TYPE axis_type, double target_vel);
 static GNC_RES abs_homing_tp_init(AXIS_TYPE axis_type);
 static GNC_RES abs_declining_tp_init(AXIS_TYPE axis_type, double target_vel);
 static void reset_pos_at_home(AXIS_TYPE axis_type);
-static bool abs_homing_check_axis_arrive(AXIS_TYPE axis_type);
 
 void handle_homing_cmd(){
     homing_set_state();
@@ -327,14 +326,7 @@ static bool abs_homing_is_tp_finished(AXIS_TYPE axis_type){
 static bool abs_homing_is_axis_homed(AXIS_TYPE axis_type){
     double home_crds = par_axis[axis_type][PAR_AX_HOME_CRDS].value.val_real;
     double current_pos = rt_data->axis_data[axis_type].mac_cmd_pos;
-    if (fabs(home_crds - current_pos) < par_chan[0][PAR_CH_HOMED_ANG].value.val_real) return true;
-    return false;
-}
-
-static bool abs_homing_check_axis_arrive(AXIS_TYPE axis_type){
-    double home_crds = par_axis[axis_type][PAR_AX_HOME_CRDS].value.val_real;
-    double current_pos = rt_data->axis_data[axis_type].motor_act_pos;
-    if (fabs(home_crds - current_pos) < par_axis[axis_type][PAR_AX_POS_TOL].value.val_real) return true;
+    if (fabs(home_crds - current_pos) < par_axis[axis_type][PAR_AX_REF_RANGE].value.val_real) return true;
     return false;
 }
 

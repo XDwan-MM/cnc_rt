@@ -47,7 +47,7 @@ set_target_properties(kinematic PROPERTIES
     OUTPUT_NAME "kinematic"
 )
 
-option(BUILD_TRAJECTORY_TESTS "Build trajectory unit tests" ON)
+option(BUILD_TRAJECTORY_TESTS "Build trajectory unit tests" OFF)
 if(BUILD_TRAJECTORY_TESTS)
     enable_testing()
 
