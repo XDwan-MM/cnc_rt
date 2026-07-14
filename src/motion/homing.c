@@ -49,7 +49,7 @@ void handle_homing_cmd(){
 
 static void homing_cal_fv(){
     double fv = sqrt(pow(homing_tp[0].traj_data->v, 2) + pow(homing_tp[1].traj_data->v, 2) + pow(homing_tp[2].traj_data->v, 2));
-    setVarChanDouble(0, VAR_CHAN_CMD_FEEDRATE, fv, 0);
+    setVarChanDouble(0, VAR_CHAN_CMD_FEEDRATE, fv * TIME_MINUS_2_S, 0);
 }
 
 static void homing_set_state(){
@@ -223,7 +223,7 @@ static void homing_handle_alarm(){
 static double abs_homing_tp_pinc(AXIS_TYPE axis_type){
     GNC_RES res = GNC_CAL_SUCCESS;
     double ncu_cycle = (double)par_ncu[PAR_NCU_CYCLE].value.val_uint / TIME_US_2_S;
-    double rapid_vel = par_axis[axis_type][PAR_AX_RAPID_SPD].value.val_real;
+    double rapid_vel = MIN(par_axis[axis_type][PAR_AX_JOG_LOWSPD].value.val_real, par_axis[axis_type][PAR_AX_RAPID_SPD].value.val_real);
     double rapid_override = var_chan[0][VAR_CHAN_RAPID_OVERRIDE].value.f / OVERRIDE_PERCENT;
     double current_vel = fabs(var_axis[axis_type][VAR_AXIS_CMD_VEL].value.f);
     double s = 0;
@@ -352,8 +352,8 @@ GNC_RES homing_tp_init(){
         }
         homing_tp[i].homing_block->type = LINE;
         homing_tp[i].homing_state = ABS_EXEC_IDLE;
-        homing_tp[i].homing_block->max_vel = par_axis[i][PAR_AX_RAPID_SPD].value.val_real;
-        homing_tp[i].homing_block->feed_vel = par_axis[i][PAR_AX_RAPID_SPD].value.val_real;
+        homing_tp[i].homing_block->max_vel = par_axis[i][PAR_AX_JOG_LOWSPD].value.val_real;
+        homing_tp[i].homing_block->feed_vel = par_axis[i][PAR_AX_JOG_LOWSPD].value.val_real;
         homing_tp[i].homing_block->max_acc = par_axis[i][PAR_AX_RAPID_ACC].value.val_real;
         homing_tp[i].homing_block->max_jerk = par_axis[i][PAR_AX_RAPID_JK].value.val_real;
         homing_tp[i].homing_block->end_vel = 0;
@@ -388,8 +388,8 @@ void homing_tp_reset(){
 
 GNC_RES abs_homing_tp_update_params(AXIS_TYPE axis_type, double current_vel, double target_vel){
     GNC_RES res = VP_CAL_SUCCESS;
-    homing_tp[axis_type].homing_block->feed_vel = par_axis[axis_type][PAR_AX_RAPID_SPD].value.val_real;
-    homing_tp[axis_type].homing_block->max_vel = par_axis[axis_type][PAR_AX_RAPID_SPD].value.val_real * var_chan[0][VAR_CHAN_RAPID_OVERRIDE].value.f / OVERRIDE_PERCENT;
+    homing_tp[axis_type].homing_block->feed_vel = MIN(par_axis[axis_type][PAR_AX_JOG_LOWSPD].value.val_real, par_axis[axis_type][PAR_AX_RAPID_SPD].value.val_real);
+    homing_tp[axis_type].homing_block->max_vel = homing_tp[axis_type].homing_block->feed_vel * var_chan[0][VAR_CHAN_RAPID_OVERRIDE].value.f / OVERRIDE_PERCENT;
     homing_tp[axis_type].homing_block->max_acc = par_axis[axis_type][PAR_AX_RAPID_ACC].value.val_real;
     homing_tp[axis_type].homing_block->max_jerk = par_axis[axis_type][PAR_AX_RAPID_JK].value.val_real;
     // 如果新速度不满足，不更新新速度
