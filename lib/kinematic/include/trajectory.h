@@ -88,8 +88,18 @@ double vp_cal_decel_vel(VELPLAN_TYPE velplan_type, double vs, double amax, doubl
 /// @brief 计算前瞻速度
 /// @param velplan_type 加减速类型：T_SHAPE, S_SHAPE, SIN_SHAPE
 /// @param plan_queue 前瞻队列
+/// @param cycle_time 
+/// @param radius_error 基于圆弧插补的容许误差
+/// @param circular_min_vel 基于圆弧插补的下限速度
 /// @return 
-void vp_cal_bid_lookahead(VELPLAN_TYPE velplan_type, PLAN_QUEUE* plan_queue, double cycle_time);
+void vp_cal_bid_lookahead(VELPLAN_TYPE velplan_type, PLAN_QUEUE* plan_queue, double cycle_time, double x_corner_vel_thr, double y_corner_vel_thr, double z_corner_vel_thr);
+
+/// @brief 圆弧曲线的加速度进行的速度控制
+/// @param cur_block 
+/// @param chord_error 圆弧弓高误差
+/// @param cycle_time 
+/// @return double radius_error, double circular_min_vel,
+double vp_cal_circular_max_vel(PLAN_BLOCK* cur_block, double chord_error, double cycle_time);
 
 
 #ifdef __cplusplus
