@@ -98,12 +98,12 @@ static void block_cal_pos(GCODE_BLOCK* gcode_block, PLAN_BLOCK* current_block, P
 
 // 计算段最大允许速度
 static void block_cal_vel(PLAN_BLOCK* current_block){
-    // todo: 如果加速度、捷度、弓高误差为0，计算出的最大速度为0
+    // 如果加速度、捷度、弓高误差为0，计算出的最大速度为0
     double min_feed = MIN3(par_axis[0][PAR_AX_FEED_SPD].value.val_real, par_axis[1][PAR_AX_FEED_SPD].value.val_real, par_axis[2][PAR_AX_FEED_SPD].value.val_real);
-    double min_rapid_feed = MIN3(par_axis[0][PAR_AX_JOG_LOWSPD].value.val_real, par_axis[1][PAR_AX_JOG_LOWSPD].value.val_real, par_axis[2][PAR_AX_JOG_LOWSPD].value.val_real);  // G00最大速度为设置的快速进给速度
+    double min_rapid_feed = MIN3(MIN(par_axis[0][PAR_AX_JOG_LOWSPD].value.val_real, par_axis[0][PAR_AX_RAPID_SPD].value.val_real), MIN(par_axis[1][PAR_AX_JOG_LOWSPD].value.val_real, par_axis[1][PAR_AX_RAPID_SPD].value.val_real), MIN(par_axis[2][PAR_AX_JOG_LOWSPD].value.val_real, par_axis[2][PAR_AX_RAPID_SPD].value.val_real));  // G00最大速度为设置的快速进给速度
     switch(current_block->type){
         case RAPID:
-            current_block->max_vel = current_block->feed_vel = min_feed;
+            current_block->max_vel = current_block->feed_vel = min_rapid_feed;
             current_block->max_acc = MIN3(par_axis[0][PAR_AX_RAPID_ACC].value.val_real, par_axis[1][PAR_AX_RAPID_ACC].value.val_real, par_axis[2][PAR_AX_RAPID_ACC].value.val_real);
             current_block->max_jerk = MIN3(par_axis[0][PAR_AX_RAPID_JK].value.val_real, par_axis[1][PAR_AX_RAPID_JK].value.val_real, par_axis[2][PAR_AX_RAPID_JK].value.val_real);
             break;
@@ -118,13 +118,21 @@ static void block_cal_vel(PLAN_BLOCK* current_block){
             current_block->max_jerk = MIN3(par_axis[0][PAR_AX_FEED_JK].value.val_real, par_axis[1][PAR_AX_FEED_JK].value.val_real, par_axis[2][PAR_AX_FEED_JK].value.val_real);
             double vc = vp_cal_circular_max_vel(current_block, par_chan[0][PAR_CH_PATH_TOLERANCE].value.val_real, (double)par_ncu[PAR_NCU_CYCLE].value.val_uint / TIME_US_2_S);
             current_block->max_vel = current_block->feed_vel = MIN3(current_block->feed_vel, min_feed, vc);   // G02G03最大速度
-            if(IsEqualTo(current_block->max_vel, 0)) {
-                int res = setAlarm(ALARM_CH, ALARM_ERROR, 1000);
-                if(res != -8) LOG(LOG_LEVEL_WARN, "圆弧曲线速度约束: 圆弧最大速度为0");
-            }
             break;
         default:
             break;
+    }
+    if(IsEqualTo(current_block->max_vel, 0)) {
+        int res = setAlarm(ALARM_CH, ALARM_WARNING, 3);
+        if(res != -8) LOG(LOG_LEVEL_WARN, "最大允许加工速度为0");
+    }
+    if(IsEqualTo(current_block->max_acc, 0)) {
+        int res = setAlarm(ALARM_CH, ALARM_WARNING, 4);
+        if(res != -8) LOG(LOG_LEVEL_WARN, "最大允许加工加速度为0");
+    }
+    if(IsEqualTo(current_block->max_jerk, 0)) {
+        int res = setAlarm(ALARM_CH, ALARM_WARNING, 5);
+        if(res != -8) LOG(LOG_LEVEL_WARN, "最大允许加工加加速度为0");
     }
 }
 

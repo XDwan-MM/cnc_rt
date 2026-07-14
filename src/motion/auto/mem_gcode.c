@@ -66,7 +66,7 @@ void auto_execute_gcode(){
     POS interp_pos = current_pos;
     // 计算插补距离
     interp_pinc = mem_cal_pinc(velplan_mode, ncu_cycle, current_vel, current_pos);
-    // 根据插补类型计算插补点：快速G00、直线G01、圆弧G02|03……
+    // 根据插补类型计算插补点
     interp_pos = mem_cal_pos(current_pos, interp_pinc);
     // 更新速度参数
     rt_data->axis_data[AXIS_X].wcs_cmd_pos_cur = interp_pos.x;
@@ -177,6 +177,8 @@ static bool mem_check_res(GNC_RES res){
 
     case GNC_LENGTH_IS_ZERO:
     case VP_LENGTH_IS_ZERO:
+    case VP_MAX_ACC_IS_ZERO:
+    case VP_MAX_JERK_IS_ZERO:
         return false;
 
     case GNC_ARRIVE_CHECK_FAIL:
@@ -355,17 +357,18 @@ static bool cycle_tp_is_zerovel_and_zerorate(double current_vel){
         cycle_tp->max_vel = 0;
         return true;
     }
-    double max_rapid_feed = MIN3(par_axis[0][PAR_AX_RAPID_SPD].value.val_real, par_axis[1][PAR_AX_RAPID_SPD].value.val_real, par_axis[2][PAR_AX_RAPID_SPD].value.val_real); 
+    double max_rapid_feed = MIN3(MIN(par_axis[0][PAR_AX_JOG_LOWSPD].value.val_real, par_axis[0][PAR_AX_RAPID_SPD].value.val_real), MIN(par_axis[1][PAR_AX_JOG_LOWSPD].value.val_real, par_axis[1][PAR_AX_RAPID_SPD].value.val_real), MIN(par_axis[2][PAR_AX_JOG_LOWSPD].value.val_real, par_axis[2][PAR_AX_RAPID_SPD].value.val_real));
     double max_feed = MIN3(par_axis[0][PAR_AX_FEED_SPD].value.val_real, par_axis[1][PAR_AX_FEED_SPD].value.val_real, par_axis[2][PAR_AX_FEED_SPD].value.val_real);
     // 更新最大运行速度
     if(cycle_tp->plan_block->type == RAPID){
         if(rt_get_sys_state(SYS_IS_DRY_RUN)) cycle_tp->max_vel = MIN(par_chan[0][PAR_CH_DRYRUN_SPD].value.val_real * var_chan[0][VAR_CHAN_RAPID_OVERRIDE].value.f / OVERRIDE_PERCENT, max_rapid_feed);
-        else cycle_tp->max_vel = MIN(cycle_tp->plan_block->feed_vel * var_chan[0][VAR_CHAN_RAPID_OVERRIDE].value.f / OVERRIDE_PERCENT, max_feed);
+        else cycle_tp->max_vel = MIN(cycle_tp->plan_block->feed_vel * var_chan[0][VAR_CHAN_RAPID_OVERRIDE].value.f / OVERRIDE_PERCENT, max_rapid_feed);
     };
     if(cycle_tp->plan_block->type != RAPID){
-        if(rt_get_sys_state(SYS_IS_DRY_RUN)) cycle_tp->max_vel = MIN(par_chan[0][PAR_CH_DRYRUN_SPD].value.val_real * var_chan[0][VAR_CHAN_FEED_OVERRIDE].value.f / OVERRIDE_PERCENT, max_rapid_feed);
+        if(rt_get_sys_state(SYS_IS_DRY_RUN)) cycle_tp->max_vel = MIN(par_chan[0][PAR_CH_DRYRUN_SPD].value.val_real * var_chan[0][VAR_CHAN_FEED_OVERRIDE].value.f / OVERRIDE_PERCENT, max_feed);
         else cycle_tp->max_vel = MIN(cycle_tp->plan_block->feed_vel * var_chan[0][VAR_CHAN_FEED_OVERRIDE].value.f / OVERRIDE_PERCENT, max_feed);
     }
+    if(IsEqualTo(current_vel, 0) && IsEqualTo(head_block->max_vel, 0)) return true;
     return false;
 }
 
@@ -658,7 +661,7 @@ static GNC_RES cycle_tp_look_ahead(VELPLAN_TYPE vplan_mode, double ncu_cycle, do
 
 // 计算段的首末速度、最大速度、加速度、加加速度
 static void block_cal_lookahead_vel(PLAN_BLOCK* current_block){
-    double max_rapid_feed = MIN3(par_axis[0][PAR_AX_RAPID_SPD].value.val_real, par_axis[1][PAR_AX_RAPID_SPD].value.val_real, par_axis[2][PAR_AX_RAPID_SPD].value.val_real); 
+    double max_rapid_feed = MIN3(MIN(par_axis[0][PAR_AX_JOG_LOWSPD].value.val_real, par_axis[0][PAR_AX_RAPID_SPD].value.val_real), MIN(par_axis[1][PAR_AX_JOG_LOWSPD].value.val_real, par_axis[1][PAR_AX_RAPID_SPD].value.val_real), MIN(par_axis[2][PAR_AX_JOG_LOWSPD].value.val_real, par_axis[2][PAR_AX_RAPID_SPD].value.val_real));
     double max_feed = MIN3(par_axis[0][PAR_AX_FEED_SPD].value.val_real, par_axis[1][PAR_AX_FEED_SPD].value.val_real, par_axis[2][PAR_AX_FEED_SPD].value.val_real);
     switch (current_block->mode)
     {
