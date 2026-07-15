@@ -327,9 +327,6 @@ ctrl+X 回车 保存退出.
 
 
 
-重构实时进程版本
-
-
 编译命令:
 使用 CONFIG+=debug_mode 启用调试模式编译
 使用 CONFIG+=release 或不加参数使用实时模式编译

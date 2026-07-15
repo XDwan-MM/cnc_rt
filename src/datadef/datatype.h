@@ -116,9 +116,10 @@ typedef enum {
     LINE,           // 直线 G01
     CIRCLE_CW,      // 顺时针圆弧 G02
     CIRCLE_CCW,     // 逆时针圆弧 G03
-    HELIX,          // 螺纹 G04
+    HELIX,          // 螺旋 G33
+    RIGID_TAP,      // 刚性攻丝 G84
+    TAP_RETURN,     // 攻丝回退
     SPLINE,         // 样条
-    RIGID_TAP,      // 刚性攻丝
     PROBE,          // 探针
 } INTERP_TYPE;
 

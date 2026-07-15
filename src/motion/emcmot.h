@@ -16,10 +16,16 @@
 extern "C" {
 #endif
 
-// 路径规划：解释器译码 → 处理成block → 平滑、拟合
+/// @brief 路径规划：
+/// parser_run_mode 解释器译码
+/// chan_add_block 添加block
+/// pre_add_block 预处理
 void emcmotPathPlan();
 
-// 轨迹规划：速度前瞻 → 速度控制 → 插补 → 补偿 → 更新hal → 反馈status
+/// @brief 轨迹规划：
+/// chan_do_period 通道周期状态机：复位、报警和通知扫描、手动、回零和程序运行、坐标处理
+/// smx_do_period 运动同步控制：主轴同步、刚性攻丝/频率攻丝同步、重叠控制
+/// axis_write_out 轴输出与伺服处理：获取通道周期生成的轴增量、检查正负软限位、更新编码器/反馈命令位置、执行补偿
 void emcmotTrajPlan();
 
 

@@ -253,6 +253,7 @@ static GNC_RES parser_handle_recieve(pmc_data* motion_data, NcItpState *itp_stat
         case PMC_MODE_ARRIVE_CHECK: // 到位检测
         case PMC_MODE_TAP: // 攻丝模式
         case PMC_MODE_PAUSE: // 暂停模式
+        case PMC_MODE_TAP_RETURE: // 攻丝回退
             res = parser_handle_gcode(motion_data, itp_state, line_no);
             break; 
         case PMC_MODE_M_CMD: // M指令
@@ -288,13 +289,16 @@ static GNC_RES parser_handle_gcode(pmc_data* motion_data, NcItpState *itp_state,
             break;
         case PMC_G03:
             gcode_block.type = CIRCLE_CCW;
-            // 圆心位置
             gcode_block.center_pos.x = motion_data->circle_center.x_coc;
             gcode_block.center_pos.y = motion_data->circle_center.y_coc;
             gcode_block.center_pos.z = motion_data->circle_center.z_coc;
-            // 平面
             gcode_block.plane = (PLANE)(motion_data->plane);
             break;
+        case PMC_G33_1: // 攻丝循环
+            gcode_block.type = RIGID_TAP;
+            break;
+        case PMC_G33_2: // 攻丝回退
+            gcode_block.type = TAP_RETURN;
         default:
             // 未支持的插补类型
             rt_set_parser_state(3001, *line_no);

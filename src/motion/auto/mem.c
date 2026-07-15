@@ -9,6 +9,8 @@ static void auto_set_state();
 static void auto_handle_alarm();
 static bool auto_check_running();
 static void auto_check_prog_end();
+static inline bool is_tap_mode(pmc_mode mode);
+static inline bool is_pause_mode(pmc_mode mode);
 static bool reset_trigger = false;
 
 void handle_auto_cmd(){
@@ -133,7 +135,7 @@ static void auto_set_state(){
             if(cycle_tp->mem_exec_state == EXEC_RUNNING){
                 // 攻丝方式下进给暂停无效
                 if(!queue_is_empty(plan_queue)){
-                    if(cycle_tp->plan_block->mode == PMC_MODE_TAP) {
+                    if(is_tap_mode(cycle_tp->plan_block->mode)) {
                         // ｍ代码状态也不能进入暂停
                         mcode_data->mcode_state = MCODE_EXECUTE_RUNNING;
                         break;
@@ -148,8 +150,8 @@ static void auto_set_state(){
             LOG(LOG_LEVEL_INFO, "自动模式处理进给倍率切换");
             if(cycle_tp->mem_exec_state == EXEC_RUNNING){
                 if(!queue_is_empty(plan_queue)){
-                    if(cycle_tp->plan_block->mode == PMC_MODE_PAUSE) break;
-                    if(cycle_tp->plan_block->mode != PMC_MODE_TAP && cycle_tp->plan_block->type != RAPID){
+                    if(is_pause_mode(cycle_tp->plan_block->mode)) break;
+                    if(!is_tap_mode(cycle_tp->plan_block->mode) && cycle_tp->plan_block->type != RAPID){
                         cycle_tp->is_event_trigger = true;
                     }
                 }
@@ -160,8 +162,8 @@ static void auto_set_state(){
             LOG(LOG_LEVEL_INFO, "自动模式处理快速倍率切换 %f", var_chan[0][VAR_CHAN_RAPID_OVERRIDE].value.f);
             if(cycle_tp->mem_exec_state == EXEC_RUNNING){
                 if(!queue_is_empty(plan_queue)){
-                    if(cycle_tp->plan_block->mode == PMC_MODE_PAUSE) break;
-                    if(cycle_tp->plan_block->mode != PMC_MODE_TAP && cycle_tp->plan_block->type == RAPID){
+                    if(is_pause_mode(cycle_tp->plan_block->mode)) break;
+                    if(!is_tap_mode(cycle_tp->plan_block->mode) && cycle_tp->plan_block->type == RAPID){
                         cycle_tp->is_event_trigger = true;
                     };
                 }
@@ -172,7 +174,7 @@ static void auto_set_state(){
             LOG(LOG_LEVEL_INFO, "自动模式处理开启空运行");
             if(cycle_tp->mem_exec_state == EXEC_RUNNING){
                 if(!queue_is_empty(plan_queue)){
-                    if(cycle_tp->plan_block->mode == PMC_MODE_PAUSE) break;
+                    if(is_pause_mode(cycle_tp->plan_block->mode)) break;
                     cycle_tp->is_event_trigger = true;
                 }
             }
@@ -182,7 +184,7 @@ static void auto_set_state(){
             LOG(LOG_LEVEL_INFO, "自动模式处理关闭空运行");
             if(cycle_tp->mem_exec_state == EXEC_RUNNING){
                 if(!queue_is_empty(plan_queue)){
-                    if(cycle_tp->plan_block->mode == PMC_MODE_PAUSE) break;
+                    if(is_pause_mode(cycle_tp->plan_block->mode)) break;
                     cycle_tp->is_event_trigger = true;
                 }
             }
@@ -193,10 +195,8 @@ static void auto_set_state(){
             LOG(LOG_LEVEL_INFO, "自动模式处理单段");
             if(cycle_tp->mem_exec_state == EXEC_RUNNING){
                 if(!queue_is_empty(plan_queue)){
-                    if(cycle_tp->plan_block->mode == PMC_MODE_PAUSE) break;
-                    if(cycle_tp->plan_block->mode != PMC_MODE_TAP){
-                        cycle_tp->is_event_trigger = true;
-                    };
+                    if(is_pause_mode(cycle_tp->plan_block->mode)) break;
+                    cycle_tp->is_event_trigger = true;
                 }
             }
             break;
@@ -254,6 +254,14 @@ static void auto_set_state(){
 void auto_handle_estop(){
     mcode_handle_estop();
     gcode_handle_estop();
+}
+
+static inline bool is_tap_mode(pmc_mode mode){
+    return cycle_tp->plan_block->mode == PMC_MODE_TAP || cycle_tp->plan_block->mode == PMC_MODE_TAP_RETURE;
+}
+
+static inline bool is_pause_mode(pmc_mode mode){
+    return cycle_tp->plan_block->mode == PMC_MODE_PAUSE;
 }
 
 // 编辑模式下复位，光标回到首行

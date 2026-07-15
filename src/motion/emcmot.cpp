@@ -25,6 +25,10 @@
 #include "master.h"
 #include <hmisysapi.h>
 
+static void chan_do_period();
+static void smx_do_period();
+static void axis_write_out();
+
 static void check_for_fault();
 static void set_operating_mode();
 static void spindle_control();
@@ -48,10 +52,37 @@ void emcmotTrajPlan() {
     if (op_flag == 0) {
         return;
     }
+    // 通道周期状态机
+    chan_do_period();
+    // 运动同步控制
+    smx_do_period();
+    // 轴输出与伺服处理
+    axis_write_out();
+    // 清除事件
+    rt_data->nc_event = SYS_EVENT_NONE;
+}
 
+// 路径规划
+void emcmotPathPlan() {
+    // 遍历多个通道
+    for (int i = 0; i < var_sys[VAR_SYS_CHAN_NUM].value.i; i++) {
+        if (rt_get_chan_state(i, CHAN_IS_PARSER_RERUN)){
+            // LOG(LOG_LEVEL_INFO, "初始化译码器");
+            parser_init(rt_data->current_mode);
+            rt_set_chan_state(i, CHAN_IS_FIRST_RUN, true);      // 通知预处理第一次获取pre_pos
+            rt_set_chan_state(i, CHAN_IS_PARSER_RERUN, false);
+        }
+        // 解释器译码
+        parser_run_mode();
+        // 预处理，添加block
+        chan_add_block();
+    }
+}
+
+// 通道周期状态机
+static void chan_do_period(){
     // 遍历每个通道
     for (int i = 0; i < var_sys[VAR_SYS_CHAN_NUM].value.i; i++) {
-        
         // 当前活动通道
         setVarSysInt(VAR_SYS_ACTIVE_CHAN, i, 0);
         
@@ -75,45 +106,37 @@ void emcmotTrajPlan() {
 
         // 根据运动模式计算运动位置
         get_cmd_pos();
-
-        // 计算mac_cmd_pos
-        calcul_mac_cmd_pos();
-
-        // 误差补偿
-        compute_error_comp();
-
-        //更新轴状态
-        Axis_Status_Update();
-
-        // 预先检查插补位置是否超软限位
-        check_for_soft_limit();
-
-        // 更新抽象层数据
-        output_to_hal();
-
-        // 上传运动状态数据
-        update_status();
-
-        // 清除事件
-        rt_data->nc_event = SYS_EVENT_NONE;
     }
 }
 
-// 路径规划
-void emcmotPathPlan() {
-    // 遍历多个通道
-    for (int i = 0; i < var_sys[VAR_SYS_CHAN_NUM].value.i; i++) {
-        if (rt_get_chan_state(i, CHAN_IS_PARSER_RERUN)){
-            // LOG(LOG_LEVEL_INFO, "初始化译码器");
-            parser_init(rt_data->current_mode);
-            rt_set_chan_state(i, CHAN_IS_FIRST_RUN, true);      // 通知预处理第一次获取pre_pos
-            rt_set_chan_state(i, CHAN_IS_PARSER_RERUN, false);
-        }
-        // 解释器译码
-        parser_run_mode();
-        // 预处理，添加block
-        chan_add_block();
-    }
+// 运动同步控制
+static void smx_do_period(){
+    // 刚性攻丝同步（进给 = 转速 × 螺距：F = S × Pitch）
+
+    // 主轴同步
+
+    // 重叠控制
+}
+
+// 轴输出与伺服处理
+static void axis_write_out(){
+    // 计算mac_cmd_pos
+    calcul_mac_cmd_pos();
+
+    // 误差补偿
+    compute_error_comp();
+
+    //更新轴状态
+    Axis_Status_Update();
+
+    // 预先检查插补位置是否超软限位
+    check_for_soft_limit();
+
+    // 更新抽象层数据
+    output_to_hal();
+
+    // 上传运动状态数据
+    update_status();
 }
 
 static void set_operating_mode() {
