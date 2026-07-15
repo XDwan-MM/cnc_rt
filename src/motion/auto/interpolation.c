@@ -15,14 +15,14 @@ POS mem_cal_pos(POS current_pos, double accum_distance){
             interp_pos = interpolate_rapid(current_block, accum_distance);
             break;
         case LINE:
+        case RIGID_TAP:
+        case TAP_RETURN:
             interp_pos = interpolate_line(current_block, accum_distance);
             break;
         case CIRCLE_CCW:
         case CIRCLE_CW:
             interp_pos = interpolate_circle(current_pos, current_block, accum_distance);
             break;
-        // 刚性攻丝
-        case RIGID_TAP:
         case UNKNOWN:
         default:
             interp_pos = current_pos;

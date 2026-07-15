@@ -53,6 +53,7 @@ LIBS += -L "/usr/local/lib/" -lethercat
 INCLUDEPATH += /opt/GreeMaster/include/libGREEMASTER/
 
 HEADERS += \
+    ../src/alarm/alarm.h \
     ../src/common/debug_mode.h \
     ../src/compensation/comp_data.h \
     ../src/datadef/datatype.h \
@@ -75,20 +76,20 @@ HEADERS += \
     ../src/motion/auto/parser.h \
     ../src/motion/auto/pathplan.h \
     ../src/motion/spindle/spl_control.h \
-    ../src/motion/alarm.h \
     ../src/motion/egear_ratio.h \
     ../src/motion/emcmot.h \
-    ../src/motion/ferror_control.h \
-    ../src/motion/handwheel.h \
-    ../src/motion/homing.h \
-    ../src/motion/jog/jog.h \
-    ../src/motion/jog/jog_planner.h \
-    ../src/motion/stored_stroke_check.h \
-    ../src/pmc_scanner/pmc_a_input_scanner.h \
-    ../src/pmc_scanner/pmc_g_input_scanner.h \
-    ../src/pmc_scanner/pmc_io_map.h \
-    ../src/pmc_scanner/pmc_output_handler.h \
-    ../src/pmc_scanner/signal_utils.h \
+    ../src/motion/manual/handwheel.h \
+    ../src/motion/manual/homing.h \
+    ../src/motion/manual/jog/jog.h \
+    ../src/motion/manual/jog/jog_planner.h \
+    ../src/motion/protect/ferror_control.h \
+    ../src/motion/protect/stored_stroke_check.h \
+    ../src/plc/pmc_scanner/pmc_a_input_scanner.h \
+    ../src/plc/pmc_scanner/pmc_g_input_scanner.h \
+    ../src/plc/pmc_scanner/pmc_io_map.h \
+    ../src/plc/pmc_scanner/pmc_output_handler.h \
+    ../src/plc/pmc_scanner/signal_utils.h \
+    ../src/plc/plc_task/plctask.h \
     ../src/task/task.h \
     ../src/threads/threads_api.h \
     ../src/threads/thread_manager.h \
@@ -97,9 +98,10 @@ HEADERS += \
     ../src/threads/threads_controller.h \
     ../src/utils/math/cnc_math.h \
     ../src/utils/log/log.h \
-    ../src/plc/plctask.h \
+    
 
 SOURCES += \
+    ../src/alarm/alarm.c \
     ../src/compensation/comp_data.c \
     ../src/datadef/datatype.c \
     ../src/datadef/event_queue.c \
@@ -119,18 +121,18 @@ SOURCES += \
     ../src/motion/auto/parser.cpp \
     ../src/motion/auto/pathplan.c \
     ../src/motion/spindle/spl_control.c \
-    ../src/motion/alarm.c \
     ../src/motion/egear_ratio.c \
     ../src/motion/emcmot.cpp \
-    ../src/motion/ferror_control.c \
-    ../src/motion/handwheel.c \
-    ../src/motion/homing.c \
-    ../src/motion/jog/jog.c \
-    ../src/motion/jog/jog_planner.c \
-    ../src/motion/stored_stroke_check.c \
-    ../src/pmc_scanner/pmc_a_input_scanner.c \
-    ../src/pmc_scanner/pmc_g_input_scanner.c \
-    ../src/pmc_scanner/pmc_output_handler.c \
+    ../src/motion/manual/handwheel.c \
+    ../src/motion/manual/homing.c \
+    ../src/motion/manual/jog/jog.c \
+    ../src/motion/manual/jog/jog_planner.c \
+    ../src/motion/protect/ferror_control.c \
+    ../src/motion/protect/stored_stroke_check.c \
+    ../src/plc/pmc_scanner/pmc_a_input_scanner.c \
+    ../src/plc/pmc_scanner/pmc_g_input_scanner.c \
+    ../src/plc/pmc_scanner/pmc_output_handler.c \
+    ../src/plc/plc_task/plctask.cpp \
     ../src/task/task.c \
     ../src/threads/thread_manager.cpp \
     ../src/threads/threads.cpp \
@@ -138,9 +140,10 @@ SOURCES += \
     ../src/threads/threads_controller.cpp \
     ../src/utils/math/cnc_math.c \
     ../src/utils/log/log.c \
-    ../src/plc/plctask.cpp \
+    
 
 INCLUDEPATH += \
+    ../src/alarm \
     ../src/common \
     ../src/compensation \
     ../src/datadef \
@@ -148,11 +151,12 @@ INCLUDEPATH += \
     ../src/master \
     ../src/motion \
     ../src/motion/auto \
-    ../src/motion/jog \
+    ../src/motion/manual/jog \
     ../src/motion/spindle \
-    ../src/monitor \
-    ../src/pmc_scanner \
+    ../src/motion/manual \
     ../src/plc \
+    ../src/plc/pmc_scanner \
+    ../src/plc/plc_task \
     ../src/task \
     ../src/threads \
     ../src/utils \

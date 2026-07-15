@@ -21,9 +21,6 @@
 #include <QTextStream>
 #include <hmisysapi.h>
 #include "sysapi.h"
-#ifdef DEBUG_MODE_ENABLED
-#include "keyboard.h"
-#endif
 
 static char version[64];
 static int sys_start_rt = 0;

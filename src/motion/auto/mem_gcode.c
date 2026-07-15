@@ -349,7 +349,7 @@ static GNC_RES cycle_tp_update_params(VELPLAN_TYPE velplan_type, double cycle_ti
 
 static bool cycle_tp_is_zerovel_and_zerorate(double current_vel){
     PLAN_BLOCK* head_block = queue_peak(plan_queue);
-    if(head_block->mode == PMC_MODE_PAUSE || head_block->mode == PMC_MODE_TAP) return false;
+    if(head_block->mode == PMC_MODE_PAUSE || head_block->mode == PMC_MODE_TAP || head_block->mode == PMC_MODE_TAP_RETURE) return false;
     if(head_block->type != RAPID && IsEqualTo(current_vel, 0) && IsEqualTo(var_chan[0][VAR_CHAN_FEED_OVERRIDE].value.f, 0)){
         cycle_tp->max_vel = 0;
         return true;
@@ -690,8 +690,9 @@ static void block_cal_lookahead_vel(PLAN_BLOCK* current_block){
         case PMC_MODE_CHOP:
             block_cal_chop_vel(current_block, max_rapid_feed, max_feed);
             break;
-        // 攻丝方式 G63
+        // 攻丝方式 G63、G83、G84
         case PMC_MODE_TAP:
+        case PMC_MODE_TAP_RETURE:
             block_cal_tap_vel(current_block, max_rapid_feed, max_feed);
             break;
         // 准确停止、到位检测 G09、G61、G27、G28

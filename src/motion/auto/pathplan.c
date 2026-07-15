@@ -107,6 +107,8 @@ static void block_cal_vel(PLAN_BLOCK* current_block){
             current_block->max_jerk = MIN3(par_axis[0][PAR_AX_RAPID_JK].value.val_real, par_axis[1][PAR_AX_RAPID_JK].value.val_real, par_axis[2][PAR_AX_RAPID_JK].value.val_real);
             break;
         case LINE:
+        case RIGID_TAP:
+        case TAP_RETURN:
             current_block->max_vel = current_block->feed_vel = MIN(current_block->feed_vel, min_feed);   // G01最大速度
             current_block->max_acc = MIN3(par_axis[0][PAR_AX_FEED_ACC].value.val_real, par_axis[1][PAR_AX_FEED_ACC].value.val_real, par_axis[2][PAR_AX_FEED_ACC].value.val_real);
             current_block->max_jerk = MIN3(par_axis[0][PAR_AX_FEED_JK].value.val_real, par_axis[1][PAR_AX_FEED_JK].value.val_real, par_axis[2][PAR_AX_FEED_JK].value.val_real);
@@ -139,9 +141,11 @@ static double cal_two_vectors_angle(VECTOR* vector1, VECTOR* vector2){
 static void block_cal_angle(PLAN_BLOCK* current_block, VECTOR* pre_end_vector, VECTOR* cur_start_vector){
     switch(current_block->type){
         case RAPID:
+        case LINE:
         case CIRCLE_CCW:
         case CIRCLE_CW:
-        case LINE:
+        case RIGID_TAP:
+        case TAP_RETURN:
             current_block->angle_rad = cal_two_vectors_angle(pre_end_vector, cur_start_vector);
             break;
         default:
@@ -255,6 +259,8 @@ void block_cal_length(PLAN_BLOCK* current_block){
     switch(current_block->type){
         case RAPID:
         case LINE:
+        case RIGID_TAP:
+        case TAP_RETURN:
             current_block->length = POS_Distance(&current_block->start_pos, &current_block->end_pos);
             break;
         case CIRCLE_CCW:
@@ -271,6 +277,8 @@ void block_cal_vector(PLAN_BLOCK* current_block){
     switch(current_block->type){
         case RAPID:
         case LINE:
+        case RIGID_TAP:
+        case TAP_RETURN:
             current_block->end_vec = current_block->start_vec = VECTOR_Unit(&current_block->start_pos, &current_block->end_pos);
             break;
         case CIRCLE_CCW:

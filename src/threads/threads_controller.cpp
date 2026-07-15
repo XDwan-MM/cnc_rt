@@ -19,7 +19,6 @@
 #include <alarmapi.h>
 #ifdef DEBUG_MODE_ENABLED
 #include "master_sim.h"
-#include "keyboard.h"
 #endif
 
 #ifdef DEBUG_MODE_ENABLED
