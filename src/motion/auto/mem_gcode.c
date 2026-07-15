@@ -40,6 +40,7 @@ static void block_cal_exact_stop_vel(PLAN_BLOCK* current_block, double max_rapid
 static void block_cal_tap_vel(PLAN_BLOCK* current_block, double max_rapid_feed, double max_feed);
 static void block_cal_chop_vel(PLAN_BLOCK* current_block, double max_rapid_feed, double max_feed);
 static void block_cal_lookahead_vel(PLAN_BLOCK* current_block);
+static bool check_params_unvalid(PLAN_BLOCK* current_block);
 // todo：修改位置
 static GNC_RES vp_cal_g04_vel_profile(VELPLAN_TYPE velplan_type, PLAN_BLOCK* plan_block, VEL_PROFILE* vel_profile, double cycle_time);
 static GNC_RES vp_cal_g04_pause_profile(VELPLAN_TYPE velplan_type, PLAN_BLOCK* plan_block, VEL_PROFILE* vel_profile, double cycle_time);
@@ -301,7 +302,7 @@ static GNC_RES cycle_tp_update_running_tp(VELPLAN_TYPE vplan_mode, double ncu_cy
     }
     res = cycle_tp_update_block(vplan_mode, ncu_cycle, current_vel, current_pos);
     if(res != GNC_CAL_SUCCESS) return res;
-    // 如果加工段允许最大速度为0（倍率为0）
+    // 如果加工段允许最大速度为0
     if(IsEqualTo(cycle_tp->plan_block->max_vel, 0) && cycle_tp->plan_block->mode != PMC_MODE_PAUSE) return VP_MAX_VEL_IS_ZERO;
     // 对插补段终点进行行程限位检查
     lookahead_check_soft_limit(&cycle_tp->plan_block->end_pos);
@@ -359,7 +360,7 @@ static bool cycle_tp_is_zerovel_and_zerorate(double current_vel){
     }
     double max_rapid_feed = MIN3(MIN(par_axis[0][PAR_AX_JOG_LOWSPD].value.val_real, par_axis[0][PAR_AX_RAPID_SPD].value.val_real), MIN(par_axis[1][PAR_AX_JOG_LOWSPD].value.val_real, par_axis[1][PAR_AX_RAPID_SPD].value.val_real), MIN(par_axis[2][PAR_AX_JOG_LOWSPD].value.val_real, par_axis[2][PAR_AX_RAPID_SPD].value.val_real));
     double max_feed = MIN3(par_axis[0][PAR_AX_FEED_SPD].value.val_real, par_axis[1][PAR_AX_FEED_SPD].value.val_real, par_axis[2][PAR_AX_FEED_SPD].value.val_real);
-    // 更新最大运行速度
+    // 更新最大目标运行速度
     if(cycle_tp->plan_block->type == RAPID){
         if(rt_get_sys_state(SYS_IS_DRY_RUN)) cycle_tp->max_vel = MIN(par_chan[0][PAR_CH_DRYRUN_SPD].value.val_real * var_chan[0][VAR_CHAN_RAPID_OVERRIDE].value.f / OVERRIDE_PERCENT, max_rapid_feed);
         else cycle_tp->max_vel = MIN(cycle_tp->plan_block->feed_vel * var_chan[0][VAR_CHAN_RAPID_OVERRIDE].value.f / OVERRIDE_PERCENT, max_rapid_feed);
@@ -368,8 +369,29 @@ static bool cycle_tp_is_zerovel_and_zerorate(double current_vel){
         if(rt_get_sys_state(SYS_IS_DRY_RUN)) cycle_tp->max_vel = MIN(par_chan[0][PAR_CH_DRYRUN_SPD].value.val_real * var_chan[0][VAR_CHAN_FEED_OVERRIDE].value.f / OVERRIDE_PERCENT, max_feed);
         else cycle_tp->max_vel = MIN(cycle_tp->plan_block->feed_vel * var_chan[0][VAR_CHAN_FEED_OVERRIDE].value.f / OVERRIDE_PERCENT, max_feed);
     }
-    if(IsEqualTo(current_vel, 0) && IsEqualTo(head_block->max_vel, 0)) return true;
+    // 如果长度、加速度、捷度、弓高误差为0，前瞻计算出的最大速度为0
+    if(IsEqualTo(current_vel, 0) && check_params_unvalid(head_block)) return true;
     return false;
+}
+
+static bool check_params_unvalid(PLAN_BLOCK* current_block){
+    bool is_unvalid = false;
+    if(IsEqualTo(current_block->max_vel, 0) && IsGreaterThan(current_block->length, 0)) {
+        int res = setAlarm(ALARM_CH, ALARM_WARNING, 3);
+        if(res != -8) LOG(LOG_LEVEL_WARN, "最大允许加工速度为0, %d", current_block->line_number);
+        is_unvalid = true;
+    }else delAlarm(ALARM_CH, ALARM_WARNING, 3);
+    if(IsEqualTo(current_block->max_acc, 0)) {
+        int res = setAlarm(ALARM_CH, ALARM_WARNING, 4);
+        if(res != -8) LOG(LOG_LEVEL_WARN, "最大允许加工加速度为0");
+        is_unvalid = true;
+    }else delAlarm(ALARM_CH, ALARM_WARNING, 4);
+    if(IsEqualTo(current_block->max_jerk, 0)) {
+        int res = setAlarm(ALARM_CH, ALARM_WARNING, 5);
+        if(res != -8) LOG(LOG_LEVEL_WARN, "最大允许加工加加速度为0");
+        is_unvalid = true;
+    }else delAlarm(ALARM_CH, ALARM_WARNING, 5);
+    return is_unvalid;
 }
 
 static bool cycle_tp_is_newvel_unvalid(VELPLAN_TYPE vplan_mode, double current_vel, double target_vel){
@@ -401,7 +423,8 @@ static GNC_RES cycle_tp_update_block(VELPLAN_TYPE vplan_mode, double ncu_cycle, 
         // LOG(LOG_LEVEL_INFO, "更新当前插补段");
     }
     if(res != GNC_CAL_SUCCESS) return res;
-    if(cycle_tp_look_ahead(vplan_mode, ncu_cycle, current_vel) == GNC_DATA_EMPTY) return GNC_DATA_EMPTY;
+    res = cycle_tp_look_ahead(vplan_mode, ncu_cycle, current_vel);
+    if(res != GNC_CAL_SUCCESS) return res;
     // 更新当前行信息
     queue_copy_block(plan_queue, 0, cycle_tp->plan_block);
     gcode_update_var(cycle_tp->plan_block->line_number);
@@ -639,7 +662,6 @@ static GNC_RES cycle_tp_look_ahead(VELPLAN_TYPE vplan_mode, double ncu_cycle, do
     cur_block->start_vel = vs;
     // 判断是否大于最大速度
     if(cur_block->start_vel > cur_block->max_vel) cur_block->max_vel = cur_block->start_vel;
-    
     // 速度前瞻
     vp_cal_bid_lookahead(vplan_mode, plan_queue, ncu_cycle, par_axis[0][PAR_AX_CORNER_VEL_DIFF].value.val_real, par_axis[1][PAR_AX_CORNER_VEL_DIFF].value.val_real, par_axis[2][PAR_AX_CORNER_VEL_DIFF].value.val_real);
     // if(cur_block->type == CIRCLE_CW || cur_block->type == CIRCLE_CCW){
@@ -647,7 +669,6 @@ static GNC_RES cycle_tp_look_ahead(VELPLAN_TYPE vplan_mode, double ncu_cycle, do
     // }else{
     //     LOG(LOG_LEVEL_DEBUG, "速度前瞻 %d, angle:%f, length:%f, max_vel:%f, start_vel:%f end_vel:%f", cur_block->line_number, cur_block->angle_rad, cur_block->length, cur_block->max_vel, cur_block->start_vel, cur_block->end_vel);
     // }
-    
     // 如果无法减速到ve
     if(IsGreaterThan(vs, 0)){
         double del_dist = vp_cal_decel_dist(vplan_mode, cur_block->start_vel, cur_block->end_vel, cur_block->max_acc, cur_block->max_jerk);
