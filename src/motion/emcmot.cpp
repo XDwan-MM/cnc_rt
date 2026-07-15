@@ -28,7 +28,6 @@
 static void chan_do_period();
 static void smx_do_period();
 static void axis_write_out();
-
 static void check_for_fault();
 static void set_operating_mode();
 static void spindle_control();

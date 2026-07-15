@@ -289,7 +289,6 @@ ctrl+X 回车 保存退出.
 |   |--datadef		# 数据定义
 |   |--hal			# 硬件抽象层
 |   |--master		# 主站相关
-|   |--monitor    # 模拟器相关
 |   |--motion		# 运动相关
 |   |   |--emcmot	# 路径规划和轨迹规划
 |   |--plc        # plc相关
