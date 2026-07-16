@@ -87,6 +87,9 @@ void auto_check_soft_limit_del_done();
 // 手动模式下移动后检查软限位减速完成
 void manual_check_soft_limit_del_done(int axis_type);
 
+// 预先检查插补位置是否超软限位
+void check_for_soft_limit();
+
 #ifdef __cplusplus
 }
 #endif

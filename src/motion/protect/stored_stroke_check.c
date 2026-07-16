@@ -390,3 +390,74 @@ static bool detect_falling_edge(bool current_value ,int i)
     last_value[i] = current_value; // 更新上一次信号状态
     return edge_detected;
 }
+
+void check_for_soft_limit()
+{
+    for (int var = 0; var < 3; ++var)
+    {
+        if (runtime[var].is_first_run)
+        {
+            int levels = Check_Axis_Limit_Violation(&runtime[var], rt_data->axis_data[var].mac_cmd_pos, RESET_CHEAK_USED);
+            runtime[var].temp_config = runtime[var].config;
+            runtime[var].limit_pos = rt_data->axis_data[var].mac_cmd_pos;
+            if (!levels)
+            {
+                runtime[var].limit_type = NO_LIMIT_TRIGGERED;
+            }
+            runtime[var].is_first_run = 0;
+        }
+
+        if (rt_data->axis_data[var].axis_status.is_moving)
+        {
+            if ((runtime[var].limit_type == 0) ||
+                (!rt_data->axis_data[var].axis_status.is_decel_done))
+            {
+                runtime[var].active_levels = Check_Axis_Limit_Violation(&runtime[var], rt_data->axis_data[var].mac_cmd_pos, SOFT_CHEAK_USED);
+                runtime[var].limit_pos = rt_data->axis_data[var].mac_cmd_pos;
+            }
+            switch (runtime[var].limit_type)
+            {
+            case LEVEL1_FWD_LIMIT:
+                runtime[var].temp_config.level1.positive_limit = runtime[var].limit_pos;
+                runtime[var].active_levels = Check_Axis_Limit_Violation(&runtime[var], rt_data->axis_data[var].mac_cmd_pos, ALARM_CHEAK_USED);
+                break;
+            case LEVEL1_REV_LIMIT:
+                runtime[var].temp_config.level1.negative_limit = runtime[var].limit_pos;
+                runtime[var].active_levels = Check_Axis_Limit_Violation(&runtime[var], rt_data->axis_data[var].mac_cmd_pos, ALARM_CHEAK_USED);
+                break;
+            case LEVEL2_FWD_LIMIT:
+                if (runtime[var].config.level2_mode == 0)
+                {
+                    runtime[var].temp_config.level2.positive_limit = runtime[var].limit_pos;
+                }
+                else
+                {
+                    runtime[var].temp_config.level2.negative_limit = runtime[var].limit_pos;
+                }
+                runtime[var].active_levels = Check_Axis_Limit_Violation(&runtime[var], rt_data->axis_data[var].mac_cmd_pos, ALARM_CHEAK_USED);
+                break;
+            case LEVEL2_REV_LIMIT:
+                if (runtime[var].config.level2_mode == 0)
+                {
+                    runtime[var].temp_config.level2.negative_limit = runtime[var].limit_pos;
+                }
+                else
+                {
+                    runtime[var].temp_config.level2.positive_limit = runtime[var].limit_pos;
+                }
+                runtime[var].active_levels = Check_Axis_Limit_Violation(&runtime[var], rt_data->axis_data[var].mac_cmd_pos, ALARM_CHEAK_USED);
+                break;
+            case LEVEL3_FWD_LIMIT:
+                runtime[var].temp_config.level3.negative_limit = runtime[var].limit_pos;
+                runtime[var].active_levels = Check_Axis_Limit_Violation(&runtime[var], rt_data->axis_data[var].mac_cmd_pos, ALARM_CHEAK_USED);
+                break;
+            case LEVEL3_REV_LIMIT:
+                runtime[var].temp_config.level3.positive_limit = runtime[var].limit_pos;
+                runtime[var].active_levels = Check_Axis_Limit_Violation(&runtime[var], rt_data->axis_data[var].mac_cmd_pos, ALARM_CHEAK_USED);
+                break;
+            default:
+                break;
+            }
+        }
+    }
+}

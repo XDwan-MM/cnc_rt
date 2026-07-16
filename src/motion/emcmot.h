@@ -19,7 +19,8 @@ extern "C" {
 /// @brief 路径规划：
 /// parser_run_mode 解释器译码
 /// chan_add_block 添加block
-/// pre_add_block 预处理
+/// pretreat_block 预处理
+/// unif_block 一致性处理 smooth_block_by_bezier、generate_approx_spline_blk
 void emcmotPathPlan();
 
 /// @brief 轨迹规划：
