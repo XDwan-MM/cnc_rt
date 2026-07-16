@@ -302,8 +302,12 @@ static GNC_RES cycle_tp_update_running_tp(VELPLAN_TYPE vplan_mode, double ncu_cy
     }
     res = cycle_tp_update_block(vplan_mode, ncu_cycle, current_vel, current_pos);
     if(res != GNC_CAL_SUCCESS) return res;
-    // 如果加工段允许最大速度为0
-    if(IsEqualTo(cycle_tp->plan_block->max_vel, 0) && cycle_tp->plan_block->mode != PMC_MODE_PAUSE) return VP_MAX_VEL_IS_ZERO;
+    // 如果加工段计算出最大速度为0
+    if(IsEqualTo(cycle_tp->plan_block->max_vel, 0) && cycle_tp->plan_block->mode != PMC_MODE_PAUSE) {
+        int res = setAlarm(ALARM_CH, ALARM_WARNING, 3);
+        if(res != -8) LOG(LOG_LEVEL_WARN, "最大允许加工速度为0, %d", cycle_tp->plan_block->line_number);
+        return VP_MAX_VEL_IS_ZERO;
+    }
     // 对插补段终点进行行程限位检查
     lookahead_check_soft_limit(&cycle_tp->plan_block->end_pos);
     res = cycle_tp_update_vp(vplan_mode, ncu_cycle, current_vel, cycle_tp->max_vel);
@@ -370,24 +374,26 @@ static bool cycle_tp_is_zerovel_and_zerorate(double current_vel){
         else cycle_tp->max_vel = MIN(cycle_tp->plan_block->feed_vel * var_chan[0][VAR_CHAN_FEED_OVERRIDE].value.f / OVERRIDE_PERCENT, max_feed);
     }
     // 如果长度、加速度、捷度、弓高误差为0，前瞻计算出的最大速度为0
-    if(IsEqualTo(current_vel, 0) && check_params_unvalid(head_block)) return true;
+    // if(IsEqualTo(current_vel, 0) && check_params_unvalid(head_block)) return true;
     return false;
 }
 
 static bool check_params_unvalid(PLAN_BLOCK* current_block){
     bool is_unvalid = false;
-    if(IsEqualTo(current_block->max_vel, 0) && IsGreaterThan(current_block->length, 0)) {
-        int res = setAlarm(ALARM_CH, ALARM_WARNING, 3);
+    int res = 0;
+    // if(IsEqualTo(current_block->max_vel, 0) && IsGreaterThan(current_block->length, 0))
+    if(IsEqualTo(current_block->feed_vel, 0)) {
+        res = setAlarm(ALARM_CH, ALARM_WARNING, 3);
         if(res != -8) LOG(LOG_LEVEL_WARN, "最大允许加工速度为0, %d", current_block->line_number);
         is_unvalid = true;
     }else delAlarm(ALARM_CH, ALARM_WARNING, 3);
     if(IsEqualTo(current_block->max_acc, 0)) {
-        int res = setAlarm(ALARM_CH, ALARM_WARNING, 4);
+        res = setAlarm(ALARM_CH, ALARM_WARNING, 4);
         if(res != -8) LOG(LOG_LEVEL_WARN, "最大允许加工加速度为0");
         is_unvalid = true;
     }else delAlarm(ALARM_CH, ALARM_WARNING, 4);
     if(IsEqualTo(current_block->max_jerk, 0)) {
-        int res = setAlarm(ALARM_CH, ALARM_WARNING, 5);
+        res = setAlarm(ALARM_CH, ALARM_WARNING, 5);
         if(res != -8) LOG(LOG_LEVEL_WARN, "最大允许加工加加速度为0");
         is_unvalid = true;
     }else delAlarm(ALARM_CH, ALARM_WARNING, 5);

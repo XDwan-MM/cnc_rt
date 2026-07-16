@@ -35,7 +35,6 @@ static void get_cmd_pos();
 static void update_status();
 static void output_to_hal();
 static void read_from_hal();
-static void check_for_soft_limit();
 static void compute_error_comp();
 static void calcul_mac_cmd_pos();
 static void manual_unset_sys_state();
@@ -68,13 +67,17 @@ void emcmotPathPlan() {
         if (rt_get_chan_state(i, CHAN_IS_PARSER_RERUN)){
             // LOG(LOG_LEVEL_INFO, "初始化译码器");
             parser_init(rt_data->current_mode);
-            rt_set_chan_state(i, CHAN_IS_FIRST_RUN, true);      // 通知预处理第一次获取pre_pos
+            rt_set_chan_state(i, CHAN_IS_FIRST_RUN, true);
             rt_set_chan_state(i, CHAN_IS_PARSER_RERUN, false);
         }
         // 解释器译码
         parser_run_mode();
-        // 预处理，添加block
+        // 添加block
         chan_add_block();
+        // 预处理
+        // pretreat_block();
+        // 一致性处理
+        // unif_block();
     }
 }
 
@@ -84,25 +87,18 @@ static void chan_do_period(){
     for (int i = 0; i < var_sys[VAR_SYS_CHAN_NUM].value.i; i++) {
         // 当前活动通道
         setVarSysInt(VAR_SYS_ACTIVE_CHAN, i, 0);
-        
         // 复位清除警告
         reset_clean_warning();
-
         // 检查系统是否有异常
         check_for_fault();
-
         // 读取抽象层数据
         read_from_hal();
-
         // 检查跟随误差
         check_ferror_fault();
-
         // 判断运动模式
         set_operating_mode();
-
         // 主轴控制
         spindle_control();
-
         // 根据运动模式计算运动位置
         get_cmd_pos();
     }
@@ -121,19 +117,14 @@ static void smx_do_period(){
 static void axis_write_out(){
     // 计算mac_cmd_pos
     calcul_mac_cmd_pos();
-
     // 误差补偿
     compute_error_comp();
-
     //更新轴状态
     Axis_Status_Update();
-
     // 预先检查插补位置是否超软限位
     check_for_soft_limit();
-
     // 更新抽象层数据
     output_to_hal();
-
     // 上传运动状态数据
     update_status();
 }
@@ -152,6 +143,11 @@ static void set_operating_mode() {
         case MODE_IDLE:
             rt_data->current_mode = rt_data->target_mode;
             break;
+        case MODE_EDIT:
+        case MODE_MPG:
+            rt_data->current_mode = rt_data->target_mode;
+            LOG(LOG_LEVEL_INFO, "系统模式切换为 %s", mode_names[rt_data->current_mode]);
+            break;
         case MODE_JOG:
             // 当前点动速度为零,才能切模式成功
             if (fabs(jog_tp[AXIS_X].curr_vel) < SPEED_THRESHOLD
@@ -162,11 +158,6 @@ static void set_operating_mode() {
                 rt_data->sys_state[SYS_IS_SWITCHING_MODE] = false;
                 LOG(LOG_LEVEL_INFO, "系统模式切换为 %s", mode_names[rt_data->current_mode]);
             }
-            break;
-        case MODE_EDIT:
-        case MODE_MPG:
-            rt_data->current_mode = rt_data->target_mode;
-            LOG(LOG_LEVEL_INFO, "系统模式切换为 %s", mode_names[rt_data->current_mode]);
             break;
         case MODE_HOMING:
             if (!var_chan[0][VAR_CHAN_IS_HOMING].value.i) {
@@ -369,77 +360,6 @@ static void calcul_mac_cmd_pos()
         }
         // 上一周期插补位置
         rt_data->axis_data[i].wcs_cmd_pos_pre = rt_data->axis_data[i].wcs_cmd_pos_cur;
-    }
-}
-
-static void check_for_soft_limit()
-{
-    for (int var = 0; var < 3; ++var)
-    {
-        if (runtime[var].is_first_run)
-        {
-            int levels = Check_Axis_Limit_Violation(&runtime[var], rt_data->axis_data[var].mac_cmd_pos, RESET_CHEAK_USED);
-            runtime[var].temp_config = runtime[var].config;
-            runtime[var].limit_pos = rt_data->axis_data[var].mac_cmd_pos;
-            if (!levels)
-            {
-                runtime[var].limit_type = NO_LIMIT_TRIGGERED;
-            }
-            runtime[var].is_first_run = 0;
-        }
-
-        if (rt_data->axis_data[var].axis_status.is_moving)
-        {
-            if ((runtime[var].limit_type == 0) ||
-                (!rt_data->axis_data[var].axis_status.is_decel_done))
-            {
-                runtime[var].active_levels = Check_Axis_Limit_Violation(&runtime[var], rt_data->axis_data[var].mac_cmd_pos, SOFT_CHEAK_USED);
-                runtime[var].limit_pos = rt_data->axis_data[var].mac_cmd_pos;
-            }
-            switch (runtime[var].limit_type)
-            {
-            case LEVEL1_FWD_LIMIT:
-                runtime[var].temp_config.level1.positive_limit = runtime[var].limit_pos;
-                runtime[var].active_levels = Check_Axis_Limit_Violation(&runtime[var], rt_data->axis_data[var].mac_cmd_pos, ALARM_CHEAK_USED);
-                break;
-            case LEVEL1_REV_LIMIT:
-                runtime[var].temp_config.level1.negative_limit = runtime[var].limit_pos;
-                runtime[var].active_levels = Check_Axis_Limit_Violation(&runtime[var], rt_data->axis_data[var].mac_cmd_pos, ALARM_CHEAK_USED);
-                break;
-            case LEVEL2_FWD_LIMIT:
-                if (runtime[var].config.level2_mode == 0)
-                {
-                    runtime[var].temp_config.level2.positive_limit = runtime[var].limit_pos;
-                }
-                else
-                {
-                    runtime[var].temp_config.level2.negative_limit = runtime[var].limit_pos;
-                }
-                runtime[var].active_levels = Check_Axis_Limit_Violation(&runtime[var], rt_data->axis_data[var].mac_cmd_pos, ALARM_CHEAK_USED);
-                break;
-            case LEVEL2_REV_LIMIT:
-                if (runtime[var].config.level2_mode == 0)
-                {
-                    runtime[var].temp_config.level2.negative_limit = runtime[var].limit_pos;
-                }
-                else
-                {
-                    runtime[var].temp_config.level2.positive_limit = runtime[var].limit_pos;
-                }
-                runtime[var].active_levels = Check_Axis_Limit_Violation(&runtime[var], rt_data->axis_data[var].mac_cmd_pos, ALARM_CHEAK_USED);
-                break;
-            case LEVEL3_FWD_LIMIT:
-                runtime[var].temp_config.level3.negative_limit = runtime[var].limit_pos;
-                runtime[var].active_levels = Check_Axis_Limit_Violation(&runtime[var], rt_data->axis_data[var].mac_cmd_pos, ALARM_CHEAK_USED);
-                break;
-            case LEVEL3_REV_LIMIT:
-                runtime[var].temp_config.level3.positive_limit = runtime[var].limit_pos;
-                runtime[var].active_levels = Check_Axis_Limit_Violation(&runtime[var], rt_data->axis_data[var].mac_cmd_pos, ALARM_CHEAK_USED);
-                break;
-            default:
-                break;
-            }
-        }
     }
 }
 
