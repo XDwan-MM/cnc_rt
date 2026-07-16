@@ -583,17 +583,17 @@ static bool cycle_block_axis_arrive_check(){
 #endif
     int res = 0;
     bool is_arrived = true;
-    if((fabs(cycle_tp->plan_block->end_pos.x - rt_data->axis_data[AXIS_X].fb_pos_no_comp)) > par_axis[AXIS_X][PAR_AX_POS_TOL].value.val_real) {
+    if((fabs(rt_data->axis_data[AXIS_X].mac_cmd_pos - rt_data->axis_data[AXIS_X].fb_pos_no_comp)) > par_axis[AXIS_X][PAR_AX_POS_TOL].value.val_real) {
         is_arrived = false;
         res = setAlarm(ALARM_AX, ALARM_WARNING, 103);
         if (res != -8) LOG(LOG_LEVEL_DEBUG, "X轴终点%f,实际偏差%f超过目标%f允差,等待到位...", cycle_tp->plan_block->end_pos.x, fabs(cycle_tp->plan_block->end_pos.x - rt_data->axis_data[AXIS_X].fb_pos_no_comp), par_axis[AXIS_X][PAR_AX_POS_TOL].value.val_real);
     }
-    if((fabs(cycle_tp->plan_block->end_pos.y - rt_data->axis_data[AXIS_Y].fb_pos_no_comp)) > par_axis[AXIS_Y][PAR_AX_POS_TOL].value.val_real) {
+    if((fabs(rt_data->axis_data[AXIS_Y].mac_cmd_pos - rt_data->axis_data[AXIS_Y].fb_pos_no_comp)) > par_axis[AXIS_Y][PAR_AX_POS_TOL].value.val_real) {
         is_arrived = false;
         res = setAlarm(ALARM_AX, ALARM_WARNING, 104);
         if (res != -8) LOG(LOG_LEVEL_DEBUG, "Y轴终点%f,实际偏差%f超过目标%f允差,等待到位...", cycle_tp->plan_block->end_pos.y, fabs(cycle_tp->plan_block->end_pos.y - rt_data->axis_data[AXIS_Y].fb_pos_no_comp), par_axis[AXIS_Y][PAR_AX_POS_TOL].value.val_real);
     }
-    if((fabs(cycle_tp->plan_block->end_pos.z - rt_data->axis_data[AXIS_Z].fb_pos_no_comp)) > par_axis[AXIS_Z][PAR_AX_POS_TOL].value.val_real) {
+    if((fabs(rt_data->axis_data[AXIS_Z].mac_cmd_pos - rt_data->axis_data[AXIS_Z].fb_pos_no_comp)) > par_axis[AXIS_Z][PAR_AX_POS_TOL].value.val_real) {
         is_arrived = false;
         res = setAlarm(ALARM_AX, ALARM_WARNING, 105);
         if (res != -8) LOG(LOG_LEVEL_DEBUG, "Z轴终点%f,实际偏差%f超过目标%f允差,等待到位...", cycle_tp->plan_block->end_pos.z, fabs(cycle_tp->plan_block->end_pos.z - rt_data->axis_data[AXIS_Z].fb_pos_no_comp), par_axis[AXIS_Z][PAR_AX_POS_TOL].value.val_real);
