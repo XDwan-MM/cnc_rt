@@ -24,7 +24,7 @@ void handle_estop_cmd(){
         jog_handle_estop();
         LOG(LOG_LEVEL_INFO, "处理按下急停");
     }
-    if(rt_data->nc_event == SYS_EVENT_RESET) rt_data->nc_event = SYS_EVENT_NONE;
+    if(rt_data->nc_event == SYS_EVENT_HMI_RESET) rt_data->nc_event = SYS_EVENT_NONE;
 }
 
 // 报警状态逻辑
@@ -32,7 +32,7 @@ void handle_alarm_cmd(){
     switch(rt_data->nc_event){
         case SYS_EVENT_NONE:
             break;
-        case SYS_EVENT_RESET:       
+        case SYS_EVENT_HMI_RESET:       
             // 清除报警
             cleanAllAlarm(ALARM_TYPE_ALL, ALARM_LEVEL_ALL);
             rt_data->sys_state[SYS_IS_ALARMING] = false;

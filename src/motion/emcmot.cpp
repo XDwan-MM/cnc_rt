@@ -372,7 +372,7 @@ static void update_status() {
 }
 
 static void reset_clean_warning(){
-    if(rt_data->nc_event == SYS_EVENT_RESET)
+    if(rt_data->nc_event == SYS_EVENT_HMI_RESET)
     {
         // 复位状态：2.外部复位信号ERS 4.按下MDI上的RESET键
         nc_set_resetting();

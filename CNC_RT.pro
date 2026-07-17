@@ -141,6 +141,7 @@ HEADERS += \
     src/plc/pmc_scanner/signal_utils.h \
     src/plc/plc_task/plctask.h \
     src/task/task.h \
+    src/task/hmi_scanner.h \
     src/threads/threads_api.h \
     src/threads/thread_manager.h \
     src/threads/rt_sem.h \
@@ -183,6 +184,7 @@ SOURCES += \
     src/plc/pmc_scanner/pmc_output_handler.c \
     src/plc/plc_task/plctask.cpp \
     src/task/task.c \
+    src/task/hmi_scanner.c \
     src/threads/thread_manager.cpp \
     src/threads/threads.cpp \
     src/threads/rt_sem.c \
