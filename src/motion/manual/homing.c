@@ -63,7 +63,7 @@ static void homing_set_state(){
             break;
 
         // 回零时按复位，856梯形图会产生XYZ释放G100.0~G100.2变为0
-        case SYS_EVENT_RESET:
+        case SYS_EVENT_HMI_RESET:
             LOG(LOG_LEVEL_INFO, "回零处理复位");
             for(int i = 0; i < SYS_AXES_NUM; i++){
                 homing_tp[i].is_ref_on = false;
