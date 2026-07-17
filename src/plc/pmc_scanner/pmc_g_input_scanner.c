@@ -93,23 +93,26 @@ void pmc_g_input_scan_cycle(void)
 
     /* step2. G信号检测 */
 
-    /* G8.4紧急停止检测 (下降沿或常开逻辑触发)  G08.4 = 0急停拍下，G08.4 = 1急停拉起 */
-    // 检测急停按下 1->0（下降沿，如果常开逻辑触发会造成事件堆积。）
-    if (SIGNAL_FALLING(curr_g.g_regs[8], last_g.g_regs[8], 4))
+    /* G8.4紧急停止检测 G08.4 = 0急停拍下，G08.4 = 1急停拉起 */
+    // 急停按下检测 （状态检测）
+    if (!GET_BIT(curr_g.g_regs[8], 4))
     {
         // 急停按键拍下
-        // rt_data->sys_state[SYS_IS_ESTOP_PRESS] = true;
-        rt_set_sys_state(SYS_IS_ESTOP_PRESS, true);
-        LOG(LOG_LEVEL_INFO, "扫描到急停按键: 拍下");
+        rt_set_sys_state(SYS_ESTOP_INPUT, true);
+        if (is_first_scan || GET_BIT(last_g.g_regs[8], 4))
+        {
+            LOG(LOG_LEVEL_INFO, "扫描到急停G8.4信号为0, 急停拍下");
+        }
+        
     }
-    // 检测急停释放 0->1（上升沿）
-    if (SIGNAL_RISING(curr_g.g_regs[8], last_g.g_regs[8], 4))
+    // 急停释放检测 0->1（上升沿）,自动触发系统复位，清除内部急停标志和报警
+    if (!is_first_scan && SIGNAL_RISING(curr_g.g_regs[8], last_g.g_regs[8], 4))
     {
-        // 急停按键释放
-        // 复位后实时内部急停标志rt_data->sys_state[SYS_IS_ESTOP_ON]置为false
-        // rt_data->sys_state[SYS_IS_ESTOP_PRESS] = false;
-        rt_set_sys_state(SYS_IS_ESTOP_PRESS, false);
-        LOG(LOG_LEVEL_INFO, "扫描到急停按键: 释放");
+        // 系统急停输入信号
+        rt_set_sys_state(SYS_ESTOP_INPUT, false);
+        // 自动触发复位事件（推送复位事件）
+        pmc_dispatch_event(EV_MSG_RESET, 1, 0);
+        LOG(LOG_LEVEL_INFO, "扫描到急停G8.4信号由0变1, 系统自动复位");
     }
 
     /* G19.7 快速按键信号检测，0->1 上升沿有效，1->0 下降沿失效 */
@@ -163,7 +166,6 @@ void pmc_g_input_scan_cycle(void)
     // 进给倍率变化检测G12
     if (is_first_scan || SIGNAL_BYTE_CHANGED(curr_g.g_regs[12], last_g.g_regs[12]))
     {
-        // 1、共享内存有符号版本代码逻辑
         int feed_override = 0;
 
         /* 核心修正：强制转换为无符号字节，避免符号位干扰位运算 */
@@ -192,9 +194,6 @@ void pmc_g_input_scan_cycle(void)
         }
         /* p1=0 代表进给倍率类型 (EV_MSG_OVERRIDE) */
         pmc_dispatch_event(EV_MSG_OVERRIDE, 0, feed_override);
-
-        // // 2、共享内存无符号版本的代码逻辑
-        // pmc_dispatch_event(EV_MSG_OVERRIDE, 0, (int)curr_g.g_regs[12]);
     }
     // 快速进给倍率检测G14
     if (is_first_scan || ((curr_g.g_regs[14] & 0x03) != (last_g.g_regs[14] & 0x03)))
@@ -218,13 +217,15 @@ void pmc_g_input_scan_cycle(void)
     // 启动检测 (G7.2 上升沿 【暂定上升沿触发】)
     if (SIGNAL_RISING(curr_g.g_regs[7], last_g.g_regs[7], 2))
     {
-        // G7.2 产生上升沿，开始自动运行
+        // G7.2 产生上升沿，发送自动运行事件
         pmc_dispatch_event(EV_MSG_AUTO_RUN, 1, 0);
+        LOG(LOG_LEVEL_INFO, "扫描到循环启动G7.2发生了上升沿");
     }
-    // 中止检测 (G8.5 下降沿 中止，发送暂停事件；)
+    // 暂停检测 (G8.5 下降沿，发送暂停事件)
     if (SIGNAL_FALLING(curr_g.g_regs[8], last_g.g_regs[8], 5))
     {
         pmc_dispatch_event(EV_MSG_AUTO_RUN, 0, 0);
+        LOG(LOG_LEVEL_INFO, "扫描到暂停G8.5发生了下降沿");
     }
 
     /* 外部复位M02M30 (G8.7 复位 上升沿触发) */
@@ -480,7 +481,7 @@ static void pmc_dispatch_event(PMC_EVENT_ID id, int p1, int p2)
     {
         event.id = id;
         event.spindle_payload.direction = p1;
-        LOG(LOG_LEVEL_INFO, "扫描到主轴切换 sp:%d, direction: %d", event.id, p1);
+        LOG(LOG_LEVEL_INFO, "扫描到主轴状态切换 sp:%d, direction: %d", event.id, p1);
         break;
     }
     case EV_MSG_OVERRIDE:

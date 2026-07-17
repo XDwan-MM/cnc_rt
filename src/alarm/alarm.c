@@ -7,9 +7,9 @@
 // 急停处理逻辑
 void handle_estop_cmd(){
     // 按下急停时执行一次
-    if(!rt_data->sys_state[SYS_IS_ESTOP_ON])
+    if(!rt_data->sys_state[SYS_IS_ESTOP_ACTIVE])
     {
-        rt_data->sys_state[SYS_IS_ESTOP_ON] = true;
+        rt_data->sys_state[SYS_IS_ESTOP_ACTIVE] = true;
         // 实时急停报警
         setAlarm(ALARM_SY, ALARM_ERROR, 0);
         // 系统事件置为NONE
@@ -36,8 +36,8 @@ void handle_alarm_cmd(){
             // 清除报警
             cleanAllAlarm(ALARM_TYPE_ALL, ALARM_LEVEL_ALL);
             rt_data->sys_state[SYS_IS_ALARMING] = false;
-            // 清除内部急停标志
-            rt_data->sys_state[SYS_IS_ESTOP_ON] = false;
+            // 清除内部急停标志和人机急停显示标志
+            rt_data->sys_state[SYS_IS_ESTOP_ACTIVE] = false;
             setVarChanInt(0, VAR_CHAN_IS_ESTOP, 0, 0);
             // 状态复位、数据重置
             tp_reset();

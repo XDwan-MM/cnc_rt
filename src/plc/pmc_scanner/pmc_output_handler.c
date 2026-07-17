@@ -36,7 +36,7 @@ static void pmc_output_alarm(){
     int ax_cnt, dv_cnt = 0;
     getAlarmCount(ALARM_AX, ALARM_ERROR, &ax_cnt);
     getAlarmCount(ALARM_SV, ALARM_ERROR, &dv_cnt);
-    if (ax_cnt || dv_cnt || rt_get_sys_state(SYS_IS_ESTOP_PRESS))
+    if (ax_cnt || dv_cnt || rt_get_sys_state(SYS_ESTOP_INPUT))
         setRegBit(REG_F, 1, 0);
     else
         clearRegBit(REG_F, 1, 0);
