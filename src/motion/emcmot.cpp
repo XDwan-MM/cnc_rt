@@ -119,7 +119,7 @@ static void axis_write_out(){
     calcul_mac_cmd_pos();
     // 误差补偿
     compute_error_comp();
-    //更新轴状态
+    // 更新轴状态
     Axis_Status_Update();
     // 预先检查插补位置是否超软限位
     check_for_soft_limit();
