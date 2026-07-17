@@ -17,7 +17,6 @@
 sem_t exit_sem;                         // 退出信号
 sem_t op_sem;                           // 已进入op信号，用于线程间通信
 int InterruptFlag = 0;                  // 打断标志位
-Slave_info* slave_list = NULL;          // 定义从站信息结构体以存储解析结果
 int update_pos_flag = 0;                // 理论位置读取驱动器位置
 int rc = 0;
 PdoWarn PdoWarnInfo; //pdo警告信息结构体

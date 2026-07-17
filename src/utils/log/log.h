@@ -46,7 +46,6 @@ extern FILE* gnc_log_file;
 extern char gnc_log_file_path[256];
 
 char* get_log_path(void);
-char* get_master_eni_path();
 int get_rt_version(char *version, size_t version_size);
 void printMode();
 

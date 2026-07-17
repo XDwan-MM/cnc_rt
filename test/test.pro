@@ -3,7 +3,6 @@ QT += core gui
 CONFIG += qt console warn_on depend_includepath c++17
 CONFIG -= app_bundle
 
-DEFINES += PLATFORM_1
 DEFINES += MASTER_RUN_ON
 DEFINES += UNIT_TEST
 

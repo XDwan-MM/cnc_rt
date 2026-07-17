@@ -18,6 +18,7 @@
 #include <time.h>
 #include <alarmapi.h>
 #include "hmi_scanner.h"
+#include "device.h"
 #ifdef DEBUG_MODE_ENABLED
 #include "master_sim.h"
 #endif
@@ -70,7 +71,7 @@ void* soft_plc_thread_func(void*) {
         }
         uint16_t mcp_input = 0;
         for (int i = 0; i < 11; i++) {
-            GM_TxPdoEntry_Read(MCPDI[i], &mcp_input, 2);
+            GM_TxPdoEntry_Read(g_device_data[0].control.input_addr[i], &mcp_input, 2);
             setRegValue8(REG_X, i * 2 + 4, (char)(mcp_input & 0xFF));
             setRegValue8(REG_X, i * 2 + 5, (char)((mcp_input >> 8) & 0xFF));
         }
@@ -96,7 +97,7 @@ void* soft_plc_thread_func(void*) {
             char value2 = 0;
             getRegValue8(REG_Y, i * 2 + 5, &value2);
             mcp_output = (uint32_t)(unsigned char)value1 | (uint32_t)(unsigned char)value2 << 8;
-            GM_RxPdoEntry_Write(MCPDO[i], mcp_output);
+            GM_RxPdoEntry_Write(g_device_data[0].control.output_addr[i], mcp_output);
         }
         #endif
         

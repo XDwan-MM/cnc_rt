@@ -7,6 +7,7 @@
 #include <stdio.h>
 #include <unistd.h>
 #include "log.h"
+#include "device.h"
 
 #ifdef __DeveloperMode__
 #define debug printf
@@ -38,9 +39,7 @@ static void Master_Receive();
 static void Master_Error(int code);
 
 int Master_Start() {
-    char cwd[1024];
-    char* eni_path = get_master_eni_path();
-    master_error_code = ethercat_init(eni_path);
+    master_error_code = ethercat_init();
     if ( master_error_code < 0) {
         Master_Error(master_error_code);
         return -1;
@@ -82,85 +81,6 @@ static void Master_Receive(){
     {
         printf("驱动打开失败\n");
     }
-    // === 3.循环获取控制流程所需要的所有Entry ===
-    //IO
-    uint8_t mcp_slave_bias = 0;
-    for(int i = 0; i < 11; ++i)
-    {
-        CHECK_FUNC(GM_TxPdoEntry_Get_By_Pos(&MCPDI[i], slave_list, mcp_slave_bias, 0, i));
-    }
-    for(int i = 0; i < 7; ++i)
-    {
-        CHECK_FUNC(GM_RxPdoEntry_Get_By_Pos(&MCPDO[i], slave_list, mcp_slave_bias, 0, i));
-    }
-    //MCP
-    uint8_t io_slave_bias = 1;
-    for (int i = 0; i < 1; i++)
-    {
-        CHECK_FUNC(GM_TxPdoEntry_Get_By_Pos(&DI0[i], slave_list, i + io_slave_bias, 0, 0));
-        CHECK_FUNC(GM_TxPdoEntry_Get_By_Pos(&DI1[i], slave_list, i + io_slave_bias, 0, 1));
-
-        CHECK_FUNC(GM_RxPdoEntry_Get_By_Pos(&DO0[i], slave_list, i + io_slave_bias, 0, 0));
-        CHECK_FUNC(GM_RxPdoEntry_Get_By_Pos(&DO1[i], slave_list, i + io_slave_bias, 0, 1));
-    }
-    //driver
-    uint8_t drivers_slave_bias = 2;
-#ifdef PLATFORM_1
-    // 测试平台1
-    for (int i = 0; i < 3; i++) {
-        GM_RxPdoEntry_Get_By_Pos(&ControlWord[i], slave_list , i + drivers_slave_bias, 0, 0);
-        GM_RxPdoEntry_Get_By_Pos(&PurPos[i], slave_list, i + drivers_slave_bias, 0, 1);
-        GM_RxPdoEntry_Get_By_Pos(&PurVel[i], slave_list, i + drivers_slave_bias, 0, 2);
-        GM_RxPdoEntry_Get_By_Pos(&OperationMode[i], slave_list, i + drivers_slave_bias, 0, 4);
-
-        GM_TxPdoEntry_Get_By_Pos(&StatusWord[i], slave_list, i + drivers_slave_bias, 0, 0);
-        GM_TxPdoEntry_Get_By_Pos(&CurPos[i], slave_list, i + drivers_slave_bias, 0, 1);
-        GM_TxPdoEntry_Get_By_Pos(&CurVel[i], slave_list, i + drivers_slave_bias, 0, 2);
-        GM_TxPdoEntry_Get_By_Pos(&ErrorNumb[i], slave_list, i + drivers_slave_bias, 0, 3);
-    }
-    GM_RxPdoEntry_Get_By_Pos(&ControlWord[3], slave_list, 5, 0, 0);
-    GM_RxPdoEntry_Get_By_Pos(&PurPos[3], slave_list,  5, 0, 2);
-    GM_RxPdoEntry_Get_By_Pos(&OperationMode[3], slave_list, 5, 0, 1);
-
-    GM_TxPdoEntry_Get_By_Pos(&ErrorNumb[3], slave_list, 5, 0, 0);
-    GM_TxPdoEntry_Get_By_Pos(&StatusWord[3], slave_list, 5, 0, 1);
-    GM_TxPdoEntry_Get_By_Pos(&CurPos[3], slave_list, 5, 0, 3);
-
-#else
-    // 856
-    GM_RxPdoEntry_Get_By_Pos(&ControlWord[0], slave_list, drivers_slave_bias, 0, 0);
-    GM_RxPdoEntry_Get_By_Pos(&PurPos[0], slave_list, drivers_slave_bias, 0, 1);
-    GM_RxPdoEntry_Get_By_Pos(&OperationMode[0], slave_list, drivers_slave_bias, 0, 2);
-    GM_RxPdoEntry_Get_By_Pos(&PurVel[0], slave_list, drivers_slave_bias, 0, 3);
-
-    GM_TxPdoEntry_Get_By_Pos(&StatusWord[0], slave_list, drivers_slave_bias, 0, 0);
-    GM_TxPdoEntry_Get_By_Pos(&CurPos[0], slave_list, drivers_slave_bias, 0, 1);
-    GM_TxPdoEntry_Get_By_Pos(&ErrorNumb[0], slave_list, drivers_slave_bias, 0, 5);
-
-    GM_TxPdoEntry_Get_By_Pos(&CurVel[0], slave_list, drivers_slave_bias, 0, 2);
-    for (int i = 1; i < 4; i++) {
-        GM_RxPdoEntry_Get_By_Pos(&ControlWord[i], slave_list, i + drivers_slave_bias, 0, 0);
-        GM_RxPdoEntry_Get_By_Pos(&PurPos[i], slave_list, i + drivers_slave_bias, 0, 1);
-        GM_RxPdoEntry_Get_By_Pos(&OperationMode[i], slave_list, i + drivers_slave_bias, 0, 2);
-
-        GM_TxPdoEntry_Get_By_Pos(&StatusWord[i], slave_list, i + drivers_slave_bias, 0, 0);
-        GM_TxPdoEntry_Get_By_Pos(&CurPos[i], slave_list, i + drivers_slave_bias, 0, 1);
-        GM_TxPdoEntry_Get_By_Pos(&ErrorNumb[i], slave_list, i + drivers_slave_bias, 0, 2);
-    }
-
-    // 测试平台2
-    // for (int i = 0; i < 4; i++) {
-    //     CHECK_FUNC(GM_RxPdoEntry_Get_By_Pos(&PurVel[i], slave_list, i + drivers_slave_bias, 1, 0));
-    //     CHECK_FUNC(GM_RxPdoEntry_Get_By_Pos(&ControlWord[i], slave_list, i + drivers_slave_bias, 0, 0));     // 获取控制字entry信息
-    //     CHECK_FUNC(GM_RxPdoEntry_Get_By_Pos(&OperationMode[i], slave_list, i + drivers_slave_bias, 1, 1));   // 获取操作模式entry信息
-    //     CHECK_FUNC(GM_RxPdoEntry_Get_By_Pos(&PurPos[i], slave_list, i + drivers_slave_bias, 0, 1));
-
-    //     CHECK_FUNC(GM_TxPdoEntry_Get_By_Pos(&StatusWord[i], slave_list, i + drivers_slave_bias, 0, 0));      // 获取状态字entry信息
-    //     CHECK_FUNC(GM_TxPdoEntry_Get_By_Pos(&CurPos[i], slave_list, i + drivers_slave_bias, 0, 1));          // 获取当前位置entry信息
-    //     CHECK_FUNC(GM_TxPdoEntry_Get_By_Pos(&CurVel[i], slave_list, i + drivers_slave_bias, 1, 0));
-    //     CHECK_FUNC(GM_TxPdoEntry_Get_By_Pos(&ErrorNumb[i], slave_list, i + drivers_slave_bias, 2, 0));
-    // }
-#endif
 
     debug("==============================握手前DMA写================================\n");
     rc = GM_Master_Send(1);
@@ -215,10 +135,10 @@ void Master_Run()
         {
             for (int i = 0; i < 4; i++)
             {
-                CHECK_FUNC(GM_TxPdoEntry_Read(StatusWord[i], &statis[i] , 2));// 获取状态字
+                CHECK_FUNC(GM_TxPdoEntry_Read(g_device_data[i + 2].slave.statusWord, &statis[i] , 2));// 获取状态字
                 if((statis[i] & 0x0f) == 0x08)
                 {
-                    CHECK_FUNC(GM_RxPdoEntry_Write(ControlWord[i], 0x80));
+                    CHECK_FUNC(GM_RxPdoEntry_Write(g_device_data[i + 2].slave.Control_word, 0x80));
                 }
                 else if(dri_manager.drivers[i]->state == DRV_STATE_FAULT && (statis[i] & 0x0f) != 0x08)
                 {
@@ -245,26 +165,26 @@ void Master_Run()
         //进给轴上电
         for (int i = 1; i < 4; i++)
         {
-            CHECK_FUNC(GM_TxPdoEntry_Read(StatusWord[i], &statis[i] , 2));// 获取状态字
-            CHECK_FUNC(GM_TxPdoEntry_Read(CurPos[i], &pos[i], 4));
+            CHECK_FUNC(GM_TxPdoEntry_Read(g_device_data[i + 2].slave.statusWord, &statis[i] , 2));// 获取状态字
+            CHECK_FUNC(GM_TxPdoEntry_Read(g_device_data[i + 2].slave.act_pos, &pos[i], 4));
             // 根据状态字设置控制字
             if((statis[i] & 0x4f) == 0x40)
             {
-                CHECK_FUNC(GM_RxPdoEntry_Write(OperationMode[i], 0x08)); // 设置操作模式
-                CHECK_FUNC(GM_RxPdoEntry_Write(ControlWord[i], 0x06));
+                CHECK_FUNC(GM_RxPdoEntry_Write(g_device_data[i + 2].slave.Modes_of_operation, 0x08)); // 设置操作模式
+                CHECK_FUNC(GM_RxPdoEntry_Write(g_device_data[i + 2].slave.Control_word, 0x06));
                 dri_manager.drivers[i]->state = DRV_STATE_SWITCHED_ON_DISABLE;
             }
             else if((statis[i] & 0x6f) == 0x21)
             {
-                CHECK_FUNC(GM_RxPdoEntry_Write(ControlWord[i], 0x07));
-                CHECK_FUNC(GM_RxPdoEntry_Write(PurPos[i], pos[i]));
+                CHECK_FUNC(GM_RxPdoEntry_Write(g_device_data[i + 2].slave.Control_word, 0x07));
+                CHECK_FUNC(GM_RxPdoEntry_Write(g_device_data[i + 2].slave.target_pos, pos[i]));
                 pos_cmd[i] = pos[i];
                 dri_manager.drivers[i]->state = DRV_STATE_READY_TO_SWITCHED_ON;
             }
             else if((statis[i] & 0x6f) == 0x23)
             {
                 dri_manager.drivers[i]->state = DRV_STATE_SWITCHED_ON;
-                CHECK_FUNC(GM_RxPdoEntry_Write(ControlWord[i], 0x0f));
+                CHECK_FUNC(GM_RxPdoEntry_Write(g_device_data[i + 2].slave.Control_word, 0x0f));
             }
             else if((statis[i] & 0x27f) == 0x237)
             {
@@ -274,27 +194,27 @@ void Master_Run()
         //主轴上电
         if(spindle.mode != DRV_MODE_DISABLED)
         {
-            CHECK_FUNC(GM_TxPdoEntry_Read(StatusWord[0], &statis[0] , 2));// 获取状态字
+            CHECK_FUNC(GM_TxPdoEntry_Read(g_device_data[2].slave.statusWord, &statis[0] , 2));// 获取状态字
             //根据状态字设置控制字
             if(((statis[0] & 0x4f) == 0x40))
             {
-                CHECK_FUNC(GM_RxPdoEntry_Write(ControlWord[0], 0x06));
-                CHECK_FUNC(GM_TxPdoEntry_Read(CurPos[0], &pos[0], 4));
+                CHECK_FUNC(GM_RxPdoEntry_Write(g_device_data[2].slave.Control_word, 0x06));
+                CHECK_FUNC(GM_TxPdoEntry_Read(g_device_data[2].slave.act_pos, &pos[0], 4));
                 spindle.state = DRV_STATE_SWITCHED_ON_DISABLE;
             }
             else if((statis[0] & 0x6f) == 0x21)
             {
                 if(spindle.mode == DRV_MODE_CSV)
                 {
-                    CHECK_FUNC(GM_RxPdoEntry_Write(OperationMode[0], 0x09));// 设置操作模式
-                    CHECK_FUNC(GM_RxPdoEntry_Write(ControlWord[0], 0x07));
+                    CHECK_FUNC(GM_RxPdoEntry_Write(g_device_data[2].slave.Modes_of_operation, 0x09));// 设置操作模式
+                    CHECK_FUNC(GM_RxPdoEntry_Write(g_device_data[2].slave.Control_word, 0x07));
                 }
                 spindle.state = DRV_STATE_READY_TO_SWITCHED_ON;
             }
             else if((statis[0] & 0x6f) == 0x23)
             {
                 spindle.state = DRV_STATE_SWITCHED_ON;
-                CHECK_FUNC(GM_RxPdoEntry_Write(ControlWord[0], 0x0f));
+                CHECK_FUNC(GM_RxPdoEntry_Write(g_device_data[2].slave.Control_word, 0x0f));
             }
             else if((statis[0] & 0x27f) == 0x237 && (spindle.state == DRV_STATE_SWITCHED_ON))
             {
@@ -305,14 +225,14 @@ void Master_Run()
         {
             if(spindle.state != DRV_STATE_FAULT)
             {
-                CHECK_FUNC(GM_RxPdoEntry_Write(ControlWord[0], 0x00));
+                CHECK_FUNC(GM_RxPdoEntry_Write(g_device_data[2].slave.Control_word, 0x00));
             }
         }
 
         //读取驱动器警报
         for (int i = 0; i < 4; i++)
         {
-            CHECK_FUNC(GM_TxPdoEntry_Read(ErrorNumb[i], &error_code[i], 2)); // 获取状态字
+            CHECK_FUNC(GM_TxPdoEntry_Read(g_device_data[i + 2].slave.error_code, &error_code[i], 2)); // 获取状态字
             if (i == 0)
             {
                 if (error_code[0] != 0 && !rt_data->axis_data[3].axis_status.is_disable)
@@ -346,11 +266,11 @@ void Master_Run()
             {
                 if(i == 3)
                 {
-                    CHECK_FUNC(GM_RxPdoEntry_Write(ControlWord[0], 0x00));
+                    CHECK_FUNC(GM_RxPdoEntry_Write(g_device_data[2].slave.Control_word, 0x00));
                 }
                 else
                 {
-                    CHECK_FUNC(GM_RxPdoEntry_Write(ControlWord[i + 1], 0x00));
+                    CHECK_FUNC(GM_RxPdoEntry_Write(g_device_data[i + 3].slave.Control_word, 0x00));
                 }
             }
         }
@@ -473,7 +393,7 @@ static void Master_Error(int code)
     case -2000:
         res = setAlarm(ALARM_ETHCAT_SV, ALARM_ERROR, 20);
         if(res == -8) return;
-        LOG(LOG_LEVEL_ERR, "无效的通信地址");
+        LOG(LOG_LEVEL_ERR, "无效的通信地Master_Run址");
         break;
     case -2001:
         res = setAlarm(ALARM_ETHCAT_SV, ALARM_ERROR, 21);

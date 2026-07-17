@@ -24,25 +24,13 @@ debug_mode {
     TARGET = cnc_rt_d
 }
 
-release_platform_1 {
+release_platform {
     message("========== 编译实时模式 ==========")
-    message("========== 编译平台1   ==========")
-    CONFIG += debug
-    DEFINES += PLATFORM_1
-    DEFINES += MASTER_RUN_ON
-    QMAKE_CXXFLAGS += -O0
-    QMAKE_CFLAGS += -O0
-    TARGET = cnc_rt_1
-}
-
-release_platform_2{
-    message("========== 编译实时模式 ==========")
-    message("========== 编译平台2   ==========")
     CONFIG += debug
     DEFINES += MASTER_RUN_ON
     QMAKE_CXXFLAGS += -O0
     QMAKE_CFLAGS += -O0
-    TARGET = cnc_rt_2
+    TARGET = cnc_rt
 }
 
 # 检查编译缓存工具 ccache 是否可用
@@ -101,6 +89,9 @@ debug_mode {
 # 实时模式使用真实主站
 !debug_mode {
     HEADERS += src/master/main_demo.h
+    HEADERS += src/master/cJSON.h
+    HEADERS += src/master/device.h
+    HEADERS += src/master/slave_list.h
     SOURCES += src/master/master.c
 }
 
