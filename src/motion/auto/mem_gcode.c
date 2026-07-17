@@ -307,7 +307,7 @@ static GNC_RES cycle_tp_update_running_tp(VELPLAN_TYPE vplan_mode, double ncu_cy
         int res = setAlarm(ALARM_CH, ALARM_WARNING, 3);
         if(res != -8) LOG(LOG_LEVEL_WARN, "最大允许加工速度为0, %d", cycle_tp->plan_block->line_number);
         return VP_MAX_VEL_IS_ZERO;
-    }
+    }else delAlarm(ALARM_CH, ALARM_WARNING, 3);
     // 对插补段终点进行行程限位检查
     lookahead_check_soft_limit(&cycle_tp->plan_block->end_pos);
     res = cycle_tp_update_vp(vplan_mode, ncu_cycle, current_vel, cycle_tp->max_vel);
