@@ -232,8 +232,7 @@ void pmc_g_input_scan_cycle(void)
         pmc_dispatch_event(EV_MSG_AUTO_RUN, 0, 0);
     }
 
-    /* 外部复位 (G8.7 复位 上升沿触发) */
-    // 复位检测 (G8.7 上升沿)
+    /* 外部复位M02M30 (G8.7 复位 上升沿触发) */
     if (SIGNAL_RISING(curr_g.g_regs[8], last_g.g_regs[8], 7))
     {
         pmc_dispatch_event(EV_MSG_RESET, 1, 0);

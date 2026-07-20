@@ -75,9 +75,25 @@ static void auto_set_state(){
         case SYS_EVENT_NONE:
             break;
 
-        case SYS_EVENT_RESET:
+        case SYS_EVENT_HMI_RESET:
             mcode_data->mcode_state = MCODE_EXECUTE_RESET;
             LOG(LOG_LEVEL_INFO, "自动模式处理复位");
+            if(cycle_tp->mem_exec_state == EXEC_RUNNING){
+                cycle_tp->mem_exec_state = EXEC_PAUSING;
+                cycle_tp->is_event_trigger = true; 
+                cycle_tp->is_resetting = 1;
+            }else if(cycle_tp->mem_exec_state == EXEC_PAUSING){
+                cycle_tp->is_resetting = 1;
+            }
+            // 通知译码复位
+            rt_set_chan_state(0, CHAN_IS_PARSER_RESET, true);
+            break;
+        
+        case SYS_EVENT_RESET:
+            // 2.外部复位信号ERS
+            nc_set_resetting(OUTSIDE_RESET);
+            mcode_data->mcode_state = MCODE_EXECUTE_PAUSING;
+            LOG(LOG_LEVEL_INFO, "自动模式处理外部复位");
             if(cycle_tp->mem_exec_state == EXEC_RUNNING){
                 cycle_tp->mem_exec_state = EXEC_PAUSING;
                 cycle_tp->is_event_trigger = true; 
@@ -267,7 +283,7 @@ static inline bool is_pause_mode(pmc_mode mode){
 // 编辑模式下复位，光标回到首行
 void handle_edit_cmd(){
     switch(rt_data->nc_event){
-        case SYS_EVENT_RESET:
+        case SYS_EVENT_HMI_RESET:
             setVarChanInt(0, VAR_CHAN_RUN_ROW, 0, 0);
             break;
         default:

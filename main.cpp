@@ -19,7 +19,6 @@
 #include "log.h"
 #include <QFile>
 #include <QTextStream>
-#include <hmisysapi.h>
 #include "sysapi.h"
 
 static char version[64];

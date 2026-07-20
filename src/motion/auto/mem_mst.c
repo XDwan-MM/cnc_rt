@@ -36,25 +36,7 @@ void auto_execute_mcode(){
         nc_check_fin();
         break;
     case MCODE_EXECUTE_RESET: 
-        // 无M代码时按复位
-        if(mcode_data->mcode_size == 0) {
-            mcode_data->mcode_state = MCODE_EXECUTE_IDLE;
-            return;
-        }
-        // todo：HMI的复位和M30均直接重置M代码F变量状态
-        if(mcode_data->mcode_block[0].m_code == M02 || mcode_data->mcode_block[0].m_code == M30) {
-            LOG(LOG_LEVEL_DEBUG, "3、接收到FIN信号, 执行下一指令");
-            // 程序运行行光标回到首行
-            setVarChanInt(0, VAR_CHAN_RUN_ROW, 0, 0);
-            // M02和M30结尾的进行加工计数
-            setVarChanInt(0, VAR_CHAN_PART_CNTR, var_chan[0][VAR_CHAN_PART_CNTR].value.i + 1, 0);
-            LOG(LOG_LEVEL_INFO, "加工计数：%d", var_chan[0][VAR_CHAN_PART_CNTR].value.i);
-            LOG(LOG_LEVEL_INFO, "程序运行结束");
-        }
         mcode_handle_reset();
-        // nc_output_mf();
-        // nc_check_fin();
-        // if(mcode_data->mcode_size == 0) mcode_data->mcode_state = MCODE_EXECUTE_IDLE;
         break;
     case MCODE_EXECUTE_IDLE:
     default:
@@ -227,6 +209,7 @@ static void nc_check_fin(){
                 setVarChanInt(0, VAR_CHAN_RUN_ROW, 0, 0);
                 // M02和M30结尾的进行加工计数
                 setVarChanInt(0, VAR_CHAN_PART_CNTR, var_chan[0][VAR_CHAN_PART_CNTR].value.i + 1, 0);
+                mcode_data->mcode_state = MCODE_EXECUTE_IDLE;
                 LOG(LOG_LEVEL_INFO, "加工计数：%d", var_chan[0][VAR_CHAN_PART_CNTR].value.i);
                 LOG(LOG_LEVEL_INFO, "程序运行结束");
             }

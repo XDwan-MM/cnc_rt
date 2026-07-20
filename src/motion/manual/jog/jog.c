@@ -210,7 +210,7 @@ static void update_axis_state(int i, JOG_AXIS_CTRL *jog_axis_ctrl, bool global_f
     bool is_rev_limit = rt_data->axis_data[i].axis_status.is_rev_limit;
 
     /* 1. 复位事件：清除本地保持状态并强制刹车 */
-    if (event == SYS_EVENT_RESET)
+    if (event == SYS_EVENT_HMI_RESET)
     {
         jog_pos_held[i] = false;
         jog_neg_held[i] = false;

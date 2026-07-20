@@ -89,8 +89,16 @@ typedef struct
     double cmd_jk;
 }RT_CHAN;
 
+typedef enum{
+    ESTOP_RESET = 0,    // 1.紧急停止信号ESP
+    OUTSIDE_RESET,      // 2.外部复位信号ERS
+    BACKWARD_RESET,     // 3.复位&倒带信号RRW
+    HMI_RESET,          // 4.按下MDI的RESET键
+}RESET_TRIGGER;
+
 typedef struct 
 {
+    RESET_TRIGGER reset_trigger;
     bool is_resetting;
     bool is_resetted;
     bool is_reset_delaying;
@@ -124,7 +132,7 @@ void rt_set_sys_state(SysStateIndex state, bool value);
 bool rt_get_sys_state(SysStateIndex state);
 void rt_set_chan_state(int chan_index, ChanStateIndex state, bool value);
 bool rt_get_chan_state(int chan_index, ChanStateIndex state);
-void nc_set_resetting();
+void nc_set_resetting(RESET_TRIGGER reset_trigger);
 void nc_set_resetted();
 
 #ifdef __cplusplus

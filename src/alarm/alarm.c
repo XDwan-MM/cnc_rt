@@ -16,15 +16,15 @@ void handle_estop_cmd(){
         rt_data->nc_event = SYS_EVENT_NONE;
         // 人机交互状态栏显示急停报警
         setVarChanInt(0, VAR_CHAN_IS_ESTOP, 1, 0);
-        // 复位状态：1.急停信号ESP
-        nc_set_resetting();
+        // 1.急停信号ESP
+        nc_set_resetting(ESTOP_RESET);
         // 重置各个模式
         auto_handle_estop();
         homing_handle_estop();
         jog_handle_estop();
         LOG(LOG_LEVEL_INFO, "处理按下急停");
     }
-    if(rt_data->nc_event == SYS_EVENT_RESET) rt_data->nc_event = SYS_EVENT_NONE;
+    if(rt_data->nc_event == SYS_EVENT_HMI_RESET) rt_data->nc_event = SYS_EVENT_NONE;
 }
 
 // 报警状态逻辑
@@ -32,7 +32,7 @@ void handle_alarm_cmd(){
     switch(rt_data->nc_event){
         case SYS_EVENT_NONE:
             break;
-        case SYS_EVENT_RESET:       
+        case SYS_EVENT_HMI_RESET:       
             // 清除报警
             cleanAllAlarm(ALARM_TYPE_ALL, ALARM_LEVEL_ALL);
             rt_data->sys_state[SYS_IS_ALARMING] = false;

@@ -163,6 +163,7 @@ typedef enum {
     SYS_EVENT_Z_POS_RELEASE,
     SYS_EVENT_Z_NEG_PRESS,
     SYS_EVENT_Z_NEG_RELEASE,
+    SYS_EVENT_HMI_RESET,
 } SYS_EVENT;
 
 double POS_Distance(POS* p1, POS* p2);

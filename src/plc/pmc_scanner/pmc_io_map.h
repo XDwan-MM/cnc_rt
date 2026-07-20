@@ -32,6 +32,7 @@ typedef enum {
     EV_MSG_RESET,       /**< 系统复位 */
     EV_MSG_ENANLE,
     EV_MSG_SPD_ORI,     /**< 主轴定向 */
+    EV_MSG_HMI,         /**< HMI按键 */
 } PMC_EVENT_ID;
 
 typedef enum{
@@ -71,7 +72,7 @@ typedef struct {
 
 /* 5、*/
 typedef struct {
-    int run_state;;
+    int run_state;
 } EV_MSG_AUTO_RUN_PAYLOAD;
 
 /* 6、*/
@@ -89,6 +90,10 @@ typedef struct {
     int p2;
 } EV_MSG_SPD_ORI_PAYLOAD;
 
+typedef struct{
+    int press_key;
+} EV_MSG_HMI_PAYLOAD;
+
 /**
  * @brief CNC 事件通用结构
  * 用于在内存中统一事件格式，方便解析
@@ -104,6 +109,7 @@ typedef struct {
         EV_MSG_RESET_PAYLOAD reset_payload;
         EV_MSG_ENABLE_PAYLOAD enable_payload;
         EV_MSG_SPD_ORI_PAYLOAD spd_ori_payload;
+        EV_MSG_HMI_PAYLOAD hmi_payload;
     };
 } PMC_EVENT;
 

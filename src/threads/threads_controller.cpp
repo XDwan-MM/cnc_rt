@@ -17,6 +17,7 @@
 #include <stdio.h>
 #include <time.h>
 #include <alarmapi.h>
+#include "hmi_scanner.h"
 #ifdef DEBUG_MODE_ENABLED
 #include "master_sim.h"
 #endif
@@ -122,6 +123,7 @@ void* motion_controller_thread_func(void*) {
         // printf("motion_controller_thread_func");
         start = get_ns();
         Hal_Driver_Update_All(true, false);
+        hmi_events_scan();
         task_mq_proc();
         emcmotTrajPlan();
         pmc_output_feedback();

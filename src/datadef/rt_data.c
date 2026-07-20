@@ -90,7 +90,8 @@ bool rt_get_chan_state(int chan_index, ChanStateIndex state){
     return value;
 }
 
-void nc_set_resetting(){
+void nc_set_resetting(RESET_TRIGGER reset_trigger){
+    rt_data->nc_reset.reset_trigger = reset_trigger;
     rt_data->nc_reset.is_resetting = 1;
 }
 
