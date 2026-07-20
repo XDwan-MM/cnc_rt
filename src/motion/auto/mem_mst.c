@@ -209,6 +209,7 @@ static void nc_check_fin(){
                 setVarChanInt(0, VAR_CHAN_RUN_ROW, 0, 0);
                 // M02和M30结尾的进行加工计数
                 setVarChanInt(0, VAR_CHAN_PART_CNTR, var_chan[0][VAR_CHAN_PART_CNTR].value.i + 1, 0);
+                mcode_data->mcode_state = MCODE_EXECUTE_IDLE;
                 LOG(LOG_LEVEL_INFO, "加工计数：%d", var_chan[0][VAR_CHAN_PART_CNTR].value.i);
                 LOG(LOG_LEVEL_INFO, "程序运行结束");
             }

@@ -76,15 +76,24 @@ static GNC_RES task_handle_pmc_event(PMC_EVENT *event_data)
         task_handle_auto_event(event_data);
         break;
     }
-    case EV_MSG_SPD_ORI:
-        LOG(LOG_LEVEL_INFO, "处理主轴定向事件");
-        break;
     case EV_MSG_ENANLE:
         task_handle_enable_event(event_data);
         break;
     case EV_MSG_HMI:
         task_handle_hmi_event(event_data);
         break;
+    case EV_MSG_SPD_ORI:
+        LOG(LOG_LEVEL_INFO, "处理主轴定向事件");
+        break;
+    case EV_MSG_RESET:
+    {
+        if (event_data->reset_payload.reset_state == 1)
+        {
+            rt_data->nc_event = SYS_EVENT_RESET;
+            LOG(LOG_LEVEL_INFO, "处理外部复位事件");
+        }
+        break;
+    }
     default:
         break;
     }
