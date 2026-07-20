@@ -332,7 +332,7 @@ static void pmc_outpus_spl_vel_status()
 static void pmc_outpus_spl_vel()
 {
     uint8_t bytes[4];
-    uint32_t vel = (uint32_t)var_chan[0][VAR_CHAN_S_CODE].value.i;
+    uint32_t vel = (uint32_t)abs(var_chan[0][VAR_CHAN_S_CODE].value.i);
 
     bytes[0] = (uint8_t)(vel & 0xff);
     bytes[1] = (uint8_t)((vel >> 8) & 0xff);

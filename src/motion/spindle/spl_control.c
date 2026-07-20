@@ -17,6 +17,7 @@ static double sys_max_speed;
 static double para_acc;
 static double diff;
 static double target_speed;
+static int8_t orient;
 
 void spindle_set_state(){
     // 如果急停或按下复位
@@ -101,10 +102,25 @@ static void Spindle_Stop(SPINDLE_DATA *spl_data)
 // 主轴正转，输入参数d_speed 主轴转速 unit 转/分钟
 static void Spindle_Cw(SPINDLE_DATA *spl_data)
 {
-    target_speed = fmin(sys_max_speed, spl_data->emot_speed * var_chan[0][VAR_CHAN_SPDL_OVERRIDE].value.f / 100);
-    if(spl_data->current_speed + diff < target_speed)
+    if(spl_data->speed_mode)
     {
-        spl_data->current_speed = spl_data->current_speed + diff;
+        target_speed = spl_data->plc_speed;
+    }
+    else
+    {
+        target_speed = fmin(sys_max_speed, spl_data->emot_speed * var_chan[0][VAR_CHAN_SPDL_OVERRIDE].value.f / 100);
+    }
+    if(spl_data->current_speed < target_speed)
+    {
+        orient = 1;
+    }
+    else
+    {
+        orient = -1;
+    }
+    if(fabs(spl_data->current_speed + orient * diff - target_speed)  > 10)
+    {
+        spl_data->current_speed = spl_data->current_speed + orient * diff;
         spl_data->spl_vel_state = SPINDLE_VEL_RAMP;
     }
     else
@@ -117,11 +133,26 @@ static void Spindle_Cw(SPINDLE_DATA *spl_data)
 
 // 主轴反转
 static void Spindle_Ccw(SPINDLE_DATA *spl_data)
-{    
-    target_speed = fmax(- sys_max_speed, spl_data->emot_speed * var_chan[0][VAR_CHAN_SPDL_OVERRIDE].value.f / 100);
-    if((spl_data->current_speed - diff) > target_speed)
+{
+    if(spl_data->speed_mode)
     {
-        spl_data->current_speed = spl_data->current_speed - diff;
+        target_speed = -1 * spl_data->plc_speed;
+    }
+    else
+    {
+        target_speed = fmax(- sys_max_speed, spl_data->emot_speed * var_chan[0][VAR_CHAN_SPDL_OVERRIDE].value.f / 100);
+    }
+    if(spl_data->current_speed > target_speed)
+    {
+        orient = -1;
+    }
+    else
+    {
+        orient = 1;
+    }
+    if(fabs(spl_data->current_speed + orient * diff - target_speed)  > 10)
+    {
+        spl_data->current_speed = spl_data->current_speed + orient * diff;
         spl_data->spl_vel_state = SPINDLE_VEL_RAMP;
     }
     else
