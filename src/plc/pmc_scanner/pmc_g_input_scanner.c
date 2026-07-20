@@ -72,11 +72,6 @@ static void pmc_dispatch_event(PMC_EVENT_ID id, int p1, int p2);
  */
 static void process_mode_selection(char g43);
 
-/**
- * @brief PLC主轴转速解析实现
- * 涉及 G32.0-G33.3 G33.7
- */
-static void plc_sp_vel();
 
 /* ==========================================================================
  * 2. 外部函数定义 (Public Definitions)
@@ -579,8 +574,4 @@ static void process_mode_selection(char g43)
     {
         pmc_dispatch_event(EV_MSG_MODE, (int)target_mode, 0);
     }
-}
-void plc_sp_vel()
-{
-
 }
