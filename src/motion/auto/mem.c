@@ -89,6 +89,22 @@ static void auto_set_state(){
             rt_set_chan_state(0, CHAN_IS_PARSER_RESET, true);
             break;
         
+        case SYS_EVENT_RESET:
+            // 2.外部复位信号ERS
+            nc_set_resetting(OUTSIDE_RESET);
+            mcode_data->mcode_state = MCODE_EXECUTE_PAUSING;
+            LOG(LOG_LEVEL_INFO, "自动模式处理外部复位");
+            if(cycle_tp->mem_exec_state == EXEC_RUNNING){
+                cycle_tp->mem_exec_state = EXEC_PAUSING;
+                cycle_tp->is_event_trigger = true; 
+                cycle_tp->is_resetting = 1;
+            }else if(cycle_tp->mem_exec_state == EXEC_PAUSING){
+                cycle_tp->is_resetting = 1;
+            }
+            // 通知译码复位
+            rt_set_chan_state(0, CHAN_IS_PARSER_RESET, true);
+            break;
+        
         case SYS_EVENT_RERUN:
             LOG(LOG_LEVEL_INFO, "自动模式处理自动运行");
             if(IsEqualTo(var_chan[0][VAR_CHAN_FEED_OVERRIDE].value.f, 0)){

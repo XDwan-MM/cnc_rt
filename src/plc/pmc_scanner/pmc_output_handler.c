@@ -118,9 +118,18 @@ static void pmc_output_home()
 
 static void pmc_output_reset()
 {
-    // RST：复位
     if (rt_data->nc_reset.is_resetting)
     {
+        switch (rt_data->nc_reset.reset_trigger)
+        {
+        // 基于MDI的复位确认信号
+        case OUTSIDE_RESET:
+            setRegBit(REG_F, 6, 1);
+            break;
+        default:
+            break;
+        }
+        // 复位中信号
         setRegBit(REG_F, 1, 1);
     }
     if (rt_data->nc_reset.is_resetted)
@@ -140,6 +149,7 @@ static void pmc_output_reset()
         else
         {
             clearRegBit(REG_F, 1, 1);
+            clearRegBit(REG_F, 6, 1);
             setVarChanInt(0, VAR_CHAN_IS_RESETTING, 0, 0);
             rt_data->nc_reset.is_reset_delaying = false;
             rt_data->nc_reset.reset_tic = 0;

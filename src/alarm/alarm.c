@@ -16,8 +16,8 @@ void handle_estop_cmd(){
         rt_data->nc_event = SYS_EVENT_NONE;
         // 人机交互状态栏显示急停报警
         setVarChanInt(0, VAR_CHAN_IS_ESTOP, 1, 0);
-        // 复位状态：1.急停信号ESP
-        nc_set_resetting();
+        // 1.急停信号ESP
+        nc_set_resetting(ESTOP_RESET);
         // 重置各个模式
         auto_handle_estop();
         homing_handle_estop();
