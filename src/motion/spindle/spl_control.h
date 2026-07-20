@@ -29,7 +29,7 @@ typedef struct{
     SpindleState spl_state;       // 主轴状态
     SpindleVelState spl_vel_state;// 主轴速度状态
     SpindleEvent spl_event;       // 主轴事件
-    int32_t current_speed;        // 主轴速度
+    double current_speed;         // 主轴速度
     double emot_speed;            // CNC设置速度
     double plc_speed;             // PLC设置速度
     double mcp_target_speed;      // 面板按键目标速度

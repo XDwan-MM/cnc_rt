@@ -57,7 +57,7 @@ void spindle_set_state(){
 
 void spindle_cal_speed(){
     sys_max_speed = par_axis[AXIS_SP][PAR_SPDL_MAX_SPEED].value.val_real;
-    para_acc = par_axis[AXIS_SP][PAR_AX_FEED_ACC].value.val_real * 10;
+    para_acc = par_axis[AXIS_SP][PAR_AX_FEED_ACC].value.val_real;
     diff = para_acc * 0.001;
     switch (spl_data.spl_state)
     {
