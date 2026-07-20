@@ -4,6 +4,7 @@
 #include "regapi.h"       /**< 寄存器访问 API */
 #include "signal_utils.h" /**< 边沿检测宏定义 */
 #include <string.h>
+#include "spl_control.h"
 
 /**
  * @brief 寄存器自动扫描注册表
@@ -25,6 +26,7 @@ static const int SCAN_G_REGS[] =
         29,
         30,
         32,
+        33,
         43,
         44,
         45,
@@ -69,6 +71,7 @@ static void pmc_dispatch_event(PMC_EVENT_ID id, int p1, int p2);
  * 涉及 MD1, MD2, MD4 (bit 0,1,2), DNCI (bit 5), ZRN (bit 7)
  */
 static void process_mode_selection(char g43);
+
 
 /* ==========================================================================
  * 2. 外部函数定义 (Public Definitions)
@@ -281,6 +284,19 @@ void pmc_g_input_scan_cycle(void)
             }
         }
     }
+    /* 处理PLC主轴限制 */
+    uint16_t result = 0;
+    uint8_t high = 0;
+    uint8_t low = 0;
+
+    for (int i = 0; i < 8; i++)
+    {
+        low  |= ((uint16_t)(GET_BIT(curr_g.g_regs[32], i) & 1) << i);
+        high |= ((uint16_t)(GET_BIT(curr_g.g_regs[33], i) & 1) << i);
+    }
+    result = ((uint16_t)(high & 0x0f) << 5) | (low & 0xFF);
+    spl_data.plc_speed = par_axis[AXIS_SP][PAR_SPDL_MAX_SPEED].value.val_real * result / 4095;
+    spl_data.speed_mode = GET_BIT(curr_g.g_regs[33], 7);
 
     /* 空运行 G46.7 */
     if (SIGNAL_RISING(curr_g.g_regs[46], last_g.g_regs[46], 7))
