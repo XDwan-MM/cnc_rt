@@ -101,10 +101,10 @@ static GNC_RES parser_set_content(NC_MODE nc_mode){
         getNcFilePath(parser_data->parser_file_path);
         // todo：界面增加校验，增加警告
         if((strlen(parser_data->parser_file_path) == 0)){
-            LOG(LOG_LEVEL_ERR, "译码文件路径不存在");
+            LOG(LOG_LEVEL_WARN, "译码文件路径不存在");
             setAlarm(ALARM_CH, ALARM_WARNING, 1);
             return GNC_OPERATOR_ERROR;
-        }
+        }else delAlarm(ALARM_CH, ALARM_WARNING, 1);
         ItpSetFile(parser_data->parser_file_path);
         LOG(LOG_LEVEL_INFO, "mem程序 %s", parser_data->parser_file_path);
         break;
@@ -112,10 +112,10 @@ static GNC_RES parser_set_content(NC_MODE nc_mode){
         // 读取MDI内容
         getMdiContent(parser_data->mdiContent);
         if((strlen(parser_data->mdiContent) == 0)){
-            LOG(LOG_LEVEL_ERR, "MDI内容为空");
+            LOG(LOG_LEVEL_WARN, "MDI内容为空");
             setAlarm(ALARM_CH, ALARM_WARNING, 2);
             return GNC_OPERATOR_ERROR;
-        }
+        }else delAlarm(ALARM_CH, ALARM_WARNING, 2);
         ItpSetContent(parser_data->mdiContent, 0);
         LOG(LOG_LEVEL_INFO, "mdi程序 %s", parser_data->mdiContent);
         break;
