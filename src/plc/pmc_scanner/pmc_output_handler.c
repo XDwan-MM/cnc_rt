@@ -123,7 +123,7 @@ static void pmc_output_reset()
         switch (rt_data->nc_reset.reset_trigger)
         {
         // 基于MDI的复位确认信号
-        case OUTSIDE_RESET:
+        case HMI_RESET:
             setRegBit(REG_F, 6, 1);
             break;
         default:
