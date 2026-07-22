@@ -167,7 +167,7 @@ static void spindle_mcode_feedback(){
     // 只在完成M指令后执行一次
     if(!spl_data.mcode_feedback){
         spl_data.mcode_feedback = true;
-        LOG(LOG_LEVEL_DEBUG, "主轴速度到达 %d", spl_data.current_speed);
+        LOG(LOG_LEVEL_DEBUG, "主轴速度到达 %f", spl_data.current_speed);
     }
 }
 
