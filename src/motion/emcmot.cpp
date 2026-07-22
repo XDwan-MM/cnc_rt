@@ -188,7 +188,7 @@ static void spindle_control(){
         spindle_cal_speed();
     }
 #ifdef DEBUG_MODE_ENABLED
-    setVarChanInt(0, VAR_CHAN_S_CODE, spl_data.current_speed, 0);
+    setVarChanInt(0, VAR_CHAN_S_CODE, (int32_t)spl_data.current_speed, 0);
 #else
     setVarChanInt(0, VAR_CHAN_S_CODE, spindle.actual_vel, 0);
 #endif
