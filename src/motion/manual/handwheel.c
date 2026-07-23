@@ -171,7 +171,7 @@ void handle_mpg_cmd() {
         simple_tp[axis].axis = axis;
 
         simple_tp[axis].joint.vel_limit = par_axis[axis][PAR_AX_MPG_SPD].value.val_real;
-        simple_tp[axis].joint.jaccel_limit = par_axis[axis][PAR_AX_RAPID_ACC].value.val_real;
+        simple_tp[axis].joint.jaccel_limit = par_axis[axis][PAR_AX_FEED_ACC].value.val_real;
 
         //初始化
         if (mpg_statis) {
