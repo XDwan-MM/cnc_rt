@@ -77,6 +77,9 @@ private:
     void executeInit();
     void executePlc1();
     void executePlc2();
+    void applyIoInputs(int cycleType);
+    void applyIoOutputs(int cycleType);
+    static void mapIoBit(char& destination, char source, int destinationBit, int sourceBit, char flag);
     void updatePlc1LastEdge();
     void updatePlc1CurrEdge();
     void updatePlc2LastEdge();

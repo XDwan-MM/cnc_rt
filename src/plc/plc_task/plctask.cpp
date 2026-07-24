@@ -8,7 +8,7 @@
 
 PlcTask::PlcTask() 
     : _ladData(*getLadDataPtr())
-    , _regData(*getRegDataPtr()){
+    , _regData(*getRegDataPtr()) {
     initDispatchTable();
 }
 
@@ -203,6 +203,7 @@ void PlcTask::executeInit() {
 }
 
 void PlcTask::executePlc1() {
+    applyIoInputs(0);
     updateTimer();
     updatePlc1CurrEdge();
     _currCtx = &_plc1Ctx;
@@ -213,12 +214,14 @@ void PlcTask::executePlc1() {
     }
     _plc1Ctx.pc = _plc1Ctx.begin;
     updatePlc1LastEdge();
+    applyIoOutputs(0);
 }
     
 void PlcTask::executePlc2() {
     _currCtx = &_plc2Ctx;
     _cycleCount++;
     if (_plc2Ctx.pc == _plc2Ctx.begin) {
+        applyIoInputs(1);
         updatePlc2CurrEdge();
     }
     for (int i = 0; i < 500 && _plc2Ctx.pc != _plc2Ctx.end; i++) {
@@ -228,10 +231,62 @@ void PlcTask::executePlc2() {
     }
     if (_plc2Ctx.pc == _plc2Ctx.end) {
         updatePlc2LastEdge();
+        applyIoOutputs(1);
         _ladData.info.plc2CurCycle = _cycleCount;
         _cycleCount = 0;
         _plc2Ctx.pc = _plc2Ctx.begin;
     }
+}
+
+void PlcTask::applyIoInputs(int cycleType) {
+    for (int i = 0; i < _ladData.info.ioCount; ++i) {
+        const LadIoMapping& mapping = _ladData.ioMappings[i];
+        if (mapping.type != cycleType || mapping.dir.type != REG_I
+                || mapping.src.type == REG_TYPE_NONE) {
+            continue;
+        }
+
+        if (mapping.src.bit == -1) {
+            unsigned char value = static_cast<unsigned char>(_regData.regX[mapping.src.idx]);
+            _regData.regI[mapping.dir.idx] = static_cast<char>(
+                    mapping.flag == 0 ? value : static_cast<unsigned char>(~value));
+        } else {
+            mapIoBit(_regData.regI[mapping.dir.idx], _regData.regX[mapping.src.idx],
+                     mapping.dir.bit, mapping.src.bit, mapping.flag);
+        }
+    }
+}
+
+void PlcTask::applyIoOutputs(int cycleType) {
+    for (int i = 0; i < _ladData.info.ioCount; ++i) {
+        const LadIoMapping& mapping = _ladData.ioMappings[i];
+        if (mapping.type != cycleType || mapping.dir.type != REG_Q
+                || mapping.src.type == REG_TYPE_NONE) {
+            continue;
+        }
+
+        if (mapping.src.bit == -1) {
+            unsigned char value = static_cast<unsigned char>(_regData.regQ[mapping.dir.idx]);
+            _regData.regY[mapping.src.idx] = static_cast<char>(
+                    mapping.flag == 0 ? value : static_cast<unsigned char>(~value));
+        } else {
+            mapIoBit(_regData.regY[mapping.src.idx], _regData.regQ[mapping.dir.idx],
+                     mapping.src.bit, mapping.dir.bit, mapping.flag);
+        }
+    }
+}
+
+void PlcTask::mapIoBit(char& destination, char source, int destinationBit,
+                       int sourceBit, char flag) {
+    bool value = ((static_cast<unsigned char>(source) >> sourceBit) & 1u) != 0;
+    if (flag != 0) {
+        value = !value;
+    }
+    unsigned char result = static_cast<unsigned char>(destination);
+    const unsigned char mask = static_cast<unsigned char>(1u << destinationBit);
+    result = value ? static_cast<unsigned char>(result | mask)
+                   : static_cast<unsigned char>(result & static_cast<unsigned char>(~mask));
+    destination = static_cast<char>(result);
 }
 
 void PlcTask::updatePlc1LastEdge() {

@@ -42,8 +42,6 @@ clean_shm() {
             sudo ipcrm -m "$id" 2>/dev/null
         done
     fi
-
-    sudo rm -rf /temp/qipc_s*
 }
 
 # ==================== 新增：启动前环境检查 ====================
@@ -81,43 +79,150 @@ RT_BIN_DIR="${RT_ROOT}/bin"
 
 # ==================== 运行与监控部分 ====================
 
-PID1=""
-PID2=""
+HMI_PID=""
+RT_PID=""
+HMI_PIPE_PID=""
+RT_PIPE_PID=""
+PID_DIR=""
+HMI_PID_FILE=""
+RT_PID_FILE=""
+CLEANUP_RUNNING=0
+
+process_alive() {
+    local pid="$1"
+    [ -n "$pid" ] && ps -p "$pid" -o stat= 2>/dev/null | awk '$1 !~ /^Z/ {found=1} END {exit !found}'
+}
+
+wait_for_process_exit() {
+    local pid="$1"
+    local attempts="$2"
+    local index
+    for ((index = 0; index < attempts; ++index)); do
+        if ! process_alive "$pid"; then
+            return 0
+        fi
+        sleep 0.1
+    done
+    return 1
+}
+
+wait_for_pid_file() {
+    local pid_file="$1"
+    local process_name="$2"
+    local index
+    local pid
+    for ((index = 0; index < 50; ++index)); do
+        if [ -s "$pid_file" ]; then
+            pid=$(<"$pid_file")
+            if [[ "$pid" =~ ^[0-9]+$ ]] && process_alive "$pid"; then
+                return 0
+            fi
+        fi
+        sleep 0.1
+    done
+
+    echo -e "${COLOR_ERR}[错误] 无法获取 ${process_name} 的实际进程 PID。${COLOR_RESET}" >&2
+    return 1
+}
+
+stop_hmi() {
+    if ! process_alive "$HMI_PID"; then
+        return
+    fi
+
+    echo -e "${COLOR_SYS}[系统] 正在通知界面保存保持寄存器并退出...${COLOR_RESET}\r"
+    sudo kill -INT "$HMI_PID" 2>/dev/null
+    if wait_for_process_exit "$HMI_PID" 50; then
+        return
+    fi
+
+    echo -e "${COLOR_ERR}[警告] 界面进程 5 秒内未退出，发送 SIGTERM。${COLOR_RESET}\r"
+    sudo kill -TERM "$HMI_PID" 2>/dev/null
+    if wait_for_process_exit "$HMI_PID" 20; then
+        return
+    fi
+
+    echo -e "${COLOR_ERR}[警告] 界面进程仍未退出，执行强制终止。${COLOR_RESET}\r"
+    sudo kill -KILL "$HMI_PID" 2>/dev/null
+    wait_for_process_exit "$HMI_PID" 10
+}
+
+stop_rt() {
+    if ! process_alive "$RT_PID"; then
+        return
+    fi
+
+    echo -e "${COLOR_SYS}[系统] 正在停止实时进程...${COLOR_RESET}\r"
+    sudo kill -TERM "$RT_PID" 2>/dev/null
+    if wait_for_process_exit "$RT_PID" 30; then
+        return
+    fi
+
+    echo -e "${COLOR_ERR}[警告] 实时进程 3 秒内未退出，执行强制终止。${COLOR_RESET}\r"
+    sudo kill -KILL "$RT_PID" 2>/dev/null
+    wait_for_process_exit "$RT_PID" 10
+}
+
+stop_output_pipe() {
+    local pipe_pid="$1"
+    if process_alive "$pipe_pid"; then
+        kill -TERM "$pipe_pid" 2>/dev/null
+    fi
+    if [ -n "$pipe_pid" ]; then
+        wait "$pipe_pid" 2>/dev/null
+    fi
+}
 
 # 定义清理函数：用于关闭所有后台进程并清理环境（退出时保障）
 cleanup() {
-    # 移除 trap 避免死循环
-    trap - EXIT SIGINT SIGTERM
+    local exit_code="${1:-0}"
+    if [ "$CLEANUP_RUNNING" -eq 1 ]; then
+        return
+    fi
+    CLEANUP_RUNNING=1
+
+    # 清理期间忽略后续退出信号，避免中断寄存器保存流程
+    trap - EXIT
+    trap '' SIGINT SIGTERM
     
     # \r 保证不管终端当前状态如何，都能回到行首打印
     echo -e "\r\n${COLOR_SYS}[系统] 正在关闭所有相关后台进程并清理环境...${COLOR_RESET}"
     
-    # 1. 优先杀掉已知管道 PID 
-    if [ -n "$PID1" ]; then
-        echo -e "${COLOR_SYS}[系统] 正在停止界面进程监控管道...${COLOR_RESET}\r"
-        sudo kill -9 "$PID1" 2>/dev/null
-    fi
-    if [ -n "$PID2" ]; then
-        echo -e "${COLOR_SYS}[系统] 正在停止实时进程监控管道...${COLOR_RESET}\r"
-        sudo kill -9 "$PID2" 2>/dev/null
-    fi
+    # 1. 先让界面保存保持寄存器，再停止实时进程
+    stop_hmi
+    stop_rt
+
+    # 2. 业务进程退出后再关闭日志输出管道
+    stop_output_pipe "$HMI_PIPE_PID"
+    stop_output_pipe "$RT_PIPE_PID"
     
-    # 2. 兜底扫描，保证【绝对】没有存活的实际同名进程
+    # 3. 最终兜底：只强制终止优雅退出超时后仍存活的同名进程
     local LEFT_PIDS=$(ps -eo pid,comm | awk -v mypid="$$" '$1 != mypid && ($2 ~ /^cnc_rt/ || $2 == "cnc_hmi_v3") {print $1}')
     if [ -n "$LEFT_PIDS" ]; then
-        sudo kill -9 $LEFT_PIDS 2>/dev/null
+        echo -e "${COLOR_ERR}[警告] 发现退出超时的残留进程，执行最终清理：${LEFT_PIDS//$'\n'/ }${COLOR_RESET}\r"
+        sudo kill -KILL $LEFT_PIDS 2>/dev/null
     fi
     
-    # 3. 等待 0.5 秒，确保进程死亡后，操作系统将其与共享内存的连接数清零
+    # 4. 等待进程死亡后，操作系统将其与共享内存的连接数清零
     sleep 0.5
     
-    # 4. 彻底扫除任何大小超过 10000000 字节且无连接的共享内存段
+    # 5. 彻底扫除任何大小超过 10000000 字节且无连接的共享内存段
     clean_shm
+
+    if [ -n "$HMI_PID_FILE" ]; then
+        rm -f "$HMI_PID_FILE"
+    fi
+    if [ -n "$RT_PID_FILE" ]; then
+        rm -f "$RT_PID_FILE"
+    fi
+    if [ -n "$PID_DIR" ]; then
+        rmdir "$PID_DIR" 2>/dev/null
+    fi
     
     # 恢复终端正常状态（防止因为进程修改 TTY 导致终端回车变阶梯）
     stty sane 2>/dev/null
     echo -e "${COLOR_SYS}[系统] 脚本已安全退出，环境清理完毕。${COLOR_RESET}"
-    exit 0
+    exit "$exit_code"
 }
 
 print_help() {
@@ -172,16 +277,31 @@ echo "${COLOR_SYS}[TIPS] 按 Ctrl+C 可以关闭系统。              "
 echo " "
 
 # 捕获 Ctrl+C (SIGINT)、终止信号 (SIGTERM) 以及脚本正常退出事件 (EXIT)
-trap cleanup EXIT SIGINT SIGTERM
+trap 'cleanup 130' SIGINT
+trap 'cleanup 143' SIGTERM
+trap 'exit_code=$?; cleanup "$exit_code"' EXIT
+
+PID_DIR=$(mktemp -d "${TMPDIR:-/tmp}/cnc_launcher.XXXXXX")
+if [ -z "$PID_DIR" ]; then
+    echo -e "${COLOR_ERR}[错误] 无法创建进程 PID 临时目录。${COLOR_RESET}" >&2
+    exit 1
+fi
+HMI_PID_FILE="${PID_DIR}/hmi.pid"
+RT_PID_FILE="${PID_DIR}/rt.pid"
 
 # 4. 启动界面进程（两个进程统一使用 sudo，避免一个 root 一个普通用户）
 cd "$HMI_BIN_DIR"
-sudo env stdbuf -oL -eL "${HMI_ROOT}/bin/cnc_hmi_v3" ${HMI_PAR} 2>&1 | \
+sudo bash -c 'pid_file=$1; shift; echo $$ > "$pid_file"; exec stdbuf -oL -eL "$@"' \
+    bash "$HMI_PID_FILE" "${HMI_ROOT}/bin/cnc_hmi_v3" ${HMI_PAR} 2>&1 | \
     while IFS= read -r line; do
         printf "%s %s\r\n" "${COLOR_HMI}[HMI]${COLOR_RESET}" "${line%$'\r'}"
     done &
-PID1=$! 
-echo "${COLOR_SYS}[系统] 界面已在后台启动。${COLOR_RESET}"
+HMI_PIPE_PID=$!
+if ! wait_for_pid_file "$HMI_PID_FILE" "界面进程"; then
+    cleanup 1
+fi
+HMI_PID=$(<"$HMI_PID_FILE")
+echo "${COLOR_SYS}[系统] 界面已在后台启动，PID: ${HMI_PID}。${COLOR_RESET}"
 
 # 5. 延时 1 秒
 echo "${COLOR_SYS}[系统] 等待 1 秒...${COLOR_RESET}"
@@ -189,27 +309,30 @@ sleep 1
 
 # 6. 启动实时进程（两个进程统一使用 sudo，避免一个 root 一个普通用户）
 cd "$RT_BIN_DIR"
-sudo env stdbuf -oL -eL "${RT_ROOT}/bin/${RT_PAR}" 2>&1 | \
+sudo bash -c 'pid_file=$1; shift; echo $$ > "$pid_file"; exec stdbuf -oL -eL "$@"' \
+    bash "$RT_PID_FILE" "${RT_ROOT}/bin/${RT_PAR}" 2>&1 | \
     while IFS= read -r line; do
         printf "%s %s\r\n" "${COLOR_RT}[RT]${COLOR_RESET}" "${line%$'\r'}"
     done &
-PID2=$! 
-echo "${COLOR_SYS}[系统] 实时进程已在后台启动。${COLOR_RESET}"
+RT_PIPE_PID=$!
+if ! wait_for_pid_file "$RT_PID_FILE" "实时进程"; then
+    cleanup 1
+fi
+RT_PID=$(<"$RT_PID_FILE")
+echo "${COLOR_SYS}[系统] 实时进程已在后台启动，PID: ${RT_PID}。${COLOR_RESET}"
 
 echo "${COLOR_SYS}[系统] 两个进程均已启动，开始监控运行状态。按 Ctrl+C 可以同时停止它们。${COLOR_RESET}"
 
 # 7. 循环监控：若任何一个进程意外退出，则关闭另一个并退出脚本
 while true; do
-    # 检查管道进程1是否存在
-    if ! sudo kill -0 "$PID1" 2>/dev/null; then
+    if ! process_alive "$HMI_PID"; then
         echo -e "\r\n${COLOR_SYS}[系统] 检测到 [HMI] 界面进程已意外退出。${COLOR_RESET}"
-        cleanup
+        cleanup 1
     fi
     
-    # 检查管道进程2是否存在
-    if ! sudo kill -0 "$PID2" 2>/dev/null; then
+    if ! process_alive "$RT_PID"; then
         echo -e "\r\n${COLOR_SYS}[系统] 检测到 [RT] 实时进程已意外退出。${COLOR_RESET}"
-        cleanup
+        cleanup 1
     fi
     
     sleep 1
