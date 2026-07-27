@@ -61,8 +61,8 @@ GNC_RES parser_init(NC_MODE nc_mode)
     parser_data->parser_state = PARSER_READING;
     // 设置宏定义
     parser_macro_init();
-    ItpCfgGetMacroVarCB(macroVarGetValue);
-    ItpCfgSetMacroVarCB(macroVarSetValue);
+    ItpCfgGetMacroVarCB(t_macroVarGetValue);
+    ItpCfgSetMacroVarCB(t_macroVarSetValue);
     // 是否跳过注释段
     ItpSetBlockSkipEnable(rt_get_sys_state(SYS_IS_BLOCK_SKIP));
     // 长度刀补
@@ -422,24 +422,28 @@ void parser_reset(){
     rt_set_chan_state(0, CHAN_IS_PARSER_RERUN, false);
 }
 
-int macroVarGetValue(int no, double *mac)
+int t_macroVarGetValue(int no, double *mac)
 {
     // todo: 待更新shm后，将以下内容改为从shm获取
-    if (no < 0 || no >= MacroVarCount)
-    {
-        return -1;
-    }
-    *mac = parser_data->cmv[no];
-    return 0;
+    // if (no < 0 || no >= MacroVarCount)
+    // {
+    //     return -1;
+    // }
+    // *mac = parser_data->cmv[no];
+    // return 0;
+
+    return macroVarGetValue(no, mac, 0);
 }
 
-int macroVarSetValue(int no, double mac)
+int t_macroVarSetValue(int no, double mac)
 {
     // todo: 待更新shm后，将以下内容改为从shm获取
-    if (no < 0 || no >= MacroVarCount)
-    {
-        return -1;
-    }
-    parser_data->cmv[no] = mac;
-    return 0;
+    // if (no < 0 || no >= MacroVarCount)
+    // {
+    //     return -1;
+    // }
+    // parser_data->cmv[no] = mac;
+    // return 0;
+    
+    return macroVarSetValue(no, mac, 0);
 }

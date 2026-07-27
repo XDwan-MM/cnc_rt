@@ -14,15 +14,18 @@
 #include "datatype.h"
 #include "hmisysdata.h"
 
+#include "macrovarapi.h"
+#include "macrovardata.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 /*! 宏变量相关 {*/
-#define MacroVarCount (99999)
-extern double cmv[MacroVarCount];
-int macroVarGetValue(int no, double *mac);
-int macroVarSetValue(int no, double mac);
+// #define MacroVarCount (99999)
+// extern double cmv[MacroVarCount];
+int t_macroVarGetValue(int no, double *mac);
+int t_macroVarSetValue(int no, double mac);
 /*! }*/
 
 #define PARSER_BUF_SIZE 1000 //译码器最大处理长度
