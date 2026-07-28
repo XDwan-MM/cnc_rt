@@ -1,3 +1,32 @@
+stages:
+  - build
+  - code_review
+  - deploy
+
+code_review:
+  stage: code_review
+  script:
+    - python3 ci/code_review.py
+  tags:
+    - hmi_v3
+  only:
+    - merge_request
+  variables:
+    LLM_MODEL: "Qwen-Flash"
+    MAX_DIFF_CHARS: "8000"
+
+mr_summary:
+  stage: code_review
+  script:
+    - python3 ci/mr_summary.py
+  tags:
+    - hmi_v3
+  only:
+    - merge_request
+  variables:
+    LLM_MODEL: "Qwen-Flash"
+    MAX_DIFF_CHARS: "8000"
+
 .generate-tag: &generate-tag
   # 从与 $Version 相关的路径下载 tag.sh
   - curl -uly_35b717:AP38qFMP2jfnFYm5gav4KV2EyXV -O "http://10.2.30.32:8081/artifactory/source/hmi_cnc/cnc/$Version/tag.sh"
