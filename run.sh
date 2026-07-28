@@ -234,9 +234,8 @@ print_help() {
     echo ""
     echo "选项:"
     echo "             运行调试仿真模式（默认）"
-    echo "  run_d      运行调试仿真模式"
-    echo "  run_1      运行平台1"
-    echo "  run_2      运行平台2"
+    echo "  debug      运行调试仿真模式"
+    echo "  run        运行实时平台"
     echo "  help       显示此帮助信息"
     echo ""
 }
@@ -246,13 +245,10 @@ HMI_PAR=""
 
 # 主逻辑
 case "${1:-all}" in
-    1|run1|run_1)
-        RT_PAR=cnc_rt_1
+    run)
+        RT_PAR=cnc_rt
         ;;
-    2|run2|run_2)
-        RT_PAR=cnc_rt_2
-        ;;
-    all|run|rund|run_d|run_debug|debug_run)
+    all|debug|rund|run_d|run_debug|debug_run)
         RT_PAR=cnc_rt_d
         HMI_PAR=-p
         ;;

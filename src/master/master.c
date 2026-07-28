@@ -7,6 +7,7 @@
 #include <stdio.h>
 #include <unistd.h>
 #include "log.h"
+#include "device.h"
 
 #ifdef __DeveloperMode__
 #define debug printf
@@ -26,7 +27,6 @@ do { \
     int ret = (func); \
     if (ret < 0) { \
         fprintf(stderr, "Error in function: %s, rc = %d\n", #func, ret); \
-        goto err_close; \
 } \
 } while (0)
 
@@ -36,15 +36,15 @@ static char* drv_names[] = {"主","X","Y","Z"};
 
 static void Master_Receive();
 static void Master_Error(int code);
+static void Master_Hardware_Error(ErrorContext g_current_error_ctx);
 
 int Master_Start() {
-    char cwd[1024];
-    char* eni_path = get_master_eni_path();
-    master_error_code = ethercat_init(eni_path);
+    master_error_code = ethercat_init();
     if ( master_error_code < 0) {
         Master_Error(master_error_code);
         return -1;
     }
+    Master_Hardware_Error(g_current_error_ctx);
     Master_Receive();
     return 1;
 }
@@ -68,7 +68,6 @@ static void Master_Receive(){
     // === 2.握手前读 ===
     debug("==============================握手前DMA读================================\n");
     rc = GM_Master_Receive(1, &PdoWarnInfo);
-    CHECK_RC(rc, "握手前DMA读失败", err_close);
     if (PdoWarnInfo.PDOWarnFlag || PdoWarnInfo.DCWarnFlag ){
         PdoWar_Info_Get(NULL, &PdoWarnInfo);
 
@@ -82,98 +81,13 @@ static void Master_Receive(){
     {
         printf("驱动打开失败\n");
     }
-    // === 3.循环获取控制流程所需要的所有Entry ===
-    //IO
-    uint8_t mcp_slave_bias = 0;
-    for(int i = 0; i < 11; ++i)
-    {
-        CHECK_FUNC(GM_TxPdoEntry_Get_By_Pos(&MCPDI[i], slave_list, mcp_slave_bias, 0, i));
-    }
-    for(int i = 0; i < 7; ++i)
-    {
-        CHECK_FUNC(GM_RxPdoEntry_Get_By_Pos(&MCPDO[i], slave_list, mcp_slave_bias, 0, i));
-    }
-    //MCP
-    uint8_t io_slave_bias = 1;
-    for (int i = 0; i < 1; i++)
-    {
-        CHECK_FUNC(GM_TxPdoEntry_Get_By_Pos(&DI0[i], slave_list, i + io_slave_bias, 0, 0));
-        CHECK_FUNC(GM_TxPdoEntry_Get_By_Pos(&DI1[i], slave_list, i + io_slave_bias, 0, 1));
-
-        CHECK_FUNC(GM_RxPdoEntry_Get_By_Pos(&DO0[i], slave_list, i + io_slave_bias, 0, 0));
-        CHECK_FUNC(GM_RxPdoEntry_Get_By_Pos(&DO1[i], slave_list, i + io_slave_bias, 0, 1));
-    }
-    //driver
-    uint8_t drivers_slave_bias = 2;
-#ifdef PLATFORM_1
-    // 测试平台1
-    for (int i = 0; i < 3; i++) {
-        GM_RxPdoEntry_Get_By_Pos(&ControlWord[i], slave_list , i + drivers_slave_bias, 0, 0);
-        GM_RxPdoEntry_Get_By_Pos(&PurPos[i], slave_list, i + drivers_slave_bias, 0, 1);
-        GM_RxPdoEntry_Get_By_Pos(&PurVel[i], slave_list, i + drivers_slave_bias, 0, 2);
-        GM_RxPdoEntry_Get_By_Pos(&OperationMode[i], slave_list, i + drivers_slave_bias, 0, 4);
-
-        GM_TxPdoEntry_Get_By_Pos(&StatusWord[i], slave_list, i + drivers_slave_bias, 0, 0);
-        GM_TxPdoEntry_Get_By_Pos(&CurPos[i], slave_list, i + drivers_slave_bias, 0, 1);
-        GM_TxPdoEntry_Get_By_Pos(&CurVel[i], slave_list, i + drivers_slave_bias, 0, 2);
-        GM_TxPdoEntry_Get_By_Pos(&ErrorNumb[i], slave_list, i + drivers_slave_bias, 0, 3);
-    }
-    GM_RxPdoEntry_Get_By_Pos(&ControlWord[3], slave_list, 5, 0, 0);
-    GM_RxPdoEntry_Get_By_Pos(&PurPos[3], slave_list,  5, 0, 2);
-    GM_RxPdoEntry_Get_By_Pos(&OperationMode[3], slave_list, 5, 0, 1);
-
-    GM_TxPdoEntry_Get_By_Pos(&ErrorNumb[3], slave_list, 5, 0, 0);
-    GM_TxPdoEntry_Get_By_Pos(&StatusWord[3], slave_list, 5, 0, 1);
-    GM_TxPdoEntry_Get_By_Pos(&CurPos[3], slave_list, 5, 0, 3);
-
-#else
-    // 856
-    GM_RxPdoEntry_Get_By_Pos(&ControlWord[0], slave_list, drivers_slave_bias, 0, 0);
-    GM_RxPdoEntry_Get_By_Pos(&PurPos[0], slave_list, drivers_slave_bias, 0, 1);
-    GM_RxPdoEntry_Get_By_Pos(&OperationMode[0], slave_list, drivers_slave_bias, 0, 2);
-    GM_RxPdoEntry_Get_By_Pos(&PurVel[0], slave_list, drivers_slave_bias, 0, 3);
-
-    GM_TxPdoEntry_Get_By_Pos(&StatusWord[0], slave_list, drivers_slave_bias, 0, 0);
-    GM_TxPdoEntry_Get_By_Pos(&CurPos[0], slave_list, drivers_slave_bias, 0, 1);
-    GM_TxPdoEntry_Get_By_Pos(&ErrorNumb[0], slave_list, drivers_slave_bias, 0, 5);
-
-    GM_TxPdoEntry_Get_By_Pos(&CurVel[0], slave_list, drivers_slave_bias, 0, 2);
-    for (int i = 1; i < 4; i++) {
-        GM_RxPdoEntry_Get_By_Pos(&ControlWord[i], slave_list, i + drivers_slave_bias, 0, 0);
-        GM_RxPdoEntry_Get_By_Pos(&PurPos[i], slave_list, i + drivers_slave_bias, 0, 1);
-        GM_RxPdoEntry_Get_By_Pos(&OperationMode[i], slave_list, i + drivers_slave_bias, 0, 2);
-
-        GM_TxPdoEntry_Get_By_Pos(&StatusWord[i], slave_list, i + drivers_slave_bias, 0, 0);
-        GM_TxPdoEntry_Get_By_Pos(&CurPos[i], slave_list, i + drivers_slave_bias, 0, 1);
-        GM_TxPdoEntry_Get_By_Pos(&ErrorNumb[i], slave_list, i + drivers_slave_bias, 0, 2);
-    }
-
-    // 测试平台2
-    // for (int i = 0; i < 4; i++) {
-    //     CHECK_FUNC(GM_RxPdoEntry_Get_By_Pos(&PurVel[i], slave_list, i + drivers_slave_bias, 1, 0));
-    //     CHECK_FUNC(GM_RxPdoEntry_Get_By_Pos(&ControlWord[i], slave_list, i + drivers_slave_bias, 0, 0));     // 获取控制字entry信息
-    //     CHECK_FUNC(GM_RxPdoEntry_Get_By_Pos(&OperationMode[i], slave_list, i + drivers_slave_bias, 1, 1));   // 获取操作模式entry信息
-    //     CHECK_FUNC(GM_RxPdoEntry_Get_By_Pos(&PurPos[i], slave_list, i + drivers_slave_bias, 0, 1));
-
-    //     CHECK_FUNC(GM_TxPdoEntry_Get_By_Pos(&StatusWord[i], slave_list, i + drivers_slave_bias, 0, 0));      // 获取状态字entry信息
-    //     CHECK_FUNC(GM_TxPdoEntry_Get_By_Pos(&CurPos[i], slave_list, i + drivers_slave_bias, 0, 1));          // 获取当前位置entry信息
-    //     CHECK_FUNC(GM_TxPdoEntry_Get_By_Pos(&CurVel[i], slave_list, i + drivers_slave_bias, 1, 0));
-    //     CHECK_FUNC(GM_TxPdoEntry_Get_By_Pos(&ErrorNumb[i], slave_list, i + drivers_slave_bias, 2, 0));
-    // }
-#endif
 
     debug("==============================握手前DMA写================================\n");
     rc = GM_Master_Send(1);
-    CHECK_RC(rc, "握手前DMA写失败", err_close);
 
     debug("====================与主站握手:GM_Master_OP_Valid()=======================\n");
     rc = GM_Master_OP_Valid();
-    CHECK_RC(rc, "与主站握手失败", err_close);
-
     sem_post(&op_sem); // 通知其他线程主站已经进入op
-
-err_close:
-    Master_Error(rc);
 }
 
 // 等待中断信号
@@ -185,40 +99,38 @@ void Master_Wait_Sync(){
     #else
         debug("==============================等待周期中断================================\n");
         rc = GM_Wait_Master_Sync(IRQ_TIMEOUT);
-        CHECK_RC(rc, "等待周期中断失败", err_close);
         debug("=============================接收主站周期数据==============================\n");
         rc = GM_Master_Receive(1, &PdoWarnInfo);
-        CHECK_RC(rc, "握手前DMA读失败", err_close);
         if (PdoWarnInfo.PDOWarnFlag || PdoWarnInfo.DCWarnFlag){
             PdoWar_Info_Get(NULL, &PdoWarnInfo);
         }
         if (PdoWarnInfo.FlameTimeOutCount || PdoWarnInfo.CRCErrCount){
-            printf(" CRC错误次数:%d, 超时错误次数:%d\n", PdoWarnInfo.CRCErrCount, PdoWarnInfo.FlameTimeOutCount);
+            // printf(" CRC错误次数:%d, 超时错误次数:%d\n", PdoWarnInfo.CRCErrCount, PdoWarnInfo.FlameTimeOutCount);
         }
         sem_post(&plc_sem);
         sem_post(&motion_sem);
         sem_post(&path_plan_sem);
     #endif
-err_close:
-    Master_Error(rc);
 }
 
 void Master_Run()
 {
     while (!thread_exit_flag){
+        // 判断硬件连线等错误
+        Master_Hardware_Error(g_current_error_ctx);
         // 主站周期性中断信号
         Master_Wait_Sync();
-        sem_wait(&moton_sem_exec_done);
+        // sem_wait(&moton_sem_exec_done);
         op_flag = 1;
         //复位清除驱动器报警
         if(reset_sem)
         {
             for (int i = 0; i < 4; i++)
             {
-                CHECK_FUNC(GM_TxPdoEntry_Read(StatusWord[i], &statis[i] , 2));// 获取状态字
+                CHECK_FUNC(GM_TxPdoEntry_Read(g_device_data[i + 2].slave.statusWord, &statis[i] , 2));// 获取状态字
                 if((statis[i] & 0x0f) == 0x08)
                 {
-                    CHECK_FUNC(GM_RxPdoEntry_Write(ControlWord[i], 0x80));
+                    CHECK_FUNC(GM_RxPdoEntry_Write(g_device_data[i + 2].slave.Control_word, 0x80));
                 }
                 else if(dri_manager.drivers[i]->state == DRV_STATE_FAULT && (statis[i] & 0x0f) != 0x08)
                 {
@@ -245,26 +157,26 @@ void Master_Run()
         //进给轴上电
         for (int i = 1; i < 4; i++)
         {
-            CHECK_FUNC(GM_TxPdoEntry_Read(StatusWord[i], &statis[i] , 2));// 获取状态字
-            CHECK_FUNC(GM_TxPdoEntry_Read(CurPos[i], &pos[i], 4));
+            CHECK_FUNC(GM_TxPdoEntry_Read(g_device_data[i + 2].slave.statusWord, &statis[i] , 2));// 获取状态字
+            CHECK_FUNC(GM_TxPdoEntry_Read(g_device_data[i + 2].slave.act_pos, &pos[i], 4));
             // 根据状态字设置控制字
             if((statis[i] & 0x4f) == 0x40)
             {
-                CHECK_FUNC(GM_RxPdoEntry_Write(OperationMode[i], 0x08)); // 设置操作模式
-                CHECK_FUNC(GM_RxPdoEntry_Write(ControlWord[i], 0x06));
+                CHECK_FUNC(GM_RxPdoEntry_Write(g_device_data[i + 2].slave.Modes_of_operation, 0x08)); // 设置操作模式
+                CHECK_FUNC(GM_RxPdoEntry_Write(g_device_data[i + 2].slave.Control_word, 0x06));
                 dri_manager.drivers[i]->state = DRV_STATE_SWITCHED_ON_DISABLE;
             }
             else if((statis[i] & 0x6f) == 0x21)
             {
-                CHECK_FUNC(GM_RxPdoEntry_Write(ControlWord[i], 0x07));
-                CHECK_FUNC(GM_RxPdoEntry_Write(PurPos[i], pos[i]));
+                CHECK_FUNC(GM_RxPdoEntry_Write(g_device_data[i + 2].slave.Control_word, 0x07));
+                CHECK_FUNC(GM_RxPdoEntry_Write(g_device_data[i + 2].slave.target_pos, pos[i]));
                 pos_cmd[i] = pos[i];
                 dri_manager.drivers[i]->state = DRV_STATE_READY_TO_SWITCHED_ON;
             }
             else if((statis[i] & 0x6f) == 0x23)
             {
                 dri_manager.drivers[i]->state = DRV_STATE_SWITCHED_ON;
-                CHECK_FUNC(GM_RxPdoEntry_Write(ControlWord[i], 0x0f));
+                CHECK_FUNC(GM_RxPdoEntry_Write(g_device_data[i + 2].slave.Control_word, 0x0f));
             }
             else if((statis[i] & 0x27f) == 0x237)
             {
@@ -274,27 +186,27 @@ void Master_Run()
         //主轴上电
         if(spindle.mode != DRV_MODE_DISABLED)
         {
-            CHECK_FUNC(GM_TxPdoEntry_Read(StatusWord[0], &statis[0] , 2));// 获取状态字
+            CHECK_FUNC(GM_TxPdoEntry_Read(g_device_data[2].slave.statusWord, &statis[0] , 2));// 获取状态字
             //根据状态字设置控制字
             if(((statis[0] & 0x4f) == 0x40))
             {
-                CHECK_FUNC(GM_RxPdoEntry_Write(ControlWord[0], 0x06));
-                CHECK_FUNC(GM_TxPdoEntry_Read(CurPos[0], &pos[0], 4));
+                CHECK_FUNC(GM_RxPdoEntry_Write(g_device_data[2].slave.Control_word, 0x06));
+                CHECK_FUNC(GM_TxPdoEntry_Read(g_device_data[2].slave.act_pos, &pos[0], 4));
                 spindle.state = DRV_STATE_SWITCHED_ON_DISABLE;
             }
             else if((statis[0] & 0x6f) == 0x21)
             {
                 if(spindle.mode == DRV_MODE_CSV)
                 {
-                    CHECK_FUNC(GM_RxPdoEntry_Write(OperationMode[0], 0x09));// 设置操作模式
-                    CHECK_FUNC(GM_RxPdoEntry_Write(ControlWord[0], 0x07));
+                    CHECK_FUNC(GM_RxPdoEntry_Write(g_device_data[2].slave.Modes_of_operation, 0x09));// 设置操作模式
+                    CHECK_FUNC(GM_RxPdoEntry_Write(g_device_data[2].slave.Control_word, 0x07));
                 }
                 spindle.state = DRV_STATE_READY_TO_SWITCHED_ON;
             }
             else if((statis[0] & 0x6f) == 0x23)
             {
                 spindle.state = DRV_STATE_SWITCHED_ON;
-                CHECK_FUNC(GM_RxPdoEntry_Write(ControlWord[0], 0x0f));
+                CHECK_FUNC(GM_RxPdoEntry_Write(g_device_data[2].slave.Control_word, 0x0f));
             }
             else if((statis[0] & 0x27f) == 0x237 && (spindle.state == DRV_STATE_SWITCHED_ON))
             {
@@ -305,14 +217,14 @@ void Master_Run()
         {
             if(spindle.state != DRV_STATE_FAULT)
             {
-                CHECK_FUNC(GM_RxPdoEntry_Write(ControlWord[0], 0x00));
+                CHECK_FUNC(GM_RxPdoEntry_Write(g_device_data[2].slave.Control_word, 0x00));
             }
         }
 
         //读取驱动器警报
         for (int i = 0; i < 4; i++)
         {
-            CHECK_FUNC(GM_TxPdoEntry_Read(ErrorNumb[i], &error_code[i], 2)); // 获取状态字
+            CHECK_FUNC(GM_TxPdoEntry_Read(g_device_data[i + 2].slave.error_code, &error_code[i], 2)); // 获取状态字
             if (i == 0)
             {
                 if (error_code[0] != 0 && !rt_data->axis_data[3].axis_status.is_disable)
@@ -346,11 +258,11 @@ void Master_Run()
             {
                 if(i == 3)
                 {
-                    CHECK_FUNC(GM_RxPdoEntry_Write(ControlWord[0], 0x00));
+                    CHECK_FUNC(GM_RxPdoEntry_Write(g_device_data[2].slave.Control_word, 0x00));
                 }
                 else
                 {
-                    CHECK_FUNC(GM_RxPdoEntry_Write(ControlWord[i + 1], 0x00));
+                    CHECK_FUNC(GM_RxPdoEntry_Write(g_device_data[i + 3].slave.Control_word, 0x00));
                 }
             }
         }
@@ -363,10 +275,7 @@ void Master_Run()
 
         debug("=============================发送主站周期数据==============================\n");
         rc = GM_Master_Send(1);
-        CHECK_RC(rc, "发送主站周期数据失败", err_close);
     }
-err_close:
-    Master_Error(rc);
 }
 
 void Master_Reset()
@@ -392,6 +301,85 @@ void Check_Driver_Error()
                 }
             }
         }
+    }
+}
+
+static void Master_Hardware_Error(ErrorContext g_current_error_ctx){
+    int res = 0;
+    // printf("g_current_error_ctx.ErrorID = %x\n",g_current_error_ctx.ErrorID);
+    // printf("g_current_error_ctx.Fms = %x\n",g_current_error_ctx.Fms);
+    // printf("g_current_error_ctx.Model = %x\n",g_current_error_ctx.Model);
+    // printf("g_current_error_ctx.Code = %x\n",g_current_error_ctx.Code);
+    // printf("g_current_error_ctx.errslave = %x\n",g_current_error_ctx.errslave);
+    switch (g_current_error_ctx.ErrorID)
+    {
+    case ECAT_INIT_ERROR:
+        res = setAlarm(ALARM_ETHCAT_SV, ALARM_ERROR, 100);
+        if(res == -8) return;
+        LOG(LOG_LEVEL_ERR, "主站初始化模块错误");
+        break;
+    case ECAT_CONTROL_PANEL_CONNECT_LOST:
+        res = setAlarm(ALARM_ETHCAT_SV, ALARM_ERROR, 101);
+        if(res == -8) return;
+        LOG(LOG_LEVEL_ERR, "控制面板断连");
+        break;
+    case ECAT_IO_CONNECT_LOST:
+        res = setAlarm(ALARM_ETHCAT_SV, ALARM_ERROR, 102);
+        if(res == -8) return;
+        LOG(LOG_LEVEL_ERR, "IO模块断连");
+        break;
+    case ECAT_SLAVE3_CONNECT_LOST:
+        res = setAlarm(ALARM_ETHCAT_SV, ALARM_ERROR, 103);
+        if(res == -8) return;
+        LOG(LOG_LEVEL_ERR, "从站三断连");
+        break;
+    case ECAT_SLAVE4_CONNECT_LOST:
+        res = setAlarm(ALARM_ETHCAT_SV, ALARM_ERROR, 104);
+        if(res == -8) return;
+        LOG(LOG_LEVEL_ERR, "从站四断连");
+        break;
+    case ECAT_SLAVE5_CONNECT_LOST:
+        res = setAlarm(ALARM_ETHCAT_SV, ALARM_ERROR, 105);
+        if(res == -8) return;
+        LOG(LOG_LEVEL_ERR, "从站五断连");
+        break;
+    case ECAT_SLAVE6_CONNECT_LOST:
+        res = setAlarm(ALARM_ETHCAT_SV, ALARM_ERROR, 106);
+        if(res == -8) return;
+        LOG(LOG_LEVEL_ERR, "从站六断连");
+        break;
+    case ECAT_TOPOLOGY_ERROR:
+        res = setAlarm(ALARM_ETHCAT_SV, ALARM_ERROR, 107);
+        if(res == -8) return;
+        LOG(LOG_LEVEL_ERR, "主站拓扑模块错误");
+        break;
+    case ECAT_ACTIVE_ERROR:
+        res = setAlarm(ALARM_ETHCAT_SV, ALARM_ERROR, 108);
+        if(res == -8) return;
+        LOG(LOG_LEVEL_ERR, "主站激活模块错误");
+        break;
+    case ECAT_DC_ERROR:
+        res = setAlarm(ALARM_ETHCAT_SV, ALARM_ERROR, 109);
+        if(res == -8) return;
+        LOG(LOG_LEVEL_ERR, "主站DC模块错误");
+        break;
+    case ECAT_PDO_ERROR:
+        res = setAlarm(ALARM_ETHCAT_SV, ALARM_ERROR, 110);
+        if(res == -8) return;
+        LOG(LOG_LEVEL_ERR, "主站PDO模块错误");
+        break;
+    case ECAT_RT_ERROR:
+        res = setAlarm(ALARM_ETHCAT_SV, ALARM_ERROR, 111);
+        if(res == -8) return;
+        LOG(LOG_LEVEL_ERR, "主站RT模块错误");
+        break;
+    case UNKOWN_ERROR:
+        res = setAlarm(ALARM_ETHCAT_SV, ALARM_ERROR, 999);
+        if(res == -8) return;
+        LOG(LOG_LEVEL_ERR, "未知错误");
+        break;
+    default:
+        break;
     }
 }
 
@@ -473,7 +461,7 @@ static void Master_Error(int code)
     case -2000:
         res = setAlarm(ALARM_ETHCAT_SV, ALARM_ERROR, 20);
         if(res == -8) return;
-        LOG(LOG_LEVEL_ERR, "无效的通信地址");
+        LOG(LOG_LEVEL_ERR, "无效的通信地Master_Run址");
         break;
     case -2001:
         res = setAlarm(ALARM_ETHCAT_SV, ALARM_ERROR, 21);
@@ -576,7 +564,7 @@ static void Master_Error(int code)
         LOG(LOG_LEVEL_ERR, "远程升级时计算次数与实际写入不符");
         break;
     case -9999:
-        res = setAlarm(ALARM_ETHCAT_SV, ALARM_ERROR, 99);
+        res = setAlarm(ALARM_ETHCAT_SV, ALARM_ERROR, 999);
         if(res == -8) return;
         LOG(LOG_LEVEL_ERR, "未知错误");
         break;

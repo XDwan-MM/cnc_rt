@@ -56,7 +56,6 @@ extern "C" {
 extern sem_t exit_sem;                         // 退出信号
 extern sem_t op_sem;                           // 已进入op信号，用于线程间通信
 extern int InterruptFlag;                      // 打断标志位
-extern Slave_info* slave_list;                 // 定义从站信息结构体以存储解析结果
 extern int update_pos_flag;                    // 理论位置读取驱动器位置
 extern int rc;
 extern PdoWarn PdoWarnInfo; //pdo警告信息结构体

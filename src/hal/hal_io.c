@@ -1,5 +1,6 @@
 #include "hal_io.h"
 #include "debug_mode.h"
+#include "device.h"
 #include <stddef.h>
 #include <stdio.h>
 
@@ -81,8 +82,8 @@ hal_io_retcode_t Hal_Io_Update(hal_io_module_t* iomod, bool read, bool write)
     {
         uint16_t high = 0;
         uint16_t low = 0;
-        GM_TxPdoEntry_Read(DI0[iomod->module_id], &low, 2);
-        GM_TxPdoEntry_Read(DI1[iomod->module_id], &high, 2);
+        GM_TxPdoEntry_Read(g_device_data[1].io.io_input_addr[0], &low, 2);
+        GM_TxPdoEntry_Read(g_device_data[1].io.io_input_addr[1], &high, 2);
         iomod->di_status = ((uint32_t)high << 16) | (uint32_t)low;
     }
     if (write)
@@ -91,8 +92,8 @@ hal_io_retcode_t Hal_Io_Update(hal_io_module_t* iomod, bool read, bool write)
         uint16_t low = 0;
         high = (iomod->do_status) >> 16 & 0xFFFF;
         low = iomod->do_status & 0xFFFF;
-        GM_RxPdoEntry_Write(DO0[iomod->module_id], low);
-        GM_RxPdoEntry_Write(DO1[iomod->module_id], high);
+        GM_RxPdoEntry_Write(g_device_data[1].io.io_output_addr[0], low);
+        GM_RxPdoEntry_Write(g_device_data[1].io.io_output_addr[1], high);
     }
 #else
     // 调试模式：IO数据由模拟函数更新

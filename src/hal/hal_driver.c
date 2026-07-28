@@ -1,5 +1,6 @@
 #include "hal_driver.h"
 #include "debug_mode.h"
+#include "device.h"
 #include <stddef.h>
 #include <stdio.h>
 
@@ -181,13 +182,13 @@ hal_retcode_t Hal_Driver_Update(hal_driver_t* drv, bool read, bool write)
 #ifndef DEBUG_MODE_ENABLED
     if (read)
     {
-        GM_TxPdoEntry_Read(CurPos[drv->axis_id], &drv->actual_pos, 4);
-        GM_TxPdoEntry_Read(CurVel[drv->axis_id], &drv->actual_vel, 4);
+        GM_TxPdoEntry_Read(g_device_data[drv->axis_id + 2].slave.act_pos, &drv->actual_pos, 4);
+        GM_TxPdoEntry_Read(g_device_data[drv->axis_id + 2].slave.act_speed, &drv->actual_vel, 4);
     }
     if (write)
     {
-        GM_RxPdoEntry_Write(PurPos[drv->axis_id], drv->target_pos);
-        GM_RxPdoEntry_Write(PurVel[drv->axis_id], drv->target_vel);
+        GM_RxPdoEntry_Write(g_device_data[drv->axis_id + 2].slave.target_pos, drv->target_pos);
+        GM_RxPdoEntry_Write(g_device_data[drv->axis_id + 2].slave.target_speed, drv->target_vel);
     }
 #else
     // 调试模式：数据由 master_sim.c 中的 simulate_hal_data() 更新

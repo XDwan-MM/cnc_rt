@@ -35,37 +35,6 @@ char* get_log_path(void) {
     return strdup(path);
 }
 
-char* get_master_eni_path(){
-    char cwd[1024];
-    char eni_path[512];
-    #ifdef PLATFORM_1
-    if(getcwd(cwd, sizeof(cwd)) != NULL){
-        char* last_slash = strrchr(cwd, '/');
-        if(last_slash != NULL){
-            *last_slash = '\0';
-            // 测试平台1
-            snprintf(eni_path, sizeof(eni_path), "%s/%s", cwd, "config/ENI/speed.xml");
-        }
-    }else{
-        RT_LOG(ERROR, "无法打开ENI %s 文件", cwd);
-    }
-    #else
-    if(getcwd(cwd, sizeof(cwd)) != NULL){
-        char* last_slash = strrchr(cwd, '/');
-        if(last_slash != NULL){
-            *last_slash = '\0';
-            // 856
-            snprintf(eni_path, sizeof(eni_path), "%s/%s", cwd, "config/ENI/850_120.xml");
-            // 测试平台2
-            // snprintf(eni_path, sizeof(eni_path), "%s/%s", cwd, "config/ENI/gugao_io.xml");
-        }
-    }else{
-        RT_LOG(ERROR, "无法打开ENI %s 文件", cwd);
-    }
-    #endif
-    return strdup(eni_path);
-}
-
 static char* get_version_path() {
     char cwd[1024];
     char path[512];
@@ -139,11 +108,6 @@ void printMode() {
     RT_LOG(INFO, "         调试模式 (DEBUG MODE)              ");
 #else
     RT_LOG(INFO, "         实时模式 (REALTIME MODE)           ");
-    #ifdef PLATFORM_1
-    RT_LOG(INFO, "         平台1 (REALTIME MODE)             ");
-    #else
-    RT_LOG(INFO, "         平台2 (REALTIME MODE)             ");
-    #endif
 #endif
     RT_LOG(INFO, "══════════════════════════════════════════");
 }

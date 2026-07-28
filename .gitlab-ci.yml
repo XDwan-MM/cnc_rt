@@ -79,7 +79,7 @@ mr_summary:
     - cd ../../
     - echo "⏳ Compiling Main Project..."
     - ./build.sh check
-    - ls -l bin/cnc_rt_1
+    - ls -l bin/cnc_rt
     - echo "✅ Compiled Main Project Success!"
   only:
     - merge_request
