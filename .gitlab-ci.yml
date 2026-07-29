@@ -110,7 +110,7 @@ mr_summary:
     - ls -l bin/
     # 4.添加版本号信息
     - *tag-change
-    - tar -cf cnc_rt_$SUM_B.tar bin config lib .git version.sh
+    - tar -cf cnc_rt_$SUM_B.tar bin config lib .git version.sh run.sh
     - curl -uly_35b717:AP38qFMP2jfnFYm5gav4KV2EyXV -T cnc_rt_$SUM_B.tar  "http://10.2.30.32:8081/artifactory/hmi_cnc/${CI_COMMIT_REF_NAME}/"
   when: manual
 
@@ -143,7 +143,7 @@ mr_summary:
     - echo $Version
     # 4.添加版本号信息
     - *generate-tag
-    - tar -cf cnc_rt_$Version.$tag.tar bin config lib .git version.sh
+    - tar -cf cnc_rt_$Version.$tag.tar bin config lib .git version.sh run.sh
     - curl -uly_35b717:AP38qFMP2jfnFYm5gav4KV2EyXV -T cnc_rt_$Version.$tag.tar "http://10.2.30.32:8081/artifactory/hmi_cnc/${CI_COMMIT_REF_NAME}/"
   when: manual
 
@@ -175,7 +175,7 @@ mr_summary:
     - source version.sh
     - echo $Version
     # 4.添加版本号信息
-    - tar -cf cnc_rt_$Version.tar bin config lib .git version.sh
+    - tar -cf cnc_rt_$Version.tar bin config lib .git version.sh run.sh
     - curl -uly_35b717:AP38qFMP2jfnFYm5gav4KV2EyXV -T cnc_rt_$Version.tar "http://10.2.30.32:8081/artifactory/hmi_cnc/development/"
   when: manual
 
@@ -209,7 +209,7 @@ mr_summary:
     - echo $Version
     # 4.添加版本号信息
     - *tag-change
-    - tar -cf cnc_plc_$SUM_B.tar bin config lib .git version.sh
+    - tar -cf cnc_plc_$SUM_B.tar bin config lib .git version.sh run.sh
     - curl -uly_35b717:AP38qFMP2jfnFYm5gav4KV2EyXV -T cnc_plc_$SUM_B.tar "http://10.2.30.32:8081/artifactory/hmi_cnc/${CI_COMMIT_REF_NAME}/"
   only:
     - triggers 
