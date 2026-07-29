@@ -85,10 +85,10 @@ void pmc_a_input_scan_cycle(void)
                         setAlarm(ALARM_UP, ALARM_ERROR, alarm_no);
                     }
                     // 检测下降沿 (1 -> 0): 消除报警
-                    else if (SIGNAL_FALLING(current_a_status[i], last_a_status[i], bit))
-                    {
-                        delAlarm(ALARM_UP, ALARM_ERROR, alarm_no);
-                    }
+                    // else if (SIGNAL_FALLING(current_a_status[i], last_a_status[i], bit))
+                    // {
+                    //     delAlarm(ALARM_UP, ALARM_ERROR, alarm_no);
+                    // }
                 }
                 else
                 {
