@@ -33,8 +33,15 @@ void handle_alarm_cmd(){
         case SYS_EVENT_NONE:
             break;
         case SYS_EVENT_HMI_RESET:       
-            // 清除报警
-            cleanAllAlarm(ALARM_TYPE_ALL, ALARM_LEVEL_ALL);
+            // 清除报警，不清除PLC和用户PLC报警
+            cleanAllAlarm(ALARM_SY, ALARM_LEVEL_ALL);
+            cleanAllAlarm(ALARM_CH, ALARM_LEVEL_ALL);
+            cleanAllAlarm(ALARM_AX, ALARM_LEVEL_ALL);
+            cleanAllAlarm(ALARM_SV, ALARM_LEVEL_ALL);
+            cleanAllAlarm(ALARM_DV, ALARM_LEVEL_ALL);
+            cleanAllAlarm(ALARM_PS, ALARM_LEVEL_ALL);
+            cleanAllAlarm(ALARM_HM, ALARM_LEVEL_ALL);
+            cleanAllAlarm(ALARM_ETHCAT_SV, ALARM_LEVEL_ALL);
             rt_data->sys_state[SYS_IS_ALARMING] = false;
             // 清除内部急停标志和人机急停显示标志
             rt_data->sys_state[SYS_IS_ESTOP_ACTIVE] = false;

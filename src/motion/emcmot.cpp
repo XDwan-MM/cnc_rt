@@ -384,7 +384,14 @@ static void reset_clean_warning(){
         // 复位生效参数
         Axis_Limit_Manager_Init();
         // 清除警告提示
-        cleanAllAlarm(ALARM_TYPE_ALL, ALARM_WARNING);
+        cleanAllAlarm(ALARM_SY, ALARM_WARNING);
+        cleanAllAlarm(ALARM_CH, ALARM_WARNING);
+        cleanAllAlarm(ALARM_AX, ALARM_WARNING);
+        cleanAllAlarm(ALARM_SV, ALARM_WARNING);
+        cleanAllAlarm(ALARM_DV, ALARM_WARNING);
+        cleanAllAlarm(ALARM_PS, ALARM_WARNING);
+        cleanAllAlarm(ALARM_HM, ALARM_WARNING);
+        cleanAllAlarm(ALARM_ETHCAT_SV, ALARM_WARNING);
     }
 }
 
