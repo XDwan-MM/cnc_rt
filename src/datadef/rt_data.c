@@ -25,7 +25,7 @@ GNC_RES rt_data_reset(void){
     // memset(rt_data->sys_state, 0, sizeof(rt_data->sys_state));
     rt_set_chan_state(0, CHAN_IS_GCODE_END, true);
     rt_set_chan_state(0, CHAN_IS_MCODE_END, true);
-    rt_data->sys_state[SYS_IS_ESTOP_ON] = false;
+    rt_data->sys_state[SYS_IS_ESTOP_ACTIVE] = false;
     rt_data->parser_error.parser_error_no = -1;
     pthread_mutex_unlock(&rt_data->mutex);
     return GNC_OPERATOR_SUCCESS;

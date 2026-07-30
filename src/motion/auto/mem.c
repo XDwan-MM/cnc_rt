@@ -89,7 +89,7 @@ static void auto_set_state(){
             rt_set_chan_state(0, CHAN_IS_PARSER_RESET, true);
             break;
         
-        case SYS_EVENT_RESET:
+        case SYS_EVENT_OUTSIDE_RESET:
             // 2.外部复位信号ERS
             nc_set_resetting(OUTSIDE_RESET);
             mcode_data->mcode_state = MCODE_EXECUTE_PAUSING;

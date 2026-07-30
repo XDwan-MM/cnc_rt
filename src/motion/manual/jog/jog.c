@@ -39,7 +39,7 @@ static bool check_all_axes_idle_jog();
 void handle_jog_cmd()
 {
     // 内部急停标志触发，立即停止规划，复位规划器
-    if (rt_data->sys_state[SYS_IS_ESTOP_ON])
+    if (rt_data->sys_state[SYS_IS_ESTOP_ACTIVE])
     {
         jog_handle_estop();
         return;

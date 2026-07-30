@@ -119,7 +119,7 @@ static void axis_write_out(){
     calcul_mac_cmd_pos();
     // 误差补偿
     compute_error_comp();
-    //更新轴状态
+    // 更新轴状态
     Axis_Status_Update();
     // 预先检查插补位置是否超软限位
     check_for_soft_limit();
@@ -131,7 +131,7 @@ static void axis_write_out(){
 
 static void set_operating_mode() {
     // 急停拍下时不允许切换模式
-    if (rt_get_sys_state(SYS_IS_ESTOP_PRESS)) return;
+    if (rt_get_sys_state(SYS_ESTOP_INPUT)) return;
     // 如果没有切换，不进行操作
     if (rt_data->current_mode == rt_data->target_mode) {
         rt_data->sys_state[SYS_IS_SWITCHING_MODE] = false;
@@ -222,20 +222,25 @@ static void get_cmd_pos() {
     }
 }
 
-static void check_for_fault() {
-    if(rt_get_sys_state(SYS_IS_ESTOP_PRESS)){
+static void check_for_fault()
+{
+    if (rt_get_sys_state(SYS_ESTOP_INPUT))
+    {
         handle_estop_cmd();
     }
-    //　检查系统报警和内部急停标志
+    // 　检查系统报警和内部急停标志
     int alarm_count = 0;
     getAlarmCount(ALARM_TYPE_ALL, ALARM_ERROR, &alarm_count);
-    if(alarm_count > 0 || rt_data->sys_state[SYS_IS_ESTOP_ON]){
+    if (alarm_count > 0 || rt_data->sys_state[SYS_IS_ESTOP_ACTIVE])
+    {
         rt_data->sys_state[SYS_IS_ALARMING] = true;
         // 除急停外的其他报警，取消准备就绪信号
-        if(!rt_data->sys_state[SYS_IS_ESTOP_ON]) rt_set_sys_state(SYS_IS_READY, false);
+        if (!rt_data->sys_state[SYS_IS_ESTOP_ACTIVE])
+            rt_set_sys_state(SYS_IS_READY, false);
         handle_alarm_cmd();
     }
-    if(alarm_count <= 0){
+    if (alarm_count <= 0)
+    {
         rt_data->sys_state[SYS_IS_ALARMING] = false;
         rt_set_sys_state(SYS_IS_READY, true);
     }

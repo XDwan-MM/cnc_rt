@@ -137,7 +137,6 @@ typedef enum {
 
 typedef enum {
     SYS_EVENT_NONE = 0,
-    SYS_EVENT_RESET,
     SYS_EVENT_RERUN,
     SYS_EVENT_PAUSE,
     SYS_EVENT_SINGLE_BLOCK_ON,
@@ -164,6 +163,7 @@ typedef enum {
     SYS_EVENT_Z_NEG_PRESS,
     SYS_EVENT_Z_NEG_RELEASE,
     SYS_EVENT_HMI_RESET,
+    SYS_EVENT_OUTSIDE_RESET,
 } SYS_EVENT;
 
 double POS_Distance(POS* p1, POS* p2);

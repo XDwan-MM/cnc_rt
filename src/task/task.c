@@ -28,15 +28,19 @@ GNC_RES task_mq_init()
 // 消息队列处理
 GNC_RES task_mq_proc()
 {
-    if (event_queue_is_empty(event_queue))
-        return GNC_DATA_EMPTY;
     if (event_queue_is_full(event_queue))
     {
         LOG(LOG_LEVEL_ERR, "事件队列已满");
         // setAlarm(ALARM_SY, ALARM_ERROR, 0);
         // return GNC_OPERATOR_ERROR;
     }
-    event_queue_pop(event_queue, &event_data);
+    // 弹出事件
+    int operator_res = event_queue_pop(event_queue, &event_data);
+    if (operator_res != GNC_OPERATOR_SUCCESS)
+    {
+        return GNC_DATA_EMPTY;
+    }
+    // 处理事件
     task_handle_pmc_event(&event_data);
     return GNC_OPERATOR_SUCCESS;
 }
@@ -89,8 +93,14 @@ static GNC_RES task_handle_pmc_event(PMC_EVENT *event_data)
     {
         if (event_data->reset_payload.reset_state == 1)
         {
-            rt_data->nc_event = SYS_EVENT_RESET;
-            LOG(LOG_LEVEL_INFO, "处理外部复位事件");
+            if (event_data->reset_payload.reset_type == 0){
+                rt_data->nc_event = SYS_EVENT_HMI_RESET;
+                LOG(LOG_LEVEL_INFO, "处理急停复位事件");
+            }
+            if (event_data->reset_payload.reset_type == 1){
+                rt_data->nc_event = SYS_EVENT_OUTSIDE_RESET;
+                LOG(LOG_LEVEL_INFO, "处理m30复位事件");
+            }
         }
         break;
     }

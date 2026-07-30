@@ -78,6 +78,7 @@ typedef struct {
 /* 6、*/
 typedef struct {
     int reset_state;
+    int reset_type;
 } EV_MSG_RESET_PAYLOAD;
 
 typedef struct {
