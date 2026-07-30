@@ -381,7 +381,6 @@ static void reset_clean_warning(){
     {
         // 4.按下MDI上的RESET键
         nc_set_resetting(HMI_RESET);
-        setVarChanInt(0, VAR_CHAN_IS_RESETTING, 1, 0);
         // 复位生效参数
         Axis_Limit_Manager_Init();
         // 清除警告提示

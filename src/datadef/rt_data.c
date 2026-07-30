@@ -90,9 +90,22 @@ bool rt_get_chan_state(int chan_index, ChanStateIndex state){
     return value;
 }
 
+const char* reset_trigger_name[] = {"紧急停止信号ESP","外部复位信号ERS","复位&倒带信号RRW","按下MDI的RESET键"};
+
 void nc_set_resetting(RESET_TRIGGER reset_trigger){
     rt_data->nc_reset.reset_trigger = reset_trigger;
     rt_data->nc_reset.is_resetting = 1;
+    LOG(LOG_LEVEL_DEBUG, "复位中F1.1信号来源：%s", reset_trigger_name[reset_trigger]);
+    switch (rt_data->nc_reset.reset_trigger)
+    {
+    // 基于MDI的复位确认信号
+    case HMI_RESET:
+        rt_data->nc_reset.is_mdi_reset = 1;
+        rt_data->nc_reset.mdi_reset_tic = 0;
+        break;
+    default:
+        break;
+    }
 }
 
 void nc_set_resetted(){

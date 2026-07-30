@@ -124,7 +124,21 @@ static void pmc_output_reset()
         {
         // 基于MDI的复位确认信号
         case HMI_RESET:
-            setRegBit(REG_F, 6, 1);
+            if(rt_data->nc_reset.is_mdi_reset) {
+                setRegBit(REG_F, 6, 1);
+                setVarChanInt(0, VAR_CHAN_IS_RESETTING, 1, 0);
+            }
+            else {
+                clearRegBit(REG_F, 6, 1);
+                setVarChanInt(0, VAR_CHAN_IS_RESETTING, 0, 0);
+            }
+            if(rt_data->sys_state[SYS_ESTOP_INPUT]){
+                if(rt_data->nc_reset.mdi_reset_tic < 22){
+                    rt_data->nc_reset.mdi_reset_tic++;
+                }else{
+                    rt_data->nc_reset.is_mdi_reset = 0;
+                } 
+            }
             break;
         default:
             break;
