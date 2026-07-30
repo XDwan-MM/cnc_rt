@@ -114,7 +114,6 @@ void pmc_g_input_scan_cycle(void)
         pmc_dispatch_event(EV_MSG_RESET, 1, 0);
         LOG(LOG_LEVEL_INFO, "扫描到急停G8.4信号由0变1, 系统自动复位");
     }
-
     /* G19.7 快速按键信号检测，0->1 上升沿有效，1->0 下降沿失效 */
     if (SIGNAL_RISING(curr_g.g_regs[19], last_g.g_regs[19], 7))
     {
@@ -231,7 +230,7 @@ void pmc_g_input_scan_cycle(void)
     /* 外部复位M02M30 (G8.7 复位 上升沿触发) */
     if (SIGNAL_RISING(curr_g.g_regs[8], last_g.g_regs[8], 7))
     {
-        pmc_dispatch_event(EV_MSG_RESET, 1, 0);
+        pmc_dispatch_event(EV_MSG_RESET, 1, 1);
     }
 
     /* 主轴正反信号检测 (G70.4 主轴反转, G70.5 主轴正转, G29.6 主轴停止信号) */
@@ -504,6 +503,7 @@ static void pmc_dispatch_event(PMC_EVENT_ID id, int p1, int p2)
     {
         event.id = id;
         event.reset_payload.reset_state = p1;
+         event.reset_payload.reset_type = p2;
         LOG(LOG_LEVEL_INFO, "扫描到复位: %d, reset_state: %d", event.id, p1);
         break;
     }

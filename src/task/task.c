@@ -93,8 +93,14 @@ static GNC_RES task_handle_pmc_event(PMC_EVENT *event_data)
     {
         if (event_data->reset_payload.reset_state == 1)
         {
-            rt_data->nc_event = SYS_EVENT_RESET;
-            LOG(LOG_LEVEL_INFO, "处理外部复位事件");
+            if (event_data->reset_payload.reset_type == 0){
+                rt_data->nc_event = SYS_EVENT_HMI_RESET;
+                LOG(LOG_LEVEL_INFO, "处理急停复位事件");
+            }
+            if (event_data->reset_payload.reset_type == 1){
+                rt_data->nc_event = SYS_EVENT_OUTSIDE_RESET;
+                LOG(LOG_LEVEL_INFO, "处理m30复位事件");
+            }
         }
         break;
     }
