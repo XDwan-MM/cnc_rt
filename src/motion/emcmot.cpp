@@ -2,7 +2,6 @@
 #include "global.h"
 #include <hmisysapi.h>
 #include "egear_ratio.h"
-#include "mcode_queue.h"
 #include "ferror_control.h"
 #include "pathplan.h"
 #include "rt_sem.h"
@@ -10,7 +9,7 @@
 #include "jog.h"
 #include "handwheel.h"
 #include "homing.h"
-#include "mem.h"
+#include "auto.h"
 #include "spl_control.h"
 #include "stored_stroke_check.h"
 #include "parser.h"
@@ -359,7 +358,7 @@ static void calcul_mac_cmd_pos()
     for (int i = 0; i < SYS_AXES_NUM; i++)
     {
         // 机床锁住或者轴拆卸，不下发位置
-        if (!rt_data->sys_state[SYS_IS_MAC_LOCK] && !rt_data->axis_data[i].axis_status.is_disable)
+        if (!rt_data->sys_state[SYS_IS_MAC_LOCK_READY] && !rt_data->axis_data[i].axis_status.is_disable)
         {
             rt_data->axis_data[i].mac_cmd_pos += rt_data->axis_data[i].wcs_cmd_pos_cur - rt_data->axis_data[i].wcs_cmd_pos_pre;
         }
@@ -398,13 +397,15 @@ static void reset_clean_warning(){
 static void manual_unset_sys_state(){
     if(rt_data->current_mode == MODE_MDI || rt_data->current_mode == MODE_MEM || rt_data->current_mode == MODE_DNC) return;
     // todo：手动模式暂不支持机械锁住
-    if(rt_data->sys_state[SYS_IS_MAC_LOCK]) rt_data->sys_state[SYS_IS_MAC_LOCK] = false;
+    if(rt_data->sys_state[SYS_IS_MAC_LOCK_READY]) rt_data->sys_state[SYS_IS_MAC_LOCK_READY] = false;
+    if(rt_data->sys_state[SYS_IS_MAC_LOCK_ON]) rt_data->sys_state[SYS_IS_MAC_LOCK_ON] = false;
     switch (rt_data->nc_event)
     {
     case SYS_EVENT_MAC_LOCK_ON:
     case SYS_EVENT_MAC_LOCK_OFF:
         LOG(LOG_LEVEL_WARN, "手动模式暂不支持机械锁住");
-        rt_data->sys_state[SYS_IS_MAC_LOCK] = false;
+        rt_data->sys_state[SYS_IS_MAC_LOCK_READY] = false;
+        rt_data->sys_state[SYS_IS_MAC_LOCK_ON] = false;
         break;
     case SYS_EVENT_BLOCK_SKIP_ON:
         rt_set_sys_state(SYS_IS_BLOCK_SKIP, true);

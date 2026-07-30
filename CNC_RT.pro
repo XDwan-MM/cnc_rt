@@ -102,19 +102,17 @@ HEADERS += \
     src/datadef/datatype.h \
     src/datadef/event_queue.h \
     src/datadef/eventdef.h \
-    src/datadef/gcode_queue.h \
     src/datadef/global.h \
     src/datadef/rt_data.h \
-    src/datadef/mcode_queue.h \
     src/datadef/plan_queue.h \
     src/datadef/rt_data.h \
     src/hal/hal_driver.h \
     src/hal/hal_io.h \
     src/hal/egear_ratio.h \
+    src/motion/auto/auto.h \
+    src/motion/auto/auto_gcode.h \
+    src/motion/auto/auto_mst.h \
     src/motion/auto/interpolation.h \
-    src/motion/auto/mem.h \
-    src/motion/auto/mem_mst.h \
-    src/motion/auto/mem_gcode.h \
     src/motion/auto/parser.h \
     src/motion/auto/pathplan.h \
     src/motion/spindle/spl_control.h \
@@ -149,18 +147,16 @@ SOURCES += \
     src/compensation/comp_data.c \
     src/datadef/datatype.c \
     src/datadef/event_queue.c \
-    src/datadef/gcode_queue.c \
     src/datadef/global.c \
-    src/datadef/mcode_queue.c \
     src/datadef/plan_queue.c \
     src/datadef/rt_data.c \
     src/hal/hal_driver.c \
     src/hal/hal_io.c \
     src/hal/egear_ratio.c \
+    src/motion/auto/auto.c \
+    src/motion/auto/auto_gcode.c \
+    src/motion/auto/auto_mst.c \
     src/motion/auto/interpolation.c \
-    src/motion/auto/mem.c \
-    src/motion/auto/mem_mst.c \
-    src/motion/auto/mem_gcode.c \
     src/motion/auto/parser.cpp \
     src/motion/auto/pathplan.c \
     src/motion/spindle/spl_control.c \

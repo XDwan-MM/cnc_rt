@@ -2,14 +2,13 @@
 #include <math.h>
 #include "trajectory.h"
 #include "pathplan.h"
-#include "gcode_queue.h"
 #include "global.h"
 #include "cnc_math.h"
 #include <hmisysapi.h>
 #include "rt_data.h"
 #include <alarmapi.h>
 
-static void block_cal_pos(GCODE_BLOCK* gcode_block, PLAN_BLOCK* current_block, POS* start_pos);
+static void block_cal_pos(PLAN_BLOCK* parser_block, PLAN_BLOCK* current_block, POS* start_pos);
 static void block_cal_vel(PLAN_BLOCK* current_block);
 static void block_cal_angle(PLAN_BLOCK* current_block, VECTOR* pre_end_vector, VECTOR* cur_start_vector);
 static void block_cal_circle_vector(PLAN_BLOCK* current_block);
@@ -18,9 +17,9 @@ static double block_cal_circle_length(PLAN_BLOCK* current_block);
 // 将译码数据转换成段
 GNC_RES chan_add_block(){
     PLAN_BLOCK* pretreat_block;
-    GCODE_BLOCK* gcode_block;
+    PLAN_BLOCK* parser_block;
 
-    if(gcode_queue_is_empty(gcode_queue)) return GNC_DATA_EMPTY;
+    if(queue_is_empty(parser_queue)) return GNC_DATA_EMPTY;
 
     // 译码第一段类型为g00，起点为当前机床位置
     if(rt_get_chan_state(0, CHAN_IS_FIRST_RUN)){
@@ -35,23 +34,19 @@ GNC_RES chan_add_block(){
         // 如果预处理队列已满，提前结束
         if(queue_is_full(pretreat_queue)) return GNC_DATA_FULL;
         // 如果译码器无数据，提前结束
-        if(gcode_queue_is_empty(gcode_queue)) return GNC_DATA_EMPTY;
+        if(queue_is_empty(parser_queue)) return GNC_DATA_EMPTY;
 
-        gcode_block = gcode_queue_peak(gcode_queue);
-        if(gcode_block == NULL) return GNC_DATA_NULL;
+        parser_block = queue_peak(parser_queue);
+        if(parser_block == NULL) return GNC_DATA_NULL;
         pretreat_block = queue_peak_tail(pretreat_queue);
         if(pretreat_block == NULL) return GNC_DATA_NULL;
 
         // 拷贝信息
-        pretreat_block->mode = gcode_block->mode;
-        pretreat_block->state = gcode_block->state;
-        pretreat_block->line_number = gcode_block->line_number;
-        pretreat_block->pause_time = gcode_block->pause_time;
+        memcpy(pretreat_block, parser_block, sizeof(PLAN_BLOCK));
 
         // 构造成段
-        pretreat_block->type = gcode_block->type;
-        pretreat_block->max_vel = pretreat_block->feed_vel = gcode_block->feed_vel / TIME_MINUS_2_S;
-        block_cal_pos(gcode_block, pretreat_block, &pretreat_queue->pre_pos);
+        pretreat_block->max_vel = pretreat_block->feed_vel = parser_block->feed_vel / TIME_MINUS_2_S;
+        block_cal_pos(parser_block, pretreat_block, &pretreat_queue->pre_pos);
 
         // 计算速度
         block_cal_vel(pretreat_block);
@@ -66,7 +61,7 @@ GNC_RES chan_add_block(){
         block_cal_angle(pretreat_block, &pretreat_queue->pre_vec, &pretreat_block->start_vec);
 
         // 删除已处理的gcode
-        gcode_queue_pop(gcode_queue);
+        queue_pop(parser_queue);
 
         // 更新预处理队列信息
         queue_soft_push(pretreat_queue);
@@ -77,19 +72,19 @@ GNC_RES chan_add_block(){
 }
 
 // 计算段的首末位置
-static void block_cal_pos(GCODE_BLOCK* gcode_block, PLAN_BLOCK* current_block, POS* start_pos){
+static void block_cal_pos(PLAN_BLOCK* parser_block, PLAN_BLOCK* current_block, POS* start_pos){
     POS_COPY(&current_block->start_pos, start_pos);
-    POS_COPY(&current_block->end_pos, &gcode_block->pos);
+    POS_COPY(&current_block->end_pos, &parser_block->end_pos);
     // LOG(LOG_LEVEL_DEBUG,  "start_pos %f %f %f", current_block->start_pos.x, current_block->start_pos.y, current_block->start_pos.z);
     // LOG(LOG_LEVEL_DEBUG,  "end_pos %f %f %f", current_block->end_pos.x, current_block->end_pos.y, current_block->end_pos.z);
-    switch(gcode_block->type){
+    switch(parser_block->type){
         case CIRCLE_CCW:
         case CIRCLE_CW:
             // 计算圆心和半径
-            POS_COPY(&current_block->circular_block.center_pos, &gcode_block->center_pos);
-            current_block->circular_block.radius = POS_Distance(&current_block->end_pos, &current_block->circular_block.center_pos);
-            current_block->circular_block.plane = gcode_block->plane;
-            current_block->circular_block.dir = (gcode_block->type == CIRCLE_CW) ? CLOCK : COUNTERCLOCK;
+            POS_COPY(&current_block->circular_data.center_pos, &parser_block->circular_data.center_pos);
+            current_block->circular_data.radius = POS_Distance(&current_block->end_pos, &current_block->circular_data.center_pos);
+            current_block->circular_data.plane = parser_block->circular_data.plane;
+            current_block->circular_data.dir = (parser_block->type == CIRCLE_CW) ? CLOCK : COUNTERCLOCK;
             break;
         default:
             break;
@@ -155,10 +150,10 @@ static void block_cal_angle(PLAN_BLOCK* current_block, VECTOR* pre_end_vector, V
 
 static void block_cal_circle_vector(PLAN_BLOCK* current_block){     
     // 计算半径矢量
-    VECTOR rs = VECTOR_Unit(&current_block->circular_block.center_pos, &current_block->start_pos);
-    VECTOR re = VECTOR_Unit(&current_block->circular_block.center_pos, &current_block->end_pos);
+    VECTOR rs = VECTOR_Unit(&current_block->circular_data.center_pos, &current_block->start_pos);
+    VECTOR re = VECTOR_Unit(&current_block->circular_data.center_pos, &current_block->end_pos);
 
-    switch(current_block->circular_block.plane){
+    switch(current_block->circular_data.plane){
         case PLANE_XY:
             switch(current_block->type){
             case CIRCLE_CW:
@@ -223,25 +218,25 @@ static void block_cal_circle_vector(PLAN_BLOCK* current_block){
 }
 
 static double block_cal_circle_length(PLAN_BLOCK* current_block){
-    VECTOR rs = POS_VECTOR(&current_block->circular_block.center_pos, &current_block->start_pos);
-    VECTOR re = POS_VECTOR(&current_block->circular_block.center_pos, &current_block->end_pos);
+    VECTOR rs = POS_VECTOR(&current_block->circular_data.center_pos, &current_block->start_pos);
+    VECTOR re = POS_VECTOR(&current_block->circular_data.center_pos, &current_block->end_pos);
     // 计算切失
-    switch(current_block->circular_block.plane){
+    switch(current_block->circular_data.plane){
         case PLANE_XY:
-            current_block->circular_block.statr_rad = atan2(rs.y, rs.x);
-            current_block->circular_block.end_rad = atan2(re.y, re.x);
+            current_block->circular_data.statr_rad = atan2(rs.y, rs.x);
+            current_block->circular_data.end_rad = atan2(re.y, re.x);
             break;
         case PLANE_XZ:
-            current_block->circular_block.statr_rad = atan2(rs.z, rs.x);
-            current_block->circular_block.end_rad = atan2(re.z, re.x);
+            current_block->circular_data.statr_rad = atan2(rs.z, rs.x);
+            current_block->circular_data.end_rad = atan2(re.z, re.x);
             break;
         case PLANE_YZ:
-            current_block->circular_block.statr_rad = atan2(rs.z, rs.y);
-            current_block->circular_block.end_rad = atan2(re.z, re.y);
+            current_block->circular_data.statr_rad = atan2(rs.z, rs.y);
+            current_block->circular_data.end_rad = atan2(re.z, re.y);
             break;
     }
     // 计算弧度
-    double angDelta = current_block->circular_block.end_rad - current_block->circular_block.statr_rad;
+    double angDelta = current_block->circular_data.end_rad - current_block->circular_data.statr_rad;
     switch(current_block->type){
         case CIRCLE_CW:
             if (IsGreaterThanOrEqual(angDelta, 0)) angDelta -= 2 * PI;
@@ -250,8 +245,8 @@ static double block_cal_circle_length(PLAN_BLOCK* current_block){
             if (IsLessThanOrEqual(angDelta, 0)) angDelta += 2 * PI;
             break;
     }
-    current_block->circular_block.rad = fabs(angDelta);
-    return current_block->circular_block.rad * current_block->circular_block.radius;
+    current_block->circular_data.rad = fabs(angDelta);
+    return current_block->circular_data.rad * current_block->circular_data.radius;
 }
 
 // 计算段长度|圆弧长

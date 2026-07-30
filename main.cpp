@@ -63,9 +63,9 @@ int main() {
     RT_LOG(INFO, "等待实时启动信号");
     LOG(LOG_LEVEL_INFO, "等待实时启动信号");
     // 如果想脱离界面进行调试，请解除注释
-    // #ifdef DEBUG_MODE_ENABLED
-    // setSysCommInt(SYS_START_RT, 1, 0);
-    // #endif
+    #ifdef DEBUG_MODE_ENABLED
+    setSysCommInt(SYS_START_RT, 1, 0);
+    #endif
     while (true) {
         getSysCommInt(SYS_START_RT, &sys_start_rt, 0);
         if(sys_start_rt) break;

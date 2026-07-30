@@ -7,7 +7,7 @@
 extern "C" {
 #endif
 
-POS mem_cal_pos(POS current_pos, double accum_distance);
+POS auto_cal_interp_pos(POS current_pos, double accum_distance);
 
 #ifdef __cplusplus
 }

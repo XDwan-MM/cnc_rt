@@ -56,17 +56,17 @@ static void pmc_output_auto()
     else
         clearRegBit(REG_F, 0, 7);
     // STL：启动中
-    if (cycle_tp->mem_exec_state == EXEC_RUNNING)
+    if (cycle_tp->exec_state == EXEC_RUNNING)
         setRegBit(REG_F, 0, 5);
     else
         clearRegBit(REG_F, 0, 5);
     // SPL：休止中
-    if (cycle_tp->mem_exec_state == EXEC_PAUSING)
+    if (cycle_tp->exec_state == EXEC_PAUSING)
         setRegBit(REG_F, 0, 4);
     else
         clearRegBit(REG_F, 0, 4);
     // 切削进给中
-    if(cycle_tp->mem_exec_state == EXEC_RUNNING && cycle_tp->plan_block->mode == PMC_MODE_CHOP){
+    if(cycle_tp->exec_state == EXEC_RUNNING && cycle_tp->plan_block->mode == PMC_MODE_CHOP){
         setRegBit(REG_F, 2, 6);
     }
     else
@@ -88,7 +88,7 @@ static void pmc_output_auto()
     else
         clearRegBit(REG_F, 2, 7);
     // 机械锁住
-    if(rt_data->sys_state[SYS_IS_MAC_LOCK])
+    if(rt_data->sys_state[SYS_IS_MAC_LOCK_READY])
         setRegBit(REG_F, 4, 1);
     else
         clearRegBit(REG_F, 4, 1);

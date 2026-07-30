@@ -63,18 +63,12 @@ SysData* sys_data = NULL;
 
 // 实时数据
 RT_DATA* rt_data;               // 实时数据
-GCODE_QUEUE *gcode_queue;       // 译码队列
-MCODE_QUEUE *mcode_queue;       // 译码队列
-PLAN_QUEUE *pretreat_queue;     // 预处理队列
-PLAN_QUEUE *plan_queue;         // 插补队列
 EVENT_QUEUE* event_queue;       // 事件队列
-GCODE_QUEUE *gcode_queue;       // 译码队列
-MCODE_QUEUE *mcode_queue;       // 译码队列
+PLAN_QUEUE *parser_queue;       // 译码队列
 PLAN_QUEUE *pretreat_queue;     // 预处理队列
 PLAN_QUEUE *plan_queue;         // 插补队列
 COORD_TP *cycle_tp;             // 循环轨迹规划
 HOMING_TP *homing_tp;           // 回零轨迹规划
-MCODE_DATA *mcode_data;
 
 // 读写共享内存锁（路径规划读时加锁）
 pthread_mutex_t shm_mutex;
@@ -103,7 +97,6 @@ static GNC_RES shm_var_init(){
         setVarChanDouble(i, VAR_CHAN_SPDL_OVERRIDE, 0.0, 0);    // 主轴倍率
         setVarChanInt(i, VAR_CHAN_IS_HOMING, 0, 0);             // 回零中
         setVarChanInt(i, VAR_CHAN_IS_RUNNING, 0, 0);            // 运行中
-        setVarChanInt(i, VAR_CHAN_IS_PROGEND, 0, 0);            // 程序结束
         setVarChanInt(i, VAR_CHAN_IS_ESTOP, 0, 0);              // 急停
         setVarChanInt(i, VAR_CHAN_IS_RESETTING, 0, 0);          // 复位中
         setVarChanInt(i, VAR_CHAN_IS_MOVING, 0, 0);             // 轴移动中
@@ -137,12 +130,9 @@ static GNC_RES tp_init(){
     if(res != GNC_OPERATOR_SUCCESS) return res;
     res = cycle_tp_init();
     if(res != GNC_OPERATOR_SUCCESS) return res;
-    res = mcode_data_init();
-    if(res != GNC_OPERATOR_SUCCESS) return res;
-    gcode_queue = (GCODE_QUEUE*)calloc(sizeof(GCODE_QUEUE), 1);
-    if(gcode_queue == NULL) return GNC_DATA_NULL;
-    res = gcode_queue_init(gcode_queue);
-    if(res != GNC_OPERATOR_SUCCESS) return res;
+    parser_queue = (PLAN_QUEUE*)calloc(sizeof(PLAN_QUEUE), 1);
+    if(parser_queue == NULL) return GNC_DATA_NULL;
+    res = queue_init(parser_queue);
     pretreat_queue = (PLAN_QUEUE*)calloc(sizeof(PLAN_QUEUE), 1);
     if(pretreat_queue == NULL) return GNC_DATA_NULL;
     res = queue_init(pretreat_queue);
@@ -157,7 +147,7 @@ static GNC_RES tp_init(){
 GNC_RES tp_reset(){
     homing_tp_reset();
     cycle_tp_reset();
-    gcode_queue_reset(gcode_queue);
+    queue_reset(parser_queue);
     queue_reset(pretreat_queue);
     queue_reset(plan_queue);
     return GNC_OPERATOR_SUCCESS;
@@ -198,10 +188,10 @@ GNC_RES rt_global_delete(){
         free(event_queue);
         event_queue = NULL;
     }
-    if(gcode_queue != NULL){
-        gcode_queue_delete(gcode_queue);
-        free(gcode_queue);
-        gcode_queue = NULL;
+    if(parser_queue != NULL){
+        queue_delete(parser_queue);
+        free(parser_queue);
+        parser_queue = NULL;
     }
     if(pretreat_queue != NULL){
         queue_delete(pretreat_queue);
@@ -213,7 +203,6 @@ GNC_RES rt_global_delete(){
         free(plan_queue);
         plan_queue = NULL;
     }
-    mcode_data_delete();
     cycle_tp_delete();
     homing_tp_delete();
     if(rt_data != NULL){

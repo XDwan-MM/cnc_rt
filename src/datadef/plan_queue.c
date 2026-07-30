@@ -10,9 +10,9 @@
 /// @return 
 GNC_RES queue_init(PLAN_QUEUE* queue){
     if(queue == NULL) return GNC_DATA_NULL;
-    PLAN_BLOCK* pl_block = (PLAN_BLOCK*)malloc(PLAN_QUEUE_SIZE * sizeof(PLAN_BLOCK));
-    if(pl_block == NULL) return GNC_DATA_NULL;
-    queue->pl_block = pl_block;
+    PLAN_BLOCK* block = (PLAN_BLOCK*)malloc(PLAN_QUEUE_SIZE * sizeof(PLAN_BLOCK));
+    if(block == NULL) return GNC_DATA_NULL;
+    queue->block = block;
     queue->head = 0;
     queue->tail = 0;
     queue->size = 0;
@@ -27,7 +27,7 @@ GNC_RES queue_init(PLAN_QUEUE* queue){
 }
 
 GNC_RES queue_reset(PLAN_QUEUE* queue){
-    if(queue == NULL || queue->pl_block == NULL) return GNC_DATA_NULL;
+    if(queue == NULL || queue->block == NULL) return GNC_DATA_NULL;
     pthread_mutex_lock(&queue->mutex);
     queue->head = 0;
     queue->tail = 0;
@@ -43,7 +43,7 @@ GNC_RES queue_reset(PLAN_QUEUE* queue){
 }
 
 GNC_RES queue_pop(PLAN_QUEUE* queue){
-    if(queue == NULL || queue->pl_block == NULL) return GNC_DATA_NULL;
+    if(queue == NULL || queue->block == NULL) return GNC_DATA_NULL;
     pthread_mutex_lock(&queue->mutex);
     if(queue->size == 0){
         pthread_mutex_unlock(&queue->mutex);
@@ -55,14 +55,14 @@ GNC_RES queue_pop(PLAN_QUEUE* queue){
     return GNC_OPERATOR_SUCCESS;
 }
 
-GNC_RES queue_push(PLAN_QUEUE* queue, const PLAN_BLOCK* pl_block){
-    if(queue == NULL || queue->pl_block == NULL || pl_block == NULL) return GNC_DATA_NULL;
+GNC_RES queue_push(PLAN_QUEUE* queue, const PLAN_BLOCK* block){
+    if(queue == NULL || queue->block == NULL || block == NULL) return GNC_DATA_NULL;
     pthread_mutex_lock(&queue->mutex);
     if(queue->size == PLAN_QUEUE_SIZE){
         pthread_mutex_unlock(&queue->mutex);
         return GNC_DATA_FULL;
     }
-    memcpy(&queue->pl_block[queue->tail], pl_block, sizeof(PLAN_BLOCK));
+    memcpy(&queue->block[queue->tail], block, sizeof(PLAN_BLOCK));
     queue->tail = (queue->tail + 1) % PLAN_QUEUE_SIZE;
     queue->size++;
     pthread_mutex_unlock(&queue->mutex);
@@ -70,7 +70,7 @@ GNC_RES queue_push(PLAN_QUEUE* queue, const PLAN_BLOCK* pl_block){
 }
 
 GNC_RES queue_soft_push(PLAN_QUEUE* queue){
-    if(queue == NULL || queue->pl_block == NULL) return GNC_DATA_NULL;
+    if(queue == NULL || queue->block == NULL) return GNC_DATA_NULL;
     if(queue->size == PLAN_QUEUE_SIZE) return GNC_DATA_FULL;
     queue->tail = (queue->tail + 1) % PLAN_QUEUE_SIZE;
     pthread_mutex_lock(&queue->mutex);
@@ -80,34 +80,34 @@ GNC_RES queue_soft_push(PLAN_QUEUE* queue){
 }
 
 PLAN_BLOCK* queue_peak(const PLAN_QUEUE* queue){
-    if(queue == NULL || queue->pl_block == NULL) return NULL;
+    if(queue == NULL || queue->block == NULL) return NULL;
     if(queue->size == 0) return NULL;
-    return &queue->pl_block[queue->head];
+    return &queue->block[queue->head];
 }
 
 PLAN_BLOCK* queue_peak_tail(const PLAN_QUEUE* queue){
-    if(queue == NULL || queue->pl_block == NULL) return NULL;
+    if(queue == NULL || queue->block == NULL) return NULL;
     if(queue->size == PLAN_QUEUE_SIZE) return NULL;
-    return &queue->pl_block[queue->tail];
+    return &queue->block[queue->tail];
 }
 
 PLAN_BLOCK* queue_get_block(const PLAN_QUEUE* queue, int index){
-    if(queue == NULL || queue->pl_block == NULL) return NULL;
+    if(queue == NULL || queue->block == NULL) return NULL;
     if(index < 0 || index >= queue->size) return NULL;
-    return &(queue->pl_block[(queue->head + index) % PLAN_QUEUE_SIZE]);
+    return &(queue->block[(queue->head + index) % PLAN_QUEUE_SIZE]);
 }
 
 void queue_copy_block(const PLAN_QUEUE* queue, int index, PLAN_BLOCK* copy_block){
-    if(queue == NULL || queue->pl_block == NULL) return;
+    if(queue == NULL || queue->block == NULL) return;
     if(index < 0 || index >= queue->size) return;
     if(copy_block == NULL) return;
-    memcpy(copy_block, &(queue->pl_block[(queue->head + index) % PLAN_QUEUE_SIZE]), sizeof(PLAN_BLOCK));
+    memcpy(copy_block, &(queue->block[(queue->head + index) % PLAN_QUEUE_SIZE]), sizeof(PLAN_BLOCK));
     return;
 }
 
 int queue_get_size(const PLAN_QUEUE* queue){
     // VALIDATE_ARGUMENT(queue != NULL, "queue","queue is null");
-    if(queue == NULL || queue->pl_block == NULL) return -1;
+    if(queue == NULL || queue->block == NULL) return -1;
     pthread_mutex_lock(&queue->mutex);
     int size = queue->size;
     pthread_mutex_unlock(&queue->mutex);
@@ -116,7 +116,7 @@ int queue_get_size(const PLAN_QUEUE* queue){
 
 bool queue_is_empty(const PLAN_QUEUE* queue){
     // VALIDATE_ARGUMENT(queue != NULL, "queue","queue is null");
-    if(queue == NULL || queue->pl_block == NULL) return true;
+    if(queue == NULL || queue->block == NULL) return true;
     pthread_mutex_lock(&queue->mutex);
     int size = queue->size;
     pthread_mutex_unlock(&queue->mutex);
@@ -125,7 +125,7 @@ bool queue_is_empty(const PLAN_QUEUE* queue){
 
 bool queue_is_full(const PLAN_QUEUE* queue){
     // VALIDATE_ARGUMENT(queue != NULL, "queue","queue is null");
-    if(queue == NULL || queue->pl_block == NULL) return false;
+    if(queue == NULL || queue->block == NULL) return false;
     pthread_mutex_lock(&queue->mutex);
     int size = queue->size;
     pthread_mutex_unlock(&queue->mutex);
@@ -133,10 +133,10 @@ bool queue_is_full(const PLAN_QUEUE* queue){
 }
 
 GNC_RES queue_delete(PLAN_QUEUE* queue){
-    if (queue != NULL && queue->pl_block != NULL) {
+    if (queue != NULL && queue->block != NULL) {
         pthread_mutex_destroy(&queue->mutex);
-        free(queue->pl_block); 
-        queue->pl_block = NULL; 
+        free(queue->block); 
+        queue->block = NULL; 
     }
     return GNC_OPERATOR_SUCCESS;
 }

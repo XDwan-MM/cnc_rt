@@ -61,6 +61,7 @@ TEST_F(TestHoming, TpInitReadsAxisParams)
     const double rapid_acc = 5000.0;
     const double rapid_jk  = 20000.0;
     for (int i = 0; i < SYS_AXES_NUM; i++) {
+        set_axis_param(i, PAR_AX_JOG_LOWSPD, rapid_spd);
         set_axis_param(i, PAR_AX_RAPID_SPD, rapid_spd);
         set_axis_param(i, PAR_AX_RAPID_ACC, rapid_acc);
         set_axis_param(i, PAR_AX_RAPID_JK,  rapid_jk);
