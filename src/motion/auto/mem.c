@@ -45,7 +45,7 @@ static bool auto_check_running(){
 
 static void auto_check_prog_end(){
     if(auto_check_running()) return;
-    if(cycle_tp->mem_exec_state == EXEC_RUNNING){
+    if(cycle_tp->mem_exec_state == EXEC_RUNNING || cycle_tp->mem_exec_state == EXEC_PAUSING){
         int error_no = rt_get_parser_error_no();
         int error_line = rt_get_parser_error_line();
         if(error_no >= 0){

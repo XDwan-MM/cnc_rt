@@ -103,6 +103,8 @@ typedef struct
     bool is_resetted;
     bool is_reset_delaying;
     int reset_tic;
+    bool is_mdi_reset;
+    int mdi_reset_tic;
 }SYS_RESET;
 
 typedef struct {
