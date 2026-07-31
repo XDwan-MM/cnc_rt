@@ -164,6 +164,9 @@ typedef enum {
     SYS_EVENT_Z_NEG_RELEASE,
     SYS_EVENT_HMI_RESET,
     SYS_EVENT_OUTSIDE_RESET,
+
+    SYS_EVENT_COMP_PARAM_CHANGED,   /* 误差补偿参数变更（需 sync + on_params_synced） */
+    SYS_EVENT_COMP_TABLE_CHANGED,   /* 数据表参数变更（需重建表 + on_params_synced） */
 } SYS_EVENT;
 
 double POS_Distance(POS* p1, POS* p2);

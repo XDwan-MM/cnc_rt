@@ -8,8 +8,8 @@ PitchCompState pitch_comp_state[3];       // XYZ轴 螺距补偿状态机
 BacklashCompState backlash_comp_state[3]; // XYZ轴 反向间隙补偿状态机
 PerpCompState perp_comp_state[3];         // XYZ轴 垂直度补偿状态机
 
-pitch_comp_table_t pitch_comp_table[3];      // XYZ轴 螺距补偿表
-PitchTableStatus pitch_comp_table_status[3]; // 螺距补偿表建立状态
+PitchCompSeqList_t pitch_comp_table[3]; // XYZ轴 螺距补偿表
+OP_RES pitch_comp_table_status[3];      // 螺距补偿表建立状态
 static const char *axis_names[] = {"X", "Y", "Z"};
 
 // 误差补偿库中的补偿参数结构体实例
@@ -68,6 +68,7 @@ void comp_data_init(void)
 {
     for (int axis = 0; axis < 3; axis++)
     {
+        pitch_comp_seqlist_init(&pitch_comp_table[axis]);
         pitch_comp_init(&pitch_comp_state[axis], 0.001);
         backlash_comp_init(&backlash_comp_state[axis]);
         perp_comp_init(&perp_comp_state[axis], 0.001);
@@ -88,15 +89,15 @@ void establish_pitch_comp_table(void)
         // 补偿点数为0 重置螺补表
         if (par->pitch_num <= 0)
         {
-            pitch_comp_table[axis].entries = 0;
-            pitch_comp_table[axis].entry = &pitch_comp_table[axis].array[0];
+            pitch_comp_seqlist_init(&pitch_comp_table[axis]);
+            pitch_comp_table_status[axis] = OP_RES_OK;
             continue;
         }
         // 非单向或双向 重置补偿表
         if (par->pitch_type != 1 && par->pitch_type != 2)
         {
-            pitch_comp_table[axis].entries = 0;
-            pitch_comp_table[axis].entry = &pitch_comp_table[axis].array[0];
+            pitch_comp_seqlist_init(&pitch_comp_table[axis]);
+            pitch_comp_table_status[axis] = OP_RES_OK;
             continue;
         }
         // 补偿点数 (单轴不超过256个点)
@@ -122,12 +123,12 @@ void establish_pitch_comp_table(void)
         // 正向/负向补偿数组赋值
         getPitchData(table_start, num, fwd_comp_arr_um);
         getPitchData(table_start + num, num, rev_comp_arr_um);
-#ifdef DEBUG_MODE_ENABLED
-        for (int i = 0; i < num; i++)
-        {
-            printf("fwd%d rev%d\n", fwd_comp_arr_um[i], rev_comp_arr_um[i]);
-        }
-#endif
+// #ifdef DEBUG_MODE_ENABLED
+//         for (int i = 0; i < num; i++)
+//         {
+//             printf("fwd%d rev%d\n", fwd_comp_arr_um[i], rev_comp_arr_um[i]);
+//         }
+// #endif
         // 生成测量位置数组
         for (int i = 0; i < num; i++)
         {
@@ -143,18 +144,18 @@ void establish_pitch_comp_table(void)
             num
         );
 
-        if (pitch_comp_table_status[axis] != PITCH_TABLE_OK)
+        if (pitch_comp_table_status[axis] != OP_RES_OK)
         {
             const char *reason;
             switch (pitch_comp_table_status[axis])
             {
-            case PITCH_TABLE_ERR_NULL_PTR:
+            case OP_RES_ERR_NULL_PTR:
                 reason = "null pointer";
                 break;
-            case PITCH_TABLE_ERR_NUM_POINTS:
+            case OP_RES_ERR_OUT_OF_RANGE:
                 reason = "invalid point count";
                 break;
-            case PITCH_TABLE_ERR_NOT_ASCENDING:
+            case OP_RES_ERR_NOT_ASCENDING:
                 reason = "positions not ascending";
                 break;
             default:
@@ -167,8 +168,43 @@ void establish_pitch_comp_table(void)
                 reason,
                 pitch_comp_table_status[axis]);
 
-            pitch_comp_table[axis].entries = 0;
-            pitch_comp_table[axis].entry = &pitch_comp_table[axis].array[0];
+            pitch_comp_seqlist_init(&pitch_comp_table[axis]);
         }
     }
+}
+
+void comp_handle_event(SYS_EVENT event)
+{
+#ifdef DEBUG_MODE_ENABLED
+    // 强制模式：忽略事件值，每周期全量同步+建表
+    sync_comp_params();
+    establish_pitch_comp_table();
+    for (int axis = 0; axis < 3; axis++)
+        pitch_comp_on_params_synced(&pitch_comp_state[axis]);
+#else
+    switch (event)
+    {
+    case SYS_EVENT_COMP_TABLE_CHANGED:
+        // 螺补表数据变更：先同步参数（建表依赖 par_comp_lib），再建表，再通知
+        sync_comp_params();
+        establish_pitch_comp_table();
+        for (int axis = 0; axis < 3; axis++)
+            pitch_comp_on_params_synced(&pitch_comp_state[axis]);
+        break;
+
+    case SYS_EVENT_COMP_PARAM_CHANGED:
+        // 仅参数变更：同步 + 通知各模块平滑过渡
+        sync_comp_params();
+        for (int axis = 0; axis < 3; axis++)
+        {
+            pitch_comp_on_params_synced(&pitch_comp_state[axis]);
+            backlash_comp_on_params_synced(&backlash_comp_state[axis]);
+            perp_comp_on_params_synced(&perp_comp_state[axis]);
+        }
+        break;
+
+    default:
+        break;
+    }
+#endif
 }

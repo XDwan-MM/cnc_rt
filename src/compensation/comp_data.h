@@ -4,6 +4,7 @@
 #include "pitch_comp.h"
 #include "backlash_comp.h"
 #include "perp_comp.h"
+#include "datatype.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -14,8 +15,8 @@ extern PitchCompState pitch_comp_state[3];       // XYZ轴 螺距补偿状态机
 extern BacklashCompState backlash_comp_state[3]; // XYZ轴 反向间隙补偿状态机
 extern PerpCompState perp_comp_state[3];         // XYZ轴 垂直度补偿状态机
 
-extern pitch_comp_table_t pitch_comp_table[3];      // XYZ轴 螺距补偿表
-extern PitchTableStatus pitch_comp_table_status[3]; // 螺距补偿表建立状态
+extern PitchCompSeqList_t pitch_comp_table[3];      // XYZ轴 螺距补偿表
+extern OP_RES pitch_comp_table_status[3];           // 螺距补偿表建立状态
 
 // 误差补偿库中的补偿参数结构体实例
 extern CompParams par_comp_lib[3];
@@ -30,6 +31,10 @@ void sync_comp_params(void);
 // Build pitch compensation tables from shared memory data for all axes
 // Must be called after comp_data_sync_params()
 void establish_pitch_comp_table(void);
+
+// Handle compensation-related events from HMI (param change / table change)
+// Called once per cycle from compute_error_comp()
+void comp_handle_event(SYS_EVENT event);
 
 #ifdef __cplusplus
 }

@@ -285,71 +285,77 @@ static void output_to_hal() {
     Hal_Driver_Set_Target_Pos(&z_axis_driver, z_cmd_Pulses);
 }
 
-static void compute_error_comp() 
+static void compute_error_comp()
 {
     double pitch_comp_val[3];
     double backlash_comp_val[3];
     double perp_comp_val[3];
 
-    // Sync params from shared memory to library-compatible structs
-    // 暂时是立马同步补偿参数，后续改成复位生效应将函数移到复位逻辑．
-    sync_comp_params();
-
-    // TODO: check_and_rebuild_pitch_tables() 脏标记检测（预留）
-    // 后续 HMI 侧 par_table[] 接口就绪后，加 PAR_CMP_PITCH_TABLE_DIRTY 枚举并实现
+    // ★ 事件驱动：仅在 HMI 下发补偿事件时同步参数/重建表
+    comp_handle_event(rt_data->nc_event);
 
     bool is_rapid = false;
-    if(cycle_tp->plan_block->type == RAPID || rt_data->sys_state[SYS_IS_RAPID])
+    if (cycle_tp->plan_block->type == RAPID || rt_data->sys_state[SYS_IS_RAPID])
     {
         is_rapid = true;
     }
 
     // 构建 all_axis_pos[] 供垂直度等跨轴补偿使用
     double all_axis_pos[3];
-    for (int i = 0; i < 3; i++) {
+    for (int i = 0; i < 3; i++)
+    {
         all_axis_pos[i] = rt_data->axis_data[i].mac_cmd_pos;
     }
 
-    for (int i = 0; i < 3; i++) {
-        double vel_cmd = var_axis[i][VAR_AXIS_CMD_VEL].value.f;
+    for (int i = 0; i < 3; i++)
+    {
         double mac_cmd_pos = rt_data->axis_data[i].mac_cmd_pos;
 
         // 螺距误差补偿值计算 (计算出来的补偿值 单位为:mm)
-        pitch_comp_val[i] = calculate_pitch_compensation(
-            &pitch_comp_state[i], &par_comp_lib[i], &pitch_comp_table[i],
-            mac_cmd_pos, vel_cmd);
+        pitch_comp_val[i] = calcul_pitch_comp_val(
+            &pitch_comp_state[i],
+            &par_comp_lib[i],
+            &pitch_comp_table[i],
+            mac_cmd_pos
+        );
 
-        // 反向间隙补偿值计算 (计算出来的补偿值 单位为:mm)
-        // backlash_comp_val[i] = calculate_backlash_compensation(
-        //     &par_comp_lib[i], &backlash_comp_state[i],
-        //     vel_cmd, is_rapid);
+        // 反向间隙补偿值计算(计算出来的补偿值 单位为 : mm)
+        backlash_comp_val[i] = calcul_backlash_comp_val(
+            &par_comp_lib[i],
+            &backlash_comp_state[i],
+            mac_cmd_pos,
+            is_rapid
+        );
 
         // 垂直度误差补偿值计算 (计算出来的补偿值 单位为:mm)
-        // perp_comp_val[i] = calculate_perpendicularity_total(
+        // perp_comp_val[i] = calcul_perp_comp_val(
         //     &par_comp_lib[i], &perp_comp_state[i],
-        //     i, all_axis_pos, vel_cmd);
+        //     i, all_axis_pos);
 
         // TODO: 直线度补偿值计算 (预留)
         // straight_comp_val = calculate_straightness_compensation(...);
 
-        double total_comp = pitch_comp_val[i];
+        double total_comp = pitch_comp_val[i] + backlash_comp_val[i];
 
         // 当前周期插补+补偿后位置
         rt_data->axis_data[i].motor_cmd_pos = mac_cmd_pos + total_comp;
         // 反馈位置（去除补偿）
         rt_data->axis_data[i].fb_pos_no_comp = rt_data->axis_data[i].motor_act_pos - total_comp;
 
-        rt_data->axis_data[i].pitch_comp_val    = pitch_comp_val[i];
+        rt_data->axis_data[i].pitch_comp_val = pitch_comp_val[i];
         rt_data->axis_data[i].backlash_comp_val = backlash_comp_val[i];
-        rt_data->axis_data[i].perp_comp_val     = perp_comp_val[i];
-
-        
+        rt_data->axis_data[i].perp_comp_val = perp_comp_val[i];
     }
     // printf(
-    //     "Pos_nc%f, Pos_c%f, vel_cmd%f, luobu%.10f\n",
+    //     "POS_NC%f, POS_C%f, PitchVal%f\n",
     //     rt_data->axis_data[0].mac_cmd_pos,
     //     rt_data->axis_data[0].motor_cmd_pos,
-    //     var_axis[0][VAR_AXIS_CMD_VEL].value.f,
+    //     rt_data->axis_data[0].pitch_comp_val
+    // );
+    // printf(
+    //     "%.10f, %.10f, %.10f\n",
+    //     rt_data->axis_data[0].mac_cmd_pos,
+    //     rt_data->axis_data[0].motor_cmd_pos,
     //     rt_data->axis_data[0].pitch_comp_val
     // );
 }
