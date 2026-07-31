@@ -136,8 +136,8 @@ static void nc_output_mf(){
                     case M04:
                     case M05:
                         // SF主轴速度选通信号
-                        setRegBit(REG_F, 7, 2);
-                        mcode_data->signal_sf = true;
+                        // setRegBit(REG_F, 7, 2);
+                        // mcode_data->signal_sf = true;
                         break;
                     case M06:
                         // TF刀具功能选通信号

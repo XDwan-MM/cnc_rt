@@ -32,7 +32,9 @@ void handle_alarm_cmd(){
     switch(rt_data->nc_event){
         case SYS_EVENT_NONE:
             break;
-        case SYS_EVENT_HMI_RESET:       
+        case SYS_EVENT_HMI_RESET:   
+            // 待删   
+            cleanAllAlarm(ALARM_TYPE_ALL, ALARM_LEVEL_ALL); 
             // 清除报警，不清除PLC和用户PLC报警
             cleanAllAlarm(ALARM_SY, ALARM_LEVEL_ALL);
             cleanAllAlarm(ALARM_CH, ALARM_LEVEL_ALL);
