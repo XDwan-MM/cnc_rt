@@ -291,7 +291,7 @@ static void compute_error_comp()
     double backlash_comp_val[3];
     double perp_comp_val[3];
 
-    // ★ 事件驱动：仅在 HMI 下发补偿事件时同步参数/重建表
+    // todo 事件驱动：仅在 HMI 下发补偿事件时同步参数/重建表
     comp_handle_event(rt_data->nc_event);
 
     bool is_rapid = false;
@@ -346,18 +346,30 @@ static void compute_error_comp()
         rt_data->axis_data[i].backlash_comp_val = backlash_comp_val[i];
         rt_data->axis_data[i].perp_comp_val = perp_comp_val[i];
     }
-    // printf(
-    //     "POS_NC%f, POS_C%f, PitchVal%f\n",
-    //     rt_data->axis_data[0].mac_cmd_pos,
-    //     rt_data->axis_data[0].motor_cmd_pos,
-    //     rt_data->axis_data[0].pitch_comp_val
-    // );
-    // printf(
-    //     "%.10f, %.10f, %.10f\n",
-    //     rt_data->axis_data[0].mac_cmd_pos,
-    //     rt_data->axis_data[0].motor_cmd_pos,
-    //     rt_data->axis_data[0].pitch_comp_val
-    // );
+#ifdef ENABLE_COMP_DATA_LOG
+    {
+        static FILE *comp_log_file = NULL;
+        static int comp_log_cycle = 0;
+
+        if (comp_log_file == NULL)
+        {
+            comp_log_file = fopen(PROJECT_DIR "/../comp_data_log.csv", "w");
+        }
+
+        if (comp_log_file != NULL)
+        {
+            fprintf(
+                comp_log_file,
+                "%d,%.10f,%.10f\n",
+                comp_log_cycle,
+                rt_data->axis_data[0].mac_cmd_pos,
+                pitch_comp_val[0]
+            );
+            fflush(comp_log_file);
+            comp_log_cycle++;
+        }
+    }
+#endif
 }
 
 static void calcul_mac_cmd_pos()

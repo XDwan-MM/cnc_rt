@@ -123,12 +123,12 @@ void establish_pitch_comp_table(void)
         // 正向/负向补偿数组赋值
         getPitchData(table_start, num, fwd_comp_arr_um);
         getPitchData(table_start + num, num, rev_comp_arr_um);
-// #ifdef DEBUG_MODE_ENABLED
-//         for (int i = 0; i < num; i++)
-//         {
-//             printf("fwd%d rev%d\n", fwd_comp_arr_um[i], rev_comp_arr_um[i]);
-//         }
-// #endif
+        // #ifdef DEBUG_MODE_ENABLED
+        //         for (int i = 0; i < num; i++)
+        //         {
+        //             printf("fwd%d rev%d\n", fwd_comp_arr_um[i], rev_comp_arr_um[i]);
+        //         }
+        // #endif
         // 生成测量位置数组
         for (int i = 0; i < num; i++)
         {
@@ -175,36 +175,37 @@ void establish_pitch_comp_table(void)
 
 void comp_handle_event(SYS_EVENT event)
 {
-#ifdef DEBUG_MODE_ENABLED
+    /* 暂时每周期全量同步建补偿表 */
     // 强制模式：忽略事件值，每周期全量同步+建表
     sync_comp_params();
     establish_pitch_comp_table();
     for (int axis = 0; axis < 3; axis++)
         pitch_comp_on_params_synced(&pitch_comp_state[axis]);
-#else
-    switch (event)
-    {
-    case SYS_EVENT_COMP_TABLE_CHANGED:
-        // 螺补表数据变更：先同步参数（建表依赖 par_comp_lib），再建表，再通知
-        sync_comp_params();
-        establish_pitch_comp_table();
-        for (int axis = 0; axis < 3; axis++)
-            pitch_comp_on_params_synced(&pitch_comp_state[axis]);
-        break;
 
-    case SYS_EVENT_COMP_PARAM_CHANGED:
-        // 仅参数变更：同步 + 通知各模块平滑过渡
-        sync_comp_params();
-        for (int axis = 0; axis < 3; axis++)
-        {
-            pitch_comp_on_params_synced(&pitch_comp_state[axis]);
-            backlash_comp_on_params_synced(&backlash_comp_state[axis]);
-            perp_comp_on_params_synced(&perp_comp_state[axis]);
-        }
-        break;
+    // todo
+    /* 事件驱动*/
+    // switch (event)
+    // {
+    // case SYS_EVENT_COMP_TABLE_CHANGED:
+    //     // 螺补表数据变更：先同步参数（建表依赖 par_comp_lib），再建表，再通知
+    //     sync_comp_params();
+    //     establish_pitch_comp_table();
+    //     for (int axis = 0; axis < 3; axis++)
+    //         pitch_comp_on_params_synced(&pitch_comp_state[axis]);
+    //     break;
 
-    default:
-        break;
-    }
-#endif
+    // case SYS_EVENT_COMP_PARAM_CHANGED:
+    //     // 仅参数变更：同步 + 通知各模块平滑过渡
+    //     sync_comp_params();
+    //     for (int axis = 0; axis < 3; axis++)
+    //     {
+    //         pitch_comp_on_params_synced(&pitch_comp_state[axis]);
+    //         backlash_comp_on_params_synced(&backlash_comp_state[axis]);
+    //         perp_comp_on_params_synced(&perp_comp_state[axis]);
+    //     }
+    //     break;
+
+    // default:
+    //     break;
+    // }
 }

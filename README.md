@@ -147,6 +147,22 @@ cd bin
 sudo ./cnc_rt_d
 
 
+### 误差补偿数据采集到文件中，并在新终端界面打印显示
+
+1、取消debug_mode.h中对应 #define ENABLE_COMP_DATA_LOG 的注释
+
+```C
+// ============ 补偿数据记录开关 ============
+// 编译时开关：定义此宏可在 compute_error_comp() 中每个周期记录补偿数据到CSV文件
+// 文件保存位置：与 run.sh 同级目录（即项目根目录 cnc_rt/）
+// 取消注释以启用；或通过 qmake CONFIG 自动注入
+#define ENABLE_COMP_DATA_LOG
+```
+
+2、实时观察补偿数据：在run.sh同级目录打开终端，运行
+tail -f ./comp_data_log.csv
+
+
 ### 不同平台master和ENI文件配置
 
 1、当更换平台时，需使用要更换的测试平台的master.c文件进行替换
