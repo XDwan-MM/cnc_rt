@@ -21,6 +21,9 @@
 #include "trajectory.h"
 #include "hal_driver.h"
 #include "hal_io.h"
+#include "jog.h"
+#include "ferror_control.h"
+#include "stored_stroke_check.h"
 #include <varapi.h>
 #include <parapi.h>
 
