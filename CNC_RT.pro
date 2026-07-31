@@ -131,6 +131,7 @@ HEADERS += \
     src/plc/pmc_scanner/pmc_output_handler.h \
     src/plc/pmc_scanner/signal_utils.h \
     src/plc/plc_task/plctask.h \
+    src/plc/lad_trace/ladtracesampler.h \
     src/task/task.h \
     src/task/hmi_scanner.h \
     src/threads/threads_api.h \
@@ -174,6 +175,7 @@ SOURCES += \
     src/plc/pmc_scanner/pmc_g_input_scanner.c \
     src/plc/pmc_scanner/pmc_output_handler.c \
     src/plc/plc_task/plctask.cpp \
+    src/plc/lad_trace/ladtracesampler.cpp \
     src/task/task.c \
     src/task/hmi_scanner.c \
     src/threads/thread_manager.cpp \
@@ -200,6 +202,7 @@ INCLUDEPATH += \
     src/plc \
     src/plc/pmc_scanner \
     src/plc/plc_task \
+    src/plc/lad_trace \
     src/task \
     src/threads \
     src/utils \
