@@ -9,6 +9,7 @@
 #include "task.h"
 #include "emcmot.h"
 #include "plctask.h"
+#include "ladtracesampler.h"
 #include "pmc_a_input_scanner.h"
 #include "pmc_g_input_scanner.h"
 #include "pmc_output_handler.h"
@@ -79,6 +80,7 @@ void* soft_plc_thread_func(void*) {
 
         // Plc执行器逻辑
         PlcTask::instance().execute();
+        LadTraceSampler::instance().execute();
 
         #ifndef DEBUG_MODE_ENABLED
         // 将Y变量数据写至IO和MCP输出
