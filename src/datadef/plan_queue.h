@@ -34,7 +34,14 @@ typedef struct{
     double rad;         // 弧度
     double statr_rad;   // 起始弧度
     double end_rad;     // 终点弧度
-}CIRCULAR_BLOCK;
+}CIRCULAR_DATA;
+
+typedef struct mcode_block{
+    int size;               // 多个辅助功能
+    int m_code;             // 代码信号 M00~M31
+    pmc_spindle spindle;    // 主轴
+    int tool_number;        // 刀具号
+}MST_DATA;
 
 typedef struct
 {
@@ -43,9 +50,8 @@ typedef struct
     NcItpState state;   // 模态
     int line_number;    // 运行行号
     int pause_time;     // 暂停时间
-    union{              // 块信息
-        CIRCULAR_BLOCK circular_block;
-    };
+    MST_DATA mst_data;
+    CIRCULAR_DATA circular_data;
     double length;      // 长度
     double angle_rad;   // 夹角
     double start_vel;   // 起始速度
@@ -63,7 +69,7 @@ typedef struct
 // 循环队列
 typedef struct
 {
-    PLAN_BLOCK* pl_block;
+    PLAN_BLOCK* block;
     int head;
     int tail;
     int size;
@@ -86,7 +92,7 @@ GNC_RES queue_pop(PLAN_QUEUE* queue);
 
 GNC_RES queue_soft_push(PLAN_QUEUE* queue);
 
-GNC_RES queue_push(PLAN_QUEUE* queue, const PLAN_BLOCK* pl_block);
+GNC_RES queue_push(PLAN_QUEUE* queue, const PLAN_BLOCK* block);
 
 PLAN_BLOCK* queue_peak(const PLAN_QUEUE* queue);
 

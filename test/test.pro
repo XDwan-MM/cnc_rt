@@ -58,24 +58,22 @@ HEADERS += \
     ../src/datadef/datatype.h \
     ../src/datadef/event_queue.h \
     ../src/datadef/eventdef.h \
-    ../src/datadef/gcode_queue.h \
     ../src/datadef/global.h \
     ../src/datadef/rt_data.h \
-    ../src/datadef/mcode_queue.h \
     ../src/datadef/plan_queue.h \
     ../src/datadef/rt_data.h \
     ../src/hal/hal_driver.h \
     ../src/hal/hal_io.h \
     ../src/master/master_sim.h \
     ../src/master/master.h \
+    ../src/motion/auto/auto.h \
+    ../src/motion/auto/auto_gcode.h \
+    ../src/motion/auto/auto_mst.h \
     ../src/motion/auto/interpolation.h \
-    ../src/motion/auto/mem.h \
-    ../src/motion/auto/mem_mst.h \
-    ../src/motion/auto/mem_gcode.h \
     ../src/motion/auto/parser.h \
     ../src/motion/auto/pathplan.h \
     ../src/motion/spindle/spl_control.h \
-    ../src/motion/egear_ratio.h \
+    ../src/hal/egear_ratio.h \
     ../src/motion/emcmot.h \
     ../src/motion/manual/handwheel.h \
     ../src/motion/manual/homing.h \
@@ -89,6 +87,7 @@ HEADERS += \
     ../src/plc/pmc_scanner/pmc_output_handler.h \
     ../src/plc/pmc_scanner/signal_utils.h \
     ../src/plc/plc_task/plctask.h \
+    ../src/task/hmi_scanner.h \
     ../src/task/task.h \
     ../src/threads/threads_api.h \
     ../src/threads/thread_manager.h \
@@ -104,23 +103,21 @@ SOURCES += \
     ../src/compensation/comp_data.c \
     ../src/datadef/datatype.c \
     ../src/datadef/event_queue.c \
-    ../src/datadef/gcode_queue.c \
     ../src/datadef/global.c \
-    ../src/datadef/mcode_queue.c \
     ../src/datadef/plan_queue.c \
     ../src/datadef/rt_data.c \
     ../src/hal/hal_driver.c \
     ../src/hal/hal_io.c \
     ../src/master/master_sim.c \
     ../src/master/master.c \
+    ../src/motion/auto/auto.c \
+    ../src/motion/auto/auto_gcode.c \
+    ../src/motion/auto/auto_mst.c \
     ../src/motion/auto/interpolation.c \
-    ../src/motion/auto/mem.c \
-    ../src/motion/auto/mem_mst.c \
-    ../src/motion/auto/mem_gcode.c \
     ../src/motion/auto/parser.cpp \
     ../src/motion/auto/pathplan.c \
     ../src/motion/spindle/spl_control.c \
-    ../src/motion/egear_ratio.c \
+    ../src/hal/egear_ratio.c \
     ../src/motion/emcmot.cpp \
     ../src/motion/manual/handwheel.c \
     ../src/motion/manual/homing.c \
@@ -132,6 +129,7 @@ SOURCES += \
     ../src/plc/pmc_scanner/pmc_g_input_scanner.c \
     ../src/plc/pmc_scanner/pmc_output_handler.c \
     ../src/plc/plc_task/plctask.cpp \
+    ../src/task/hmi_scanner.c \
     ../src/task/task.c \
     ../src/threads/thread_manager.cpp \
     ../src/threads/threads.cpp \
@@ -153,6 +151,7 @@ INCLUDEPATH += \
     ../src/motion/manual/jog \
     ../src/motion/spindle \
     ../src/motion/manual \
+    ../src/motion/protect \
     ../src/plc \
     ../src/plc/pmc_scanner \
     ../src/plc/plc_task \

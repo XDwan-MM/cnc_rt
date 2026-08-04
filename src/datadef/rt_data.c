@@ -12,8 +12,6 @@ GNC_RES rt_data_init(void)
     rt_data->current_mode = MODE_EDIT;
     rt_data->nc_event = SYS_EVENT_NONE;
     rt_data->parser_error.parser_error_no = -1;
-    rt_set_chan_state(0, CHAN_IS_GCODE_END, true);
-    rt_set_chan_state(0, CHAN_IS_MCODE_END, true);
     pthread_mutex_init(&rt_data->mutex, NULL);
     return GNC_OPERATOR_SUCCESS;
 }
@@ -23,8 +21,6 @@ GNC_RES rt_data_reset(void){
     rt_data->nc_event = SYS_EVENT_NONE;
     pthread_mutex_lock(&rt_data->mutex);
     // memset(rt_data->sys_state, 0, sizeof(rt_data->sys_state));
-    rt_set_chan_state(0, CHAN_IS_GCODE_END, true);
-    rt_set_chan_state(0, CHAN_IS_MCODE_END, true);
     rt_data->sys_state[SYS_IS_ESTOP_ACTIVE] = false;
     rt_data->parser_error.parser_error_no = -1;
     pthread_mutex_unlock(&rt_data->mutex);
@@ -114,7 +110,7 @@ void nc_set_resetted(){
         case MODE_MDI: // MDI
         case MODE_MEM: // 记忆
         case MODE_DNC:
-            if(rt_data->nc_reset.is_resetting && cycle_tp->mem_exec_state == EXEC_IDLE && IsEqualTo(spindle.actual_vel, 0)){
+            if(rt_data->nc_reset.is_resetting && cycle_tp->exec_state == EXEC_IDLE && IsEqualTo(spindle.actual_vel, 0)){
                 rt_data->nc_reset.is_resetted = 1;
             }
             break;

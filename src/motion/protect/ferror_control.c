@@ -47,7 +47,7 @@ void check_ferror_fault(void)
     for (int i = 0; i < SYS_AXES_NUM; i++)
     {
         // 控制轴拆卸或者机床锁住不进行检查
-        if (rt_data->sys_state[SYS_IS_MAC_LOCK] || rt_data->axis_data[i].axis_status.is_disable)
+        if (rt_data->sys_state[SYS_IS_MAC_LOCK_READY] || rt_data->axis_data[i].axis_status.is_disable)
         {
             continue;
         }

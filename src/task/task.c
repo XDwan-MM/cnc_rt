@@ -332,8 +332,7 @@ static void task_handle_enable_event(PMC_EVENT *event_data){
         }
         break;
     case DRY_RUN:
-        rt_data->sys_state[SYS_IS_DRY_RUN] = event_data->enable_payload.enable_state;
-        if (rt_data->sys_state[SYS_IS_DRY_RUN]){
+        if (event_data->enable_payload.enable_state){
             rt_data->nc_event = SYS_EVENT_DRY_RUN_ON;
             LOG(LOG_LEVEL_INFO, "处理空运行开启事件");
         } 
@@ -357,8 +356,7 @@ static void task_handle_enable_event(PMC_EVENT *event_data){
         LOG(LOG_LEVEL_INFO, "处理辅助功能锁住事件");
         break;
     case SINGLE_BLOCK:
-        rt_data->sys_state[SYS_IS_SINGLE_BLOCK] = event_data->enable_payload.enable_state;
-        if(rt_data->sys_state[SYS_IS_SINGLE_BLOCK]) {
+        if(event_data->enable_payload.enable_state) {
             rt_data->nc_event = SYS_EVENT_SINGLE_BLOCK_ON;
             LOG(LOG_LEVEL_INFO, "处理单段开启事件");
         }

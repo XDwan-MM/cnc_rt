@@ -5,7 +5,7 @@ static POS interpolate_line(PLAN_BLOCK* current_block, double accum_distance);
 static POS interpolate_rapid(PLAN_BLOCK* current_block, double accum_distance);
 static POS interpolate_circle(POS current_pos, PLAN_BLOCK* current_block, double accum_distance);
 
-POS mem_cal_pos(POS current_pos, double accum_distance){
+POS auto_cal_interp_pos(POS current_pos, double accum_distance){
     if(accum_distance <= 0) return current_pos;
     PLAN_BLOCK* current_block = cycle_tp->plan_block;
     if(current_block == NULL) return current_pos;
@@ -51,34 +51,34 @@ static POS interpolate_rapid(PLAN_BLOCK* current_block, double accum_distance) {
 
 // 计算圆弧段插补点
 static POS interpolate_circle(POS current_pos, PLAN_BLOCK* current_block, double accum_distance) {
-    double angle = accum_distance / current_block->circular_block.radius;
+    double angle = accum_distance / current_block->circular_data.radius;
     double angle_interp = 0;
-    switch(current_block->circular_block.dir){
+    switch(current_block->circular_data.dir){
         case CLOCK:
-            angle_interp = current_block->circular_block.statr_rad - angle;
+            angle_interp = current_block->circular_data.statr_rad - angle;
             break;
         case COUNTERCLOCK:
-            angle_interp = current_block->circular_block.statr_rad + angle;
+            angle_interp = current_block->circular_data.statr_rad + angle;
             break;
         default:
             break;
     }
     POS interp_pos;
-    switch(current_block->circular_block.plane){
+    switch(current_block->circular_data.plane){
         case PLANE_XY:
-            interp_pos.x = current_block->circular_block.center_pos.x + current_block->circular_block.radius * cos(angle_interp);
-            interp_pos.y = current_block->circular_block.center_pos.y + current_block->circular_block.radius * sin(angle_interp);
+            interp_pos.x = current_block->circular_data.center_pos.x + current_block->circular_data.radius * cos(angle_interp);
+            interp_pos.y = current_block->circular_data.center_pos.y + current_block->circular_data.radius * sin(angle_interp);
             interp_pos.z = current_pos.z;
             break;
         case PLANE_XZ:
-            interp_pos.x = current_block->circular_block.center_pos.x + current_block->circular_block.radius * cos(angle_interp);
+            interp_pos.x = current_block->circular_data.center_pos.x + current_block->circular_data.radius * cos(angle_interp);
             interp_pos.y = current_pos.y;
-            interp_pos.z = current_block->circular_block.center_pos.z + current_block->circular_block.radius * sin(angle_interp);
+            interp_pos.z = current_block->circular_data.center_pos.z + current_block->circular_data.radius * sin(angle_interp);
             break;
         case PLANE_YZ:
             interp_pos.x = current_pos.x;
-            interp_pos.y = current_block->circular_block.center_pos.y + current_block->circular_block.radius * cos(angle_interp);
-            interp_pos.z = current_block->circular_block.center_pos.z + current_block->circular_block.radius * sin(angle_interp);
+            interp_pos.y = current_block->circular_data.center_pos.y + current_block->circular_data.radius * cos(angle_interp);
+            interp_pos.z = current_block->circular_data.center_pos.z + current_block->circular_data.radius * sin(angle_interp);
             break;
         default:
             interp_pos = current_pos;

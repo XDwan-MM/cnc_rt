@@ -11,12 +11,10 @@
 #define __GLOABL_H__
 
 #include <semaphore.h>
-#include "gcode_queue.h"
-#include "mcode_queue.h"
 #include "plan_queue.h"
 #include "event_queue.h"
 #include "rt_data.h"
-#include "mem.h"
+#include "auto.h"
 #include "homing.h"
 #include "trajectory.h"
 #include "hal_driver.h"
@@ -101,15 +99,13 @@ extern ParamUnit (*par_cfg)[PARAMAN_FILE_CFG_MAX];           // 设备接口参�
 extern ParamUnit *par_table;                                 // 刀具和刀库参数
 
 // 实时数据
-extern RT_DATA* rt_data;                
-extern GCODE_QUEUE *gcode_queue;        // 译码队列
-extern MCODE_QUEUE *mcode_queue;        // 译码队列
+extern RT_DATA* rt_data;       
+extern EVENT_QUEUE* event_queue;        // 事件队列         
+extern PLAN_QUEUE *parser_queue;        // 译码队列
 extern PLAN_QUEUE *pretreat_queue;      // 预处理队列
 extern PLAN_QUEUE *plan_queue;          // 插补队列
-extern EVENT_QUEUE* event_queue;        // 事件队列
 extern COORD_TP *cycle_tp;              // 循环轨迹规划
 extern HOMING_TP *homing_tp;            // 回零轨迹规划
-extern MCODE_DATA *mcode_data;
 
 // 读写共享内存锁
 extern pthread_mutex_t shm_mutex;

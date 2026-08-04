@@ -23,7 +23,7 @@ static void parser_macro_init()
     for (int i = 0; i < 30000; ++i) {
         parser_data->cmv[i] = 0;
     }
-    parser_data->cmv[18004] = 0.1; // 设置半径值超差
+    parser_data->cmv[18004] = 0.1;  // 设置半径值超差
     parser_data->cmv[17031] = 0.0;  // 设置坐标旋转1轴运动计算方式
     parser_data->cmv[5410] = -90.0; // 设置坐标旋转默认角度
     parser_data->cmv[17028] = 1.0;  // 默认米制单位
@@ -85,9 +85,6 @@ GNC_RES parser_init(NC_MODE nc_mode)
     // 设置程序段来源
     res = parser_set_content(nc_mode);
     if(res != GNC_OPERATOR_SUCCESS) return res;
-    // 将GM指令设置为已完成
-    rt_set_chan_state(0, CHAN_IS_GCODE_END, true);
-    rt_set_chan_state(0, CHAN_IS_MCODE_END, true);
     rt_set_parser_state(-1, 0);
     return res;
 }
@@ -129,7 +126,7 @@ void parser_run_mode(){
     if (rt_get_chan_state(0, CHAN_IS_PARSER_RESET) == true)
     {
         parser_reset();
-        gcode_queue_reset(gcode_queue);
+        queue_reset(parser_queue);
         rt_set_chan_state(0, CHAN_IS_PARSER_RESET, false);
     }
     GNC_RES res = GNC_OPERATOR_SUCCESS;
@@ -269,36 +266,37 @@ static GNC_RES parser_handle_recieve(pmc_data* motion_data, NcItpState *itp_stat
 
 static GNC_RES parser_handle_gcode(pmc_data* motion_data, NcItpState *itp_state, int *line_no)
 {
-    GCODE_BLOCK gcode_block;
+    PLAN_BLOCK plan_block;
     // 插补类型
     switch(motion_data->interp){
         case PMC_G00:
-            gcode_block.type = RAPID;
+            plan_block.type = RAPID;
             break;
         case PMC_G01:
-            gcode_block.type = LINE;
+            plan_block.type = LINE;
             break;
         case PMC_G02:
-            gcode_block.type = CIRCLE_CW;
+            plan_block.type = CIRCLE_CW;
             // 圆心位置
-            gcode_block.center_pos.x = motion_data->circle_center.x_coc;
-            gcode_block.center_pos.y = motion_data->circle_center.y_coc;
-            gcode_block.center_pos.z = motion_data->circle_center.z_coc;
+            plan_block.circular_data.center_pos.x = motion_data->circle_center.x_coc;
+            plan_block.circular_data.center_pos.y = motion_data->circle_center.y_coc;
+            plan_block.circular_data.center_pos.z = motion_data->circle_center.z_coc;
             // 平面
-            gcode_block.plane = (PLANE)(motion_data->plane);
+            plan_block.circular_data.plane = (PLANE)(motion_data->plane);
             break;
         case PMC_G03:
-            gcode_block.type = CIRCLE_CCW;
-            gcode_block.center_pos.x = motion_data->circle_center.x_coc;
-            gcode_block.center_pos.y = motion_data->circle_center.y_coc;
-            gcode_block.center_pos.z = motion_data->circle_center.z_coc;
-            gcode_block.plane = (PLANE)(motion_data->plane);
+            plan_block.type = CIRCLE_CCW;
+            plan_block.circular_data.center_pos.x = motion_data->circle_center.x_coc;
+            plan_block.circular_data.center_pos.y = motion_data->circle_center.y_coc;
+            plan_block.circular_data.center_pos.z = motion_data->circle_center.z_coc;
+            plan_block.circular_data.plane = (PLANE)(motion_data->plane);
             break;
         case PMC_G33_1: // 攻丝循环
-            gcode_block.type = RIGID_TAP;
+            plan_block.type = RIGID_TAP;
             break;
         case PMC_G33_2: // 攻丝回退
-            gcode_block.type = TAP_RETURN;
+            plan_block.type = TAP_RETURN;
+            break;
         default:
             // 未支持的插补类型
             rt_set_parser_state(3001, *line_no);
@@ -306,76 +304,69 @@ static GNC_RES parser_handle_gcode(pmc_data* motion_data, NcItpState *itp_state,
             return GNC_PARSER_OVER;
     }
     // 进给速度
-    gcode_block.feed_vel = motion_data->feed.value;
+    plan_block.feed_vel = motion_data->feed.value;
     // 位置
-    gcode_block.pos.x = motion_data->position.x;
-    gcode_block.pos.y = motion_data->position.y;
-    gcode_block.pos.z = motion_data->position.z;
+    plan_block.end_pos.x = motion_data->position.x;
+    plan_block.end_pos.y = motion_data->position.y;
+    plan_block.end_pos.z = motion_data->position.z;
     // 模态
-    gcode_block.state = *itp_state;
+    plan_block.state = *itp_state;
     // 模组
-    gcode_block.mode = motion_data->mode;
+    plan_block.mode = motion_data->mode;
     // 行号
-    gcode_block.line_number = *line_no;
+    plan_block.line_number = *line_no;
     // 暂停时间
-    gcode_block.pause_time = motion_data->pause_time;
+    plan_block.pause_time = motion_data->pause_time;
     // 加入队列
-    if(gcode_queue_is_full(gcode_queue)){
+    if(queue_is_full(parser_queue)){
         return GNC_DATA_FULL;
     }
-    // 判断M代码是否已处理完成
-    if (!rt_get_chan_state(0, CHAN_IS_MCODE_END))
-    {
-        return GNC_PARSER_WAIT;
-    }
     // ======= 测试 ===========
-    // if(gcode_block.type == CIRCLE_CW || gcode_block.type == CIRCLE_CCW ){
-    //     LOG(LOG_LEVEL_DEBUG, "center pos %f %f %f no %d", gcode_block.center_pos.x, gcode_block.center_pos.y, gcode_block.center_pos.z, gcode_block.line_number);  
+    // if(plan_block.type == CIRCLE_CW || plan_block.type == CIRCLE_CCW ){
+    //     LOG(LOG_LEVEL_DEBUG, "center pos %f %f %f no %d", plan_block.circular_data.center_pos.x, plan_block.circular_data.center_pos.y, plan_block.circular_data.center_pos.z, plan_block.line_number);  
     // }
-    // LOG(LOG_LEVEL_DEBUG, "end pos %f %f %f mode %d type:%d no %d", motion_data->position.x, motion_data->position.y, motion_data->position.z, gcode_block.mode, gcode_block.type, gcode_block.line_number);
+    // LOG(LOG_LEVEL_DEBUG, "end pos %f %f %f mode %d type:%d no %d", motion_data->position.x, motion_data->position.y, motion_data->position.z, plan_block.mode, plan_block.type, plan_block.line_number);
     // ======= 测试 ===========
-    gcode_queue_push(gcode_queue, &gcode_block);
-    rt_set_chan_state(0, CHAN_IS_GCODE_END, false);
-    // printf("type: %d, feed_vel: %.2f, pos:(%.2f, %.2f, %.2f)\n", gcode_block.type, gcode_block.feed_vel, gcode_block.pos.x, gcode_block.pos.y, gcode_block.pos.z);
+    queue_push(parser_queue, &plan_block);
     return GNC_OPERATOR_SUCCESS;
 }
 
 static GNC_RES parser_handle_mcode(pmc_data* motion_data, NcItpState *itp_state, int *line_no){
-    MCODE_BLOCK mcode_block;
+    PLAN_BLOCK plan_block;
     // 子程序调用M98和M99
     if(motion_data->m_code == 98 || motion_data->m_code == 99){
         return GNC_OPERATOR_SUCCESS;
     }
-    // M码
-    mcode_block.m_code = motion_data->m_code;
-    // 主轴
-    mcode_block.spindle = motion_data->spindle;
+    // 进给速度
+    plan_block.feed_vel = motion_data->feed.value;
+    // 位置
+    plan_block.end_pos.x = motion_data->position.x;
+    plan_block.end_pos.y = motion_data->position.y;
+    plan_block.end_pos.z = motion_data->position.z;
     // 模态
-    mcode_block.state = *itp_state;
+    plan_block.state = *itp_state;
+    // 模组
+    plan_block.mode = motion_data->mode;
     // 行号
-    mcode_block.line_number = *line_no;
+    plan_block.line_number = *line_no;
+    // M码
+    plan_block.mst_data.m_code = motion_data->m_code;
+    // 主轴
+    plan_block.mst_data.spindle = motion_data->spindle;
     // 刀号
-    mcode_block.tool_number = motion_data->tool_number; 
-    if (mcode_queue_is_full(mcode_queue))
+    plan_block.mst_data.tool_number = motion_data->tool_number; 
+    // 预留
+    plan_block.mst_data.size = 1;
+    if (queue_is_full(parser_queue))
     {
         return GNC_DATA_FULL;
     }
-    // 判断G代码是否已处理完成
-    if (!rt_get_chan_state(0, CHAN_IS_GCODE_END))
-    {
-        return GNC_PARSER_WAIT;
-    }
-    if (!rt_get_chan_state(0, CHAN_IS_MCODE_END))
-    {
-        return GNC_PARSER_WAIT;
-    }
-    mcode_queue_push(mcode_queue, &mcode_block);
-    rt_set_chan_state(0, CHAN_IS_MCODE_END, false);
+    queue_push(parser_queue, &plan_block);
     return GNC_OPERATOR_SUCCESS;
 }
 
 GNC_RES parser_waiting_for_buf(){
-    if(gcode_queue_is_full(gcode_queue)) return GNC_DATA_FULL;
+    if(queue_is_full(parser_queue)) return GNC_DATA_FULL;
     GNC_RES res = GNC_CAL_SUCCESS;
     int start_index = parser_data->interp_list_index;
     for(int i = start_index; i < parser_data->itp_datas.count; i++){
