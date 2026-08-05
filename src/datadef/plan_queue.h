@@ -36,6 +36,12 @@ typedef struct{
     double end_rad;     // 终点弧度
 }CIRCULAR_DATA;
 
+typedef struct{
+    double screw_offset;    // 螺旋插补的螺距(向量)
+    int screw_number;       // 螺距数（涡旋数）
+    double screw_rad;     // 角度
+}HELIX_DATA;
+
 typedef struct mcode_block{
     int size;               // 多个辅助功能
     int m_code;             // 代码信号 M00~M31
@@ -52,6 +58,7 @@ typedef struct
     int pause_time;     // 暂停时间
     MST_DATA mst_data;
     CIRCULAR_DATA circular_data;
+    HELIX_DATA helical_data;
     double length;      // 长度
     double angle_rad;   // 夹角
     double start_vel;   // 起始速度

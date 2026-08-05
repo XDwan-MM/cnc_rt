@@ -291,6 +291,24 @@ static GNC_RES parser_handle_gcode(pmc_data* motion_data, NcItpState *itp_state,
             plan_block.circular_data.center_pos.z = motion_data->circle_center.z_coc;
             plan_block.circular_data.plane = (PLANE)(motion_data->plane);
             break;
+        case PMC_G02_5:
+            plan_block.type = HELIX_CW;
+            plan_block.circular_data.center_pos.x = motion_data->circle_center.x_coc;
+            plan_block.circular_data.center_pos.y = motion_data->circle_center.y_coc;
+            plan_block.circular_data.center_pos.z = motion_data->circle_center.z_coc;
+            plan_block.circular_data.plane = (PLANE)(motion_data->plane);
+            plan_block.helical_data.screw_number = motion_data->screw_number;
+            plan_block.helical_data.screw_offset = motion_data->screw_offset;
+            break;
+        case PMC_G03_5:
+            plan_block.type = HELIX_CCW;
+            plan_block.circular_data.center_pos.x = motion_data->circle_center.x_coc;
+            plan_block.circular_data.center_pos.y = motion_data->circle_center.y_coc;
+            plan_block.circular_data.center_pos.z = motion_data->circle_center.z_coc;
+            plan_block.circular_data.plane = (PLANE)(motion_data->plane);
+            plan_block.helical_data.screw_number = motion_data->screw_number;
+            plan_block.helical_data.screw_offset = motion_data->screw_offset;
+            break;
         case PMC_G33_1: // 攻丝循环
             plan_block.type = RIGID_TAP;
             break;

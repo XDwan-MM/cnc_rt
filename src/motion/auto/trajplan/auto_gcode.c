@@ -27,7 +27,7 @@ static void block_cal_exact_stop_vel(PLAN_BLOCK* current_block);
 static void block_cal_tap_vel(PLAN_BLOCK* current_block);
 static void block_cal_chop_vel(PLAN_BLOCK* current_block);
 static void block_cal_default_vel(PLAN_BLOCK* current_block);
-static void cycle_tp_update_start_pos();
+static void cycle_tp_update_block_data();
 static void cycle_tp_update_pos_cmd_data();
 static bool auto_pos_cmd_cycle_is_finished();
 static bool auto_pos_cmd_axis_arrive_check();
@@ -97,9 +97,7 @@ void auto_update_pos_cmd(){
         // 判断是否需要重新计算速度曲线
         if(is_newval_unvalid()) return;
         // 更新块信息
-        cycle_tp_update_start_pos();
-        block_cal_vector(cycle_tp->plan_block);
-        block_cal_length(cycle_tp->plan_block);
+        cycle_tp_update_block_data();
         // 速度前瞻
         auto_look_ahead();
         // 行程限位检查
@@ -317,10 +315,23 @@ static GNC_RES auto_do_vel_plan(){
     return res;
 }
 
-static void cycle_tp_update_start_pos(){
+static void cycle_tp_update_block_data(){
+    // 更新起点位置
     cycle_tp->plan_block->start_pos.x = rt_data->axis_data[AXIS_X].wcs_cmd_pos_cur;
     cycle_tp->plan_block->start_pos.y = rt_data->axis_data[AXIS_Y].wcs_cmd_pos_cur;
     cycle_tp->plan_block->start_pos.z = rt_data->axis_data[AXIS_Z].wcs_cmd_pos_cur;
+    switch (cycle_tp->plan_block->type)
+    {
+    case HELIX_CCW:
+    case HELIX_CW:
+        // 更新导程
+        cycle_tp->plan_block->helical_data.screw_offset -= cycle_tp->pos_cmd_data.accum_distance * sin(cycle_tp->plan_block->helical_data.screw_rad);
+        break;
+    default:
+        break;
+    }
+    block_cal_vector(cycle_tp->plan_block);
+    block_cal_length(cycle_tp->plan_block);
 }
 
 static void cycle_tp_update_pos_cmd_data(){
@@ -469,6 +480,18 @@ static void block_cal_exact_stop_vel(PLAN_BLOCK* current_block){
             }
             current_block->start_vel = current_block->end_vel = 0;
             break;
+
+        case HELIX_CW:
+        case HELIX_CCW:
+            if (rt_get_sys_state(SYS_IS_DRY_RUN))
+            {
+                current_block->max_vel = MIN(par_chan[0][PAR_CH_DRYRUN_SPD].value.val_real * var_chan[0][VAR_CHAN_FEED_OVERRIDE].value.f / OVERRIDE_PERCENT, cycle_tp->max_feed_vel);
+            }
+            else{
+                current_block->max_vel = MIN(current_block->feed_vel * var_chan[0][VAR_CHAN_FEED_OVERRIDE].value.f / OVERRIDE_PERCENT, cycle_tp->max_feed_vel);
+            }
+            current_block->start_vel = current_block->end_vel = 0;
+            break;
         default:
             break;
     }
@@ -501,6 +524,18 @@ static void block_cal_tap_vel(PLAN_BLOCK* current_block){
             if(rt_get_sys_state(SYS_IS_SINGLE_BLOCK)) current_block->start_vel = current_block->end_vel = 0;
             else current_block->start_vel = current_block->end_vel = current_block->max_vel;    
             break;
+        
+        case HELIX_CW:
+        case HELIX_CCW:
+            if (rt_get_sys_state(SYS_IS_DRY_RUN))
+            {
+                current_block->max_vel = MIN(par_chan[0][PAR_CH_DRYRUN_SPD].value.val_real, cycle_tp->max_feed_vel);
+            }
+            else{
+                current_block->max_vel = MIN(current_block->feed_vel, cycle_tp->max_feed_vel);
+            }
+            current_block->start_vel = current_block->end_vel = 0;
+            break;
         default:
             break;
     }
@@ -532,6 +567,18 @@ static void block_cal_chop_vel(PLAN_BLOCK* current_block){
             }
             if(rt_get_sys_state(SYS_IS_SINGLE_BLOCK)) current_block->start_vel = current_block->end_vel = 0;
             else current_block->start_vel = current_block->end_vel = current_block->max_vel;  
+            break;
+        
+        case HELIX_CW:
+        case HELIX_CCW:
+            if (rt_get_sys_state(SYS_IS_DRY_RUN))
+            {
+                current_block->max_vel = MIN(par_chan[0][PAR_CH_DRYRUN_SPD].value.val_real * var_chan[0][VAR_CHAN_FEED_OVERRIDE].value.f / OVERRIDE_PERCENT, cycle_tp->max_feed_vel);
+            }
+            else{
+                current_block->max_vel = MIN(current_block->feed_vel * var_chan[0][VAR_CHAN_FEED_OVERRIDE].value.f / OVERRIDE_PERCENT, cycle_tp->max_feed_vel);
+            }
+            current_block->start_vel = current_block->end_vel = 0;
             break;
         default:
             break;

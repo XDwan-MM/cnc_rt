@@ -71,20 +71,56 @@ GNC_RES chan_add_block(){
     return GNC_CAL_SUCCESS;
 }
 
-// 计算段的首末位置
+// 计算段位置信息
 static void block_cal_pos(PLAN_BLOCK* parser_block, PLAN_BLOCK* current_block, POS* start_pos){
     POS_COPY(&current_block->start_pos, start_pos);
     POS_COPY(&current_block->end_pos, &parser_block->end_pos);
     // LOG(LOG_LEVEL_DEBUG,  "start_pos %f %f %f", current_block->start_pos.x, current_block->start_pos.y, current_block->start_pos.z);
     // LOG(LOG_LEVEL_DEBUG,  "end_pos %f %f %f", current_block->end_pos.x, current_block->end_pos.y, current_block->end_pos.z);
+    // 计算顺逆方向
+    switch(parser_block->type){
+        case CIRCLE_CCW:
+        case HELIX_CCW:
+            current_block->circular_data.dir = COUNTERCLOCK;
+            POS_COPY(&current_block->circular_data.center_pos, &parser_block->circular_data.center_pos);
+            current_block->circular_data.plane = parser_block->circular_data.plane;
+            break;
+        case CIRCLE_CW:
+        case HELIX_CW:
+            current_block->circular_data.dir = CLOCK;
+            POS_COPY(&current_block->circular_data.center_pos, &parser_block->circular_data.center_pos);
+            current_block->circular_data.plane = parser_block->circular_data.plane;
+            break;
+        default:
+            break;
+    }
+    // 计算半径
     switch(parser_block->type){
         case CIRCLE_CCW:
         case CIRCLE_CW:
-            // 计算圆心和半径
-            POS_COPY(&current_block->circular_data.center_pos, &parser_block->circular_data.center_pos);
             current_block->circular_data.radius = POS_Distance(&current_block->end_pos, &current_block->circular_data.center_pos);
-            current_block->circular_data.plane = parser_block->circular_data.plane;
-            current_block->circular_data.dir = (parser_block->type == CIRCLE_CW) ? CLOCK : COUNTERCLOCK;
+            break;
+        case HELIX_CCW:
+        case HELIX_CW:
+            POS helix_circle_pos = {0};
+            POS_COPY(&helix_circle_pos, &current_block->end_pos);
+            switch (current_block->circular_data.plane)
+            {
+            case PLANE_XY:
+                helix_circle_pos.z = current_block->circular_data.center_pos.z;
+                current_block->circular_data.radius = POS_Distance(&helix_circle_pos, &current_block->circular_data.center_pos);
+                break;
+            case PLANE_XZ:
+                helix_circle_pos.y = current_block->circular_data.center_pos.y;
+                current_block->circular_data.radius = POS_Distance(&helix_circle_pos, &current_block->circular_data.center_pos);
+                break;
+            case PLANE_YZ:
+                helix_circle_pos.x = current_block->circular_data.center_pos.x;
+                current_block->circular_data.radius = POS_Distance(&helix_circle_pos, &current_block->circular_data.center_pos);
+                break;
+            default:
+                break;
+            }
             break;
         default:
             break;
@@ -110,6 +146,8 @@ static void block_cal_vel(PLAN_BLOCK* current_block){
             break;
         case CIRCLE_CCW:
         case CIRCLE_CW:
+        case HELIX_CW:
+        case HELIX_CCW:
             current_block->max_acc = MIN3(par_axis[0][PAR_AX_FEED_ACC].value.val_real, par_axis[1][PAR_AX_FEED_ACC].value.val_real, par_axis[2][PAR_AX_FEED_ACC].value.val_real);
             current_block->max_jerk = MIN3(par_axis[0][PAR_AX_FEED_JK].value.val_real, par_axis[1][PAR_AX_FEED_JK].value.val_real, par_axis[2][PAR_AX_FEED_JK].value.val_real);
             double vc = vp_cal_circular_max_vel(current_block, par_chan[0][PAR_CH_PATH_TOLERANCE].value.val_real, (double)par_ncu[PAR_NCU_CYCLE].value.val_uint / TIME_US_2_S);
@@ -139,6 +177,8 @@ static void block_cal_angle(PLAN_BLOCK* current_block, VECTOR* pre_end_vector, V
         case LINE:
         case CIRCLE_CCW:
         case CIRCLE_CW:
+        case HELIX_CW:
+        case HELIX_CCW:
         case RIGID_TAP:
         case TAP_RETURN:
             current_block->angle_rad = cal_two_vectors_angle(pre_end_vector, cur_start_vector);
@@ -157,6 +197,7 @@ static void block_cal_circle_vector(PLAN_BLOCK* current_block){
         case PLANE_XY:
             switch(current_block->type){
             case CIRCLE_CW:
+            case HELIX_CW:
                 current_block->start_vec.x = rs.y;
                 current_block->start_vec.y = - rs.x;
                 current_block->start_vec.z = 0;
@@ -165,6 +206,7 @@ static void block_cal_circle_vector(PLAN_BLOCK* current_block){
                 current_block->end_vec.z = 0;
                 break;
             case CIRCLE_CCW:
+            case HELIX_CCW:
                 current_block->start_vec.x = - rs.y;
                 current_block->start_vec.y = rs.x;
                 current_block->start_vec.z = 0;
@@ -177,6 +219,7 @@ static void block_cal_circle_vector(PLAN_BLOCK* current_block){
         case PLANE_XZ:
             switch(current_block->type){
             case CIRCLE_CW:
+            case HELIX_CW:
                 current_block->start_vec.x = rs.z;
                 current_block->start_vec.y = 0;
                 current_block->start_vec.z = - rs.x;
@@ -185,6 +228,7 @@ static void block_cal_circle_vector(PLAN_BLOCK* current_block){
                 current_block->end_vec.z = - re.x;
                 break;
             case CIRCLE_CCW:
+            case HELIX_CCW:
                 current_block->start_vec.x = - rs.z;
                 current_block->start_vec.y = 0;
                 current_block->start_vec.z = rs.x;
@@ -197,6 +241,7 @@ static void block_cal_circle_vector(PLAN_BLOCK* current_block){
         case PLANE_YZ:
             switch(current_block->type){
             case CIRCLE_CW:
+            case HELIX_CW:
                 current_block->start_vec.x = 0;
                 current_block->start_vec.y = rs.z;
                 current_block->start_vec.z = - rs.y;
@@ -205,6 +250,7 @@ static void block_cal_circle_vector(PLAN_BLOCK* current_block){
                 current_block->end_vec.z = - re.y;
                 break;
             case CIRCLE_CCW:
+            case HELIX_CCW:
                 current_block->start_vec.x = 0;
                 current_block->start_vec.y = - rs.z;
                 current_block->start_vec.z = rs.y;
@@ -239,14 +285,29 @@ static double block_cal_circle_length(PLAN_BLOCK* current_block){
     double angDelta = current_block->circular_data.end_rad - current_block->circular_data.statr_rad;
     switch(current_block->type){
         case CIRCLE_CW:
+        case HELIX_CW:
             if (IsGreaterThanOrEqual(angDelta, 0)) angDelta -= 2 * PI;
             break;
         case CIRCLE_CCW:
+        case HELIX_CCW:
             if (IsLessThanOrEqual(angDelta, 0)) angDelta += 2 * PI;
+            break;
+        default:
             break;
     }
     current_block->circular_data.rad = fabs(angDelta);
-    return current_block->circular_data.rad * current_block->circular_data.radius;
+    // 计算长度
+    switch(current_block->type){
+        case CIRCLE_CW:
+        case CIRCLE_CCW:
+            return current_block->circular_data.rad * current_block->circular_data.radius;
+        case HELIX_CW:
+        case HELIX_CCW:
+            current_block->helical_data.screw_rad = atan2(current_block->helical_data.screw_offset, current_block->circular_data.rad * current_block->circular_data.radius);
+            return sqrt(pow(current_block->circular_data.rad * current_block->circular_data.radius, 2) + pow(current_block->helical_data.screw_offset, 2));
+        default:
+            return 0;
+    }
 }
 
 // 计算段长度|圆弧长
@@ -260,6 +321,8 @@ void block_cal_length(PLAN_BLOCK* current_block){
             break;
         case CIRCLE_CCW:
         case CIRCLE_CW:
+        case HELIX_CW:
+        case HELIX_CCW:
             current_block->length = block_cal_circle_length(current_block);
             break;
         default:
@@ -278,6 +341,8 @@ void block_cal_vector(PLAN_BLOCK* current_block){
             break;
         case CIRCLE_CCW:
         case CIRCLE_CW:
+        case HELIX_CW:
+        case HELIX_CCW:
             // 计算圆弧的切失，指向圆心
             block_cal_circle_vector(current_block);
             return;
