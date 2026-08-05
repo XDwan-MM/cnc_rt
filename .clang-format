@@ -18,9 +18,15 @@ BraceWrapping:
   # 将 else 放在新的一行（不与上一行的 "}" 粘连，推荐配合开启）
   BeforeElse: true
 
+# extern "C" 块内的声明不额外缩进
+IndentExternBlock: NoIndent
+
 # ========================================
 # 2. 解决: 函数参数过长时，一个参数占一行
 # ========================================
+# 超长函数声明优先拆分参数，避免返回类型和函数名分行
+PenaltyReturnTypeOnItsOwnLine: 1000
+
 # 禁用参数合并排列（换行时强制一参数一行）
 BinPackParameters: false  # 针对函数定义
 BinPackArguments: false   # 针对函数调用

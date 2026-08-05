@@ -254,11 +254,11 @@ static void read_from_hal() {
     rt_data->axis_data[AXIS_Z].motor_act_pos =  rt_data->axis_data[AXIS_Z].motor_cmd_pos;
     #else
     Hal_Driver_Get_Actual_Pos(&x_axis_driver, &x_target_pos);
-    rt_data->axis_data[AXIS_X].motor_act_pos = pulses_to_position(x_target_pos, par_axis[AXIS_X]);
+    rt_data->axis_data[AXIS_X].motor_act_pos = pulses_to_position(par_axis[AXIS_X], x_target_pos);
     Hal_Driver_Get_Actual_Pos(&y_axis_driver, &y_target_pos);
-    rt_data->axis_data[AXIS_Y].motor_act_pos = pulses_to_position(y_target_pos, par_axis[AXIS_Y]);
+    rt_data->axis_data[AXIS_Y].motor_act_pos = pulses_to_position(par_axis[AXIS_Y], y_target_pos);
     Hal_Driver_Get_Actual_Pos(&z_axis_driver, &z_target_pos);
-    rt_data->axis_data[AXIS_Z].motor_act_pos = pulses_to_position(z_target_pos, par_axis[AXIS_Z]);
+    rt_data->axis_data[AXIS_Z].motor_act_pos = pulses_to_position(par_axis[AXIS_Z], z_target_pos);
     #endif
 
     // 第一次运行，初始化位置
@@ -277,11 +277,11 @@ static void read_from_hal() {
 
 static void output_to_hal() {
     // 发送给驱动器
-    x_cmd_Pulses = position_to_pulses(rt_data->axis_data[AXIS_X].motor_cmd_pos, par_axis[AXIS_X]);
+    x_cmd_Pulses = position_to_pulses(par_axis[AXIS_X], rt_data->axis_data[AXIS_X].motor_cmd_pos);
     Hal_Driver_Set_Target_Pos(&x_axis_driver, x_cmd_Pulses);
-    y_cmd_Pulses = position_to_pulses(rt_data->axis_data[AXIS_Y].motor_cmd_pos, par_axis[AXIS_Y]);
+    y_cmd_Pulses = position_to_pulses(par_axis[AXIS_Y], rt_data->axis_data[AXIS_Y].motor_cmd_pos);
     Hal_Driver_Set_Target_Pos(&y_axis_driver, y_cmd_Pulses);
-    z_cmd_Pulses = position_to_pulses(rt_data->axis_data[AXIS_Z].motor_cmd_pos, par_axis[AXIS_Z]);
+    z_cmd_Pulses = position_to_pulses(par_axis[AXIS_Z], rt_data->axis_data[AXIS_Z].motor_cmd_pos);
     Hal_Driver_Set_Target_Pos(&z_axis_driver, z_cmd_Pulses);
 }
 
