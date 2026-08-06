@@ -4,6 +4,7 @@
 static POS interpolate_line(PLAN_BLOCK* current_block, double accum_distance);
 static POS interpolate_rapid(PLAN_BLOCK* current_block, double accum_distance);
 static POS interpolate_circle(POS current_pos, PLAN_BLOCK* current_block, double accum_distance);
+static POS interpolate_helix(POS current_pos, PLAN_BLOCK* current_block, double accum_distance);
 
 POS auto_cal_interp_pos(POS current_pos, double accum_distance){
     if(accum_distance <= 0) return current_pos;
@@ -22,6 +23,10 @@ POS auto_cal_interp_pos(POS current_pos, double accum_distance){
         case CIRCLE_CCW:
         case CIRCLE_CW:
             interp_pos = interpolate_circle(current_pos, current_block, accum_distance);
+            break;
+        case HELIX_CW:
+        case HELIX_CCW:
+            interp_pos = interpolate_helix(current_pos, current_block, accum_distance);
             break;
         case UNKNOWN:
         default:
@@ -86,3 +91,43 @@ static POS interpolate_circle(POS current_pos, PLAN_BLOCK* current_block, double
     }
     return interp_pos;
 }
+
+static POS interpolate_helix(POS current_pos, PLAN_BLOCK* current_block, double accum_distance) {
+    double circle_distance = accum_distance * cos(current_block->helical_data.screw_rad);
+    double screw_distance = accum_distance * sin(current_block->helical_data.screw_rad);
+    double angle = circle_distance / current_block->circular_data.radius;
+    double angle_interp = 0;
+    switch(current_block->circular_data.dir){
+        case CLOCK:
+            angle_interp = current_block->circular_data.statr_rad - angle;
+            break;
+        case COUNTERCLOCK:
+            angle_interp = current_block->circular_data.statr_rad + angle;
+            break;
+        default:
+            break;
+    }
+    POS interp_pos;
+    switch(current_block->circular_data.plane){
+        case PLANE_XY:
+            interp_pos.x = current_block->circular_data.center_pos.x + current_block->circular_data.radius * cos(angle_interp);
+            interp_pos.y = current_block->circular_data.center_pos.y + current_block->circular_data.radius * sin(angle_interp);
+            interp_pos.z = current_block->start_pos.z + screw_distance;
+            break;
+        case PLANE_XZ:
+            interp_pos.x = current_block->circular_data.center_pos.x + current_block->circular_data.radius * cos(angle_interp);
+            interp_pos.y = current_block->start_pos.y + screw_distance;
+            interp_pos.z = current_block->circular_data.center_pos.z + current_block->circular_data.radius * sin(angle_interp);
+            break;
+        case PLANE_YZ:
+            interp_pos.x = current_block->start_pos.x + screw_distance;
+            interp_pos.y = current_block->circular_data.center_pos.y + current_block->circular_data.radius * cos(angle_interp);
+            interp_pos.z = current_block->circular_data.center_pos.z + current_block->circular_data.radius * sin(angle_interp);
+            break;
+        default:
+            interp_pos = current_pos;
+            break;
+    }
+    return interp_pos;
+}
+

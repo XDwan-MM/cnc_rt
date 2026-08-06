@@ -106,6 +106,9 @@ static void chan_do_period(){
 // 运动同步控制
 static void smx_do_period(){
     // 刚性攻丝同步（进给 = 转速 × 螺距：F = S × Pitch）
+    // 主轴位置 Z = Pitch × (θ/360°)
+    // double z_vel = spl_data.current_angle * cycle_tp->plan_block->screw_data.screw_offset;
+    // rt_data->axis_data[AXIS_Z].wcs_cmd_pos_cur += z_vel * (double)par_ncu[PAR_NCU_CYCLE].value.val_uint / TIME_US_2_S;
 
     // 主轴同步
 
