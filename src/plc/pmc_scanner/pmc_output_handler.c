@@ -133,7 +133,7 @@ static void pmc_output_reset()
                 setVarChanInt(0, VAR_CHAN_IS_RESETTING, 0, 0);
             }
             if(rt_data->sys_state[SYS_ESTOP_INPUT]){
-                if(rt_data->nc_reset.mdi_reset_tic < 22){
+                if(rt_data->nc_reset.mdi_reset_tic < 24){
                     rt_data->nc_reset.mdi_reset_tic++;
                 }else{
                     rt_data->nc_reset.is_mdi_reset = 0;

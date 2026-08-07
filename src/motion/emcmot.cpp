@@ -295,14 +295,13 @@ static void check_for_fault()
     }
 }
 
-static void read_from_hal()
-{
-// 读取实际位置
-#ifdef DEBUG_MODE_ENABLED
+static void read_from_hal() {
+    // 读取实际位置
+    #ifdef DEBUG_MODE_ENABLED
     rt_data->axis_data[AXIS_X].motor_act_pos = rt_data->axis_data[AXIS_X].motor_cmd_pos;
     rt_data->axis_data[AXIS_Y].motor_act_pos = rt_data->axis_data[AXIS_Y].motor_cmd_pos;
     rt_data->axis_data[AXIS_Z].motor_act_pos = rt_data->axis_data[AXIS_Z].motor_cmd_pos;
-#else
+    #else
     Hal_Driver_Get_Actual_Pos(&x_axis_driver, &x_target_pos);
     rt_data->axis_data[AXIS_X].motor_act_pos = pulses_to_position(par_axis[AXIS_X], x_target_pos);
     Hal_Driver_Get_Actual_Pos(&y_axis_driver, &y_target_pos);
@@ -310,6 +309,12 @@ static void read_from_hal()
     Hal_Driver_Get_Actual_Pos(&z_axis_driver, &z_target_pos);
     rt_data->axis_data[AXIS_Z].motor_act_pos = pulses_to_position(par_axis[AXIS_Z], z_target_pos);
 #endif
+
+    // 读取实际速度
+    rt_data->axis_data[AXIS_X].act_vel = x_axis_driver.actual_vel;
+    rt_data->axis_data[AXIS_Y].act_vel = y_axis_driver.actual_vel;
+    rt_data->axis_data[AXIS_Z].act_vel = z_axis_driver.actual_vel;
+    rt_data->chan_data[0].act_vel = sqrt(pow(x_axis_driver.actual_vel, 2) + pow(y_axis_driver.actual_vel, 2) + pow(z_axis_driver.actual_vel, 2));
 
     if (!update_pos_flag)
     {

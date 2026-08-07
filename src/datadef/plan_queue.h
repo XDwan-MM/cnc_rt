@@ -39,7 +39,7 @@ typedef struct{
 typedef struct{
     double screw_offset;    // 螺旋插补的螺距(向量)
     int screw_number;       // 螺距数（涡旋数）
-    double screw_rad;     // 角度
+    double screw_rad;       // 角度
 }HELIX_DATA;
 
 typedef struct mcode_block{
