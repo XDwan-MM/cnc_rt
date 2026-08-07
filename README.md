@@ -13,20 +13,16 @@
 
 选项:
   debug      运行调试模式
-  run1       运行测试平台1
-  run2       运行测试平台2
+  run        运行测试平台
   help       显示帮助信息
 
 示例:
   sudo ./run.sh debug      # 运行调试模式
-  sudo ./run.sh run1       # 运行测试平台1
-  sudo ./run.sh run2       # 运行测试平台2
+  sudo ./run.sh run        # 运行测试平台1
   sudo ./run.sh help       # 显示帮助信息
 
 模糊匹配：
 debug|rund|run_d|run_debug|debug_run
-run|run1|run_1
-run2|run_2
 help|--help|-h|-H
 
 
@@ -58,7 +54,7 @@ help|--help|-h|-H
 
 如果想要启动界面，然后在实时调试
 
-界面启动：sudo -E LD_LIBRARY_PATH=../include/cncshm/bin ./cnc_hmi_v3 -p
+界面启动：sudo ./cnc_hmi_v3 -p
 
 
 
@@ -88,9 +84,7 @@ ipcrm -m <shmid>
 
 ２ 执行方式，在 cnc_rt_x.x.xxxx/bin 打开终端运行
 
-sudo -E LD_LIBRARY_PATH=../lib/cncshm/bin ./cnc_rt_x（平台1、平台2、调试）
-
-解释：以root权限，指定动态库在指定路径查找，执行cnc_rt_x
+sudo ./cnc_rt
 
 
 ### 使用方法
@@ -147,29 +141,6 @@ cd bin
 sudo ./cnc_rt_d
 
 
-### 不同平台master和ENI文件配置
-
-1、当更换平台时，需使用要更换的测试平台的master.c文件进行替换
-
-- 9楼实验室第一台测试平台：speed.xml
-
-- 9楼实验室第一台测试平台：gugao_io.xml
-
-示例：
-
-```C
-int Master_Start() {
-    char eni_path[512];
-    snprintf(eni_path, sizeof(eni_path), "%s/%s", PROJECT_DIR, "config/ENI/gugao_io.xml");
-    int error_code = ethercat_init(eni_path);
-    if ( error_code < 0) {
-        printf("[Warning] EtherCAT 启动失败，错误码为 %d ！\n", error_code);
-        return -1;
-    }
-    return 1;
-}
-```
-
 
 ### PLC查看FG变量
 
@@ -225,88 +196,49 @@ Defaults        env_keep += "QT_LICENSE_FILE"
 ctrl+X 回车 保存退出.
 
 
-### 键盘调试
-
-1、配置
-
-1. sudo visudo
-2. 行末添加：[用户名] ALL=(ALL) NOPASSWD: ALL
-   注意需要修改为自己的用户名，例子： gree ALL=(ALL) NOPASSWD: ALL
-
-2、打开vscode，点击调试
-
-
-3、通过按键模拟
-
-╔══════════════════════════════════════════════════════════════════╗
-║                     CNC 键盘控制监控                             ║
-╠══════════════════════════════════════════════════════════════════╣
-║                          按键说明                                ║
-╠══════════════════════════════════════════════════════════════════╣
-║ [模式] 1:JOG  2:快速  3:手轮  4:回零  5:编辑  6:自动  7:MDI      ║
-║ [倍率] Q/A:进给+/-10%  W/S:快速+/-10%  E/D:主轴+/-10%            ║
-║ [点动] U/J:+X/-X  I/K:+Y/-Y  O/L:+Z/-Z                           ║
-║ [主轴] Z:正转  X:停止  C:反转                                    ║
-║ [运行] Enter:运行  Space:暂停  R:复位  Esc:急停                  ║
-║ [帮助] h/H:按键点位  p/P:系统信息                                ║
-╚══════════════════════════════════════════════════════════════════╝
-[============== CNC HMI ===================================]
-[状态: 空闲] [进给: 100%] [快速: 100%] [主轴: 100%]
-[译码行:   0][运行行:   0][程序完成: 否]
-[急停: 否][复位: 否][运行: 否][回零: 否][移动: 否]
-[事件数量: 0]
-[===========================================================]
-
-
-
-
 ### 仓库管理
 
 1、提交至当前分支，当前分支不受保护，不要git push -f！！！
 
 2、提交使用合并请求
 
-3、运行命令：
-
-1. 进入bin文件夹内
-2. 输入命令: sudo LD_LIBRARY_PATH=../lib/cncshm/bin/:../lib/log/bin/ ./CNC_RT
-
 
 
 ### 项目结构
 
 ```SHELL
-|--bin				# 可执行文件
+|--bin				    # 可执行文件
 |--config         # 配置文件
 |--lib
-|   |--cncshm		# 共享内存库
+|   |--cncshm		  # 共享内存库
 |   |--errorcomp	# 补偿库
 |   |--kinematic	# 运动库
-|   |--log			# 日志存库
-|   |--parser		# 译码库
+|   |--parser		  # 译码库
 |--src
-|   |--common		# 配置文件
-|   |--datadef		# 数据定义
-|   |--hal			# 硬件抽象层
-|   |--master		# 主站相关
-|   |--motion		# 运动相关
-|   |   |--emcmot	# 路径规划和轨迹规划
-|   |--plc        # plc相关
-|   |--spindle		# 主轴相关
-|   |--task			# 事件相关
-|   |--threads		# 线程相关
-|   |--utils		# 工具类
+|   |--alarm		      # 报警
+|   |--common		      # 配置文件
+|   |--compensation		# 补偿
+|   |--datadef		    # 数据定义
+|   |--hal			      # 硬件抽象层
+|   |--master		      # 主站相关
+|   |--motion		      # 运动相关
+|   |   |--auto	      # 自动模式
+|   |   |--manaul	    # 手动模式
+|   |   |--spindle		# 主轴相关
+|   |   |--emcmot	    # 路径规划和轨迹规划
+|   |--plc            # plc相关
+|   |--task			      # 事件相关
+|   |--threads		    # 线程相关
+|   |--utils		      # 工具类
 |--main				# 程序入口
 |--build			# 运行脚本
 |--README			# 说明文档
 ```
 
 
-
 **main.cpp**
 
 初始化共享内存 → 初始化硬件抽象层 → 启动主站 → 创建信号量 → 创建线程
-
 
 
 **motion/emcmot.cpp**
