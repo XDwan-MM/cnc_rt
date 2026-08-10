@@ -17,14 +17,12 @@ extern "C"
  */
 typedef struct
 {
-    double current_output;    /* 当前实际输出的补偿量 (mm) */
-    double last_dir_sign;     /* 上周期方向符号，由位置增量推导: +1.0 / -1.0 */
-    double last_pos_cmd;      /* 上周期指令位置 (mm)，用于运动/方向检测 */
-    bool   pos_initialized;   /* 惰性初始化标志 */
-    CompPhase phase;          /* 状态机当前阶段: IDLE / RAMPING / LOCKED */
+    double current_output; /* 当前实际输出的补偿量 (mm) */
+    double last_dir_sign;  /* 上周期运动方向: +1.0 / -1.0，未运动时为 0.0 */
+    double last_pos_cmd;   /* 上周期指令位置 (mm) */
+    bool pos_initialized;  /* 是否已捕获初始指令位置 */
+    CompPhase phase;       /* 当前状态: IDLE / RAMPING / LOCKED */
 } BacklashCompState;
-
-/* --- 公开接口 --- */
 
 /**
  * @brief 初始化反向间隙补偿状态
@@ -38,17 +36,17 @@ void backlash_comp_init(BacklashCompState *state);
  * 根据运动方向（由逐周期位置增量推导）施加反向间隙补偿值。
  * 补偿值按 bl_rate 控制步进速率平滑过渡，方向切换时自动进入 RAMPING 阶段。
  *
- * @param par_cmp  当前轴的补偿参数指针
- * @param state    对应的补偿状态指针
- * @param pos_cmd  当前轴指令位置 (mm)，用于位置增量推导方向
+ * @param params           对应轴的补偿参数
+ * @param state            对应轴的补偿状态
+ * @param position_command 当前轴指令位置 (mm)，用于位置增量推导方向
  * @param is_rapid 是否快移 (G00)，仅 bl_enable=2 时生效:
- *                 0=切削进给→使用 bl_value, 1=快移→使用 bl_value2
- * @return         补偿输出值 (mm)，范围 ±MAX_COMP_LIMIT_PER
+ *                 0=切削进给，非0=快移
+ * @return 补偿输出值 (mm)，范围 ±MAX_COMP_LIMIT_PER
  */
-double calcul_backlash_comp_val(const CompParams *par_cmp,
-                                       BacklashCompState *state,
-                                       double pos_cmd,
-                                       int is_rapid);
+double calcul_backlash_comp_val(const CompParams *params,
+                                BacklashCompState *state,
+                                double position_command,
+                                int is_rapid);
 
 /**
  * @brief 通知反向间隙补偿模块：补偿参数已被控制器同步更新

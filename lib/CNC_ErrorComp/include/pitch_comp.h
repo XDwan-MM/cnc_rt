@@ -15,12 +15,12 @@ extern "C"
  */
 typedef struct
 {
-    double current_output;  // 该轴当前实际输出的补偿量
-    double step_limit;      // 平滑过渡的步进限制
-    double last_dir_sign;   // 上周期方向符号，由位置增量推导：+1.0正向 / -1.0负向
-    double last_pos_cmd;    // 上周期指令位置 (mm)，用于运动/方向检测
-    bool   pos_initialized; // 惰性初始化标志：首周期用当前pos填充last_pos_cmd
-    CompPhase phase;        // 状态机当前阶段: IDLE / RAMPING / LOCKED
+    double current_output; // 该轴当前实际输出的补偿量
+    double step_limit;     // 平滑过渡的步进限制
+    double last_dir_sign;  // 上周期方向符号，由位置增量推导：+1.0正向 / -1.0负向
+    double last_pos_cmd;   // 上周期指令位置 (mm)，用于运动/方向检测
+    bool pos_initialized;  // 惰性初始化标志：首周期用当前pos填充last_pos_cmd
+    CompPhase phase;       // 状态机当前阶段: IDLE / RAMPING / LOCKED
 } PitchCompState;
 
 /* --- 接口函数 --- */
@@ -42,10 +42,7 @@ void pitch_comp_init(PitchCompState *state, double step_limit);
  * @param pos_cmd 当前轴指令位置 (mm)
  * @return        补偿输出值 (mm)，范围 ±MAX_COMP_LIMIT_PER
  */
-double calcul_pitch_comp_val(PitchCompState *state,
-                                    const CompParams *par_cmp,
-                                    PitchCompSeqList_t *table,
-                                    double pos_cmd);
+double calcul_pitch_comp_val(PitchCompState *state, const CompParams *par_cmp, PitchCompSeqList_t *table, double pos_cmd);
 
 /**
  * @brief 通知螺距补偿模块：补偿参数已被控制器同步更新
@@ -62,4 +59,4 @@ void pitch_comp_on_params_synced(PitchCompState *state);
 }
 #endif
 
-#endif // PITCH_COMP_H
+#endif /* PITCH_COMP_H */

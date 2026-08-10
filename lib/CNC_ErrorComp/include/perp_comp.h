@@ -65,4 +65,4 @@ void perp_comp_on_params_synced(PerpCompState *state);
 }
 #endif
 
-#endif
+#endif /* PERP_COMP_H */

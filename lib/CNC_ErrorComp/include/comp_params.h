@@ -1,5 +1,5 @@
-#ifndef RT_PAR_H
-#define RT_PAR_H
+#ifndef COMP_PARAMS_H
+#define COMP_PARAMS_H
 
 /**
  * @file comp_params.h
@@ -20,11 +20,11 @@ extern "C"
 typedef struct
 {
     /* ---- 反向间隙补偿 (PAR_CMP_BL_*, 索引 0~4) ---- */
-    int bl_enable;
-    double bl_value;
-    double bl_rate;
-    double bl_value2;
-    double bl_mpg_value;
+    int bl_enable;       /* 0=关闭，1=统一间隙值，2=快移使用独立间隙值 */
+    double bl_value;     /* 切削进给/普通模式的间隙值 (mm) */
+    double bl_rate;      /* 每伺服周期最大补偿变化量 (mm)，<=0 表示瞬时到位 */
+    double bl_value2;    /* bl_enable=2 时的快移间隙值 (mm) */
+    double bl_mpg_value; /* 手轮模式间隙值 (mm)，当前模块暂未使用 */
 
     /* ---- 热误差补偿占位 (PAR_CMP_HEAT_*, 索引 5~19) ---- */
     int thermal_placeholder[15];
@@ -50,19 +50,29 @@ typedef struct
     double squ2_refn;
     double squ2_ang;
 
-    /* ---- 直线度补偿 (PAR_CMP_STRA1_*, 索引 50~57) ---- */
-    int stra1_input_ax;
-    int stra1_type;
-    double stra1_start;
-    int stra1_num;
-    double stra1_step;
-    int stra1_modulo;
-    double stra1_factor;
-    int stra1_table;
+    /* ---- 直线度补偿第一组 (PAR_CMP_STRA1_*, 索引 50~57) ---- */
+    int stra1_mov_ax;          /*移动轴轴号*/
+    int stra1_type;            /*补偿类型*/
+    double stra1_start_pos;    /*移动轴补偿起点位置*/
+    int stra1_point_cnt;       /*补偿点数*/
+    double stra1_step;         /*补偿间距*/
+    int stra1_modulo;          /*补偿取模使能*/
+    double stra1_factor;       /*补偿倍率*/
+    int stra1_table_start_idx; /*补偿表起始点参数好*/
+
+    /* ---- 直线度补偿第二组 (PAR_CMP_STRA2_*, 索引 65~72) ---- */
+    int stra2_mov_ax;          /*移动轴轴号*/
+    int stra2_type;            /*补偿类型*/
+    double stra2_start_pos;    /*移动轴补偿起点位置*/
+    int stra2_point_cnt;       /*补偿点数*/
+    double stra2_step;         /*补偿间距*/
+    int stra2_modulo;          /*补偿取模使能*/
+    double stra2_factor;       /*补偿倍率*/
+    int stra2_table_start_idx; /*补偿表起始点参数好*/
 } CompParams;
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif /* RT_PAR_H */
+#endif /* COMP_PARAMS_H */

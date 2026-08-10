@@ -75,7 +75,7 @@ HEADERS += \
     ../src/motion/auto/parser.h \
     ../src/motion/auto/pathplan.h \
     ../src/motion/spindle/spl_control.h \
-    ../src/motion/egear_ratio.h \
+    ../src/hal/egear_ratio.h \
     ../src/motion/emcmot.h \
     ../src/motion/manual/handwheel.h \
     ../src/motion/manual/homing.h \
@@ -120,7 +120,7 @@ SOURCES += \
     ../src/motion/auto/parser.cpp \
     ../src/motion/auto/pathplan.c \
     ../src/motion/spindle/spl_control.c \
-    ../src/motion/egear_ratio.c \
+    ../src/hal/egear_ratio.c \
     ../src/motion/emcmot.cpp \
     ../src/motion/manual/handwheel.c \
     ../src/motion/manual/homing.c \
@@ -132,6 +132,8 @@ SOURCES += \
     ../src/plc/pmc_scanner/pmc_g_input_scanner.c \
     ../src/plc/pmc_scanner/pmc_output_handler.c \
     ../src/plc/plc_task/plctask.cpp \
+    ../src/plc/lad_trace/ladtracesampler.cpp \
+    ../src/task/hmi_scanner.c \
     ../src/task/task.c \
     ../src/threads/thread_manager.cpp \
     ../src/threads/threads.cpp \
@@ -153,9 +155,11 @@ INCLUDEPATH += \
     ../src/motion/manual/jog \
     ../src/motion/spindle \
     ../src/motion/manual \
+    ../src/motion/protect \
     ../src/plc \
     ../src/plc/pmc_scanner \
     ../src/plc/plc_task \
+    ../src/plc/lad_trace \
     ../src/task \
     ../src/threads \
     ../src/utils \

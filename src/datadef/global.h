@@ -7,8 +7,8 @@
  * @copyright   珠海格力电器股份有限公司装备动力技术研究院三所
 ********************************************************************/
 
-#ifndef __GLOABL_H__
-#define __GLOABL_H__
+#ifndef GLOBAL_H
+#define GLOBAL_H
 
 #include <semaphore.h>
 #include "gcode_queue.h"
@@ -126,4 +126,4 @@ void shm_var_update();
 }
 #endif
 
-#endif
+#endif /* GLOBAL_H */
