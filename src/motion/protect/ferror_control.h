@@ -15,11 +15,13 @@
 #include <stdbool.h>
 
 #ifdef __cplusplus
-extern "C" {
+extern "C"
+{
 #endif
 
 /* 跟随误差控制器结构体 */
-typedef struct {
+typedef struct
+{
     double ferror;       /* 实际跟随误差 (mm)，供 HMI 显示 */
     double ferror_limit; /* 当前生效的跟随误差限值 (mm)，供 HMI 显示 */
     bool error_flag;     /* 跟随误差超限标志 */

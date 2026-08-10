@@ -21,13 +21,11 @@ ferror_control_t ferror_control[SYS_AXES_NUM]; // 跟随误差控制器
 static const char *axis_names[] = {"X", "Y", "Z"};
 
 /* ---------- 内部函数声明 ---------- */
-static void check_axis_ferror(
-    ferror_control_t *ferror_ctrl,
-    const ParamUnit *axis_para,
-    double pos_cmd,
-    double pos_fb,
-    double vel_cmd
-);
+static void check_axis_ferror(ferror_control_t *ferror_ctrl,
+                              const ParamUnit *axis_para,
+                              double pos_cmd,
+                              double pos_fb,
+                              double vel_cmd);
 
 /* ---------- 外部函数定义 ---------- */
 
@@ -98,13 +96,11 @@ void reset_ferror_control(void)
  *   - 运动中 (|vel_cmd| > SPEED_THRESHOLD) 使用 PAR_AX_MAX_FERROR（PRM 1828）
  *   - 停止时 (|vel_cmd| <= SPEED_THRESHOLD) 使用 PAR_AX_MIN_FERROR（PRM 1829）
  */
-static void check_axis_ferror(
-    ferror_control_t *ferror_ctrl,
-    const ParamUnit *axis_para,
-    double pos_cmd,
-    double pos_fb,
-    double vel_cmd
-)
+static void check_axis_ferror(ferror_control_t *ferror_ctrl,
+                              const ParamUnit *axis_para,
+                              double pos_cmd,
+                              double pos_fb,
+                              double vel_cmd)
 {
     if (ferror_ctrl == NULL || axis_para == NULL)
         return;
@@ -113,14 +109,14 @@ static void check_axis_ferror(
 
     if (fabs(vel_cmd) > SPEED_THRESHOLD)
     {
-        /* 运动中：使用移动中位置偏差极限值 (对应 PRM 1828) */
-        ferror_ctrl->ferror_limit = axis_para[PAR_AX_MAX_FERROR].value.val_real;
+        /* 运动中：使用动态最大跟随误差 */
+        ferror_ctrl->ferror_limit = axis_para[PAR_AX_MAX_DYNAMIC_LAG].value.val_real;
         ferror_ctrl->is_moving = true;
     }
     else
     {
-        /* 停止中：使用停止时位置偏差极限值 (对应 PRM 1829) */
-        ferror_ctrl->ferror_limit = axis_para[PAR_AX_MIN_FERROR].value.val_real;
+        /* 停止中：使用静态最大跟随误差 */
+        ferror_ctrl->ferror_limit = axis_para[PAR_AX_MAX_STATIC_LAG].value.val_real;
         ferror_ctrl->is_moving = false;
     }
 
