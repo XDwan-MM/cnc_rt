@@ -1,5 +1,5 @@
-#ifndef __EMCMOT_H__
-#define __EMCMOT_H__
+#ifndef EMCMOT_H
+#define EMCMOT_H
 
 /******************************************************************** 
  * @file        emcmot.h
@@ -34,4 +34,4 @@ void emcmotTrajPlan();
 }
 #endif
 
-#endif
+#endif /* EMCMOT_H */

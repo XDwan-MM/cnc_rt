@@ -10,24 +10,27 @@
  * 定义物理安全边界、运动判定阈值及补偿状态机枚举。
  */
 
-/* 物理安全边界：1000um = 1mm，各项误差补偿（螺距误差、垂直度）单次输出最大不超过1mm */
+/* 物理安全边界：1000um = 1mm，单项误差补偿输出不得超过此范围。 */
 #define MAX_COMP_LIMIT_PER (1.0)
 
-/* 运动判定速度阈值 (mm/s)：低于此值视为静止，用于触发首次运动入场逻辑 */
-#define VEL_THRESHOLD (1e-5)
-
-/* 位置增量检测阈值 (mm/周期)：1e-5 mm/s × 1ms = 1e-8 mm。
+/* 位置增量检测阈值 (mm/周期)：用于统一各模块的运动/静止判定。
  * 实际最小运动步长 ~1e-4 mm，远大于此值。静止时指令位置逐周期相同，不会误判。 */
-#define POS_DELTA_THRESHOLD (1e-5)
+#define POS_DELTA_THRESHOLD (1e-6)
 
 /* 角度转换因子：将 um/m 转换为 mm/mm 的无量纲比值 (1 um/m = 1e-6 mm/mm) */
 #define ANGLE_UM_PER_M_TO_RATIO (1e-6)
 
-/* 螺距补偿输入单位转换：int16_t 原始值 (μm) → 补偿值 (mm) */
-#define PITCH_COMP_UM_TO_MM (0.001)
+/* 补偿输入通用单位转换：int 原始值 (μm) → 补偿值 (mm) */
+#define UNIT_UM_TO_MM (0.001)
 
 /* 最大轴索引 (0-based)，用于 all_axis_pos[] 数组越界保护 */
 #define MAX_AXIS_INDEX (2)
+
+/* 顺序表最大支持存储的测量点数 */
+#define COMP_ARRAY_MAX_SIZE 256
+
+/* 哨兵边界点数量：数组首尾各预留1个，防止游标查找越界 */
+#define COMP_BOUNDARY_POINTS 2
 
 #ifdef __cplusplus
 extern "C"
@@ -39,32 +42,32 @@ extern "C"
  *
  * 用于处理补偿开启、关闭及参数变更时的平滑过渡：
  * - IDLE:    补偿关闭或上电未运动，输出恒为 0
- * - RAMPING: 入场、退场或类型切换时的斜坡过渡
- * - ACTIVE:  正常加工中，实时叠加理想补偿值
+ * - RAMPING: 入场、退场、换向或参数切换时的斜坡过渡
+ * - LOCKED:  斜坡完成，已锁定目标，每周期直接跟随输出
  */
 typedef enum
 {
     COMP_PHASE_IDLE = 0,
     COMP_PHASE_RAMPING,
-    COMP_PHASE_ACTIVE,
-    COMP_PHASE_WAIT_MOTION   /* 使能变化时所有轴静止，等待任意轴运动后再斜坡 */
+    COMP_PHASE_LOCKED,
+    COMP_PHASE_WAIT_MOTION /* 使能变化时所有轴静止，等待任意轴运动后再斜坡 */
 } CompPhase;
 
 /**
- * @brief 螺距补偿建表返回值枚举
+ * @brief 操作结果返回值枚举
  *
- * generate_pitch_comp_table() 的返回状态，负值表示错误，零表示成功。
+ * 适用于所有基于顺序表的补偿模块（螺距、直线度等）的建表/操作返回值。
  */
 typedef enum
 {
-    PITCH_TABLE_OK = 0,                /* 建表成功 */
-    PITCH_TABLE_ERR_NULL_PTR = -1,     /* 参数指针为空 (table / meas_pos_arr_mm / fwd_comp_arr_um / rev_comp_arr_um) */
-    PITCH_TABLE_ERR_NUM_POINTS = -2,   /* 测量点数无效 (<=0 或超过 COMP_ARRAY_MAX_SIZE) */
-    PITCH_TABLE_ERR_NOT_ASCENDING = -3 /* 测量点未按升序排列 */
-} PitchTableStatus;
+    OP_RES_OK = 0,              /* 操作成功 */
+    OP_RES_ERR_NULL_PTR,        /* 参数指针为空 */
+    OP_RES_ERR_OUT_OF_RANGE,    /* 测量点数无效 (<=0 或超过 COMP_ARRAY_MAX_SIZE) */
+    OP_RES_ERR_NOT_ASCENDING    /* 测量点未按升序排列 */
+} OP_RES;
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif
+#endif /* COMP_COMMON_H */

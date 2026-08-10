@@ -158,6 +158,7 @@ INCLUDEPATH += \
     ../src/plc \
     ../src/plc/pmc_scanner \
     ../src/plc/plc_task \
+    ../src/plc/lad_trace \
     ../src/task \
     ../src/threads \
     ../src/utils \

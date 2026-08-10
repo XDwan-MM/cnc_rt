@@ -1,38 +1,50 @@
-#ifndef __COMP_DATA_H__
-#define __COMP_DATA_H__
+#ifndef COMP_DATA_H
+#define COMP_DATA_H
 
-#include "pitch_comp.h"
 #include "backlash_comp.h"
-#include "perp_comp.h"
+#include "datatype.h"
+#include "pitch_comp.h"
+#include "pitch_comp_seqlist.h"
+#include "straightness_comp.h"
+#include "straightness_comp_seqlist.h"
 
 #ifdef __cplusplus
-extern "C" {
+extern "C"
+{
 #endif
 
-// 螺距误差补偿数据
-extern PitchCompState pitch_comp_state[3];       // XYZ轴 螺距补偿状态机
-extern BacklashCompState backlash_comp_state[3]; // XYZ轴 反向间隙补偿状态机
-extern PerpCompState perp_comp_state[3];         // XYZ轴 垂直度补偿状态机
-
-extern pitch_comp_table_t pitch_comp_table[3];      // XYZ轴 螺距补偿表
-extern PitchTableStatus pitch_comp_table_status[3]; // 螺距补偿表建立状态
-
-// 误差补偿库中的补偿参数结构体实例
+// 误差补偿库中的补偿参数结构体声明
 extern CompParams par_comp_lib[3];
 
+// 补偿算法状态机声明
+extern PitchCompState pitch_comp_state[3];                // XYZ轴 螺距补偿状态机
+extern BacklashCompState backlash_comp_state[3];          // XYZ轴 反向间隙补偿状态机
+extern StraightnessCompState straightness1_comp_state[3]; // XYZ轴 第一组直线度误差补偿状态机
+extern StraightnessCompState straightness2_comp_state[3]; // XYZ轴 第二组直线度误差补偿状态机
 
-// One-time init: call pitch_comp_init() for each axis, initial param sync
-void comp_data_init(void);
+// 各个补偿表声明
+extern PitchCompSeqList_t pitch_comp_table[3];                // XYZ轴 螺距补偿表
+extern StraightnessCompSeqList_t straightness1_comp_table[3]; // XYZ轴 第一组直线度误差补偿表
+extern StraightnessCompSeqList_t straightness2_comp_table[3]; // XYZ轴 第二组直线度误差补偿表
 
-// Per-cycle: copy pitch_comp fields from par_acmp[] to par_comp_lib[]
-void sync_comp_params(void);
+// 各个补偿表创建结果返回声明
+extern OP_RES pitch_comp_table_status[3];         // 螺距补偿表建立结果返回
+extern OP_RES straightness1_comp_table_status[3]; // 第一组直线度补偿表建立结果返回
+extern OP_RES straightness2_comp_table_status[3]; // 第二组直线度补偿表建立结果返回
 
-// Build pitch compensation tables from shared memory data for all axes
-// Must be called after comp_data_sync_params()
-void establish_pitch_comp_table(void);
+// 外部接口声明
+extern void comp_data_init(void);
+
+extern void sync_comp_params(void);
+
+extern void establish_pitch_comp_table(void);
+
+extern void establish_straightness_comp_table(void);
+
+extern void comp_handle_event(SYS_EVENT event);
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif
+#endif /* COMP_DATA_H */

@@ -41,4 +41,10 @@
     #define DEBUG_PRINT(fmt, ...)
 #endif
 
+// ============ 补偿数据记录开关 ============
+// 编译时开关：定义此宏可在 compute_error_comp() 中每个周期记录补偿数据到CSV文件
+// 文件保存位置：与 run.sh 同级目录
+// 取消注释以启用
+// #define ENABLE_COMP_DATA_LOG
+
 #endif // DEBUG_MODE_H

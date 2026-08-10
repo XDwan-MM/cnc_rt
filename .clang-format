@@ -1,12 +1,17 @@
----
+# clang-format configuration for CNC_ErrorComp
 # 基础风格
 BasedOnStyle: LLVM
 
 # 限制单行最大字符数（超过此长度时，就会触发函数参数换行。可根据喜好调整为 100 或 120）
-ColumnLimit: 100
+ColumnLimit: 120
 
 # 缩进宽度（根据你的习惯，通常为 4 或 2）
 IndentWidth: 4
+TabWidth: 4
+UseTab: Never
+IndentCaseLabels: false
+# extern "C" 块内的声明不额外缩进
+IndentExternBlock: NoIndent
 
 # ========================================
 # 1. 解决: if 语句大括号单独一行
@@ -21,15 +26,21 @@ BraceWrapping:
 # ========================================
 # 2. 解决: 函数参数过长时，一个参数占一行
 # ========================================
+# 超长函数声明优先拆分参数，避免返回类型和函数名分行
+PenaltyReturnTypeOnItsOwnLine: 1000
+# 避免在赋值号后优先换行，保留 "result = function(...)" 在同一行
+PenaltyBreakAssignment: 1000
+
 # 禁用参数合并排列（换行时强制一参数一行）
 BinPackParameters: false  # 针对函数定义
 BinPackArguments: false   # 针对函数调用
 
-# 括号内折行对齐规则
-# BlockIndent 会把第一个参数放到新行，每个参数独占一行，右括号 ")" 也单独占一行
-AlignAfterOpenBracket: BlockIndent
+# 括号内折行对齐规则：续行参数对齐到左括号后的第一列
+AlignAfterOpenBracket: Align
 
 # 禁止把所有参数整体挤到下一行
 AllowAllParametersOfDeclarationOnNextLine: false
 AllowAllArgumentsOnNextLine: false
----
+
+# C++11 / C11 features
+Standard: c++17

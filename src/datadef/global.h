@@ -7,8 +7,8 @@
  * @copyright   珠海格力电器股份有限公司装备动力技术研究院三所
 ********************************************************************/
 
-#ifndef __GLOABL_H__
-#define __GLOABL_H__
+#ifndef GLOBAL_H
+#define GLOBAL_H
 
 #include <semaphore.h>
 #include "plan_queue.h"
@@ -19,6 +19,9 @@
 #include "trajectory.h"
 #include "hal_driver.h"
 #include "hal_io.h"
+#include "jog.h"
+#include "ferror_control.h"
+#include "stored_stroke_check.h"
 #include <varapi.h>
 #include <parapi.h>
 
@@ -119,4 +122,4 @@ void shm_var_update();
 }
 #endif
 
-#endif
+#endif /* GLOBAL_H */
