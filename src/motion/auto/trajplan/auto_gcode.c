@@ -35,80 +35,78 @@ static bool auto_pos_cmd_arrive_check();
 
 void auto_get_pos_cmd(){
     cycle_tp_update_pos_cmd_data();
-    if(IsGreaterThan(cycle_tp->plan_block->length, 0)) {
-        switch (cycle_tp->plan_block->type)
-        {
-        case RAPID:
-            cycle_tp->exec_cmd = DO_MOVE_CMD;
-            break;
-        case TAP_RETURN:
-        case RIGID_TAP:
-            cycle_tp->exec_cmd = DO_TAP_CMD;
-            break;
-        default:
-            cycle_tp->exec_cmd = DO_CHOP_CMD;
-            break;
-        }
-        // 更新目标速度
-        auto_cal_target_vel();
-        // 当前速度和目标速度为0
-        if (IsEqualTo(cycle_tp->pos_cmd_data.current_vel, 0) && IsEqualTo(cycle_tp->pos_cmd_data.target_vel, 0)) {
-            cycle_tp->exec_cmd = DO_NULL_CMD;
-            cycle_tp->target_stage = PROGRAM_WAIT;
-            return;
-        }
-        // 速度前瞻
-        auto_look_ahead();
-        // 行程限位检查
-        lookahead_check_soft_limit(&cycle_tp->plan_block->end_pos);
-        // 速度规划
-        auto_do_vel_plan();
+    switch (cycle_tp->plan_block->type)
+    {
+    case RAPID:
+        cycle_tp->exec_cmd = DO_MOVE_CMD;
+        break;
+    case TAP_RETURN:
+    case RIGID_TAP:
+        cycle_tp->exec_cmd = DO_TAP_CMD;
+        break;
+    default:
+        cycle_tp->exec_cmd = DO_CHOP_CMD;
+        break;
     }
-    else {
+    // 更新目标速度
+    auto_cal_target_vel();
+    // 当前速度和目标速度为0
+    if (IsEqualTo(cycle_tp->pos_cmd_data.current_vel, 0) && IsEqualTo(cycle_tp->pos_cmd_data.target_vel, 0)) {
+        cycle_tp->target_stage = PROGRAM_WAIT;
+        return;
+    }
+    // 如果长度为0
+    if(IsLessThanOrEqual(cycle_tp->plan_block->length, 0)){
         cycle_tp->exec_cmd = DO_NULL_CMD;
         cycle_tp->target_stage = BLOCK_STOP_2_END;
+        return;
     }
+    // 速度前瞻
+    auto_look_ahead();
+    // 行程限位检查
+    lookahead_check_soft_limit(&cycle_tp->plan_block->end_pos);
+    // 速度规划
+    auto_do_vel_plan();
 }
 
 void auto_update_pos_cmd(){
     cycle_tp_update_pos_cmd_data();
-    if(IsGreaterThan(cycle_tp->plan_block->length, 0)) {
-        switch (cycle_tp->plan_block->type)
-        {
-        case RAPID:
-            cycle_tp->exec_cmd = DO_MOVE_CMD;
-            break;
-        case TAP_RETURN:
-        case RIGID_TAP:
-            cycle_tp->exec_cmd = DO_TAP_CMD;
-            break;
-        default:
-            cycle_tp->exec_cmd = DO_CHOP_CMD;
-            break;
-        }
-        // 更新目标速度
-        auto_cal_target_vel();
-        // 当前速度和目标速度为0
-        if (IsEqualTo(cycle_tp->pos_cmd_data.current_vel, 0) && IsEqualTo(cycle_tp->pos_cmd_data.target_vel, 0)) {
-            cycle_tp->exec_cmd = DO_NULL_CMD;
-            cycle_tp->target_stage = PROGRAM_WAIT;
-            return;
-        }
-        // 判断是否需要重新计算速度曲线
-        if(is_newval_unvalid()) return;
-        // 更新块信息
-        cycle_tp_update_block_data();
-        // 速度前瞻
-        auto_look_ahead();
-        // 行程限位检查
-        lookahead_check_soft_limit(&cycle_tp->plan_block->end_pos);
-        // 速度规划
-        auto_do_vel_plan();
+    switch (cycle_tp->plan_block->type)
+    {
+    case RAPID:
+        cycle_tp->exec_cmd = DO_MOVE_CMD;
+        break;
+    case TAP_RETURN:
+    case RIGID_TAP:
+        cycle_tp->exec_cmd = DO_TAP_CMD;
+        break;
+    default:
+        cycle_tp->exec_cmd = DO_CHOP_CMD;
+        break;
     }
-    else {
+    // 更新目标速度
+    auto_cal_target_vel();
+    // 当前速度和目标速度为0
+    if (IsEqualTo(cycle_tp->pos_cmd_data.current_vel, 0) && IsEqualTo(cycle_tp->pos_cmd_data.target_vel, 0)) {
+        cycle_tp->target_stage = PROGRAM_WAIT;
+        return;
+    }
+    // 判断是否需要重新计算速度曲线
+    if(is_newval_unvalid()) return;
+    // 更新块信息
+    cycle_tp_update_block_data();
+    // 如果长度为0
+    if(IsLessThanOrEqual(cycle_tp->plan_block->length, 0)){
         cycle_tp->exec_cmd = DO_NULL_CMD;
         cycle_tp->target_stage = BLOCK_STOP_2_END;
+        return;
     }
+    // 速度前瞻
+    auto_look_ahead();
+    // 行程限位检查
+    lookahead_check_soft_limit(&cycle_tp->plan_block->end_pos);
+    // 速度规划
+    auto_do_vel_plan();
 }
 
 void auto_execute_pos_cmd(){
@@ -145,6 +143,14 @@ static bool auto_pos_cmd_cycle_is_finished(){
 
 bool auto_pos_cmd_is_finished(){
     if(auto_pos_cmd_arrive_check()) {
+        switch(cycle_tp->target_stage){
+            case BLOCK_PAUSED:
+            case BLOCK_BREAKPOINT:
+                cycle_tp_update_block_data();
+                break;
+            default:
+                break;
+        }
         cycle_tp_reset_pos_cmd_data();
         return true;
     }
@@ -212,7 +218,6 @@ static bool is_newval_unvalid(){
     int velplan_mode = cycle_tp->velplan_mode;
     double remain_s = cycle_tp->plan_block->length - cycle_tp->pos_cmd_data.accum_distance;
     double total_decline_length = 0;
-    if(IsEqualTo(remain_s, 0)) return true;
     if(IsGreaterThan(vs, target_vel) && IsGreaterThanOrEqual(target_vel, ve)){
         total_decline_length = vp_cal_decel_dist(velplan_mode, vs, target_vel, cycle_tp->plan_block->max_acc, cycle_tp->plan_block->max_jerk)
         + vp_cal_decel_dist(velplan_mode, target_vel, ve, cycle_tp->plan_block->max_acc, cycle_tp->plan_block->max_jerk);

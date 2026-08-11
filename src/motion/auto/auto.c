@@ -572,7 +572,8 @@ static void auto_check_error_line(){
     int error_line = rt_get_parser_error_line();
     if(error_no >= 0){
         setVarChanInt(0, VAR_CHAN_RUN_ROW, error_line, 0);
-        setAlarm(ALARM_PS, ALARM_ERROR, error_no);
+        int res = setAlarm(ALARM_PS, ALARM_ERROR, error_no);
+        if(res == -8) return;
         LOG(LOG_LEVEL_INFO, "error line: %d", error_line);
         LOG(LOG_LEVEL_ERR, "译码错误 %d", error_no);
     }
@@ -686,7 +687,7 @@ static void auto_update_var(){
     }
     // 运行行号
     setVarChanInt(0, VAR_CHAN_RUN_ROW, cycle_tp->plan_block->line_number, 0);
-    LOG(LOG_LEVEL_DEBUG, "line number:%d", cycle_tp->plan_block->line_number);
+    // LOG(LOG_LEVEL_DEBUG, "line number:%d", cycle_tp->plan_block->line_number);
 }
 
 static GNC_RES cycle_tp_pos_cmd_data_init(POS_CMD_DATA* pos_cmd_data){
