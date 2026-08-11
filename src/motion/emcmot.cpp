@@ -345,17 +345,21 @@ static void compute_error_comp()
                                                         mac_cmd_pos,
                                                         is_rapid);
         // 第一组直线度误差补偿值计算
-        straightness1_comp_val[i] = calcul_straightness1_comp_val(&par_comp_lib[i],
-                                                                  &straightness1_comp_state[i],
-                                                                  i,
-                                                                  all_axis_pos,
-                                                                  &straightness1_comp_table[i]);
+        straightness1_comp_val[i] = 0.0;
+        // straightness1_comp_val[i] = calcul_straightness1_comp_val(&par_comp_lib[i],
+        //                                                           &straightness1_comp_state[i],
+        //                                                           i,
+        //                                                           all_axis_pos,
+        //                                                           &straightness1_comp_table[i]);
+
         // 第二组直线度误差补偿值计算
-        straightness2_comp_val[i] = calcul_straightness2_comp_val(&par_comp_lib[i],
-                                                                  &straightness2_comp_state[i],
-                                                                  i,
-                                                                  all_axis_pos,
-                                                                  &straightness2_comp_table[i]);
+        straightness2_comp_val[i] = 0.0;
+        // straightness2_comp_val[i] = calcul_straightness2_comp_val(&par_comp_lib[i],
+        //                                                           &straightness2_comp_state[i],
+        //                                                           i,
+        //                                                           all_axis_pos,
+        //                                                           &straightness2_comp_table[i]);
+        
         // 补偿值同步到全局误差补偿变量中
         rt_data->axis_data[i].pitch_comp_val = pitch_comp_val[i];
         rt_data->axis_data[i].backlash_comp_val = backlash_comp_val[i];
