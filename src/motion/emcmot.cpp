@@ -248,9 +248,29 @@ static void check_for_fault()
     {
         handle_estop_cmd();
     }
-    // 　检查系统报警和内部急停标志
-    int alarm_count = 0;
-    getAlarmCount(ALARM_TYPE_ALL, ALARM_ERROR, &alarm_count);
+    // 检查系统报警(去除用户PLC报警)和内部急停标志
+    int alarm_count0 = 0;
+    int alarm_count1 = 0;
+    int alarm_count2 = 0;
+    int alarm_count3 = 0;
+    int alarm_count4 = 0;
+    int alarm_count5 = 0;
+    int alarm_count6 = 0;
+    int alarm_count7 = 0;
+    int alarm_count8 = 0;
+    getAlarmCount(ALARM_SY, ALARM_ERROR, &alarm_count0);
+    getAlarmCount(ALARM_CH, ALARM_ERROR, &alarm_count1);
+    getAlarmCount(ALARM_AX, ALARM_ERROR, &alarm_count2);
+    getAlarmCount(ALARM_SV, ALARM_ERROR, &alarm_count3);
+    getAlarmCount(ALARM_PC, ALARM_ERROR, &alarm_count4);
+    getAlarmCount(ALARM_DV, ALARM_ERROR, &alarm_count5);
+    getAlarmCount(ALARM_PS, ALARM_ERROR, &alarm_count6);
+    getAlarmCount(ALARM_HM, ALARM_ERROR, &alarm_count7);
+    getAlarmCount(ALARM_ETHCAT_SV, ALARM_ERROR, &alarm_count8);
+
+    int alarm_count = alarm_count0 + alarm_count1 + alarm_count2 + alarm_count3 + alarm_count4 + alarm_count5 +
+                      alarm_count6 + alarm_count7 + alarm_count8;
+
     if (alarm_count > 0 || rt_data->sys_state[SYS_IS_ESTOP_ACTIVE])
     {
         rt_data->sys_state[SYS_IS_ALARMING] = true;
@@ -291,7 +311,20 @@ static void read_from_hal()
             rt_data->axis_data[i].wcs_cmd_pos_pre = rt_data->axis_data[i].motor_act_pos;
             rt_data->axis_data[i].mac_cmd_pos = rt_data->axis_data[i].motor_act_pos;
             rt_data->axis_data[i].motor_cmd_pos = rt_data->axis_data[i].motor_act_pos;
+#ifdef DEBUG_MODE_ENABLED
+            // rt_data->axis_data[i].fb_pos_no_comp = rt_data->axis_data[i].motor_act_pos -
+            // rt_data->axis_data[i].pitch_comp_val;
+            LOG(LOG_LEVEL_DEBUG,
+                "%f, %f, %f, %f, %f,%f",
+                rt_data->axis_data[i].motor_act_pos,
+                rt_data->axis_data[i].wcs_cmd_pos_cur,
+                rt_data->axis_data[i].wcs_cmd_pos_pre,
+                rt_data->axis_data[i].mac_cmd_pos,
+                rt_data->axis_data[i].motor_cmd_pos,
+                rt_data->axis_data[i].fb_pos_no_comp);
+#else
             rt_data->axis_data[i].fb_pos_no_comp = rt_data->axis_data[i].motor_act_pos;
+#endif
         }
         update_pos_flag = 1;
     }
@@ -310,10 +343,10 @@ static void output_to_hal()
 
 static void compute_error_comp()
 {
-    double pitch_comp_val[3] = {0};
-    double backlash_comp_val[3] = {0};
-    double straightness1_comp_val[3] = {0};
-    double straightness2_comp_val[3] = {0};
+    double pitch_comp_val[3] = {0.0};
+    double backlash_comp_val[3] = {0.0};
+    double straightness1_comp_val[3] = {0.0};
+    double straightness2_comp_val[3] = {0.0};
 
     // todo 事件驱动：仅在 HMI 下发补偿事件时同步参数/重建表
     comp_handle_event(rt_data->nc_event);
@@ -359,7 +392,7 @@ static void compute_error_comp()
         //                                                           i,
         //                                                           all_axis_pos,
         //                                                           &straightness2_comp_table[i]);
-        
+
         // 补偿值同步到全局误差补偿变量中
         rt_data->axis_data[i].pitch_comp_val = pitch_comp_val[i];
         rt_data->axis_data[i].backlash_comp_val = backlash_comp_val[i];
@@ -377,6 +410,7 @@ static void compute_error_comp()
         // 反馈位置（去除补偿）
         rt_data->axis_data[i].fb_pos_no_comp = rt_data->axis_data[i].motor_act_pos - total_comp_val;
     }
+    // printf("mac_cmd_pos_x: %f\n", rt_data->axis_data[0].mac_cmd_pos);
 #ifdef ENABLE_COMP_DATA_LOG
     {
         static FILE *comp_log_file = NULL;

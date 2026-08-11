@@ -8,11 +8,9 @@
 jog_planner_t jog_tp[SYS_AXES_NUM_JOG];
 
 /* 控制状态初始化 */
-static JOG_AXIS_CTRL jog_ctrls[SYS_AXES_NUM_JOG] = {
-    {JOG_STATE_IDLE, JOG_DIR_NONE},
-    {JOG_STATE_IDLE, JOG_DIR_NONE},
-    {JOG_STATE_IDLE, JOG_DIR_NONE}
-};
+static JOG_AXIS_CTRL jog_ctrls[SYS_AXES_NUM_JOG] = {{JOG_STATE_IDLE, JOG_DIR_NONE},
+                                                    {JOG_STATE_IDLE, JOG_DIR_NONE},
+                                                    {JOG_STATE_IDLE, JOG_DIR_NONE}};
 
 /* 在 jog.c 的文件头部定义 */
 static NC_MODE last_sys_mode = MODE_IDLE; // 记录进入当前模式前，上一次的操作模式
@@ -24,12 +22,7 @@ static bool jog_neg_held[SYS_AXES_NUM_JOG];
 
 /* 内部私有函数声明 */
 static void update_axis_state(int i, JOG_AXIS_CTRL *jog_axis_ctrl, bool global_fatal);
-static void execute_axis_motion(
-    int i,
-    JOG_AXIS_CTRL *jog_axis_ctrl,
-    jog_planner_t *axis_jog_tp,
-    const bool is_rapid
-);
+static void execute_axis_motion(int i, JOG_AXIS_CTRL *jog_axis_ctrl, jog_planner_t *axis_jog_tp, const bool is_rapid);
 static void sync_jog_on_mode_entry();
 static bool check_all_axes_idle_jog();
 
@@ -73,10 +66,7 @@ void handle_jog_cmd()
         {
             if (rt_data->axis_data[j].axis_status.is_error || ferror_control[j].error_flag)
                 any_non_limit = true;
-            else if (
-                rt_data->axis_data[j].axis_status.is_fwd_limit ||
-                rt_data->axis_data[j].axis_status.is_rev_limit
-            )
+            else if (rt_data->axis_data[j].axis_status.is_fwd_limit || rt_data->axis_data[j].axis_status.is_rev_limit)
                 any_pure_limit = true;
         }
         global_fatal = (any_non_limit || !any_pure_limit);
@@ -115,8 +105,7 @@ void handle_jog_cmd()
     for (int i = 0; i < SYS_AXES_NUM_JOG; i++)
     {
         if (fabs(var_axis[i][VAR_AXIS_CMD_VEL].value.f) < SPEED_THRESHOLD &&
-            (rt_data->axis_data[i].axis_status.is_fwd_limit ||
-             rt_data->axis_data[i].axis_status.is_rev_limit))
+            (rt_data->axis_data[i].axis_status.is_fwd_limit || rt_data->axis_data[i].axis_status.is_rev_limit))
         {
             rt_data->axis_data[i].axis_status.is_decel_done = 1;
         }
@@ -314,8 +303,7 @@ static void update_axis_state(int i, JOG_AXIS_CTRL *jog_axis_ctrl, bool global_f
  * @brief 轴运动执行逻辑 (带前瞻软限位拦截)
  * 根据快速标志位选择 运动类型：快速JOG/普通JOG。
  */
-static void
-execute_axis_motion(int i, JOG_AXIS_CTRL *jog_axis_ctrl, jog_planner_t *axis_jog_tp, bool is_rapid)
+static void execute_axis_motion(int i, JOG_AXIS_CTRL *jog_axis_ctrl, jog_planner_t *axis_jog_tp, bool is_rapid)
 {
     switch (jog_axis_ctrl->state)
     {
