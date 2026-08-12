@@ -1,12 +1,12 @@
 #include "task.h"
 #include "eventdef.h"
-#include <hmisysapi.h>
-#include <alarmapi.h>
-#include <stdlib.h>
-#include "regapi.h"
 #include "global.h"
-#include "spl_control.h"
 #include "hmi_scanner.h"
+#include "regapi.h"
+#include "spl_control.h"
+#include <alarmapi.h>
+#include <hmisysapi.h>
+#include <stdlib.h>
 
 static PMC_EVENT event_data;
 static GNC_RES task_handle_pmc_event(PMC_EVENT *event_data);
@@ -16,6 +16,7 @@ static void task_handle_spl_event(PMC_EVENT *event_data);
 static void task_handle_overrate_event(PMC_EVENT *event_data);
 static void task_handle_auto_event(PMC_EVENT *event_data);
 static void task_handle_enable_event(PMC_EVENT *event_data);
+static void task_handle_reset_event(PMC_EVENT *event_data);
 static void task_handle_hmi_event(PMC_EVENT *event_data);
 
 // 任务消息队列初始化
@@ -53,8 +54,10 @@ static GNC_RES task_handle_pmc_event(PMC_EVENT *event_data)
     switch (event_data->id)
     {
     case EV_MSG_NONE:
+    {
         rt_data->nc_event = SYS_EVENT_NONE;
         break;
+    }
     case EV_MSG_MODE:
     {
         task_handle_mode_event(event_data);
@@ -81,27 +84,23 @@ static GNC_RES task_handle_pmc_event(PMC_EVENT *event_data)
         break;
     }
     case EV_MSG_ENANLE:
+    {
         task_handle_enable_event(event_data);
         break;
+    }
     case EV_MSG_HMI:
+    {
         task_handle_hmi_event(event_data);
         break;
-    case EV_MSG_SPD_ORI:
-        LOG(LOG_LEVEL_INFO, "处理主轴定向事件");
-        break;
+    }
     case EV_MSG_RESET:
     {
-        if (event_data->reset_payload.reset_state == 1)
-        {
-            if (event_data->reset_payload.reset_type == 0){
-                rt_data->nc_event = SYS_EVENT_HMI_RESET;
-                LOG(LOG_LEVEL_INFO, "处理急停复位事件");
-            }
-            if (event_data->reset_payload.reset_type == 1){
-                rt_data->nc_event = SYS_EVENT_OUTSIDE_RESET;
-                LOG(LOG_LEVEL_INFO, "处理m30复位事件");
-            }
-        }
+        task_handle_reset_event(event_data);
+        break;
+    }
+    case EV_MSG_SPD_ORI:
+    {
+        LOG(LOG_LEVEL_INFO, "处理主轴定向事件");
         break;
     }
     default:
@@ -110,7 +109,9 @@ static GNC_RES task_handle_pmc_event(PMC_EVENT *event_data)
     return GNC_OPERATOR_SUCCESS;
 }
 
-static void task_handle_mode_event(PMC_EVENT *event_data){
+static void task_handle_mode_event(PMC_EVENT *event_data)
+{
+    LOG(LOG_LEVEL_INFO, "处理模式切换事件 %d", rt_data->target_mode);
     switch (event_data->mode_payload.mode)
     {
     case CNC_MODE_EDIT:
@@ -138,10 +139,15 @@ static void task_handle_mode_event(PMC_EVENT *event_data){
         rt_data->target_mode = MODE_IDLE;
         break; // wcf: 我不太确定
     }
-    LOG(LOG_LEVEL_INFO, "处理模式切换事件 %d", rt_data->target_mode);
 }
 
-static void task_handle_feed_event(PMC_EVENT *event_data){
+static void task_handle_feed_event(PMC_EVENT *event_data)
+{
+    LOG(LOG_LEVEL_INFO,
+        "处理进给轴按键事件 轴选键%d 动作%d 当前模式%d",
+        event_data->feedaxis_key_payload.axis_num,
+        event_data->feedaxis_key_payload.direction,
+        rt_data->current_mode);
     int axis = event_data->feedaxis_key_payload.axis_num;       // 0:X, 1:Y, 2:Z
     int direction = event_data->feedaxis_key_payload.direction; // 1:正按, -1:正释放, 2:负按，-2:负释放
 
@@ -224,38 +230,40 @@ static void task_handle_feed_event(PMC_EVENT *event_data){
                 break;
             }
         }
-        LOG(LOG_LEVEL_INFO, "处理进给轴按键事件 Axis %d action %d under mode %d", axis, direction, rt_data->current_mode);
     }
 }
 
-static void task_handle_spl_event(PMC_EVENT *event_data){
+static void task_handle_spl_event(PMC_EVENT *event_data)
+{
+    LOG(LOG_LEVEL_INFO, "处理主轴事件 动作%d", event_data->spindle_payload.direction);
     if (event_data->spindle_payload.direction == 1)
     {
+        // LOG(LOG_LEVEL_INFO, "处理主轴正转事件");
         spl_data.spl_event = SPINDLE_EVENT_CW;
         spl_data.emot_speed = spl_data.mcp_target_speed;
-        LOG(LOG_LEVEL_INFO, "处理主轴正转事件");
     }
     if (event_data->spindle_payload.direction == -1)
     {
+        // LOG(LOG_LEVEL_INFO, "处理主轴反转事件");
         spl_data.spl_event = SPINDLE_EVENT_CCW;
         spl_data.emot_speed = -1.0 * spl_data.mcp_target_speed;
-        LOG(LOG_LEVEL_INFO, "处理主轴反转事件");
     }
     if (event_data->spindle_payload.direction == 0)
     {
+        // LOG(LOG_LEVEL_INFO, "处理主轴停止事件");
         spl_data.spl_event = SPINDLE_EVENT_STOP;
         spl_data.emot_speed = 0;
-        LOG(LOG_LEVEL_INFO, "处理主轴停止事件");
-    }    
+    }
 }
 
-static void task_handle_overrate_event(PMC_EVENT *event_data){
+static void task_handle_overrate_event(PMC_EVENT *event_data)
+{
     // 1.进给倍率
     if (event_data->override_payload.override_type == 0)
     {
+        LOG(LOG_LEVEL_INFO, "处理进给倍率事件 倍率值%d", event_data->override_payload.val);
         setVarChanDouble(0, VAR_CHAN_FEED_OVERRIDE, (double)event_data->override_payload.val, 0);
         rt_data->nc_event = SYS_EVENT_FEED_OVERRIDE;
-        LOG(LOG_LEVEL_INFO, "处理进给倍率事件 %d", event_data->override_payload.val);
         if (IsEqualTo(var_chan[0][VAR_CHAN_FEED_OVERRIDE].value.f, 0))
         {
             setAlarm(ALARM_SY, ALARM_WARNING, 3);
@@ -269,9 +277,9 @@ static void task_handle_overrate_event(PMC_EVENT *event_data){
     // 2.快速进给倍率
     if (event_data->override_payload.override_type == 1)
     {
+        LOG(LOG_LEVEL_INFO, "处理快速进给倍率事件 倍率值%d", event_data->override_payload.val);
         setVarChanDouble(0, VAR_CHAN_RAPID_OVERRIDE, (double)event_data->override_payload.val, 0);
         rt_data->nc_event = SYS_EVENT_RAPID_OVERRIDE;
-        LOG(LOG_LEVEL_INFO, "处理快速进给倍率事件 %d", event_data->override_payload.val);
         if (IsEqualTo(var_chan[0][VAR_CHAN_RAPID_OVERRIDE].value.f, 0))
         {
             setAlarm(ALARM_SY, ALARM_WARNING, 2);
@@ -285,17 +293,21 @@ static void task_handle_overrate_event(PMC_EVENT *event_data){
     // 3.主轴倍率
     if (event_data->override_payload.override_type == 2)
     {
+        LOG(LOG_LEVEL_INFO, "处理主轴倍率事件 倍率值%d", event_data->override_payload.val);
         setVarChanDouble(0, VAR_CHAN_SPDL_OVERRIDE, (double)event_data->override_payload.val, 0);
         rt_data->nc_event = SYS_EVENT_SPDL_OVERRIDE;
-        LOG(LOG_LEVEL_INFO, "处理主轴倍率事件 %d", event_data->override_payload.val);
     }
 }
 
-static void task_handle_auto_event(PMC_EVENT *event_data){
+static void task_handle_auto_event(PMC_EVENT *event_data)
+{
     // check：复位在F1.1置高，实时不响应启动和暂停事件
-    if(var_chan[0][VAR_CHAN_IS_RESETTING].value.i) {
-        if(event_data->run_payload.run_state == 1) LOG(LOG_LEVEL_WARN, "复位中...循环启动无效");
-        if(event_data->run_payload.run_state == 0) LOG(LOG_LEVEL_WARN, "复位中...进给保持无效");
+    if (var_chan[0][VAR_CHAN_IS_RESETTING].value.i)
+    {
+        if (event_data->run_payload.run_state == 1)
+            LOG(LOG_LEVEL_WARN, "复位中...循环启动无效");
+        if (event_data->run_payload.run_state == 0)
+            LOG(LOG_LEVEL_WARN, "复位中...进给保持无效");
         return;
     }
     if (event_data->run_payload.run_state == 1)
@@ -313,40 +325,47 @@ static void task_handle_auto_event(PMC_EVENT *event_data){
         {
             // 进给保持
             rt_data->nc_event = SYS_EVENT_PAUSE;
-            LOG(LOG_LEVEL_INFO, "处理进给保持事件");
+            LOG(LOG_LEVEL_INFO, "处理暂停事件");
         }
     }
 }
 
-static void task_handle_enable_event(PMC_EVENT *event_data){
+static void task_handle_enable_event(PMC_EVENT *event_data)
+{
     switch (event_data->enable_payload.enable_key)
     {
     case BLOCK_SKIP:
-        if(event_data->enable_payload.enable_state) {
+        if (event_data->enable_payload.enable_state)
+        {
             rt_data->nc_event = SYS_EVENT_BLOCK_SKIP_ON;
             LOG(LOG_LEVEL_INFO, "处理跳段开启事件");
         }
-        else {
+        else
+        {
             rt_data->nc_event = SYS_EVENT_BLOCK_SKIP_OFF;
             LOG(LOG_LEVEL_INFO, "处理跳段关闭事件");
         }
         break;
     case DRY_RUN:
-        if (event_data->enable_payload.enable_state){
+        if (event_data->enable_payload.enable_state)
+        {
             rt_data->nc_event = SYS_EVENT_DRY_RUN_ON;
             LOG(LOG_LEVEL_INFO, "处理空运行开启事件");
-        } 
-        else{
+        }
+        else
+        {
             rt_data->nc_event = SYS_EVENT_DRY_RUN_OFF;
             LOG(LOG_LEVEL_INFO, "处理空运行关闭事件");
         }
         break;
     case MAC_LOCK:
-        if(event_data->enable_payload.enable_state) {
+        if (event_data->enable_payload.enable_state)
+        {
             rt_data->nc_event = SYS_EVENT_MAC_LOCK_ON;
             LOG(LOG_LEVEL_INFO, "处理机床锁住开启事件");
         }
-        else {
+        else
+        {
             rt_data->nc_event = SYS_EVENT_MAC_LOCK_OFF;
             LOG(LOG_LEVEL_INFO, "处理机床锁住关闭事件");
         }
@@ -356,11 +375,13 @@ static void task_handle_enable_event(PMC_EVENT *event_data){
         LOG(LOG_LEVEL_INFO, "处理辅助功能锁住事件");
         break;
     case SINGLE_BLOCK:
-        if(event_data->enable_payload.enable_state) {
+        if (event_data->enable_payload.enable_state)
+        {
             rt_data->nc_event = SYS_EVENT_SINGLE_BLOCK_ON;
             LOG(LOG_LEVEL_INFO, "处理单段开启事件");
         }
-        else{
+        else
+        {
             rt_data->nc_event = SYS_EVENT_SINGLE_BLOCK_OFF;
             LOG(LOG_LEVEL_INFO, "处理单段关闭事件");
         }
@@ -370,7 +391,25 @@ static void task_handle_enable_event(PMC_EVENT *event_data){
     }
 }
 
-static void task_handle_hmi_event(PMC_EVENT *event_data){
+static void task_handle_reset_event(PMC_EVENT *event_data)
+{
+    if (event_data->reset_payload.reset_state == 1)
+    {
+        if (event_data->reset_payload.reset_type == 0)
+        {
+            LOG(LOG_LEVEL_INFO, "处理急停复位事件");
+            rt_data->nc_event = SYS_EVENT_HMI_RESET;
+        }
+        if (event_data->reset_payload.reset_type == 1)
+        {
+            LOG(LOG_LEVEL_INFO, "处理m30复位事件");
+            rt_data->nc_event = SYS_EVENT_OUTSIDE_RESET;
+        }
+    }
+}
+
+static void task_handle_hmi_event(PMC_EVENT *event_data)
+{
     switch (event_data->hmi_payload.press_key)
     {
     case KEY_KP_0:

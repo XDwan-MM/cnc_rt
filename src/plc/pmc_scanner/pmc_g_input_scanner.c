@@ -1,10 +1,10 @@
 #include "pmc_g_input_scanner.h"
 #include "global.h"
-#include <hmisysapi.h>
 #include "regapi.h"       /**< 寄存器访问 API */
 #include "signal_utils.h" /**< 边沿检测宏定义 */
-#include <string.h>
 #include "spl_control.h"
+#include <hmisysapi.h>
+#include <string.h>
 
 /**
  * @brief 寄存器自动扫描注册表
@@ -13,45 +13,16 @@
  * 2. 只有在此数组中注册过的索引，其对应的 g_regs[i] 才会包含有效的 共享内存G寄存器 数据。
  * 3. 以后若想增加 G19 或 G32，只需在此数组末尾添加数字 19, 32 即可，无需改动获取数据的函数。
  */
-static const int SCAN_G_REGS[] =
-    {
-        4,
-        5,
-        6,
-        7,
-        8,
-        12,
-        14,
-        19,
-        29,
-        30,
-        32,
-        33,
-        43,
-        44,
-        45,
-        46,
-        54,
-        55,
-        56,
-        61,
-        62,
-        70,
-        100,
-        102,
-        108,
-        124,
-        130,
-        132,
-        134, /* 已有信号的地址 */
-             /* <--- 您想新增的信号地址 */
+static const int SCAN_G_REGS[] = {
+    4,  5,  6,  7,  8,  12, 14, 19,  29,  30,  32,  33,  43,  44,  45,
+    46, 54, 55, 56, 61, 62, 70, 100, 102, 108, 124, 130, 132, 134, /* 已有信号的地址 */
+                                                                   /* <--- 您想新增的信号地址 */
 };
 
 /** 计算注册表中元素的个数，用于驱动循环扫描 */
 #define SCAN_G_REGS_COUNT (sizeof(SCAN_G_REGS) / sizeof(SCAN_G_REGS[0]))
 
-static G_INPUT_MAP
-    last_g; /**< 上一周期快照（是指任务控制器线程，上一周期的快照） */
+static G_INPUT_MAP last_g; /**< 上一周期快照（是指任务控制器线程，上一周期的快照） */
 
 /* 首次扫描标志 */
 static bool is_first_scan = true;
@@ -71,7 +42,6 @@ static void pmc_dispatch_event(PMC_EVENT_ID id, int p1, int p2);
  * 涉及 MD1, MD2, MD4 (bit 0,1,2), DNCI (bit 5), ZRN (bit 7)
  */
 static void process_mode_selection(char g43);
-
 
 /* ==========================================================================
  * 2. 外部函数定义 (Public Definitions)
@@ -103,22 +73,21 @@ void pmc_g_input_scan_cycle(void)
         {
             LOG(LOG_LEVEL_INFO, "扫描到急停G8.4信号为0, 急停拍下");
         }
-        
     }
     // 急停释放检测 0->1（上升沿）,自动触发系统复位，清除内部急停标志和报警
     if (!is_first_scan && SIGNAL_RISING(curr_g.g_regs[8], last_g.g_regs[8], 4))
     {
+        LOG(LOG_LEVEL_INFO, "扫描到急停G8.4信号由0变1, 系统自动复位");
         // 系统急停输入信号
         rt_set_sys_state(SYS_ESTOP_INPUT, false);
         // 自动触发复位事件（推送复位事件）
         pmc_dispatch_event(EV_MSG_RESET, 1, 0);
-        LOG(LOG_LEVEL_INFO, "扫描到急停G8.4信号由0变1, 系统自动复位");
     }
     /* G19.7 快速按键信号检测，0->1 上升沿有效，1->0 下降沿失效 */
     if (SIGNAL_RISING(curr_g.g_regs[19], last_g.g_regs[19], 7))
     {
-        // 快速按键按下
         LOG(LOG_LEVEL_INFO, "扫描到快速按键: 按下");
+        // 快速按键按下
         if (rt_data->current_mode == MODE_JOG)
         {
             rt_data->sys_state[SYS_IS_RAPID] = true;
@@ -126,8 +95,8 @@ void pmc_g_input_scan_cycle(void)
     }
     else if (SIGNAL_FALLING(curr_g.g_regs[19], last_g.g_regs[19], 7))
     {
-        // 快速按键释放
         LOG(LOG_LEVEL_INFO, "扫描到快速按键: 释放");
+        // 快速按键释放
         rt_data->sys_state[SYS_IS_RAPID] = false;
     }
 
@@ -216,36 +185,40 @@ void pmc_g_input_scan_cycle(void)
     // 启动检测 (G7.2 上升沿 【暂定上升沿触发】)
     if (SIGNAL_RISING(curr_g.g_regs[7], last_g.g_regs[7], 2))
     {
+        LOG(LOG_LEVEL_INFO, "扫描到循环启动G7.2发生了上升沿");
         // G7.2 产生上升沿，发送自动运行事件
         pmc_dispatch_event(EV_MSG_AUTO_RUN, 1, 0);
-        LOG(LOG_LEVEL_INFO, "扫描到循环启动G7.2发生了上升沿");
     }
     // 暂停检测 (G8.5 下降沿，发送暂停事件)
     if (SIGNAL_FALLING(curr_g.g_regs[8], last_g.g_regs[8], 5))
     {
-        pmc_dispatch_event(EV_MSG_AUTO_RUN, 0, 0);
         LOG(LOG_LEVEL_INFO, "扫描到暂停G8.5发生了下降沿");
+        pmc_dispatch_event(EV_MSG_AUTO_RUN, 0, 0);
     }
 
     /* 外部复位M02M30 (G8.7 复位 上升沿触发) */
     if (SIGNAL_RISING(curr_g.g_regs[8], last_g.g_regs[8], 7))
     {
+        LOG(LOG_LEVEL_INFO, "扫描到外部复位G8.7发生了上升沿");
         pmc_dispatch_event(EV_MSG_RESET, 1, 1);
     }
 
     /* 主轴正反信号检测 (G70.4 主轴反转, G70.5 主轴正转, G29.6 主轴停止信号) */
     if (SIGNAL_RISING(curr_g.g_regs[70], last_g.g_regs[70], 4))
     {
+        LOG(LOG_LEVEL_INFO, "扫描到主轴反转G70.4发生了上升沿");
         // 产生主轴反转事件 入队
         pmc_dispatch_event(EV_MSG_SPINDLE, -1, 0);
     }
     if (SIGNAL_RISING(curr_g.g_regs[70], last_g.g_regs[70], 5))
     {
+        LOG(LOG_LEVEL_INFO, "扫描到主轴正转G70.5发生了上升沿");
         // 产生主轴正转事件 入队
         pmc_dispatch_event(EV_MSG_SPINDLE, 1, 0);
     }
     if (SIGNAL_FALLING(curr_g.g_regs[29], last_g.g_regs[29], 6))
     {
+        LOG(LOG_LEVEL_INFO, "扫描到主轴停止G29.6发生了下降沿");
         // 产生主轴停止事件 入队
         pmc_dispatch_event(EV_MSG_SPINDLE, 0, 0);
     }
@@ -259,13 +232,13 @@ void pmc_g_input_scan_cycle(void)
     /* 可选程序段跳过 G44.0 */
     if (SIGNAL_RISING(curr_g.g_regs[44], last_g.g_regs[44], 0))
     {
-        pmc_dispatch_event(EV_MSG_ENANLE, BLOCK_SKIP, 1);
         LOG(LOG_LEVEL_INFO, "扫描到G44.0 发生上升沿");
+        pmc_dispatch_event(EV_MSG_ENANLE, BLOCK_SKIP, 1);
     }
     if (SIGNAL_FALLING(curr_g.g_regs[44], last_g.g_regs[44], 0))
     {
-        pmc_dispatch_event(EV_MSG_ENANLE, BLOCK_SKIP, 0);
         LOG(LOG_LEVEL_INFO, "扫描到G44.0 发生下降沿");
+        pmc_dispatch_event(EV_MSG_ENANLE, BLOCK_SKIP, 0);
     }
     /* 跳段 G45发生变化 */
     if (SIGNAL_BYTE_CHANGED(curr_g.g_regs[45], last_g.g_regs[45]))
@@ -274,13 +247,13 @@ void pmc_g_input_scan_cycle(void)
         {
             if (SIGNAL_RISING(curr_g.g_regs[45], last_g.g_regs[45], i))
             {
-                pmc_dispatch_event(EV_MSG_ENANLE, BLOCK_SKIP + i + 1, 1);
                 LOG(LOG_LEVEL_INFO, "扫描到G45.%d 发生上升沿", i);
+                pmc_dispatch_event(EV_MSG_ENANLE, BLOCK_SKIP + i + 1, 1);
             }
             if (SIGNAL_FALLING(curr_g.g_regs[45], last_g.g_regs[45], i))
             {
-                pmc_dispatch_event(EV_MSG_ENANLE, BLOCK_SKIP + i + 1, 0);
                 LOG(LOG_LEVEL_INFO, "扫描到G45.%d 发生下降沿", i);
+                pmc_dispatch_event(EV_MSG_ENANLE, BLOCK_SKIP + i + 1, 0);
             }
         }
     }
@@ -291,7 +264,7 @@ void pmc_g_input_scan_cycle(void)
 
     for (int i = 0; i < 8; i++)
     {
-        low  |= ((uint16_t)(GET_BIT(curr_g.g_regs[32], i) & 1) << i);
+        low |= ((uint16_t)(GET_BIT(curr_g.g_regs[32], i) & 1) << i);
         high |= ((uint16_t)(GET_BIT(curr_g.g_regs[33], i) & 1) << i);
     }
     result = ((uint16_t)(high & 0x0f) << 5) | (low & 0xFF);
@@ -301,49 +274,49 @@ void pmc_g_input_scan_cycle(void)
     /* 空运行 G46.7 */
     if (SIGNAL_RISING(curr_g.g_regs[46], last_g.g_regs[46], 7))
     {
-        pmc_dispatch_event(EV_MSG_ENANLE, DRY_RUN, 1);
         LOG(LOG_LEVEL_INFO, "扫描到G46.7 发生上升沿");
+        pmc_dispatch_event(EV_MSG_ENANLE, DRY_RUN, 1);
     }
     if (SIGNAL_FALLING(curr_g.g_regs[46], last_g.g_regs[46], 7))
     {
-        pmc_dispatch_event(EV_MSG_ENANLE, DRY_RUN, 0);
         LOG(LOG_LEVEL_INFO, "扫描到G46.7 发生下降沿");
+        pmc_dispatch_event(EV_MSG_ENANLE, DRY_RUN, 0);
     }
 
     /* 单程序段 G46.1 */
     if (SIGNAL_RISING(curr_g.g_regs[46], last_g.g_regs[46], 1))
     {
-        pmc_dispatch_event(EV_MSG_ENANLE, SINGLE_BLOCK, 1);
         LOG(LOG_LEVEL_INFO, "扫描到G46.1 发生上升沿");
+        pmc_dispatch_event(EV_MSG_ENANLE, SINGLE_BLOCK, 1);
     }
     if (SIGNAL_FALLING(curr_g.g_regs[46], last_g.g_regs[46], 1))
     {
-        pmc_dispatch_event(EV_MSG_ENANLE, SINGLE_BLOCK, 0);
         LOG(LOG_LEVEL_INFO, "扫描到G46.1 发生下降沿");
+        pmc_dispatch_event(EV_MSG_ENANLE, SINGLE_BLOCK, 0);
     }
 
     /* 辅助功能锁住 G5.6 */
     if (SIGNAL_RISING(curr_g.g_regs[5], last_g.g_regs[5], 6))
     {
-        pmc_dispatch_event(EV_MSG_ENANLE, MSBT_LOCK, 1);
         LOG(LOG_LEVEL_INFO, "扫描到G5.6 发生上升沿");
+        pmc_dispatch_event(EV_MSG_ENANLE, MSBT_LOCK, 1);
     }
     if (SIGNAL_FALLING(curr_g.g_regs[5], last_g.g_regs[5], 6))
     {
-        pmc_dispatch_event(EV_MSG_ENANLE, MSBT_LOCK, 0);
         LOG(LOG_LEVEL_INFO, "扫描到G5.6 发生下降沿");
+        pmc_dispatch_event(EV_MSG_ENANLE, MSBT_LOCK, 0);
     }
 
     /* 机床锁住 G4.1 */
     if (SIGNAL_RISING(curr_g.g_regs[4], last_g.g_regs[4], 1))
     {
-        pmc_dispatch_event(EV_MSG_ENANLE, MAC_LOCK, 1);
         LOG(LOG_LEVEL_INFO, "扫描到G4.1 发生上升沿");
+        pmc_dispatch_event(EV_MSG_ENANLE, MAC_LOCK, 1);
     }
     if (SIGNAL_FALLING(curr_g.g_regs[4], last_g.g_regs[4], 1))
     {
-        pmc_dispatch_event(EV_MSG_ENANLE, MAC_LOCK, 0);
         LOG(LOG_LEVEL_INFO, "扫描到G4.1 发生下降沿");
+        pmc_dispatch_event(EV_MSG_ENANLE, MAC_LOCK, 0);
     }
     /* G54 用户宏程序输入指令*/
     if (SIGNAL_BYTE_CHANGED(curr_g.g_regs[54], last_g.g_regs[54]))
@@ -397,13 +370,13 @@ void pmc_g_input_scan_cycle(void)
         {
             if (SIGNAL_RISING(curr_g.g_regs[108], last_g.g_regs[108], i))
             {
-                pmc_dispatch_event(EV_MSG_ENANLE, MAC_LOCK + i + 1, 1);
                 LOG(LOG_LEVEL_INFO, "扫描到G108.%d 发生上升沿", i);
+                pmc_dispatch_event(EV_MSG_ENANLE, MAC_LOCK + i + 1, 1);
             }
             if (SIGNAL_FALLING(curr_g.g_regs[108], last_g.g_regs[108], i))
             {
-                pmc_dispatch_event(EV_MSG_ENANLE, MAC_LOCK + i + 1, 0);
                 LOG(LOG_LEVEL_INFO, "扫描到G108.%d 发生下降沿", i);
+                pmc_dispatch_event(EV_MSG_ENANLE, MAC_LOCK + i + 1, 0);
             }
         }
     }
@@ -414,13 +387,13 @@ void pmc_g_input_scan_cycle(void)
         {
             if (SIGNAL_RISING(curr_g.g_regs[124], last_g.g_regs[124], i))
             {
+                LOG(LOG_LEVEL_INFO, "扫描到轴屏蔽G124.%d发生上升沿 %d轴被屏蔽", i, i);
                 rt_data->axis_data[i].axis_status.plc_is_disable = 1;
-                LOG(LOG_LEVEL_INFO, "plc扫描到%d轴被屏蔽",i);
             }
             if (SIGNAL_FALLING(curr_g.g_regs[124], last_g.g_regs[124], i))
             {
+                LOG(LOG_LEVEL_INFO, "扫描到轴屏蔽G124.%d发生下降沿 %d轴解除屏蔽", i, i);
                 rt_data->axis_data[i].axis_status.plc_is_disable = 0;
-                LOG(LOG_LEVEL_INFO, "plc扫描到%d轴解除屏蔽", i);
             }
         }
     }
@@ -464,7 +437,7 @@ static void pmc_dispatch_event(PMC_EVENT_ID id, int p1, int p2)
     {
         event.id = id;
         event.mode_payload.mode = p1; // 目标模式
-        LOG(LOG_LEVEL_INFO, "扫描到模式切换 %d", id);
+        // LOG(LOG_LEVEL_INFO, "扫描到模式切换 %d", id);
         break;
     }
     case EV_MSG_FEEDAXIS_KEY:
@@ -472,15 +445,14 @@ static void pmc_dispatch_event(PMC_EVENT_ID id, int p1, int p2)
         event.id = id;
         event.feedaxis_key_payload.axis_num = p1;
         event.feedaxis_key_payload.direction = p2;
-        LOG(LOG_LEVEL_INFO, "扫描到进给轴按键切换: %d, axis: %d, action: %d",
-            event.id, p1, p2);
+        // LOG(LOG_LEVEL_INFO, "扫描到进给轴按键切换: %d, axis: %d, action: %d", event.id, p1, p2);
         break;
     }
     case EV_MSG_SPINDLE:
     {
         event.id = id;
         event.spindle_payload.direction = p1;
-        LOG(LOG_LEVEL_INFO, "扫描到主轴状态切换 sp:%d, direction: %d", event.id, p1);
+        // LOG(LOG_LEVEL_INFO, "扫描到主轴状态切换 sp:%d, direction: %d", event.id, p1);
         break;
     }
     case EV_MSG_OVERRIDE:
@@ -488,36 +460,35 @@ static void pmc_dispatch_event(PMC_EVENT_ID id, int p1, int p2)
         event.id = id;
         event.override_payload.override_type = p1;
         event.override_payload.val = p2;
-        LOG(LOG_LEVEL_INFO, "扫描到倍率切换 type: %d, override_type: %d, val: %d",
-            event.id, p1, p2);
+        // LOG(LOG_LEVEL_INFO, "扫描到倍率切换 type: %d, override_type: %d, val: %d", event.id, p1, p2);
         break;
     }
     case EV_MSG_AUTO_RUN:
     {
         event.id = id;
         event.run_payload.run_state = p1;
-        LOG(LOG_LEVEL_INFO, "扫描到运行状态切换 run:%d, state: %d", event.id, p1);
+        // LOG(LOG_LEVEL_INFO, "扫描到运行状态切换 run:%d, state: %d", event.id, p1);
         break;
     }
     case EV_MSG_RESET:
     {
         event.id = id;
         event.reset_payload.reset_state = p1;
-         event.reset_payload.reset_type = p2;
-        LOG(LOG_LEVEL_INFO, "扫描到复位: %d, reset_state: %d", event.id, p1);
+        event.reset_payload.reset_type = p2;
+        // LOG(LOG_LEVEL_INFO, "扫描到复位: %d, reset_state: %d", event.id, p1);
         break;
     }
     case EV_MSG_ENANLE:
         event.id = id;
         event.enable_payload.enable_key = p1;
         event.enable_payload.enable_state = p2;
-        LOG(LOG_LEVEL_INFO, "扫描到使能: %d, enable_state: %d", p1, p2);
+        // LOG(LOG_LEVEL_INFO, "扫描到使能: %d, enable_state: %d", p1, p2);
         break;
     case EV_MSG_SPD_ORI:
         event.id = id;
         event.spd_ori_payload.p1 = p1;
         event.spd_ori_payload.p2 = p2;
-        LOG(LOG_LEVEL_INFO, "扫描到主轴定向: %d", event.id);
+        // LOG(LOG_LEVEL_INFO, "扫描到主轴定向: %d", event.id);
         break;
     default:
         break;
