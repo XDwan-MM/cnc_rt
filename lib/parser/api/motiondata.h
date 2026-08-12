@@ -16,6 +16,7 @@ typedef enum pmc_mode_t
     PMC_MODE_TOOL_CHANGE,   //换刀
     PMC_MODE_ARRIVE_CHECK,  //到位检测
     PMC_MODE_STOPSKIP,      //跳转
+    PMC_MODE_NULL,          // 空包
 }pmc_mode;
 
 typedef enum pmc_interp_t
@@ -138,7 +139,8 @@ typedef struct pmc_data_t
     int tool_number;            //刀具号
     int tips;                   //跳过指令
     int pause_time;             //暂停时间（ms）
-    int m_code;
+    int m_code;                 // M代码
+    bool sub_program;           // 子程序或宏程序标志
 
     int splineCurveMode;        //样条曲线模式
     double baseCirRadius;       //基圆半径

@@ -13,6 +13,7 @@ static GNC_RES parser_handle_mcode(pmc_data* motion_data, NcItpState *itp_state,
 static GNC_RES parser_handle_tcode(pmc_data* motion_data, NcItpState *itp_state, int *line_no);
 static GNC_RES parser_handle_scode(pmc_data* motion_data, NcItpState *itp_state, int *line_no);
 static GNC_RES parser_handle_gcode(pmc_data* motion_data, NcItpState *itp_state, int *line_no);
+static GNC_RES parser_handle_null(NcItpState *itp_state, int *line_no);
 static GNC_RES parser_set_content(NC_MODE nc_mode);
 static bool parser_check_res(GNC_RES res);
 
@@ -186,6 +187,11 @@ GNC_RES parser_reading(){
         // }
         // setVarChanInt(0, VAR_CHAN_RUN_ROW, parser_data->itp_line_no, 0);
         // LOG(LOG_LEVEL_DEBUG, "译码为空: %d", parser_data->itp_line_no);
+
+        res = parser_handle_recieve(nullptr, &parser_data->itp_state, &parser_data->itp_line_no);
+        parser_check_res(res);
+        // if (res == ?)
+
     }
     else
     {
@@ -249,25 +255,47 @@ static bool parser_check_res(GNC_RES res){
 
 static GNC_RES parser_handle_recieve(pmc_data* motion_data, NcItpState *itp_state, int *line_no){
     GNC_RES res = GNC_OPERATOR_SUCCESS;
-    // 模式
-    switch(motion_data->mode){
-        case PMC_MODE_EXACT_STOP: // 精准停模式
-        case PMC_MODE_CHOP: // 切削模式
-        case PMC_MODE_ARRIVE_CHECK: // 到位检测
-        case PMC_MODE_TAP: // 攻丝模式
-        case PMC_MODE_PAUSE: // 暂停模式
-        case PMC_MODE_TAP_RETURE: // 攻丝回退
-            res = parser_handle_gcode(motion_data, itp_state, line_no);
-            break; 
-        case PMC_MODE_M_CMD: // M指令
-            res = parser_handle_mcode(motion_data, itp_state, line_no);
-            break;
-        // 更新：其他模式
-        default:
-            res = GNC_OPERATOR_SUCCESS;
-            break;
+    if (motion_data) {
+        // 模式
+        switch(motion_data->mode){
+            case PMC_MODE_EXACT_STOP: // 精准停模式
+            case PMC_MODE_CHOP: // 切削模式
+            case PMC_MODE_ARRIVE_CHECK: // 到位检测
+            case PMC_MODE_TAP: // 攻丝模式
+            case PMC_MODE_PAUSE: // 暂停模式
+            case PMC_MODE_TAP_RETURE: // 攻丝回退
+                res = parser_handle_gcode(motion_data, itp_state, line_no);
+                break; 
+            case PMC_MODE_M_CMD: // M指令
+                res = parser_handle_mcode(motion_data, itp_state, line_no);
+                break;
+            // 更新：其他模式
+            default:
+                res = GNC_OPERATOR_SUCCESS;
+                break;
+        }
+    }
+    else {  // 空包
+        res = parser_handle_null(itp_state, line_no);
     }
     return res;
+}
+
+static GNC_RES parser_handle_null(NcItpState *itp_state, int *line_no){
+
+    PLAN_BLOCK plan_block;
+    // 模态
+    plan_block.state = *itp_state;
+    // 模组
+    plan_block.mode = pmc_mode::PMC_MODE_NULL;
+    // 行号
+    plan_block.line_number = *line_no;
+    // 加入队列
+    if(queue_is_full(parser_queue)){
+        return GNC_DATA_FULL;
+    }
+    queue_push(parser_queue, &plan_block);
+    return GNC_OPERATOR_SUCCESS;
 }
 
 static GNC_RES parser_handle_gcode(pmc_data* motion_data, NcItpState *itp_state, int *line_no)
