@@ -311,20 +311,7 @@ static void read_from_hal()
             rt_data->axis_data[i].wcs_cmd_pos_pre = rt_data->axis_data[i].motor_act_pos;
             rt_data->axis_data[i].mac_cmd_pos = rt_data->axis_data[i].motor_act_pos;
             rt_data->axis_data[i].motor_cmd_pos = rt_data->axis_data[i].motor_act_pos;
-#ifdef DEBUG_MODE_ENABLED
-            // rt_data->axis_data[i].fb_pos_no_comp = rt_data->axis_data[i].motor_act_pos -
-            // rt_data->axis_data[i].pitch_comp_val;
-            LOG(LOG_LEVEL_DEBUG,
-                "%f, %f, %f, %f, %f,%f",
-                rt_data->axis_data[i].motor_act_pos,
-                rt_data->axis_data[i].wcs_cmd_pos_cur,
-                rt_data->axis_data[i].wcs_cmd_pos_pre,
-                rt_data->axis_data[i].mac_cmd_pos,
-                rt_data->axis_data[i].motor_cmd_pos,
-                rt_data->axis_data[i].fb_pos_no_comp);
-#else
             rt_data->axis_data[i].fb_pos_no_comp = rt_data->axis_data[i].motor_act_pos;
-#endif
         }
         update_pos_flag = 1;
     }
