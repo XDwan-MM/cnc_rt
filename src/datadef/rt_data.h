@@ -25,27 +25,29 @@ extern "C"
 #define CHAN_STATE_NUM 100
 
 // 路径和轨迹线程使用
-typedef enum{
-    SYS_IS_READY = 0,           // 准备就绪
-    SYS_IS_ESTOP_ACTIVE,        // 系统是否急停
-    SYS_ESTOP_INPUT,            // 系统急停输入
-    SYS_IS_ALARMING,            // 是否正在报警中
-    SYS_IS_SWITCHING_MODE,      // 是否正在切换模式
-    SYS_IS_MAC_LOCK_ON,         // 机床锁住开启
-    SYS_IS_MAC_LOCK_READY,      // 机床锁住完成
-    SYS_IS_DRY_RUN,             // 空运行
-    SYS_IS_BLOCK_SKIP,          // 程序段跳过（路径和轨迹线程使用）
-    SYS_IS_SINGLE_BLOCK,        // 单段
-    SYS_IS_MSBT_LOCK,           // 辅助功能锁住
-    SYS_IS_RAPID,               // 是否快速
+typedef enum
+{
+    SYS_IS_READY = 0,      // 准备就绪
+    SYS_IS_ESTOP_ACTIVE,   // 系统是否急停
+    SYS_ESTOP_INPUT,       // 系统急停输入
+    SYS_IS_ALARMING,       // 是否正在报警中
+    SYS_IS_SWITCHING_MODE, // 是否正在切换模式
+    SYS_IS_MAC_LOCK_ON,    // 机床锁住开启
+    SYS_IS_MAC_LOCK_READY, // 机床锁住完成
+    SYS_IS_DRY_RUN,        // 空运行
+    SYS_IS_BLOCK_SKIP,     // 程序段跳过（路径和轨迹线程使用）
+    SYS_IS_SINGLE_BLOCK,   // 单段
+    SYS_IS_MSBT_LOCK,      // 辅助功能锁住
+    SYS_IS_RAPID,          // 是否快速
 } SysStateIndex;
 
 // 路径和轨迹两个线程使用
-typedef enum{
-    CHAN_IS_PARSER_RESET = 0,    // 译码器复位  is_parser_reset
-    CHAN_IS_PARSERING,           // 解释器是否运行中 is_parsering
-    CHAN_IS_PARSER_RERUN,        // 译码器是否运行中 is_parser_running
-    CHAN_IS_FIRST_RUN,           // 是否为第一次运行 is_first_run
+typedef enum
+{
+    CHAN_IS_PARSER_RESET = 0, // 译码器复位  is_parser_reset
+    CHAN_IS_PARSERING,        // 解释器是否运行中 is_parsering
+    CHAN_IS_PARSER_RERUN,     // 译码器是否运行中 is_parser_running
+    CHAN_IS_FIRST_RUN,        // 是否为第一次运行 is_first_run
 } ChanStateIndex;
 
 typedef struct
@@ -80,6 +82,7 @@ typedef struct
     double backlash_comp_val;      // 当前位置反向间隙补偿值 (单位:mm)
     double straightness1_comp_val; // 当前位置第一组直线度误差补偿值 (单位:mm)
     double straightness2_comp_val; // 当前位置第二组直线度误差补偿值 (单位:mm)
+    double total_comp_cal;         // 当前位置总误差补偿值 (单位:mm)
     AxisStatus axis_status;
 } RT_AXIS;
 

@@ -38,6 +38,7 @@ static void compute_error_comp();
 static void calcul_mac_cmd_pos();
 static void manual_unset_sys_state();
 static void reset_clean_warning();
+static void rebuild_axis_positions_from_feedback();
 
 static int32_t x_cmd_Pulses, y_cmd_Pulses, z_cmd_Pulses;
 static int32_t x_target_pos, y_target_pos, z_target_pos;
@@ -84,6 +85,14 @@ void emcmotPathPlan()
         // unif_block();
     }
 }
+
+#ifdef UNIT_TEST
+void emcmot_test_rebuild_axis_positions_from_feedback()
+{
+    rebuild_axis_positions_from_feedback();
+    update_pos_flag = 1;
+}
+#endif
 
 // 通道周期状态机
 static void chan_do_period()
@@ -302,17 +311,10 @@ static void read_from_hal()
     rt_data->axis_data[AXIS_Z].motor_act_pos = pulses_to_position(par_axis[AXIS_Z], z_target_pos);
 #endif
 
-    // 第一次运行，初始化位置
     if (!update_pos_flag)
     {
-        for (int i = 0; i < SYS_AXES_NUM; i++)
-        {
-            rt_data->axis_data[i].wcs_cmd_pos_cur = rt_data->axis_data[i].motor_act_pos;
-            rt_data->axis_data[i].wcs_cmd_pos_pre = rt_data->axis_data[i].motor_act_pos;
-            rt_data->axis_data[i].mac_cmd_pos = rt_data->axis_data[i].motor_act_pos;
-            rt_data->axis_data[i].motor_cmd_pos = rt_data->axis_data[i].motor_act_pos;
-            rt_data->axis_data[i].fb_pos_no_comp = rt_data->axis_data[i].motor_act_pos;
-        }
+        // 报警复位后用最新带补偿反馈，重建未补偿坐标基准。
+        rebuild_axis_positions_from_feedback();
         update_pos_flag = 1;
     }
 }
@@ -386,16 +388,16 @@ static void compute_error_comp()
         rt_data->axis_data[i].straightness1_comp_val = straightness1_comp_val[i];
         rt_data->axis_data[i].straightness2_comp_val = straightness2_comp_val[i];
 
-        // 总补偿值
-        double total_comp_val = rt_data->axis_data[i].pitch_comp_val + rt_data->axis_data[i].backlash_comp_val +
-                                rt_data->axis_data[i].straightness1_comp_val +
-                                rt_data->axis_data[i].straightness2_comp_val;
+        rt_data->axis_data[i].total_comp_cal = rt_data->axis_data[i].pitch_comp_val +
+                                                rt_data->axis_data[i].backlash_comp_val +
+                                                rt_data->axis_data[i].straightness1_comp_val +
+                                                rt_data->axis_data[i].straightness2_comp_val;
 
         // 下发电机位置 (当前周期插补位置 + 总补偿值)
-        rt_data->axis_data[i].motor_cmd_pos = mac_cmd_pos + total_comp_val;
+        rt_data->axis_data[i].motor_cmd_pos = mac_cmd_pos + rt_data->axis_data[i].total_comp_cal;
 
         // 反馈位置（去除补偿）
-        rt_data->axis_data[i].fb_pos_no_comp = rt_data->axis_data[i].motor_act_pos - total_comp_val;
+        rt_data->axis_data[i].fb_pos_no_comp = rt_data->axis_data[i].motor_act_pos - rt_data->axis_data[i].total_comp_cal;
     }
     // printf("mac_cmd_pos_x: %f\n", rt_data->axis_data[0].mac_cmd_pos);
 #ifdef ENABLE_COMP_DATA_LOG
@@ -491,5 +493,21 @@ static void manual_unset_sys_state()
         break;
     default:
         break;
+    }
+}
+
+static void rebuild_axis_positions_from_feedback()
+{
+    // motor_act_pos 是带补偿反馈；wcs_cmd_pos_*、mac_cmd_pos 和 fb_pos_no_comp 是未补偿机床坐标。
+    for (int i = 0; i < SYS_AXES_NUM; i++)
+    {
+        double uncompensated_pos;
+
+        uncompensated_pos = rt_data->axis_data[i].motor_act_pos - rt_data->axis_data[i].total_comp_cal;
+        rt_data->axis_data[i].wcs_cmd_pos_cur = uncompensated_pos;
+        rt_data->axis_data[i].wcs_cmd_pos_pre = uncompensated_pos;
+        rt_data->axis_data[i].mac_cmd_pos = uncompensated_pos;
+        rt_data->axis_data[i].motor_cmd_pos = rt_data->axis_data[i].motor_act_pos;
+        rt_data->axis_data[i].fb_pos_no_comp = uncompensated_pos;
     }
 }

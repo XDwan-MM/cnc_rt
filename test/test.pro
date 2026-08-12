@@ -86,6 +86,7 @@ HEADERS += \
     ../src/plc/pmc_scanner/pmc_io_map.h \
     ../src/plc/pmc_scanner/pmc_output_handler.h \
     ../src/plc/pmc_scanner/signal_utils.h \
+    ../src/plc/lad_trace/ladtracesampler.h \
     ../src/plc/plc_task/plctask.h \
     ../src/task/hmi_scanner.h \
     ../src/task/task.h \
@@ -128,6 +129,7 @@ SOURCES += \
     ../src/plc/pmc_scanner/pmc_a_input_scanner.c \
     ../src/plc/pmc_scanner/pmc_g_input_scanner.c \
     ../src/plc/pmc_scanner/pmc_output_handler.c \
+    ../src/plc/lad_trace/ladtracesampler.cpp \
     ../src/plc/plc_task/plctask.cpp \
     ../src/task/hmi_scanner.c \
     ../src/task/task.c \
