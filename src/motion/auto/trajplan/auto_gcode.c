@@ -472,9 +472,11 @@ static void block_cal_exact_stop_vel(PLAN_BLOCK* current_block){
             current_block->start_vel = current_block->end_vel = 0;
             break;
 
+        case LINE:
         case CIRCLE_CCW:
         case CIRCLE_CW:
-        case LINE:
+        case HELIX_CW:
+        case HELIX_CCW:
             // 被钳制在最大切削进给速度上
             if (rt_get_sys_state(SYS_IS_DRY_RUN))
             {
@@ -486,17 +488,6 @@ static void block_cal_exact_stop_vel(PLAN_BLOCK* current_block){
             current_block->start_vel = current_block->end_vel = 0;
             break;
 
-        case HELIX_CW:
-        case HELIX_CCW:
-            if (rt_get_sys_state(SYS_IS_DRY_RUN))
-            {
-                current_block->max_vel = MIN(par_chan[0][PAR_CH_DRYRUN_SPD].value.val_real * var_chan[0][VAR_CHAN_FEED_OVERRIDE].value.f / OVERRIDE_PERCENT, cycle_tp->max_feed_vel);
-            }
-            else{
-                current_block->max_vel = MIN(current_block->feed_vel * var_chan[0][VAR_CHAN_FEED_OVERRIDE].value.f / OVERRIDE_PERCENT, cycle_tp->max_feed_vel);
-            }
-            current_block->start_vel = current_block->end_vel = 0;
-            break;
         default:
             break;
     }
@@ -516,8 +507,6 @@ static void block_cal_tap_vel(PLAN_BLOCK* current_block){
             current_block->start_vel = current_block->end_vel = 0;
             break;
 
-        case CIRCLE_CCW:
-        case CIRCLE_CW:
         case LINE:
             if (rt_get_sys_state(SYS_IS_DRY_RUN))
             {
@@ -530,6 +519,8 @@ static void block_cal_tap_vel(PLAN_BLOCK* current_block){
             else current_block->start_vel = current_block->end_vel = current_block->max_vel;    
             break;
         
+        case CIRCLE_CCW:
+        case CIRCLE_CW:
         case HELIX_CW:
         case HELIX_CCW:
             if (rt_get_sys_state(SYS_IS_DRY_RUN))
@@ -559,9 +550,7 @@ static void block_cal_chop_vel(PLAN_BLOCK* current_block){
             }
             current_block->start_vel = current_block->end_vel = 0;
             break;
-
-        case CIRCLE_CCW:
-        case CIRCLE_CW:
+        
         case LINE:
             if (rt_get_sys_state(SYS_IS_DRY_RUN))
             {
@@ -574,6 +563,8 @@ static void block_cal_chop_vel(PLAN_BLOCK* current_block){
             else current_block->start_vel = current_block->end_vel = current_block->max_vel;  
             break;
         
+        case CIRCLE_CCW:
+        case CIRCLE_CW:
         case HELIX_CW:
         case HELIX_CCW:
             if (rt_get_sys_state(SYS_IS_DRY_RUN))

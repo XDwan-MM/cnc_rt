@@ -120,7 +120,8 @@ void Master_Run()
         Master_Hardware_Error(g_current_error_ctx);
         // 主站周期性中断信号
         Master_Wait_Sync();
-        // sem_wait(&moton_sem_exec_done);
+        // 等待运控计算完成信号
+        sem_wait(&moton_sem_exec_done);
         op_flag = 1;
         //复位清除驱动器报警
         if(reset_sem)
