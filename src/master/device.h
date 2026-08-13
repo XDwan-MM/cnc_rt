@@ -24,8 +24,8 @@
     } \
 } while (0)
 
-#define SYNC0_CYCLE 4000000   
-#define SYNC0_SHIFT 2000000                  
+#define SYNC0_CYCLE 1000000   
+#define SYNC0_SHIFT 500000                  
 #define SYNC1_CYCLE 0                
 #define SYNC1_SHIFT 0 
 
@@ -141,7 +141,9 @@ static const DEVICE_TYPE_MAP device_type_library[] = {
     {0xB13E2412, 1, 0, GREE_AXIS4_TYPE, "Gree axis4 Servo Driver"},
     {2252, 269418498, 1, CONTROL_PANEL_TYPE, "Control Panel Module"},
     {2252, 269418497, 1, IO_MODEL_TYPE, "IO Module"},
-    {1717, 1026, 268435457, SERVO_TYPE, "IO Module"},
+    {1717, 1026, 268435457, SERVO_TYPE, "GHSD"},
+    {1710, 131073, 65536, SERVO_TYPE, "SPS_ECAT_CoE_02"},
+    {1337, 35652353, 268435456, SERVO_TYPE, "SGD7S"},
     // 可继续添加更多类型...
 };
 #define MAX_DEVICE_NUM 30   //假设最多 30 个设备
