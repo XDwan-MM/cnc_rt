@@ -105,7 +105,7 @@ void nc_set_resetting(RESET_TRIGGER reset_trigger){
 }
 
 void nc_set_resetted(){
-    if(rt_data->sys_state[SYS_IS_ALARMING]) return;
+    if(rt_data->sys_state[SYS_IS_ALARMING] || rt_data->sys_state[SYS_IS_ESTOP_ACTIVE]) return;
     switch (rt_data->current_mode) {
         case MODE_MDI: // MDI
         case MODE_MEM: // 记忆

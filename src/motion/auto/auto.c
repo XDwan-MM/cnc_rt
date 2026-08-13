@@ -41,7 +41,7 @@ void handle_auto_cmd(){
 static void auto_update_state(){
     // 报警或切换模式下，减速停止
     static bool reset_trigger = false;
-    if(rt_data->sys_state[SYS_IS_ALARMING] || rt_data->sys_state[SYS_IS_SWITCHING_MODE]){
+    if(rt_data->sys_state[SYS_IS_ALARMING] || rt_data->sys_state[SYS_IS_ESTOP_ACTIVE] || rt_data->sys_state[SYS_IS_SWITCHING_MODE]){
         if(!reset_trigger){
             reset_trigger = true;
             cycle_tp->exec_state = EXEC_RESET;

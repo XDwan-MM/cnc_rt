@@ -54,7 +54,7 @@ static void homing_cal_fv(){
 
 static void homing_set_state(){
     // 处理报警，减速停止
-    if(rt_data->sys_state[SYS_IS_ALARMING] || rt_data->sys_state[SYS_IS_SWITCHING_MODE]){
+    if(rt_data->sys_state[SYS_IS_ALARMING] || rt_data->sys_state[SYS_IS_ESTOP_ACTIVE] || rt_data->sys_state[SYS_IS_SWITCHING_MODE]){
         homing_handle_alarm();
         return;
     }

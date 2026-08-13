@@ -29,6 +29,9 @@ void emcmotPathPlan();
 /// axis_write_out 轴输出与伺服处理：获取通道周期生成的轴增量、检查正负软限位、更新编码器/反馈命令位置、执行补偿
 void emcmotTrajPlan();
 
+#ifdef UNIT_TEST
+void emcmot_test_rebuild_axis_positions_from_feedback();
+#endif
 
 #ifdef __cplusplus
 }

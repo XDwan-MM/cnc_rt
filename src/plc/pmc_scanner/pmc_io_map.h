@@ -127,4 +127,4 @@ typedef struct {
 } G_INPUT_MAP;
 #pragma pack(pop)
 
-#endif
+#endif /* PMC_IO_MAP_H */

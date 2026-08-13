@@ -38,6 +38,7 @@ static void compute_error_comp();
 static void calcul_mac_cmd_pos();
 static void manual_unset_sys_state();
 static void reset_clean_warning();
+static void rebuild_axis_positions_from_feedback();
 
 static int32_t x_cmd_Pulses, y_cmd_Pulses, z_cmd_Pulses;
 static int32_t x_target_pos, y_target_pos, z_target_pos;
@@ -84,6 +85,14 @@ void emcmotPathPlan()
         // unif_block();
     }
 }
+
+#ifdef UNIT_TEST
+void emcmot_test_rebuild_axis_positions_from_feedback()
+{
+    rebuild_axis_positions_from_feedback();
+    update_pos_flag = 1;
+}
+#endif
 
 // 通道周期状态机
 static void chan_do_period()
@@ -248,9 +257,29 @@ static void check_for_fault()
     {
         handle_estop_cmd();
     }
-    // 　检查系统报警和内部急停标志
-    int alarm_count = 0;
-    getAlarmCount(ALARM_TYPE_ALL, ALARM_ERROR, &alarm_count);
+    // 检查系统报警(去除用户PLC报警)和内部急停标志
+    int alarm_count0 = 0;
+    int alarm_count1 = 0;
+    int alarm_count2 = 0;
+    int alarm_count3 = 0;
+    int alarm_count4 = 0;
+    int alarm_count5 = 0;
+    int alarm_count6 = 0;
+    int alarm_count7 = 0;
+    int alarm_count8 = 0;
+    getAlarmCount(ALARM_SY, ALARM_ERROR, &alarm_count0);
+    getAlarmCount(ALARM_CH, ALARM_ERROR, &alarm_count1);
+    getAlarmCount(ALARM_AX, ALARM_ERROR, &alarm_count2);
+    getAlarmCount(ALARM_SV, ALARM_ERROR, &alarm_count3);
+    getAlarmCount(ALARM_PC, ALARM_ERROR, &alarm_count4);
+    getAlarmCount(ALARM_DV, ALARM_ERROR, &alarm_count5);
+    getAlarmCount(ALARM_PS, ALARM_ERROR, &alarm_count6);
+    getAlarmCount(ALARM_HM, ALARM_ERROR, &alarm_count7);
+    getAlarmCount(ALARM_ETHCAT_SV, ALARM_ERROR, &alarm_count8);
+
+    int alarm_count = alarm_count0 + alarm_count1 + alarm_count2 + alarm_count3 + alarm_count4 + alarm_count5 +
+                      alarm_count6 + alarm_count7 + alarm_count8;
+
     if (alarm_count > 0 || rt_data->sys_state[SYS_IS_ESTOP_ACTIVE])
     {
         rt_data->sys_state[SYS_IS_ALARMING] = true;
@@ -282,17 +311,10 @@ static void read_from_hal()
     rt_data->axis_data[AXIS_Z].motor_act_pos = pulses_to_position(par_axis[AXIS_Z], z_target_pos);
 #endif
 
-    // 第一次运行，初始化位置
     if (!update_pos_flag)
     {
-        for (int i = 0; i < SYS_AXES_NUM; i++)
-        {
-            rt_data->axis_data[i].wcs_cmd_pos_cur = rt_data->axis_data[i].motor_act_pos;
-            rt_data->axis_data[i].wcs_cmd_pos_pre = rt_data->axis_data[i].motor_act_pos;
-            rt_data->axis_data[i].mac_cmd_pos = rt_data->axis_data[i].motor_act_pos;
-            rt_data->axis_data[i].motor_cmd_pos = rt_data->axis_data[i].motor_act_pos;
-            rt_data->axis_data[i].fb_pos_no_comp = rt_data->axis_data[i].motor_act_pos;
-        }
+        // 报警复位后用最新带补偿反馈，重建未补偿坐标基准。
+        rebuild_axis_positions_from_feedback();
         update_pos_flag = 1;
     }
 }
@@ -310,10 +332,10 @@ static void output_to_hal()
 
 static void compute_error_comp()
 {
-    double pitch_comp_val[3] = {0};
-    double backlash_comp_val[3] = {0};
-    double straightness1_comp_val[3] = {0};
-    double straightness2_comp_val[3] = {0};
+    double pitch_comp_val[3] = {0.0};
+    double backlash_comp_val[3] = {0.0};
+    double straightness1_comp_val[3] = {0.0};
+    double straightness2_comp_val[3] = {0.0};
 
     // todo 事件驱动：仅在 HMI 下发补偿事件时同步参数/重建表
     comp_handle_event(rt_data->nc_event);
@@ -359,24 +381,34 @@ static void compute_error_comp()
         //                                                           i,
         //                                                           all_axis_pos,
         //                                                           &straightness2_comp_table[i]);
-        
+
         // 补偿值同步到全局误差补偿变量中
         rt_data->axis_data[i].pitch_comp_val = pitch_comp_val[i];
         rt_data->axis_data[i].backlash_comp_val = backlash_comp_val[i];
         rt_data->axis_data[i].straightness1_comp_val = straightness1_comp_val[i];
         rt_data->axis_data[i].straightness2_comp_val = straightness2_comp_val[i];
 
-        // 总补偿值
-        double total_comp_val = rt_data->axis_data[i].pitch_comp_val + rt_data->axis_data[i].backlash_comp_val +
-                                rt_data->axis_data[i].straightness1_comp_val +
-                                rt_data->axis_data[i].straightness2_comp_val;
+        rt_data->axis_data[i].total_comp_cal = rt_data->axis_data[i].pitch_comp_val +
+                                               rt_data->axis_data[i].backlash_comp_val +
+                                               rt_data->axis_data[i].straightness1_comp_val +
+                                               rt_data->axis_data[i].straightness2_comp_val;
 
         // 下发电机位置 (当前周期插补位置 + 总补偿值)
-        rt_data->axis_data[i].motor_cmd_pos = mac_cmd_pos + total_comp_val;
+        rt_data->axis_data[i].motor_cmd_pos = mac_cmd_pos + rt_data->axis_data[i].total_comp_cal;
 
         // 反馈位置（去除补偿）
-        rt_data->axis_data[i].fb_pos_no_comp = rt_data->axis_data[i].motor_act_pos - total_comp_val;
+        rt_data->axis_data[i].fb_pos_no_comp = rt_data->axis_data[i].motor_act_pos -
+                                               rt_data->axis_data[i].total_comp_cal;
     }
+    // 螺补
+    // printf("pitch_comp_val%f\n",rt_data->axis_data[AXIS_X].pitch_comp_val);
+    // printf("mac_cmd_pos_x %f motor_act_pos %f driver_actual_pos %d total_comp_cal %f chazhi %f motor_cmd_pos %f\n",
+    //        rt_data->axis_data[AXIS_X].mac_cmd_pos,
+    //        rt_data->axis_data[AXIS_X].motor_act_pos,
+    //        x_axis_driver.actual_pos,
+    //        rt_data->axis_data[AXIS_X].total_comp_cal,
+    //        rt_data->axis_data[AXIS_X].motor_act_pos - rt_data->axis_data[AXIS_X].mac_cmd_pos,
+    //        rt_data->axis_data[AXIS_X].motor_cmd_pos);
 #ifdef ENABLE_COMP_DATA_LOG
     {
         static FILE *comp_log_file = NULL;
@@ -470,5 +502,39 @@ static void manual_unset_sys_state()
         break;
     default:
         break;
+    }
+}
+
+static void rebuild_axis_positions_from_feedback()
+{
+    // motor_act_pos 是带补偿反馈；wcs_cmd_pos_*、mac_cmd_pos 和 fb_pos_no_comp 是未补偿机床坐标。
+    for (int i = 0; i < SYS_AXES_NUM; i++)
+    {
+
+        // 暂时这样做，后续等待断电保持
+        rt_data->axis_data[i].motor_cmd_pos = rt_data->axis_data[i].motor_act_pos;
+        double uncompensated_pos;
+        uncompensated_pos = rt_data->axis_data[i].motor_act_pos - rt_data->axis_data[i].total_comp_cal;
+        rt_data->axis_data[i].mac_cmd_pos = uncompensated_pos;
+        rt_data->axis_data[i].wcs_cmd_pos_cur = uncompensated_pos;
+        rt_data->axis_data[i].wcs_cmd_pos_pre = uncompensated_pos;
+        rt_data->axis_data[i].fb_pos_no_comp = uncompensated_pos;
+    }
+    // 暂时这样做，后续等待断电保持
+    // 　补偿状态机
+    for (int axis = 0; axis < 3; axis++)
+    {
+        // 螺距补偿
+        // pitch_comp_seqlist_init(&pitch_comp_table[axis]);
+        // pitch_comp_init(&pitch_comp_state[axis], 0.001);
+        pitch_comp_state[axis].last_pos_cmd = rt_data->axis_data[axis].mac_cmd_pos;
+        // 反向间隙
+        // backlash_comp_init(&backlash_comp_state[axis]);
+        backlash_comp_state[axis].last_pos_cmd = rt_data->axis_data[axis].mac_cmd_pos;
+        // 直线度补偿
+        // straightness_comp_seqlist_init(&straightness1_comp_table[axis]);
+        // straightness_comp_seqlist_init(&straightness2_comp_table[axis]);
+        // straightness_comp_init(&straightness1_comp_state[axis], 0.001);
+        // straightness_comp_init(&straightness2_comp_state[axis], 0.001);
     }
 }
