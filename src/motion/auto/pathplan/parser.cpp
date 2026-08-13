@@ -177,21 +177,9 @@ GNC_RES parser_reading(){
     }
     if (parser_data->itp_datas.count <= 0)
     {
-        // 空包也需要更新运行行和模态信息
-        // VarUnion set_modal;
-        // set_modal.type = 0;
-        // for (int i = 0; i < MODAL_GROUP; ++i)
-        // {
-        //     set_modal.value.i = parser_data->itp_state.modal[i];
-        //     setVarChanValue(0, VAR_CHAN_MODAL, i, &set_modal, 0);
-        // }
-        // setVarChanInt(0, VAR_CHAN_RUN_ROW, parser_data->itp_line_no, 0);
-        // LOG(LOG_LEVEL_DEBUG, "译码为空: %d", parser_data->itp_line_no);
-
         res = parser_handle_recieve(nullptr, &parser_data->itp_state, &parser_data->itp_line_no);
         parser_check_res(res);
         // if (res == ?)
-
     }
     else
     {
@@ -407,6 +395,8 @@ static GNC_RES parser_handle_mcode(pmc_data* motion_data, NcItpState *itp_state,
     plan_block.mst_data.spindle = motion_data->spindle;
     // 刀号
     plan_block.mst_data.tool_number = motion_data->tool_number; 
+    // 子程序或宏程序
+    plan_block.mst_data.sub_program = motion_data->sub_program;
     // 预留
     plan_block.mst_data.size = 1;
     if (queue_is_full(parser_queue))

@@ -196,6 +196,11 @@ bool auto_dwell_cmd_is_finished(){
     return false;
 }
 
+void auto_get_modal_cmd(){
+    cycle_tp->exec_cmd = DO_NULL_CMD;
+    cycle_tp->target_stage = BLOCK_STOP_2_END;
+}
+
 void cycle_tp_add_block(){
     PLAN_BLOCK* pretreat_block;
     PLAN_BLOCK* plan_block;
