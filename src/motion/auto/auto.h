@@ -79,6 +79,7 @@ typedef struct{
 } DWELL_CMD_DATA;
 
 typedef struct{
+    bool sub_program;       // 子程序或宏程序标志
     int mcode_size;         // 多个辅助功能个数
     bool signal_mf;         // 辅助功能选通脉冲信号
     bool signal_sf;         // 主轴速度选通信号

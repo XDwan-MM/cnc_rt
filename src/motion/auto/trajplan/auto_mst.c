@@ -11,6 +11,7 @@
 
 static void auto_deal_mstb();
 static void auto_check_mstb_lock_on();
+static void auto_deal_sub_program();
 static void auto_clear_mstb_signal();
 static void auto_mstb_fin_alert();
 static void auto_mstb_fin_reset();
@@ -24,6 +25,7 @@ void auto_get_mstb_cmd(){
     cycle_tp->target_stage = BLOCK_STOP_2_END;
     cycle_tp_mstb_cmd_data_reset();
     cycle_tp->mstb_cmd_data.mcode_size = cycle_tp->plan_block->mst_data.size;
+    cycle_tp->mstb_cmd_data.sub_program = cycle_tp->plan_block->mst_data.sub_program;
     auto_check_mstb_lock_on();
     auto_deal_mstb();
 }  
@@ -55,25 +57,19 @@ void auto_execute_mstb_cmd(){
             if(! cycle_tp->mstb_cmd_data.signal_mf){
                 switch (cycle_tp->plan_block->mst_data.m_code)
                 {
-                case M03:
-                case M04:
-                case M05:
-                    // SF主轴速度选通信号
-                    // setRegBit(REG_F, 7, 2);
-                    // cycle_tp->mstb_cmd_data.signal_sf = true;
-                    break;
                 case M06:
-                    // TF刀具功能选通信号
+                    // TF刀具选通信号
+                    // 不输出MF：1、M99，M98，M198；2、调用子程序的M代码；3、调用用户宏程序的M代码
                     setRegBit(REG_F, 7, 3);
                     cycle_tp->mstb_cmd_data.signal_tf = true;
                     break;
                 default:
+                    // MF辅助功能选通信号
+                    setRegBit(REG_F, 7, 0);
                     break;
                 }
-                // MF辅助功能选通信号
-                setRegBit(REG_F, 7, 0);
                 cycle_tp->mstb_cmd_data.signal_mf = true;
-                LOG(LOG_LEVEL_DEBUG, "2、延时%dms后输出MF信号", par_chan[0][PAR_CH_TMF_DELAY].value.val_int);
+                LOG(LOG_LEVEL_DEBUG, "2、延时%dms后输出M/S/TF信号", par_chan[0][PAR_CH_TMF_DELAY].value.val_int);
                 auto_mstb_fin_alert();
             }
         }
@@ -86,7 +82,7 @@ void auto_execute_mstb_cmd(){
         // 完成信号宽幅时间，缺省值2ms
         if(cycle_tp->mstb_cmd_data.tfin_count >= par_chan[0][PAR_CH_TFIN_DELEY].value.val_int){
             cycle_tp->mstb_cmd_data.finished = true;
-            LOG(LOG_LEVEL_DEBUG, "3、接收到FIN信号, 执行下一指令"); 
+            LOG(LOG_LEVEL_DEBUG, "4、接收到FIN信号, 执行下一指令"); 
             auto_mstb_fin_reset();
             auto_clear_mstb_signal();
             if(cycle_tp->plan_block->mst_data.m_code == M02 || cycle_tp->plan_block->mst_data.m_code == M30) {
@@ -142,8 +138,7 @@ static void auto_deal_mstb(){
             spl_data.mcode_feedback = false;
             auto_set_scode_signal(i);
             break;
-        case M06: // 换刀
-            setRegValue8(REG_F, 10, 0x06);
+        case M06: // 不输出M代码信号：1、M99，M98，M198；2、调用子程序的M代码；3、调用用户宏程序的M代码
             spl_data.mcode_feedback = false;
             auto_set_tcode_signal(i);
             break;    
@@ -163,7 +158,20 @@ static void auto_deal_mstb(){
             auto_set_mcode_signal(i);
             break;
         }
-        LOG(LOG_LEVEL_DEBUG, "1、nc侧输出代码信号M%d", cycle_tp->plan_block->mst_data.m_code);
+        // 调试：打印信息
+        switch (cycle_tp->plan_block->mst_data.m_code)
+        {
+        case M03:
+        case M04:
+            LOG(LOG_LEVEL_DEBUG, "1、nc侧输出代码信号M%dS%d", cycle_tp->plan_block->mst_data.m_code, cycle_tp->plan_block->mst_data.spindle.speed);
+            break;
+        case M06:
+            LOG(LOG_LEVEL_DEBUG, "1、nc侧输出代码信号T%d", cycle_tp->plan_block->mst_data.tool_number);
+            break;
+        default:
+            LOG(LOG_LEVEL_DEBUG, "1、nc侧输出代码信号M%d", cycle_tp->plan_block->mst_data.m_code);
+            break;
+        } 
         // 分配信号 DEN信号 F1.3
         setRegBit(REG_F, 1, 3);   
         cycle_tp->mstb_cmd_data.signal_den = true; 
@@ -176,7 +184,20 @@ static void auto_deal_mstb(){
 static void auto_mstb_fin_alert(){
     var_chan[0][VAR_CHAN_FIN_SIGNAL].value.i = 1;
     setAlarm(ALARM_CH, ALARM_WARNING, 0);
-    LOG(LOG_LEVEL_DEBUG, "M%d等待FIN信号中...", cycle_tp->plan_block->mst_data.m_code);
+    // 调试：打印信息
+    switch (cycle_tp->plan_block->mst_data.m_code)
+    {
+    case M03:
+    case M04:
+        LOG(LOG_LEVEL_DEBUG, "3、M%dS%d等待FIN信号中", cycle_tp->plan_block->mst_data.m_code, cycle_tp->plan_block->mst_data.spindle.speed);
+        break;
+    case M06:
+        LOG(LOG_LEVEL_DEBUG, "3、T%d等待FIN信号中", cycle_tp->plan_block->mst_data.tool_number);
+        break;
+    default:
+        LOG(LOG_LEVEL_DEBUG, "3、M%d等待FIN信号中", cycle_tp->plan_block->mst_data.m_code);
+        break;
+    } 
 }
 
 static void auto_mstb_fin_reset(){
@@ -201,6 +222,14 @@ static void auto_check_mstb_lock_on(){
             cycle_tp->mstb_cmd_data.finished = true;
             break;
         }
+    }
+}
+
+static void auto_deal_sub_program(){
+    // 不输出MF：1、M99，M98，M198；2、调用子程序的M代码；3、调用用户宏程序的M代码
+    if(cycle_tp->mstb_cmd_data.sub_program) {
+        cycle_tp->mstb_cmd_data.mcode_size = 0;
+        cycle_tp->mstb_cmd_data.finished = true;
     }
 }
 
@@ -295,7 +324,7 @@ static void auto_set_scode_signal(int index){
 
 static void auto_set_tcode_signal(int index){
     if(cycle_tp->plan_block->mst_data.tool_number < REG_8BITE){
-        setRegValue8(REG_F, 26,cycle_tp->plan_block->mst_data.tool_number);
+        setRegValue8(REG_F, 26, cycle_tp->plan_block->mst_data.tool_number);
         setRegValue8(REG_F, 27, 0);
         setRegValue8(REG_F, 28, 0);
         setRegValue8(REG_F, 29, 0);

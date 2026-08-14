@@ -134,7 +134,7 @@ void* motion_controller_thread_func(void*) {
         end = get_ns();
         // printf("%10f", (end - start) / 1e6);
         #ifndef DEBUG_MODE_ENABLED
-        if(IsGreaterThan((end - start) / 1e6, 1.5)){
+        if(IsGreaterThan((end - start) / 1e6, 0.9)){
             int res = setAlarm(ALARM_SY, ALARM_ERROR, 1);
             if(res != -8) LOG(LOG_LEVEL_ERR, "实时超时 %10f", (end - start) / 1e6);
         }

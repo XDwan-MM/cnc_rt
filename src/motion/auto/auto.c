@@ -604,6 +604,9 @@ static void auto_get_next_cmd(){
     case PMC_MODE_M_CMD:
         auto_get_mstb_cmd();
         break;
+    case PMC_MODE_NULL:
+        auto_get_modal_cmd();
+        break;
     default:
         cycle_tp->exec_cmd = DO_NULL_CMD;
     }
@@ -635,6 +638,9 @@ static void auto_update_cur_cmd(){
         break;
     case PMC_MODE_M_CMD:
         auto_update_mstb_cmd();
+        break;
+    case PMC_MODE_NULL:
+        auto_get_modal_cmd();
         break;
     default:
         cycle_tp->exec_cmd = DO_NULL_CMD;

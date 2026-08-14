@@ -105,7 +105,7 @@ mr_summary:
     # 3.编译cnc_rt
     - cd ../../
     - echo "⏳ Compiling Main Project..."
-    - ./build.sh release
+    - ./build.sh
     - echo "✅ Compiled Main Project Success!"
     - ls -l bin/
     # 4.添加版本号信息
