@@ -21,14 +21,6 @@ GNC_RES chan_add_block(){
 
     if(queue_is_empty(parser_queue)) return GNC_DATA_EMPTY;
 
-    // 译码第一段类型为g00，起点为当前机床位置
-    if(rt_get_chan_state(0, CHAN_IS_FIRST_RUN)){
-        // todo：var变量在路径线程中被读取，存在数据竞争风险，需加锁保护
-        pretreat_queue->pre_pos = (POS){.x = rt_data->axis_data[AXIS_X].wcs_cmd_pos_cur, .y = rt_data->axis_data[AXIS_Y].wcs_cmd_pos_cur, .z = rt_data->axis_data[AXIS_Z].wcs_cmd_pos_cur};
-        rt_set_chan_state(0, CHAN_IS_FIRST_RUN, false);
-        // LOG(LOG_LEVEL_DEBUG,  "%f %f %f", pretreat_queue->pre_pos.x, pretreat_queue->pre_pos.y, pretreat_queue->pre_pos.z);
-    }
-
     // 每次最多处理 PRE_TREAT_SIZE
     for(int i = 0; i < PRE_TREAT_SIZE; i++){
         // 如果预处理队列已满，提前结束
@@ -44,29 +36,50 @@ GNC_RES chan_add_block(){
         // 拷贝信息
         memcpy(pretreat_block, parser_block, sizeof(PLAN_BLOCK));
 
-        // 构造成段
-        pretreat_block->max_vel = pretreat_block->feed_vel = parser_block->feed_vel / TIME_MINUS_2_S;
-        block_cal_pos(parser_block, pretreat_block, &pretreat_queue->pre_pos);
+        switch (parser_block->mode)
+        {
+        case PMC_MODE_NULL:
+            pretreat_block->max_vel = pretreat_block->feed_vel = 0;
+            pretreat_block->length = 0;
+            pretreat_block->angle_rad = PI;
+            break;
+            
+        default:
+            // 构建第一个实包起点
+            if(rt_get_chan_state(0, CHAN_IS_FIRST_RUN)){
+                // todo：var变量在路径线程中被读取，存在数据竞争风险，需加锁保护
+                pretreat_queue->pre_pos = (POS){.x = rt_data->axis_data[AXIS_X].wcs_cmd_pos_cur, .y = rt_data->axis_data[AXIS_Y].wcs_cmd_pos_cur, .z = rt_data->axis_data[AXIS_Z].wcs_cmd_pos_cur};
+                rt_set_chan_state(0, CHAN_IS_FIRST_RUN, false);
+                // LOG(LOG_LEVEL_DEBUG,  "%f %f %f", pretreat_queue->pre_pos.x, pretreat_queue->pre_pos.y, pretreat_queue->pre_pos.z);
+            }
+            
+            // 构造成段
+            pretreat_block->max_vel = pretreat_block->feed_vel = parser_block->feed_vel / TIME_MINUS_2_S;
+            block_cal_pos(parser_block, pretreat_block, &pretreat_queue->pre_pos);
 
-        // 计算速度
-        block_cal_vel(pretreat_block);
+            // 计算速度
+            block_cal_vel(pretreat_block);
 
-        // 计算切矢
-        block_cal_vector(pretreat_block);
+            // 计算切矢
+            block_cal_vector(pretreat_block);
 
-        // 计算长度
-        block_cal_length(pretreat_block);
+            // 计算长度
+            block_cal_length(pretreat_block);
 
-        // 计算两段衔接夹角
-        block_cal_angle(pretreat_block, &pretreat_queue->pre_vec, &pretreat_block->start_vec);
+            // 计算两段衔接夹角
+            block_cal_angle(pretreat_block, &pretreat_queue->pre_vec, &pretreat_block->start_vec);
+            
+            // 更新上一段终点
+            pretreat_queue->pre_pos = pretreat_block->end_pos;
+            pretreat_queue->pre_vec = pretreat_block->end_vec;
+            break;
+        }
 
         // 删除已处理的gcode
         queue_pop(parser_queue);
 
         // 更新预处理队列信息
         queue_soft_push(pretreat_queue);
-        pretreat_queue->pre_pos = pretreat_block->end_pos;
-        pretreat_queue->pre_vec = pretreat_block->end_vec;
     }
     return GNC_CAL_SUCCESS;
 }
