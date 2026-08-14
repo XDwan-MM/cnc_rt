@@ -41,11 +41,10 @@ void handle_auto_cmd(){
 static void auto_update_state(){
     // 报警或切换模式下，减速停止
     static bool reset_trigger = false;
-    if(rt_data->sys_state[SYS_IS_ALARMING] || rt_data->sys_state[SYS_IS_ESTOP_ACTIVE] || rt_data->sys_state[SYS_IS_SWITCHING_MODE]){
+    if(rt_data->sys_state[SYS_IS_ALARMING] || rt_data->sys_state[SYS_IS_SWITCHING_MODE]){
         if(!reset_trigger){
             reset_trigger = true;
-            cycle_tp->exec_state = EXEC_RESET;
-            cycle_tp->running_stage = BLOCK_BREAKPOINT;
+            auto_handle_alarm();
         }
         return;
     }else reset_trigger = false;
@@ -710,6 +709,25 @@ GNC_RES cycle_tp_init(){
         return GNC_DATA_NULL;
     }
     return res;
+}
+
+static void auto_handle_alarm(){
+    cycle_tp->exec_state = EXEC_RESET;
+    switch (cycle_tp->running_stage)
+    {
+    case PROGRAM_START:
+    case PROGRAM_END:
+    case PROGRAM_WAIT:
+    case BLOCK_PAUSED:
+    case BLOCK_STOP_2_END:
+        cycle_tp->running_stage = PROGRAM_END;
+        LOG(LOG_LEVEL_ERR, "报警下立刻停止");
+        break;
+    default:
+        cycle_tp->running_stage = BLOCK_BREAKPOINT;
+        LOG(LOG_LEVEL_ERR, "报警下减速停止");
+        break;
+    }   
 }
 
 void auto_handle_estop(){
