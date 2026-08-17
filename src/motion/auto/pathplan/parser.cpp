@@ -66,17 +66,27 @@ GNC_RES parser_init(NC_MODE nc_mode)
     ItpCfgSetMacroVarCB(t_macroVarSetValue);
     // 是否跳过注释段
     ItpSetBlockSkipEnable(rt_get_sys_state(SYS_IS_BLOCK_SKIP));
-    // 长度刀补
-    double toollens[20];
-    for (int i = 0; i < 20; ++i)
+    // 刀偏
+    double toollens[TOOL_COUNT];
+    double toolRads[TOOL_COUNT];
+    for (int i = 0; i < TOOL_COUNT; ++i)
     {
         double glen1 = 0.0;
         double wlen1 = 0.0;
         int ret = SHM_ToolGetToolPara(i, GTOOL_LEN1, &glen1, 0);
         ret = SHM_ToolGetToolPara(i, WTOOL_LEN1, &wlen1, 0);
         toollens[i] = glen1 - wlen1;
+
+        double grad1 = 0.0;
+        double wrad1 = 0.0;
+        ret = SHM_ToolGetToolPara(i, GTOOL_RAD1, &grad1, 0);
+        ret = SHM_ToolGetToolPara(i, WTOOL_RAD1, &wrad1, 0);
+        toolRads[i] = grad1 - wrad1;
+
+        LOG(LOG_LEVEL_INFO, "初始化刀片: %d %f %f", i, toollens[i], toolRads[i]);
     }
-    ItpSetToolLens(toollens, 20);
+    ItpSetToolLens(toollens, TOOL_COUNT);
+    ItpSetToolRads(toolRads, TOOL_COUNT);
     // 设置机床起点
     double ori_pos_x, ori_pos_y, ori_pos_z;
     ori_pos_x = rt_data->axis_data[AXIS_X].wcs_cmd_pos_cur;
