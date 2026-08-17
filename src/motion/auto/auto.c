@@ -673,7 +673,7 @@ static void auto_reset_run(){
     queue_reset(plan_queue);
     queue_reset(pretreat_queue);
     queue_reset(parser_queue);
-    rt_set_chan_state(0, CHAN_IS_PARSER_RESET, false);
+    rt_set_chan_state(0, CHAN_IS_PARSER_RESET, true);
     rt_set_chan_state(0, CHAN_IS_PARSER_RERUN, false);
     rt_set_chan_state(0, CHAN_IS_PARSERING, false);
     setVarChanInt(0, VAR_CHAN_IS_RUNNING, 0, 0);
@@ -718,6 +718,7 @@ GNC_RES cycle_tp_init(){
 }
 
 static void auto_handle_alarm(){
+    if(cycle_tp->exec_state == EXEC_IDLE) return;
     cycle_tp->exec_state = EXEC_RESET;
     switch (cycle_tp->running_stage)
     {
