@@ -36,8 +36,6 @@ void auto_update_mstb_cmd(){
         cycle_tp->target_stage = PROGRAM_END;
         cycle_tp->exec_cmd = DO_NULL_CMD;
         cycle_tp_mstb_cmd_data_reset();
-        auto_mstb_fin_reset();
-        auto_clear_mstb_signal();
         break;
     default:
         auto_get_mstb_cmd();
@@ -361,4 +359,6 @@ void cycle_tp_mstb_cmd_data_reset(){
     cycle_tp->mstb_cmd_data.tfin_count = 0;
     cycle_tp->mstb_cmd_data.tmf_count = 0;
     cycle_tp->mstb_cmd_data.finished = false;
+    auto_mstb_fin_reset();
+    auto_clear_mstb_signal();
 }
