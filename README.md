@@ -1,30 +1,41 @@
 
-### 运行方式
+### 运行
 
 1、目录结构
 
-├── cnc_hmi*   界面
-├── cnc_rt*    实时
-└── run.sh     启动脚本
+```SHELL
+|-- cnc_hmi*	  # 界面
+|-- cnc_rt*       # 实时
+|-- run.sh        # 启动脚本
+```
 
 2、启动方式
 
-用法: ./run.sh [选项]
+用法
 
-选项:
-  debug      运行调试模式
-  run        运行测试平台
-  help       显示帮助信息
+```SHELL
+./run.sh [选项]
+```
 
-示例:
+选项
+
+```SHELL
+debug      # 运行调试模式
+
+run        # 运行测试平台
+
+help       # 显示帮助信息
+```
+
+示例
+
+```SHELL
   sudo ./run.sh debug      # 运行调试模式
-  sudo ./run.sh run        # 运行测试平台1
+
+  sudo ./run.sh run        # 运行测试平台
+
   sudo ./run.sh help       # 显示帮助信息
-
-模糊匹配：
-debug|rund|run_d|run_debug|debug_run
-help|--help|-h|-H
-
+```
 
 3、启动流程
 
@@ -32,11 +43,61 @@ help|--help|-h|-H
 
 异常流程：如果界面长时间处于等待界面，可能是主站启动失败，此时50s后无法进入，等待界面显示报警信息，测试阶段请关闭重启。
 
+---
+
+### 配置文件
+
+如果需要**上机测试**（仿真模式随意），请注意配置文件的参数设置
+
+1、修改界面参数配置文件
+
+拷贝data和plc文件夹到cnc_hmi*中替换
+
+- 测试平台1（不靠墙那台）
+
+逻辑轴0 的参数 电子齿轮比分母 设置为 1500000
+
+逻辑轴1 的参数 电子齿轮比分母 设置为 1500000
+
+逻辑轴2 的参数 电子齿轮比分母 设置为 8388608
+
+- 测试平台2（靠墙那台）
+
+逻辑轴0 的参数 电子齿轮比分母 设置为 100000
+
+逻辑轴1 的参数 电子齿轮比分母 设置为 100000
+
+逻辑轴2 的参数 电子齿轮比分母 设置为 100000
+
+- 2楼机床
+
+逻辑轴0 的参数 电子齿轮比分母 设置为 1048576
+
+逻辑轴1 的参数 电子齿轮比分母 设置为 1048576
+
+逻辑轴2 的参数 电子齿轮比分母 设置为 1048576
 
 
-### 实时单独启动
+2、修改运行程序
 
-如果想脱离界面，只启动实时进行调试，可继续使用之前的启动方式 sudo ./build.sh debug
+拷贝NC、TXT文件到 /NC/program 下
+
+---
+
+### 调试
+
+如果想要启动界面，在实时调试
+
+界面启动：sudo ./cnc_hmi_v3 -p
+
+实时调试：断点调试
+
+---
+
+
+### 单实时启动
+
+如果想脱离界面，**只启动**实时进行调试，可继续使用之前的启动方式 sudo ./build.sh debug
 
 为了解除与界面的交互，请在 main.cpp 结束该部分程序段的注释
 
@@ -49,23 +110,19 @@ help|--help|-h|-H
     // #endif
 ```
 
-
-### 调试
-
-如果想要启动界面，然后在实时调试
-
-界面启动：sudo ./cnc_hmi_v3 -p
-
-
+---
 
 ### 共享内存
 
-连接数大于2，段错误
+1、cnc_hmi 和 cnc_rt 的共享内存版本需保持一致。否则无法启动
 
-ipcs -m：找到连接数最大（从右侧到左第3列），复制 shmid 号
+2、连接数大于2，段错误
 
-ipcrm -m <shmid>
+- ipcs -m：找到连接数最大（从右侧到左第3列），复制 shmid 号
 
+- ipcrm -m <shmid>
+
+---
 
 ### 版本管理
 
@@ -75,72 +132,27 @@ ipcrm -m <shmid>
 
 - 如果大功能变更/大问题修复，在 第二位 +1
 
+---
+
+### 仓库管理
+
+1、feature等保护分支，不要git push -f！！！
+
+2、提交使用合并请求
+
+---
 
 ### 制品库
 
 ０　创建分支推送，可参考 template-ci.yml，创建流水线，在制品库下载对应压缩包（也可在feature分支手动生成）
 
-１ 文件包括　bin config lib
+１ 文件包括　bin config lib ……
 
 ２ 执行方式，在 cnc_rt_x.x.xxxx/bin 打开终端运行
 
 sudo ./cnc_rt
 
-
-### 使用方法
-
-0、更新子模块（如共享内存）
-
-sudo rm -rf ./lib/cncshm/ （如报错文件已存在）
-
-拉取当前子模块代码（将子模块的代码切换到主项目所记录的特定提交（而不是子模块的最新提交））
-
-git submodule update --init --recursive
-
-更新到最新版本（请勿轻易使用，除非确认需要更新到子模块最新版本）
-
-git submodule init && git submodule update --remote
-
-
-1、修改界面参数配置文件
-
-1-1、测试平台（不靠墙那台）
-逻辑轴0 的参数 电子齿轮比分母 设置为 1500000
-逻辑轴1 的参数 电子齿轮比分母 设置为 1500000
-逻辑轴2 的参数 电子齿轮比分母 设置为 8388608
-
-1-2、测试平台（靠墙那台）
-逻辑轴0 的参数 电子齿轮比分母 设置为 100000
-逻辑轴1 的参数 电子齿轮比分母 设置为 100000
-逻辑轴2 的参数 电子齿轮比分母 设置为 100000
-
-
-2、编译
-
-清理编译（可选）sudo ./build.sh clean
-
-sudo ./build.sh
-
-
-3、编译并运行
-
-启动人机界面 sudo ./cnc_hmi_v3
-
-编译并运行实时　sudo ./build.sh
-
-
-4、运行实时
-
-cd bin
-sudo ./cnc_rt
-
-
-5、调试模式
-
-cd bin
-sudo ./cnc_rt_d
-
-
+---
 
 ### 误差补偿数据采集到文件中，并在新终端界面打印显示
 
@@ -157,7 +169,7 @@ sudo ./cnc_rt_d
 2、实时观察补偿数据：在run.sh同级目录打开终端，运行
 tail -f ./comp_data_log.csv
 
-
+---
 
 ### PLC查看FG变量
 
@@ -165,61 +177,118 @@ tail -f ./comp_data_log.csv
 
 ２、诊断　状态显示　FG
 
+---
 
+### 更新子模块
 
-### 常见问题解决
+更新子模块（如共享内存）
 
-１、编译失败
+sudo rm -rf ./lib/cncshm/ （如报错文件已存在）
 
-先尝试sudo ./build.sh clean
+拉取当前子模块代码（将子模块的代码切换到主项目所记录的特定提交（而不是子模块的最新提交））
 
+git submodule update --init --recursive
 
-２、库版本/编译器版本等问题，重新编译
+更新到最新版本（请勿轻易使用，除非确认需要更新到子模块最新版本）
 
-sudo ./build.sh
+git submodule init && git submodule update --remote
 
+---
 
-3、sudo: ./build.sh：找不到命令
+### 环境配置
 
-sudo chmod +x ./build.sh
+linux 为 ubuntu22，可以使用真实linxu环境、虚拟机、wsl环境。
 
+#### wsl环境
 
-４、时间在未来
+0、阅读培训教程，链接 (https://pan.gree.com/link/XBEaJVQXBC7xWeg/)
 
-make: 警告：文件“../shm.pro”的修改时间在未来 18348 秒后
-/opt/Qt5.15.16/5.15.16/gcc_64/bin/qmake -o Makefile ../shm.pro CONFIG+=debug
+1、安装wsl
 
-sudo find ./* -type f -exec touch {} \;
+```powershell
+dism.exe /online /enable-feature /featurename:VirtualMachinePlatform /all /norestart
+dism.exe /online /enable-feature /featurename:Microsoft-Windows-Subsystem-Linux /all /norestart
+```
 
-5、./build.sh: 行 55: qmake: 未找到命令
+2、重启
 
-sudo visudo
+3、更新wsl，下载安装（https://pan.gree.com/link/2PdqqqWiOuuQCq7/），更新wsl版本，wsl2需要win10 22H2，低于这个版本更新不了只能用wsl1
 
-修改Defaults secure_path, 在最后添加实际qmake路径, 例子(需要自己修改最后的路径!!!):
-Defaults        secure_path="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/snap/bin:/home/wcf/QtLib/Qt5.15.16/5.15.16/gcc_64/bin"
+4、下载ubuntu-wsl，链接 (https://pan.gree.com/link/eKPxhVxgiCSH24M/)
 
-ctrl+X 回车 保存退出.
+5、导入
 
-6、按照5设置后，提示qmake不能找到lisence问题
+```powershell
+wsl --import Ubuntu22 D:\WSL\Ubuntu22 C:\Users\Admin\Downloads\
+ubuntu-jammy-wsl-amd64-ubuntu22.04lts.rootfs.tar.gz
+```
 
-找到qt企业版的lisence路径（找.qt-lisence文件在哪）
-sudo ~/.bashrc
-末尾添加一行内容（等号后面需要填写自己实际的.qt-lisence路径）
-例如：export QT_LICENSE_FILE=/home/wcf/.qt-license
+6、进入linux，wsl -l -v 可以确认安装结果
 
-sudo visudo
-添加Defaults项内容
-Defaults        env_keep += "QT_LICENSE_FILE"
-ctrl+X 回车 保存退出.
+```powershell
+wsl -d Ubuntu22
+```
 
+7、配置源，链接  (https://pan.gree.com/link/lelJdACFsKqNHFn/)
 
-### 仓库管理
+```bash
+sudo cp sources.list /etc/apt
+sudo apt update
+```
 
-1、提交至当前分支，当前分支不受保护，不要git push -f！！！
+8、创建普通用户
 
-2、提交使用合并请求
+```bash
+# 创建普通用户（这里用'gree'作为用户名，可以替换为需要的用户名，比如'zy'、'joey'）
+adduser gree
+# 将新用户添加到sudo组
+usermod -aG sudo gree
+```
 
+9、设置默认账户，编辑 /etc/wsl.conf，添加下面内容，重启wsl生效
 
+```
+[user]
+default=gree
+```
+
+10、配置界面显示，联云镜像下载MobaXterm，配置~/.bashrc，添加下面内容。自行检查，需要和MobaXterm的X11服务对上即可（软件右上角X图标，鼠标放上去有显示url，写入DISPLAY变量即可）。
+
+```bash
+# 配置显示
+export DISPLAY=$(cat /etc/resolv.conf | grep nameserver | awk '{print $2}'):0.0
+```
+
+11、安装依赖包
+
+``` 
+sudo apt install \
+apt-offline base-files base-passwd bash bsdutils btop build-essential ca-certificates ccache clangd dash diffutils findutils fonts-wqy-microhei fonts-wqy-zenhei git grep gzip hostname htop init language-pack-zh-hans libdebconfclient0 libgl1-mesa-dev libgl1-mesa-glx libglu1-mesa libglu1-mesa-dev libnl-3-200 libnl-genl-3-200 libpoppler-qt5-dev libx11-xcb1 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-randr0 libxcb-render-util0 libxcb-shape0 libxcb-xinerama0 libxcomposite1 libxdamage1 libxfixes3 libxi6 libxkbcommon-x11-dev libxrender1 libxtst6 lld login mesa-common-dev micro ncdu ncurses-base ncurses-bin pkg-config screen sysvinit-utils tree ubuntu-minimal ubuntu-standard ubuntu-wsl
+```
+
+12、安装Qt5，链接 (https://pan.gree.com/link/cnOrBvColHNglbr/)
+
+```bash
+sudo chmod +x ./qt-enterprise-linux-x64-5.15.16.run
+./qt-enterprise-linux-x64-5.15.19.run
+```
+
+安装密钥如下
+
+```密钥
+第一个空行：zby3 Gree
+第二个空行：BG8RP-XQP-F4M-SCX-Y5FQH-KK8V7-6FF5
+```
+
+#### 虚拟机环境
+
+1、安装vmware软件
+
+2、安装虚拟机，链接 (https://pan.gree.com/link/G3N5lCmOAMEqSZa/)
+
+3、参考上面换源、安装Qt
+
+---
 
 ### 项目结构
 
@@ -260,9 +329,9 @@ ctrl+X 回车 保存退出.
 
 **motion/emcmot.cpp**
 
-1、emcmotPathPlan：译码 → 预处理
+- emcmotPathPlan：路径规划
 
-2、emcmotTrajPlan：读取抽象层数据 → 判断系统是否报错 → 判断运动模式 → 计算运动数据 → 补偿 → 检查超限位 → 更新抽象层数据 → 更新共享内存数据
+- emcmotTrajPlan：轨迹规划
 
 
 **threads_controller.cpp**
@@ -273,31 +342,66 @@ ctrl+X 回车 保存退出.
 - path_plan_thread_func：路径规划线程
 - pdo_thread_func：pdo线程，产生信号量
 
+---
 
+### 常见问题解决
 
-编译命令:
-使用 CONFIG+=debug_mode 启用调试模式编译
-使用 CONFIG+=release 或不加参数使用实时模式编译
-调试模式编译: cd build/debug && qmake ../../CNC_RT.pro CONFIG+=debug_mode && make -j$(nproc)
-实时模式编译: cd build/release && qmake ../../CNC_RT.pro && make -j$(nproc)
-使用编译脚本可直接编译两个版本: sudo ./build.sh，有问题可以使用 ./build.sh help 查看帮助
+１、编译失败
 
-权限问题不能调试：
-1. sudo visudo
-2. 行末添加：[用户名] ALL=(ALL) NOPASSWD: ALL
-   注意需要修改为自己的用户名，例子： gree ALL=(ALL) NOPASSWD: ALL
-
-运行命令：
-1. 进入 bin 文件夹内
-2. 输入命令: sudo LD_LIBRARY_PATH=../lib/cncshm/bin/:../lib/log/bin/ ./cnc_rt
-
-生成compile_commands.json命令：
-1. 修改 build.sh 中的make -j$(nproc) 。改为 bear -- make -j$(nproc)
-2. 执行 sudo rm -rf build && sudo ./build.sh
-
-编译失败：
 先尝试sudo ./build.sh clean
 
-sudo ./build.sh 
-cd bin && ./cnc_rt
+
+２、库版本/编译器版本等问题，重新编译
+
+sudo ./build.sh
+
+
+3、sudo: ./build.sh：找不到命令
+
+sudo chmod +x ./build.sh
+
+
+４、时间在未来
+
+make: 警告：文件“../shm.pro”的修改时间在未来 18348 秒后
+/opt/Qt5.15.16/5.15.16/gcc_64/bin/qmake -o Makefile ../shm.pro CONFIG+=debug
+
+sudo find ./* -type f -exec touch {} \;
+
+5、./build.sh: 行 55: qmake: 未找到命令
+
+sudo visudo
+
+修改Defaults secure_path, 在最后添加实际qmake路径, 例子(需要自己修改最后的路径!!!):
+
+Defaults        secure_path="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/snap/bin:/home/wcf/QtLib/Qt5.15.16/5.15.16/gcc_64/bin"
+
+ctrl+X 回车 保存退出.
+
+6、按照5设置后，提示qmake不能找到lisence问题
+
+找到qt企业版的lisence路径（找.qt-lisence文件在哪）
+
+sudo ~/.bashrc
+
+末尾添加一行内容（等号后面需要填写自己实际的.qt-lisence路径）
+
+例如：export QT_LICENSE_FILE=/home/wcf/.qt-license
+
+sudo visudo
+
+添加Defaults项内容
+
+Defaults        env_keep += "QT_LICENSE_FILE"
+
+ctrl+X 回车 保存退出.
+
+
+7、权限问题不能调试：
+
+sudo visudo
+
+行末添加：[用户名] ALL=(ALL) NOPASSWD: ALL
+
+注意需要修改为自己的用户名，例子： gree ALL=(ALL) NOPASSWD: ALL
 
