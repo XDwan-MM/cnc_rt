@@ -74,6 +74,7 @@ typedef struct
     double cmd_vel;
     double cmd_acc;
     double cmd_jk;
+    int enc_cntr;                  // 电机位置
     double wcs_cmd_pos_cur;        // 工件插补计算位置
     double wcs_cmd_pos_pre;        // 工件插补计算位置(上一插补)
     double mac_cmd_pos;            // 机床指令位置

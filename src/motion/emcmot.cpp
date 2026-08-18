@@ -309,7 +309,10 @@ static void read_from_hal() {
     Hal_Driver_Get_Actual_Pos(&z_axis_driver, &z_target_pos);
     rt_data->axis_data[AXIS_Z].motor_act_pos = pulses_to_position(par_axis[AXIS_Z], z_target_pos);
 #endif
-
+    // 电机脉冲
+    rt_data->axis_data[AXIS_X].enc_cntr = x_target_pos;
+    rt_data->axis_data[AXIS_Y].enc_cntr = y_target_pos;
+    rt_data->axis_data[AXIS_Z].enc_cntr = z_target_pos;
     // 读取实际速度
     rt_data->axis_data[AXIS_X].act_vel = x_axis_driver.actual_vel;
     rt_data->axis_data[AXIS_Y].act_vel = y_axis_driver.actual_vel;

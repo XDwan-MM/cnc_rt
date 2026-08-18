@@ -246,7 +246,7 @@ void shm_var_update(){
         if(rt_data->current_mode == MODE_MEM || rt_data->current_mode == MODE_MDI || rt_data->current_mode == MODE_DNC){
             // 剩余移动量
             crds_remain = var_axis[i][VAR_AXIS_PROG_POS_EX].value.f - var_axis[i][VAR_AXIS_CMD_POS_WCS_EX].value.f;
-            // 工件指令位置
+            // 工件指令位置 = 编程位置
             if(queue_is_empty(plan_queue)){
                 setVarAxisDouble(AXIS_X, VAR_AXIS_PROG_POS_EX, var_axis[0][VAR_AXIS_CMD_POS_WCS_EX].value.f, 0);
                 setVarAxisDouble(AXIS_Y, VAR_AXIS_PROG_POS_EX, var_axis[1][VAR_AXIS_CMD_POS_WCS_EX].value.f, 0);
@@ -269,7 +269,9 @@ void shm_var_update(){
         // 机械坐标 = 机床指令位置
         setVarAxisDouble(i, VAR_AXIS_CMD_POS_EX, rt_data->axis_data[i].mac_cmd_pos, 0);
         // 机床实际位置
-        setVarAxisDouble(i, VAR_AXIS_ACT_POS_EX, rt_data->axis_data[i].motor_act_pos, 0);
+        setVarAxisDouble(i, VAR_AXIS_ACT_POS_EX, rt_data->axis_data[i].fb_pos_no_comp, 0);
+        // 电机脉冲
+        setVarAxisInt(i, VAR_AXIS_ENC_CNTR, rt_data->axis_data[i].enc_cntr, 0);
         // 实际轴速度
         setVarAxisDouble(i, VAR_AXIS_ACT_VEL, rt_data->axis_data[i].act_vel, 0); 
         // 判断各轴零点
