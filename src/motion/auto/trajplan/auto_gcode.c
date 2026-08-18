@@ -32,6 +32,7 @@ static void cycle_tp_update_pos_cmd_data();
 static bool auto_pos_cmd_cycle_is_finished();
 static bool auto_pos_cmd_axis_arrive_check();
 static bool auto_pos_cmd_arrive_check();
+static void auto_cal_axis_vel(POS *current_pos, POS *target_pos, double target_vel);
 
 void auto_get_pos_cmd(){
     cycle_tp_update_pos_cmd_data();
@@ -135,6 +136,7 @@ void auto_execute_pos_cmd(){
     cycle_tp->pos_cmd_data.current_pos.z = rt_data->axis_data[AXIS_Z].wcs_cmd_pos_cur = interp_pos.z;
     cycle_tp->pos_cmd_data.current_vel = cycle_tp->pos_cmd_data.traj_data->v;
     setVarChanDouble(0, VAR_CHAN_CMD_FEEDRATE, cycle_tp->pos_cmd_data.traj_data->v * TIME_MINUS_2_S, 0);
+    auto_cal_axis_vel(&cycle_tp->pos_cmd_data.current_pos, &interp_pos, cycle_tp->pos_cmd_data.traj_data->v);
 }
 
 static bool auto_pos_cmd_cycle_is_finished(){
@@ -666,4 +668,18 @@ static bool auto_pos_cmd_arrive_check(){
         break;
     }
     return true;
+}
+
+// 计算单轴速度
+static void auto_cal_axis_vel(POS *current_pos, POS *target_pos, double target_vel){
+    double x_axis_vel = 0;
+    double y_axis_vel = 0;
+    double z_axis_vel = 0;
+    VECTOR vec = VECTOR_Unit(current_pos, target_pos);
+    x_axis_vel = target_vel * vec.x;
+    y_axis_vel = target_vel * vec.y;
+    z_axis_vel = target_vel * vec.z;
+    setVarAxisDouble(AXIS_X, VAR_AXIS_CMD_VEL, x_axis_vel, 0);
+    setVarAxisDouble(AXIS_Y, VAR_AXIS_CMD_VEL, y_axis_vel, 0);
+    setVarAxisDouble(AXIS_Z, VAR_AXIS_CMD_VEL, z_axis_vel, 0);
 }

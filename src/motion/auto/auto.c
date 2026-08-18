@@ -624,6 +624,9 @@ static void auto_start_run(){
     setVarChanInt(0, VAR_CHAN_IS_RUNNING, 1, 0);
     setVarChanInt(0, VAR_CHAN_IS_MOVING, 1, 0);
     setVarChanDouble(0, VAR_CHAN_CMD_FEEDRATE, 0, 0);
+    setVarAxisDouble(AXIS_X, VAR_AXIS_CMD_VEL, 0, 0);
+    setVarAxisDouble(AXIS_Y, VAR_AXIS_CMD_VEL, 0, 0);
+    setVarAxisDouble(AXIS_Z, VAR_AXIS_CMD_VEL, 0, 0);
     // 通知译码运行，初始化译码器
     rt_set_chan_state(0, CHAN_IS_PARSER_RERUN, true);
     // 译码正在运行，译码结束译码器将其置false
@@ -635,6 +638,10 @@ static void auto_start_run(){
 static void auto_pause_run(){
     cycle_tp->exec_cmd = DO_NULL_CMD;
     setVarChanInt(0, VAR_CHAN_IS_MOVING, 0, 0);
+    setVarChanDouble(0, VAR_CHAN_CMD_FEEDRATE, 0, 0);
+    setVarAxisDouble(AXIS_X, VAR_AXIS_CMD_VEL, 0, 0);
+    setVarAxisDouble(AXIS_Y, VAR_AXIS_CMD_VEL, 0, 0);
+    setVarAxisDouble(AXIS_Z, VAR_AXIS_CMD_VEL, 0, 0);
 }
 
 static void auto_reset_run(){
@@ -648,6 +655,9 @@ static void auto_reset_run(){
     setVarChanInt(0, VAR_CHAN_IS_RUNNING, 0, 0);
     setVarChanInt(0, VAR_CHAN_IS_MOVING, 0, 0);
     setVarChanDouble(0, VAR_CHAN_CMD_FEEDRATE, 0, 0);
+    setVarAxisDouble(AXIS_X, VAR_AXIS_CMD_VEL, 0, 0);
+    setVarAxisDouble(AXIS_Y, VAR_AXIS_CMD_VEL, 0, 0);
+    setVarAxisDouble(AXIS_Z, VAR_AXIS_CMD_VEL, 0, 0);
     // LOG(LOG_LEVEL_DEBUG, "vel %f", var_chan[0][VAR_CHAN_CMD_FEEDRATE].value.f);
 }
 
@@ -663,6 +673,20 @@ static void auto_update_var(){
     // 运行行号
     setVarChanInt(0, VAR_CHAN_RUN_ROW, cycle_tp->plan_block->line_number, 0);
     // LOG(LOG_LEVEL_DEBUG, "line number:%d", cycle_tp->plan_block->line_number);
+    // 速度
+    switch (cycle_tp->plan_block->mode)
+    {
+    case PMC_MODE_PAUSE:
+    case PMC_MODE_M_CMD:
+    case PMC_MODE_STOPSKIP:
+    case PMC_MODE_NULL:
+        setVarChanDouble(0, VAR_CHAN_CMD_FEEDRATE, 0, 0);
+        setVarAxisDouble(AXIS_X, VAR_AXIS_CMD_VEL, 0, 0);
+        setVarAxisDouble(AXIS_Y, VAR_AXIS_CMD_VEL, 0, 0);
+        setVarAxisDouble(AXIS_Z, VAR_AXIS_CMD_VEL, 0, 0);
+    default:
+        break;
+    }
 }
 
 static GNC_RES cycle_tp_pos_cmd_data_init(POS_CMD_DATA* pos_cmd_data){
