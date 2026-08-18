@@ -85,6 +85,16 @@ GNC_RES parser_init(NC_MODE nc_mode)
     }
     ItpSetToolLens(toollens, TOOL_COUNT);
     ItpSetToolRads(toolRads, TOOL_COUNT);
+    // 刀偏参数
+    ItpParam_temp itpParam;
+    itpParam.cnv = par_ncu[PAR_NCU_PARSER_CNV].value.val_int;
+    itpParam.cav = par_ncu[PAR_NCU_PARSER_CAV].value.val_int;
+    itpParam.naa = par_ncu[PAR_NCU_PARSER_NAA].value.val_int;
+    itpParam.sup = par_ncu[PAR_NCU_PARSER_SUP].value.val_int;
+    itpParam.suv = par_ncu[PAR_NCU_PARSER_SUV].value.val_int;
+    itpParam.ccc = par_ncu[PAR_NCU_PARSER_CCC].value.val_int;
+    itpParam.lookAheadSegments = par_ncu[PAR_NCU_PARSER_LOOKAHEADSEGMENTS].value.val_int;
+    ItpSetItpParam(itpParam);
     // 设置机床起点
     double ori_pos_x, ori_pos_y, ori_pos_z;
     ori_pos_x = rt_data->axis_data[AXIS_X].wcs_cmd_pos_cur;
