@@ -82,8 +82,6 @@ GNC_RES parser_init(NC_MODE nc_mode)
         ret = SHM_ToolGetToolPara(i, GTOOL_RAD1, &grad1, 0);
         ret = SHM_ToolGetToolPara(i, WTOOL_RAD1, &wrad1, 0);
         toolRads[i] = grad1 - wrad1;
-
-        LOG(LOG_LEVEL_INFO, "初始化刀片: %d %f %f", i, toollens[i], toolRads[i]);
     }
     ItpSetToolLens(toollens, TOOL_COUNT);
     ItpSetToolRads(toolRads, TOOL_COUNT);
