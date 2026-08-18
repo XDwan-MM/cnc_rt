@@ -59,8 +59,6 @@ static void auto_update_state(){
             auto_start_run();
             cycle_tp->exec_state = EXEC_RUNNING;
             cycle_tp->running_stage = PROGRAM_START;
-            setVarChanInt(0, VAR_CHAN_IS_RUNNING, 1, 0);
-            setVarChanInt(0, VAR_CHAN_IS_MOVING, 1, 0);
             break;
         default:
             break;
@@ -656,6 +654,9 @@ static void auto_start_run(){
     queue_reset(pretreat_queue);
     queue_reset(parser_queue);
     cycle_tp_reset();
+    setVarChanInt(0, VAR_CHAN_IS_RUNNING, 1, 0);
+    setVarChanInt(0, VAR_CHAN_IS_MOVING, 1, 0);
+    setVarChanDouble(0, VAR_CHAN_CMD_FEEDRATE, 0, 0);
     // 通知译码运行，初始化译码器
     rt_set_chan_state(0, CHAN_IS_PARSER_RERUN, true);
     // 译码正在运行，译码结束译码器将其置false
@@ -673,12 +674,14 @@ static void auto_reset_run(){
     queue_reset(plan_queue);
     queue_reset(pretreat_queue);
     queue_reset(parser_queue);
+    cycle_tp_reset();
     rt_set_chan_state(0, CHAN_IS_PARSER_RESET, true);
     rt_set_chan_state(0, CHAN_IS_PARSER_RERUN, false);
     rt_set_chan_state(0, CHAN_IS_PARSERING, false);
     setVarChanInt(0, VAR_CHAN_IS_RUNNING, 0, 0);
     setVarChanInt(0, VAR_CHAN_IS_MOVING, 0, 0);
-    cycle_tp_reset();
+    setVarChanDouble(0, VAR_CHAN_CMD_FEEDRATE, 0, 0);
+    // LOG(LOG_LEVEL_DEBUG, "vel %f", var_chan[0][VAR_CHAN_CMD_FEEDRATE].value.f);
 }
 
 static void auto_update_var(){
