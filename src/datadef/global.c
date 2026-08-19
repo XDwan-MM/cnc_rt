@@ -241,7 +241,10 @@ void shm_var_update(){
         // 绝对坐标 = 工件指令位置
         if (!rt_data->axis_data[i].axis_status.is_disable)
         {
-            setVarAxisDouble(i, VAR_AXIS_CMD_POS_WCS_EX, rt_data->axis_data[i].wcs_cmd_pos_cur, 0);
+            getVarChanValue(0, VAR_CHAN_MODAL, 14, &crds_type_var, 0);
+            getCrdsValue(CRDS_TYPE_G5X + crds_type_var.value.i - 1, i, &crds_oft);
+            act_pos_wcs_ex = rt_data->axis_data[i].wcs_cmd_pos_cur - crds_oft;
+            setVarAxisDouble(i, VAR_AXIS_CMD_POS_WCS_EX, act_pos_wcs_ex, 0);
         }
         if(rt_data->current_mode == MODE_MEM || rt_data->current_mode == MODE_MDI || rt_data->current_mode == MODE_DNC){
             // 剩余移动量
