@@ -17,6 +17,8 @@ extern "C" {
 #include "plan_queue.h"
 #include "trajectory.h"
 
+#define VEL_EPSILON 1E-4     // 速度误差
+
 void auto_update_pos_cmd();
 void auto_get_pos_cmd();
 void auto_execute_pos_cmd();
