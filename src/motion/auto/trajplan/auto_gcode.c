@@ -134,6 +134,11 @@ void auto_execute_pos_cmd(){
     cycle_tp->pos_cmd_data.current_pos.x = rt_data->axis_data[AXIS_X].wcs_cmd_pos_cur = interp_pos.x;
     cycle_tp->pos_cmd_data.current_pos.y = rt_data->axis_data[AXIS_Y].wcs_cmd_pos_cur = interp_pos.y;
     cycle_tp->pos_cmd_data.current_pos.z = rt_data->axis_data[AXIS_Z].wcs_cmd_pos_cur = interp_pos.z;
+    // TODO：计算误差
+    if(IsLessThan(cycle_tp->pos_cmd_data.traj_data->v, 0) && IsGreaterThan(cycle_tp->pos_cmd_data.traj_data->v, -VEL_EPSILON)) {
+        LOG(LOG_LEVEL_ERR, "v %f, t[2] %f, t %d", cycle_tp->pos_cmd_data.traj_data->v, cycle_tp->pos_cmd_data.vel_profile->t[2], cycle_tp->pos_cmd_data.interp_cycle);
+        cycle_tp->pos_cmd_data.traj_data->v = 0;
+    }
     cycle_tp->pos_cmd_data.current_vel = cycle_tp->pos_cmd_data.traj_data->v;
     setVarChanDouble(0, VAR_CHAN_CMD_FEEDRATE, cycle_tp->pos_cmd_data.traj_data->v * TIME_MINUS_2_S, 0);
     auto_cal_axis_vel(&cycle_tp->pos_cmd_data.current_pos, &interp_pos, cycle_tp->pos_cmd_data.traj_data->v);

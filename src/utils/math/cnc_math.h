@@ -24,9 +24,9 @@ extern "C" {
 #define EPS 1.0e-30
 #define ZERO 1.0e-30
 #define INF 1.0e30
-#define DOUBLE_EPSILON 1E-6     //浮点数误差
-#define MAXMATRICSCALE 300      //可求逆的最大矩阵规模
-#define INV_EPSILON 1E-10       //防止除0
+#define DOUBLE_EPSILON 1E-7     // 浮点数误差
+#define MAXMATRICSCALE 300      // 可求逆的最大矩阵规模
+#define INV_EPSILON 1E-10       // 防止除0
 
 #define MIN(a, b) ({            \
     __typeof__ (a) _a = (a);    \
