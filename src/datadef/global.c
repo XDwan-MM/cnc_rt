@@ -105,7 +105,8 @@ static GNC_RES shm_var_init(){
     for(int i = 0; i < SYS_AXES_NUM; i++){    
         setVarAxisDouble(i, VAR_AXIS_CMD_VEL, 0, 0);            // 轴指令速度
         setVarAxisDouble(i, VAR_AXIS_ACT_VEL, 0, 0);            // 轴实际速度
-        setVarAxisDouble(i, VAR_AXIS_CMD_POS_EX, 0, 0);         // 轴指令位置
+        setVarAxisDouble(i, VAR_AXIS_CMD_POS_WCS_EX, 0, 0);     // 绝对坐标系
+        setVarAxisDouble(i, VAR_AXIS_CMD_POS_EX, 0, 0);         // 轴指令位置 
         setVarAxisDouble(i, VAR_AXIS_ACT_POS_EX, 0, 0);         // 轴实际位置   
     }
     return GNC_OPERATOR_SUCCESS;
@@ -237,14 +238,22 @@ void shm_var_update(){
     double act_pos_wcs_ex = 0.0;
     for (int i = 0; i < SYS_AXES_NUM; i++)
     {
+        // 绝对坐标 = 工件指令位置
+        if (!rt_data->axis_data[i].axis_status.is_disable)
+        {
+            getVarChanValue(0, VAR_CHAN_MODAL, 14, &crds_type_var, 0);
+            getCrdsValue(CRDS_TYPE_G5X + crds_type_var.value.i - 1, i, &crds_oft);
+            act_pos_wcs_ex = rt_data->axis_data[i].wcs_cmd_pos_cur - crds_oft;
+            setVarAxisDouble(i, VAR_AXIS_CMD_POS_WCS_EX, act_pos_wcs_ex, 0);
+        }
         if(rt_data->current_mode == MODE_MEM || rt_data->current_mode == MODE_MDI || rt_data->current_mode == MODE_DNC){
             // 剩余移动量
-            crds_remain = var_axis[i][VAR_AXIS_PROG_POS_EX].value.f - var_axis[i][VAR_AXIS_CMD_POS_EX].value.f;
-            // 机床指令位置
+            crds_remain = var_axis[i][VAR_AXIS_PROG_POS_EX].value.f - var_axis[i][VAR_AXIS_CMD_POS_WCS_EX].value.f;
+            // 工件指令位置 = 编程位置
             if(queue_is_empty(plan_queue)){
-                setVarAxisDouble(AXIS_X, VAR_AXIS_PROG_POS_EX, var_axis[0][VAR_AXIS_CMD_POS_EX].value.f, 0);
-                setVarAxisDouble(AXIS_Y, VAR_AXIS_PROG_POS_EX, var_axis[1][VAR_AXIS_CMD_POS_EX].value.f, 0);
-                setVarAxisDouble(AXIS_Z, VAR_AXIS_PROG_POS_EX, var_axis[2][VAR_AXIS_CMD_POS_EX].value.f, 0);
+                setVarAxisDouble(AXIS_X, VAR_AXIS_PROG_POS_EX, var_axis[0][VAR_AXIS_CMD_POS_WCS_EX].value.f, 0);
+                setVarAxisDouble(AXIS_Y, VAR_AXIS_PROG_POS_EX, var_axis[1][VAR_AXIS_CMD_POS_WCS_EX].value.f, 0);
+                setVarAxisDouble(AXIS_Z, VAR_AXIS_PROG_POS_EX, var_axis[2][VAR_AXIS_CMD_POS_WCS_EX].value.f, 0);
             }else{
                 setVarAxisDouble(AXIS_X, VAR_AXIS_PROG_POS_EX, cycle_tp->plan_block->end_pos.x, 0);
                 setVarAxisDouble(AXIS_Y, VAR_AXIS_PROG_POS_EX, cycle_tp->plan_block->end_pos.y, 0);
@@ -255,42 +264,30 @@ void shm_var_update(){
         }
         // 剩余移动
         setVarAxisDouble(i, VAR_AXIS_LEFT_TOGO_EX, crds_remain, 0);
-        // 绝对坐标
-        getVarChanValue(0, VAR_CHAN_MODAL, 14, &crds_type_var, 0);
-        getCrdsValue(CRDS_TYPE_G5X + crds_type_var.value.i - 1, i, &crds_oft);
-        act_pos_wcs_ex = var_axis[i][VAR_AXIS_CMD_POS_EX].value.f - crds_oft;
-        setVarAxisDouble(i, VAR_AXIS_ACT_POS_WCS_EX, act_pos_wcs_ex, 0);
-        // 轴速度等参数
-        setVarAxisDouble(i, VAR_AXIS_ACT_VEL, var_chan[0][VAR_AXIS_CMD_VEL].value.f, 0);
-        rt_data->axis_data[i].act_acc = rt_data->axis_data[i].cmd_acc;
-        rt_data->axis_data[i].act_jk = rt_data->axis_data[i].cmd_jk;
-        // 相对坐标
+        // 相对坐标 = 相对指令位置
         double real_zero = 0.0;
         getVarAxisDouble(i, VAR_AXIS_REAL_ZERO_EX, &real_zero, 0);
-        double real = var_axis[i][VAR_AXIS_CMD_POS_EX].value.f - real_zero;
-        setVarAxisDouble(i, VAR_AXIS_ACT_POS_RCS_EX, real, 0);
+        double real = var_axis[i][VAR_AXIS_CMD_POS_WCS_EX].value.f - real_zero;
+        setVarAxisDouble(i, VAR_AXIS_CMD_POS_RCS_EX, real, 0);
+        // 机械坐标 = 机床指令位置
+        setVarAxisDouble(i, VAR_AXIS_CMD_POS_EX, rt_data->axis_data[i].mac_cmd_pos, 0);
+        // 机床实际位置
+        setVarAxisDouble(i, VAR_AXIS_ACT_POS_EX, rt_data->axis_data[i].fb_pos_no_comp, 0);
+        // 电机脉冲
+        setVarAxisInt(i, VAR_AXIS_ENC_CNTR, rt_data->axis_data[i].enc_cntr, 0);
+        // 实际轴速度
+        setVarAxisDouble(i, VAR_AXIS_ACT_VEL, rt_data->axis_data[i].act_vel, 0); 
         // 判断各轴零点
         if(fabs(par_axis[i][PAR_AX_HOME_CRDS].value.val_real - rt_data->axis_data[i].mac_cmd_pos) > par_axis[i][PAR_AX_REF_RANGE].value.val_real){
             setVarAxisInt(i, VAR_AXIS_IS_HOMEF, 0, 0);
         }
-        // 绝对坐标显示
-        if (!rt_data->axis_data[i].axis_status.is_disable)
-        {
-            setVarAxisDouble(i, VAR_AXIS_CMD_POS_EX, rt_data->axis_data[i].wcs_cmd_pos_cur, 0);
-        }
-        // 机械坐标
-        setVarAxisDouble(i, VAR_AXIS_ACT_POS_EX, rt_data->axis_data[i].mac_cmd_pos, 0);
     }
     for (int i = 0; i < SYS_CHAN_NUM; i++)
     {
         // 运行模式
         setVarChanInt(0, VAR_CHAN_MODE, rt_data->current_mode, 0);
-        // 主轴转速
-        setVarChanDouble(i, VAR_CHAN_ACT_SPDL_SPEED, var_chan[i][VAR_CHAN_ACT_SPDL_SPEED].value.f, 0);
         // 通道速度等参数
-        setVarChanDouble(i, VAR_CHAN_ACT_FEEDRATE, var_chan[i][VAR_CHAN_CMD_FEEDRATE].value.f, 0);
-        rt_data->chan_data[i].act_acc = rt_data->chan_data[i].cmd_acc;
-        rt_data->chan_data[i].act_jk = rt_data->chan_data[i].cmd_jk;
+        setVarChanDouble(i, VAR_CHAN_ACT_FEEDRATE, rt_data->chan_data[i].act_vel, 0);
     }
 }
 
