@@ -24,6 +24,7 @@ void auto_update_dwell_cmd();
 void auto_get_dwell_cmd();
 void auto_execute_dwell_cmd();
 void auto_get_modal_cmd();
+void auto_update_modal_cmd();
 void cycle_tp_add_block();
 bool auto_pos_cmd_is_finished();
 bool auto_dwell_cmd_is_finished();
