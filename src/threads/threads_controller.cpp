@@ -10,6 +10,7 @@
 #include "emcmot.h"
 #include "plctask.h"
 #include "ladtracesampler.h"
+#include "servosamplesampler.h"
 #include "pmc_a_input_scanner.h"
 #include "pmc_g_input_scanner.h"
 #include "pmc_output_handler.h"
@@ -130,6 +131,7 @@ void* motion_controller_thread_func(void*) {
         task_mq_proc();
         emcmotTrajPlan();
         pmc_output_feedback();
+        ServoSampleSampler::instance().execute();
         Hal_Driver_Update_All(false, true);
         end = get_ns();
         // printf("%10f", (end - start) / 1e6);

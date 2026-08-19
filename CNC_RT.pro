@@ -130,6 +130,8 @@ HEADERS += \
     src/plc/pmc_scanner/signal_utils.h \
     src/plc/plc_task/plctask.h \
     src/plc/lad_trace/ladtracesampler.h \
+    src/motion/servo_sample/servosamplesampler.h \
+    src/motion/servo_sample/servosampleevents.h \
     src/task/task.h \
     src/task/hmi_scanner.h \
     src/threads/threads_api.h \
@@ -172,6 +174,7 @@ SOURCES += \
     src/plc/pmc_scanner/pmc_output_handler.c \
     src/plc/plc_task/plctask.cpp \
     src/plc/lad_trace/ladtracesampler.cpp \
+    src/motion/servo_sample/servosamplesampler.cpp \
     src/task/task.c \
     src/task/hmi_scanner.c \
     src/threads/thread_manager.cpp \
@@ -198,6 +201,7 @@ INCLUDEPATH += \
     src/motion/spindle \
     src/motion/manual \
     src/motion/protect \
+    src/motion/servo_sample \
     src/plc \
     src/plc/pmc_scanner \
     src/plc/plc_task \

@@ -5,6 +5,7 @@ CONFIG -= app_bundle
 
 DEFINES += MASTER_RUN_ON
 DEFINES += UNIT_TEST
+DEFINES += DEBUG_MODE_ENABLED
 
 TEMPLATE = app
 
@@ -81,6 +82,9 @@ HEADERS += \
     ../src/motion/manual/jog/jog_planner.h \
     ../src/motion/protect/ferror_control.h \
     ../src/motion/protect/stored_stroke_check.h \
+    ../src/motion/servo_sample/servosamplesampler.h \
+    ../src/motion/servo_sample/servosampleevents.h \
+    ../src/plc/lad_trace/ladtracesampler.h \
     ../src/plc/pmc_scanner/pmc_a_input_scanner.h \
     ../src/plc/pmc_scanner/pmc_g_input_scanner.h \
     ../src/plc/pmc_scanner/pmc_io_map.h \
@@ -90,6 +94,7 @@ HEADERS += \
     ../src/plc/plc_task/plctask.h \
     ../src/task/hmi_scanner.h \
     ../src/task/task.h \
+    ../src/task/hmi_scanner.h \
     ../src/threads/threads_api.h \
     ../src/threads/thread_manager.h \
     ../src/threads/rt_sem.h \
@@ -126,6 +131,8 @@ SOURCES += \
     ../src/motion/manual/jog/jog_planner.c \
     ../src/motion/protect/ferror_control.c \
     ../src/motion/protect/stored_stroke_check.c \
+    ../src/motion/servo_sample/servosamplesampler.cpp \
+    ../src/plc/lad_trace/ladtracesampler.cpp \
     ../src/plc/pmc_scanner/pmc_a_input_scanner.c \
     ../src/plc/pmc_scanner/pmc_g_input_scanner.c \
     ../src/plc/pmc_scanner/pmc_output_handler.c \
@@ -133,6 +140,7 @@ SOURCES += \
     ../src/plc/plc_task/plctask.cpp \
     ../src/task/hmi_scanner.c \
     ../src/task/task.c \
+    ../src/task/hmi_scanner.c \
     ../src/threads/thread_manager.cpp \
     ../src/threads/threads.cpp \
     ../src/threads/rt_sem.c \
@@ -157,6 +165,8 @@ INCLUDEPATH += \
     ../src/motion/spindle \
     ../src/motion/manual \
     ../src/motion/protect \
+    ../src/motion/servo_sample \
+    ../src/plc/lad_trace \
     ../src/plc \
     ../src/plc/pmc_scanner \
     ../src/plc/plc_task \
