@@ -168,9 +168,13 @@ void auto_update_dwell_cmd(){
         cycle_tp->target_stage = BLOCK_STOP_2_END;
         break;
     case EXEC_PAUSING:
+        cycle_tp->dwell_cmd_data.dwell_cycle = 0;
+        cycle_tp->target_stage = PROGRAM_WAIT;
+        break;
     case EXEC_RESET:
         cycle_tp->dwell_cmd_data.dwell_cycle = 0;
-        cycle_tp->target_stage = BLOCK_PAUSED;
+        cycle_tp->target_stage = PROGRAM_END;
+        break;
     default:
         break;
     }
@@ -199,6 +203,24 @@ bool auto_dwell_cmd_is_finished(){
 void auto_get_modal_cmd(){
     cycle_tp->exec_cmd = DO_NULL_CMD;
     cycle_tp->target_stage = BLOCK_STOP_2_END;
+}
+
+void auto_update_modal_cmd(){
+    cycle_tp->exec_cmd = DO_NULL_CMD;
+    switch (cycle_tp->exec_state)
+    {
+    case EXEC_RUNNING:
+        cycle_tp->target_stage = BLOCK_STOP_2_END;
+        break;
+    case EXEC_PAUSING:
+        cycle_tp->target_stage = PROGRAM_WAIT;
+        break;
+    case EXEC_RESET:
+        cycle_tp->target_stage = PROGRAM_END;
+        break;
+    default:
+        break;
+    }
 }
 
 void cycle_tp_add_block(){

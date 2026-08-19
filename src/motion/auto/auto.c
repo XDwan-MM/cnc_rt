@@ -75,22 +75,23 @@ static void auto_update_state(){
             case DO_CHOP_CMD:
             case DO_DWELL_CMD:
             case DO_HOME_CMD:
-            case DO_NULL_CMD:
-                cycle_tp->exec_state = EXEC_PAUSING;
-                cycle_tp->running_stage = BLOCK_BREAKPOINT;
-                break;
             case DO_MSTB_CMD:
+            case DO_NULL_CMD:
                 switch (cycle_tp->running_stage)
                 {
-                case PROGRAM_RUNNING:
+                case PROGRAM_END:
+                case PROGRAM_START:
+                case PROGRAM_WAIT:
+                case BLOCK_STOP_2_END:
+                case BLOCK_PAUSED:
                     cycle_tp->exec_state = EXEC_PAUSING;
                     break;
                 default:
                     cycle_tp->exec_state = EXEC_PAUSING;
                     cycle_tp->running_stage = BLOCK_BREAKPOINT;
-                    break;
+                    break; 
                 }
-                break;  
+                break; 
             case DO_TAP_CMD: // 攻丝时不能暂停
             default:
                 break;
@@ -98,36 +99,24 @@ static void auto_update_state(){
             break;
         case SYS_EVENT_HMI_RESET:
             LOG(LOG_LEVEL_INFO, "自动模式处理MDI复位");
-            cycle_tp->exec_state = EXEC_RESET;
-            cycle_tp->running_stage = BLOCK_BREAKPOINT;
+            switch (cycle_tp->running_stage)
+            {
+            case PROGRAM_END:
+            case PROGRAM_START:
+            case PROGRAM_WAIT:
+            case BLOCK_STOP_2_END:
+            case BLOCK_PAUSED:
+                cycle_tp->exec_state = EXEC_RESET;
+                break;
+            default:
+                cycle_tp->exec_state = EXEC_RESET;
+                cycle_tp->running_stage = BLOCK_BREAKPOINT;
+                break; 
+            }
             break;
         case SYS_EVENT_OUTSIDE_RESET:
             LOG(LOG_LEVEL_INFO, "自动模式处理外部复位");
-            switch(cycle_tp->exec_cmd){
-            case DO_MOVE_CMD:
-            case DO_CHOP_CMD:
-            case DO_DWELL_CMD:
-            case DO_HOME_CMD:
-            case DO_TAP_CMD:
-            case DO_NULL_CMD:
-                cycle_tp->exec_state = EXEC_RESET;
-                cycle_tp->running_stage = BLOCK_BREAKPOINT;
-                break;
-            case DO_MSTB_CMD:
-                switch (cycle_tp->running_stage)
-                {
-                case PROGRAM_RUNNING:
-                    cycle_tp->exec_state = EXEC_RESET;
-                    break;
-                default:
-                    cycle_tp->exec_state = EXEC_RESET;
-                    cycle_tp->running_stage = BLOCK_BREAKPOINT;
-                    break;
-                }
-                break; 
-            default:
-                break;
-            }
+            cycle_tp->exec_state = EXEC_RESET;
             break;
         default:
             break;
@@ -138,30 +127,32 @@ static void auto_update_state(){
         switch (rt_data->nc_event)
         {
         case SYS_EVENT_HMI_RESET:
-        case SYS_EVENT_OUTSIDE_RESET:
             LOG(LOG_LEVEL_INFO, "自动模式处理复位");
             switch(cycle_tp->exec_cmd){
             case DO_MOVE_CMD:
             case DO_CHOP_CMD:
-            case DO_DWELL_CMD:
             case DO_HOME_CMD:
             case DO_TAP_CMD:
-            case DO_NULL_CMD:
                 cycle_tp->exec_state = EXEC_RESET;
-                cycle_tp->running_stage = PROGRAM_RUNNING;
                 break;
+            case DO_DWELL_CMD:
             case DO_MSTB_CMD:
+            case DO_NULL_CMD:
                 switch (cycle_tp->running_stage)
                 {
-                case PROGRAM_RUNNING:
+                case PROGRAM_END:
+                case PROGRAM_START:
+                case PROGRAM_WAIT:
+                case BLOCK_STOP_2_END:
+                case BLOCK_PAUSED:
                     cycle_tp->exec_state = EXEC_RESET;
                     break;
                 default:
                     cycle_tp->exec_state = EXEC_RESET;
                     cycle_tp->running_stage = BLOCK_BREAKPOINT;
-                    break;
+                    break; 
                 }
-                break; 
+                break;
             default:
                 break;
             } 
@@ -170,31 +161,8 @@ static void auto_update_state(){
             LOG(LOG_LEVEL_INFO, "自动模式处理循环启动");
             setVarChanInt(0, VAR_CHAN_IS_RUNNING, 1, 0);
             setVarChanInt(0, VAR_CHAN_IS_MOVING, 1, 0);
-            switch(cycle_tp->exec_cmd){
-            case DO_MOVE_CMD:
-            case DO_CHOP_CMD:
-            case DO_DWELL_CMD:
-            case DO_HOME_CMD:
-            case DO_TAP_CMD:
-            case DO_NULL_CMD:
-                cycle_tp->exec_state = EXEC_RUNNING;
-                cycle_tp->running_stage = BLOCK_BREAKPOINT;
-                break;
-            case DO_MSTB_CMD:
-                switch (cycle_tp->running_stage)
-                {
-                case PROGRAM_RUNNING:
-                    cycle_tp->exec_state = EXEC_RUNNING;
-                    break;
-                default:
-                    cycle_tp->exec_state = EXEC_RUNNING;
-                    cycle_tp->running_stage = BLOCK_BREAKPOINT;
-                    break;
-                }
-                break; 
-            default:
-                break;
-            } 
+            cycle_tp->exec_state = EXEC_RUNNING;
+            cycle_tp->running_stage = BLOCK_BREAKPOINT;
             break;
         default:
             break;
@@ -508,7 +476,6 @@ static void auto_update_stage(){
             else rt_data->sys_state[SYS_IS_MAC_LOCK_READY] = false;
             switch (cycle_tp->target_stage)
             {
-            case PROGRAM_END:
             case BLOCK_ARRIVE_2_END:
                 queue_pop(plan_queue);
                 break;
@@ -638,7 +605,7 @@ static void auto_update_cur_cmd(){
         auto_update_mstb_cmd();
         break;
     case PMC_MODE_NULL:
-        auto_get_modal_cmd();
+        auto_update_modal_cmd();
         break;
     default:
         cycle_tp->exec_cmd = DO_NULL_CMD;
@@ -731,11 +698,11 @@ static void auto_handle_alarm(){
     case BLOCK_PAUSED:
     case BLOCK_STOP_2_END:
         cycle_tp->running_stage = PROGRAM_END;
-        LOG(LOG_LEVEL_ERR, "报警下立刻停止");
+        LOG(LOG_LEVEL_DEBUG, "报警/切换模式下立刻停止");
         break;
     default:
         cycle_tp->running_stage = BLOCK_BREAKPOINT;
-        LOG(LOG_LEVEL_ERR, "报警下减速停止");
+        LOG(LOG_LEVEL_DEBUG, "报警/切换模式下减速停止");
         break;
     }   
 }

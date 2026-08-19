@@ -37,6 +37,8 @@ void auto_update_mstb_cmd(){
         cycle_tp->exec_cmd = DO_NULL_CMD;
         cycle_tp_mstb_cmd_data_reset();
         break;
+    case EXEC_PAUSING:
+        break;
     default:
         auto_get_mstb_cmd();
         break;
