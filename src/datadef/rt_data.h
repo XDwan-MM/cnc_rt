@@ -82,6 +82,7 @@ typedef struct
     double max_tang_acc;    // 最大向心加速度
     int vplan_mode;         // 速度规划模式
     int lookahead_num;      // 速度规划前瞻段数
+    double path_tolerance;  // 轨迹轮廓允差
 } RT_CHAN;
 
 // 目前仅轨迹线程使用
@@ -96,7 +97,9 @@ typedef struct
     double max_rapid_jk;                // 轴最大快速加加速度
     double jog_fastspd;                 // 轴快速点动速度
     double jog_lowspd;                  // 轴慢速点动速度
-    double mpg_spd;                     // 手摇进给速度             
+    double mpg_spd;                     // 手摇进给速度  
+    double corner_vel_diff;             // 拐角的容许速度差
+    double corner_acc_diff;             // 拐角的容许加速度差        
     double static_ferror;               // 轴静态跟随误差
     double dynamic_ferror;              // 轴动态跟随误差
     double pos_tol;                     // 轴定位允差

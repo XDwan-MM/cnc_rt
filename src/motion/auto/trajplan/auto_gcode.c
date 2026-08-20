@@ -313,7 +313,7 @@ static void auto_look_ahead(){
     // 判断是否大于最大速度
     if(cur_block->start_vel > cur_block->max_vel) cur_block->max_vel = cur_block->start_vel;
     // 速度前瞻
-    vp_cal_bid_lookahead(velplan_mode, plan_queue, ncu_cycle, par_axis[0][PAR_AX_CORNER_VEL_DIFF].value.val_real, par_axis[1][PAR_AX_CORNER_VEL_DIFF].value.val_real, par_axis[2][PAR_AX_CORNER_VEL_DIFF].value.val_real);
+    vp_cal_bid_lookahead(velplan_mode, plan_queue, ncu_cycle, rt_data->axis_data[0].corner_vel_diff, rt_data->axis_data[1].corner_vel_diff, rt_data->axis_data[2].corner_vel_diff);
     // if(cur_block->type == CIRCLE_CW || cur_block->type == CIRCLE_CCW){
     //     LOG(LOG_LEVEL_DEBUG, "速度前瞻 %d, angle:%f, length:%f, radius:%f, max_vel:%f, start_vel:%f end_vel:%f", cur_block->line_number, cur_block->angle_rad, cur_block->length, cur_block->circular_data.radius, cur_block->max_vel, cur_block->start_vel, cur_block->end_vel);
     // }else{

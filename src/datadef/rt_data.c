@@ -172,6 +172,8 @@ static void rt_reset_chan_data(){
         rt_data->chan_data[i].max_tang_acc = par_union.value.val_real;                      // 最大向心加速度
         getParData(PARAMAN_FILE_CHAN, i, PAR_CH_LOOKAHEAD_NUM, &par_union);
         rt_data->chan_data[i].lookahead_num = par_union.value.val_uint;                     // 速度规划前瞻段数
+        getParData(PARAMAN_FILE_CHAN, i, PAR_CH_PATH_TOLERANCE, &par_union);
+        rt_data->chan_data[i].path_tolerance = par_union.value.val_real;                    // 轨迹轮廓允差
     }
 }
 
@@ -196,6 +198,10 @@ static void rt_reset_axis_data(){
         rt_data->axis_data[i].jog_fastspd = CONV_MM_MIN_TO_MM_S(par_union.value.val_real);    // 轴快速点动速度 (HMI unit: mm/min | 实时 单位：mm/s)
         getParData(PARAMAN_FILE_AXIS, i, PAR_AX_MPG_SPD, &par_union);
         rt_data->axis_data[i].mpg_spd = CONV_MM_MIN_TO_MM_S(par_union.value.val_real);        // 手摇进给速度 (HMI unit: mm/min | 实时 单位：mm/s)
+        getParData(PARAMAN_FILE_AXIS, i, PAR_AX_CORNER_VEL_DIFF, &par_union);
+        rt_data->axis_data[i].corner_vel_diff = CONV_MM_MIN_TO_MM_S(par_union.value.val_real);// 拐角的容许速度差 (HMI unit: mm/min | 实时 单位：mm/s)
+        getParData(PARAMAN_FILE_AXIS, i, PAR_AX_CORNER_ACC_DIFF, &par_union);
+        rt_data->axis_data[i].corner_acc_diff = par_union.value.val_real;                     // 拐角的容许加速度差 (HMI unit: 单位：mm/s2)
         getParData(PARAMAN_FILE_AXIS, i, PAR_AX_MAX_DYNAMIC_LAG, &par_union);
         rt_data->axis_data[i].dynamic_ferror = par_union.value.val_real;                      // 轴动态跟随误差 (HMI unit: mm)
         getParData(PARAMAN_FILE_AXIS, i, PAR_AX_MAX_STATIC_LAG, &par_union);
@@ -215,7 +221,7 @@ static void rt_reset_axis_data(){
         getParData(PARAMAN_FILE_AXIS, i, PAR_AX_PLMT2, &par_union);
         rt_data->axis_data[i].plmt2 = par_union.value.val_real;                               // 轴第二级正软极限
         getParData(PARAMAN_FILE_AXIS, i, PAR_AX_NLMT2, &par_union);
-        rt_data->axis_data[i].nlmt2 = par_union.value.val_real;                               // 轴负软极限
+        rt_data->axis_data[i].nlmt2 = par_union.value.val_real;                               // 轴第二级负软极限
     }
 }
 

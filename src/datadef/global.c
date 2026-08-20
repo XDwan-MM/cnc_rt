@@ -281,7 +281,7 @@ void shm_var_update(){
         // 指令轴速度
         setVarAxisDouble(i, VAR_AXIS_CMD_VEL_EX, rt_data->axis_data[i].cmd_vel, 0);
         // 判断各轴零点
-        if(fabs(par_axis[i][PAR_AX_HOME_CRDS].value.val_real - rt_data->axis_data[i].mac_cmd_pos) > par_axis[i][PAR_AX_REF_RANGE].value.val_real){
+        if(fabs(rt_data->axis_data[i].home_crds - rt_data->axis_data[i].mac_cmd_pos) > rt_data->axis_data[i].ref_range){
             setVarAxisInt(i, VAR_AXIS_IS_HOMEF, 0, 0);
         }
     }

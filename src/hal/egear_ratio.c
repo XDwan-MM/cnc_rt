@@ -38,7 +38,7 @@ int32_t position_to_pulses(const RT_AXIS* rt_axis, double target_pos_mm)
 double pulses_to_position(const RT_AXIS* rt_axis, int32_t feedback_pulses)
 {
     // 验证参数有效性
-    if (rt_axis == NULL || rt_axis->pm_munit == 0)
+    if (rt_axis == NULL || rt_axis->pm_pulse == 0)
     {
         return 0.0;
     }
@@ -60,7 +60,7 @@ double pulses_to_position(const RT_AXIS* rt_axis, int32_t feedback_pulses)
 // 计算编码器反馈偏置量
 double calcul_enc_off(const RT_AXIS* rt_axis, int32_t raw_encoder_pulses, double target_pos_mm)
 {
-    if (rt_axis == NULL || rt_axis->pm_munit == 0)
+    if (rt_axis == NULL || rt_axis->pm_pulse == 0)
     {
         return 0.0;
     }
