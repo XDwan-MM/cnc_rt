@@ -94,7 +94,7 @@ void auto_execute_mstb_cmd(){
             }
         }
         else cycle_tp->mstb_cmd_data.tfin_count ++;
-    }
+    } else cycle_tp->mstb_cmd_data.tfin_count = 0;
 }
 
 // 1、输出M代码信号，最多3个
