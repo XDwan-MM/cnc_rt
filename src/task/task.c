@@ -4,9 +4,11 @@
 #include "hmi_scanner.h"
 #include "regapi.h"
 #include "spl_control.h"
+#include "servosampleevents.h"
 #include <alarmapi.h>
 #include <hmisysapi.h>
 #include <stdlib.h>
+
 
 static PMC_EVENT event_data;
 static GNC_RES task_handle_pmc_event(PMC_EVENT *event_data);
@@ -315,6 +317,7 @@ static void task_handle_auto_event(PMC_EVENT *event_data)
         if (rt_data->current_mode == MODE_MEM || rt_data->current_mode == MODE_MDI)
         {
             // 循环启动
+            cncServoSampleNotifyCycleStart();
             rt_data->nc_event = SYS_EVENT_RERUN;
             LOG(LOG_LEVEL_INFO, "处理循环启动事件");
         }
@@ -414,6 +417,7 @@ static void task_handle_hmi_event(PMC_EVENT *event_data)
     {
     case KEY_KP_0:
         rt_data->nc_event = SYS_EVENT_HMI_RESET;
+        cncServoSampleNotifyReset();
         LOG(LOG_LEVEL_INFO, "处理HMI复位事件");
         break;
     case CMD_RESET_PIECE_COUNT:
