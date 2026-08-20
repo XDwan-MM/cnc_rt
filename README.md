@@ -25,6 +25,8 @@ debug      # 运行调试模式
 run        # 运行测试平台
 
 help       # 显示帮助信息
+
+hmi        # 只启动 HMI，进入界面后手工按 Ctrl+Enter
 ```
 
 示例
@@ -35,6 +37,8 @@ help       # 显示帮助信息
   sudo ./run.sh run        # 运行测试平台
 
   sudo ./run.sh help       # 显示帮助信息
+
+  sudo ./run.sh hmi        # 只启动HMI，进入界面后手工按 Ctrl+Enter
 ```
 
 3、启动流程
@@ -84,23 +88,25 @@ help       # 显示帮助信息
 
 ---
 
-### 调试
+### 实时断点调试
 
-如果想要启动界面，在实时调试
+在拥有cnc_rt*/, cnc_hmi*/和run.sh 的目录或者直接在 `cnc_rt/` 目录，新建终端：
 
-界面启动：sudo ./cnc_hmi_v3 -p
+1) 运行：
+```SHELL
+./run.sh hmi             # 只启动 HMI，进入界面后手工按 Ctrl+Enter
+```
+2) 在弹出的人机交互UI 手工按 Ctrl+Enter 启动HMI，一直挂着
 
-实时调试：断点调试
+3) 在vscode中，运行和调试工作栏中，启动gdb调试。
 
 ---
 
+### 不需界面参数等数据写共享内存的单实时断点调试
 
-### 单实时启动
+如果想脱离界面，**只启动**实时进行断点调试：
 
-如果想脱离界面，**只启动**实时进行调试，可继续使用之前的启动方式 sudo ./build.sh debug
-
-为了解除与界面的交互，请在 main.cpp 结束该部分程序段的注释
-
+1) 为了解除与界面的交互，请在 main.cpp 结束该部分程序段的注释
 解释：该段模拟界面已发送启动实时的信号
 
 ```c
@@ -110,7 +116,12 @@ help       # 显示帮助信息
     // #endif
 ```
 
+2) 重新编译调试版本：sudo ./build.sh debug
+
+3) 在vscode中，运行和调试工作栏中，启动gdb调试
+
 ---
+
 
 ### 共享内存
 
@@ -404,4 +415,3 @@ sudo visudo
 行末添加：[用户名] ALL=(ALL) NOPASSWD: ALL
 
 注意需要修改为自己的用户名，例子： gree ALL=(ALL) NOPASSWD: ALL
-
