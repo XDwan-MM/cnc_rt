@@ -133,6 +133,36 @@ hmi        # 只启动 HMI，进入界面后手工按 Ctrl+Enter
 
 - ipcrm -m <shmid>
 
+**3、修改参数**
+
+如果需要增删共享内存参数
+
+#### 实时部分（负责人：许晓婷）
+
+1、修改 lib/cncshm/api/gncdatadef 中的枚举类型
+
+2、如果该参数为重启/复位生效！！！
+
+- 修改 src/datadef/rt_data
+
+- 修改 rt_update_reboot_valid_data 和 rt_upate_reset_valid_data
+
+
+#### 界面部分（负责人：梁展鹏）
+
+1、修改 cnc_hmi/conf/PARM_CON.json
+
+2、修改 cnc_hmi/data/param.json
+
+
+#### 更新配置
+
+1、无误后，更新主仓库配置文件
+
+2、修改共享内存版本号，实时和界面一起更新版本号
+
+3、发邮件通知各组人员
+
 ---
 
 ### 版本管理
