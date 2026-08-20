@@ -12,12 +12,29 @@ NC=$'\e[0m'
 # 获取当前脚本所在目录
 SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
 
+# 先识别新增的独立启动模式，供后续环境检查和清理逻辑使用。
+RUN_MODE="joint"
+case "${1:-all}" in
+    hmi)
+        RUN_MODE="hmi_only"
+        ;;
+    -rt-only)
+        RUN_MODE="rt_only"
+        ;;
+esac
+
+# 当脚本从 cnc_rt/ 目录直接运行时，工程根目录是其父目录。
+PROJECT_DIR="$SCRIPT_DIR"
+if [[ "$(basename "$SCRIPT_DIR")" == cnc_rt* ]]; then
+    PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
+fi
+
 # 开启 nullglob：若无匹配则返回空数组，而非保留字面量通配符
 shopt -s nullglob
 
 # 匹配名称中包含 hmi 或 rt 的目录（末尾加 / 确保仅匹配目录）
-HMI_DIRS=("$SCRIPT_DIR"/*hmi*/)
-RT_DIRS=("$SCRIPT_DIR"/*rt*/)
+HMI_DIRS=("$PROJECT_DIR"/*hmi*/)
+RT_DIRS=("$PROJECT_DIR"/*rt*/)
 
 # 关闭 nullglob
 shopt -u nullglob
@@ -48,7 +65,17 @@ clean_shm() {
 echo -e "${COLOR_SYS}[系统] 正在检查运行环境...${COLOR_RESET}"
 
 # 寻找残留进程（排除当前脚本进程自身）
-EXISTING_PIDS=$(ps -eo pid,comm | awk -v mypid="$$" '$1 != mypid && ($2 ~ /^cnc_rt/ || $2 == "cnc_hmi_v3") {print $1}')
+case "$RUN_MODE" in
+    hmi_only)
+        EXISTING_PIDS=$(ps -eo pid,comm | awk -v mypid="$$" '$1 != mypid && $2 == "cnc_hmi_v3" {print $1}')
+        ;;
+    rt_only)
+        EXISTING_PIDS=$(ps -eo pid,comm | awk -v mypid="$$" '$1 != mypid && $2 ~ /^cnc_rt/ {print $1}')
+        ;;
+    *)
+        EXISTING_PIDS=$(ps -eo pid,comm | awk -v mypid="$$" '$1 != mypid && ($2 ~ /^cnc_rt/ || $2 == "cnc_hmi_v3") {print $1}')
+        ;;
+esac
 
 if [ -n "$EXISTING_PIDS" ]; then
     # 将多个 PID 转为单行空格分隔，方便显示
@@ -68,8 +95,11 @@ if [ -n "$EXISTING_PIDS" ]; then
     esac
 fi
 
-# 检查并清理遗留的大块空闲共享内存（启动前确保干净）
-clean_shm
+# 检查并清理遗留的大块空闲共享内存（启动前确保干净）。
+# -rt-only 依赖正在运行的 HMI，共享内存不能在此模式清理。
+if [ "$RUN_MODE" != "rt_only" ]; then
+    clean_shm
+fi
 
 # 去除路径末尾的 '/'，安全拼接 bin 目录
 HMI_ROOT="${HMI_DIRS[0]%/}"
@@ -188,16 +218,31 @@ cleanup() {
     # \r 保证不管终端当前状态如何，都能回到行首打印
     echo -e "\r\n${COLOR_SYS}[系统] 正在关闭所有相关后台进程并清理环境...${COLOR_RESET}"
     
-    # 1. 先让界面保存保持寄存器，再停止实时进程
-    stop_hmi
-    stop_rt
+    # 1. 只停止当前模式启动的进程。
+    if [ "$RUN_MODE" != "rt_only" ]; then
+        stop_hmi
+    fi
+    if [ "$RUN_MODE" != "hmi_only" ]; then
+        stop_rt
+    fi
 
     # 2. 业务进程退出后再关闭日志输出管道
     stop_output_pipe "$HMI_PIPE_PID"
     stop_output_pipe "$RT_PIPE_PID"
     
     # 3. 最终兜底：只强制终止优雅退出超时后仍存活的同名进程
-    local LEFT_PIDS=$(ps -eo pid,comm | awk -v mypid="$$" '$1 != mypid && ($2 ~ /^cnc_rt/ || $2 == "cnc_hmi_v3") {print $1}')
+    local LEFT_PIDS
+    case "$RUN_MODE" in
+        hmi_only)
+            LEFT_PIDS=$(ps -eo pid,comm | awk -v mypid="$$" '$1 != mypid && $2 == "cnc_hmi_v3" {print $1}')
+            ;;
+        rt_only)
+            LEFT_PIDS=""
+            ;;
+        *)
+            LEFT_PIDS=$(ps -eo pid,comm | awk -v mypid="$$" '$1 != mypid && ($2 ~ /^cnc_rt/ || $2 == "cnc_hmi_v3") {print $1}')
+            ;;
+    esac
     if [ -n "$LEFT_PIDS" ]; then
         echo -e "${COLOR_ERR}[警告] 发现退出超时的残留进程，执行最终清理：${LEFT_PIDS//$'\n'/ }${COLOR_RESET}\r"
         sudo kill -KILL $LEFT_PIDS 2>/dev/null
@@ -206,8 +251,10 @@ cleanup() {
     # 4. 等待进程死亡后，操作系统将其与共享内存的连接数清零
     sleep 0.5
     
-    # 5. 彻底扫除任何大小超过 10000000 字节且无连接的共享内存段
-    clean_shm
+    # 5. 彻底扫除任何大小超过 10000000 字节且无连接的共享内存段。
+    if [ "$RUN_MODE" != "rt_only" ]; then
+        clean_shm
+    fi
 
     if [ -n "$HMI_PID_FILE" ]; then
         rm -f "$HMI_PID_FILE"
@@ -234,6 +281,8 @@ print_help() {
     echo ""
     echo "选项:"
     echo "             运行调试仿真模式（默认）"
+    echo "  hmi        只启动界面，等待手工 Ctrl+Enter 完成初始化"
+    echo "  -rt-only   只启动 cnc_rt_d，不启动或清理界面"
     echo "  debug      运行调试仿真模式"
     echo "  run        运行实时平台"
     echo "  help       显示此帮助信息"
@@ -245,6 +294,14 @@ HMI_PAR=""
 
 # 主逻辑
 case "${1:-all}" in
+    hmi)
+        RUN_MODE="hmi_only"
+        HMI_PAR=-p
+        ;;
+    -rt-only)
+        RUN_MODE="rt_only"
+        RT_PAR=cnc_rt_d
+        ;;
     run)
         RT_PAR=cnc_rt
         ;;
@@ -262,6 +319,11 @@ case "${1:-all}" in
         exit 1
         ;;
 esac
+
+if [ "$RUN_MODE" != "hmi_only" ] && [ ! -x "$RT_BIN_DIR/$RT_PAR" ]; then
+    echo -e "${COLOR_ERR}[错误] 找不到可执行的实时程序: $RT_BIN_DIR/$RT_PAR${COLOR_RESET}" >&2
+    exit 1
+fi
 
 
 echo " "
@@ -285,48 +347,58 @@ fi
 HMI_PID_FILE="${PID_DIR}/hmi.pid"
 RT_PID_FILE="${PID_DIR}/rt.pid"
 
-# 4. 启动界面进程（两个进程统一使用 sudo，避免一个 root 一个普通用户）
-cd "$HMI_BIN_DIR"
-sudo bash -c 'pid_file=$1; shift; echo $$ > "$pid_file"; exec stdbuf -oL -eL "$@"' \
-    bash "$HMI_PID_FILE" "${HMI_ROOT}/bin/cnc_hmi_v3" ${HMI_PAR} 2>&1 | \
-    while IFS= read -r line; do
-        printf "%s %s\r\n" "${COLOR_HMI}[HMI]${COLOR_RESET}" "${line%$'\r'}"
-    done &
-HMI_PIPE_PID=$!
-if ! wait_for_pid_file "$HMI_PID_FILE" "界面进程"; then
-    cleanup 1
+if [ "$RUN_MODE" != "rt_only" ]; then
+    # 4. 启动界面进程（两个进程统一使用 sudo，避免一个 root 一个普通用户）
+    cd "$HMI_BIN_DIR"
+    sudo bash -c 'pid_file=$1; shift; echo $$ > "$pid_file"; exec stdbuf -oL -eL "$@"' \
+        bash "$HMI_PID_FILE" "${HMI_ROOT}/bin/cnc_hmi_v3" ${HMI_PAR} 2>&1 | \
+        while IFS= read -r line; do
+            printf "%s %s\r\n" "${COLOR_HMI}[HMI]${COLOR_RESET}" "${line%$'\r'}"
+        done &
+    HMI_PIPE_PID=$!
+    if ! wait_for_pid_file "$HMI_PID_FILE" "界面进程"; then
+        cleanup 1
+    fi
+    HMI_PID=$(<"$HMI_PID_FILE")
+    echo "${COLOR_SYS}[系统] 界面已在后台启动，PID: ${HMI_PID}。${COLOR_RESET}"
 fi
-HMI_PID=$(<"$HMI_PID_FILE")
-echo "${COLOR_SYS}[系统] 界面已在后台启动，PID: ${HMI_PID}。${COLOR_RESET}"
 
 # 5. 延时 1 秒
 echo "${COLOR_SYS}[系统] 等待 1 秒...${COLOR_RESET}"
 sleep 1
 
-# 6. 启动实时进程（两个进程统一使用 sudo，避免一个 root 一个普通用户）
-cd "$RT_BIN_DIR"
-sudo bash -c 'pid_file=$1; shift; echo $$ > "$pid_file"; exec stdbuf -oL -eL "$@"' \
-    bash "$RT_PID_FILE" "${RT_ROOT}/bin/${RT_PAR}" 2>&1 | \
-    while IFS= read -r line; do
-        printf "%s %s\r\n" "${COLOR_RT}[RT]${COLOR_RESET}" "${line%$'\r'}"
-    done &
-RT_PIPE_PID=$!
-if ! wait_for_pid_file "$RT_PID_FILE" "实时进程"; then
-    cleanup 1
+if [ "$RUN_MODE" != "hmi_only" ]; then
+    # 6. 启动实时进程（两个进程统一使用 sudo，避免一个 root 一个普通用户）
+    cd "$RT_BIN_DIR"
+    sudo bash -c 'pid_file=$1; shift; echo $$ > "$pid_file"; exec stdbuf -oL -eL "$@"' \
+        bash "$RT_PID_FILE" "${RT_ROOT}/bin/${RT_PAR}" 2>&1 | \
+        while IFS= read -r line; do
+            printf "%s %s\r\n" "${COLOR_RT}[RT]${COLOR_RESET}" "${line%$'\r'}"
+        done &
+    RT_PIPE_PID=$!
+    if ! wait_for_pid_file "$RT_PID_FILE" "实时进程"; then
+        cleanup 1
+    fi
+    RT_PID=$(<"$RT_PID_FILE")
+    echo "${COLOR_SYS}[系统] 实时进程已在后台启动，PID: ${RT_PID}。${COLOR_RESET}"
 fi
-RT_PID=$(<"$RT_PID_FILE")
-echo "${COLOR_SYS}[系统] 实时进程已在后台启动，PID: ${RT_PID}。${COLOR_RESET}"
 
-echo "${COLOR_SYS}[系统] 两个进程均已启动，开始监控运行状态。按 Ctrl+C 可以同时停止它们。${COLOR_RESET}"
+if [ "$RUN_MODE" = "joint" ]; then
+    echo "${COLOR_SYS}[系统] 两个进程均已启动，开始监控运行状态。按 Ctrl+C 可以同时停止它们。${COLOR_RESET}"
+elif [ "$RUN_MODE" = "hmi_only" ]; then
+    echo "${COLOR_SYS}[系统] 界面已启动。请在界面中按 Ctrl+Enter 完成初始化，按 Ctrl+C 停止界面。${COLOR_RESET}"
+else
+    echo "${COLOR_SYS}[系统] 实时调试进程已启动。界面保持运行，按 Ctrl+C 只停止实时进程。${COLOR_RESET}"
+fi
 
 # 7. 循环监控：若任何一个进程意外退出，则关闭另一个并退出脚本
 while true; do
-    if ! process_alive "$HMI_PID"; then
+    if [ "$RUN_MODE" != "rt_only" ] && ! process_alive "$HMI_PID"; then
         echo -e "\r\n${COLOR_SYS}[系统] 检测到 [HMI] 界面进程已意外退出。${COLOR_RESET}"
         cleanup 1
     fi
     
-    if ! process_alive "$RT_PID"; then
+    if [ "$RUN_MODE" != "hmi_only" ] && ! process_alive "$RT_PID"; then
         echo -e "\r\n${COLOR_SYS}[系统] 检测到 [RT] 实时进程已意外退出。${COLOR_RESET}"
         cleanup 1
     fi
