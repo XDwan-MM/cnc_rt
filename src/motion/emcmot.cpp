@@ -40,6 +40,14 @@ static void manual_unset_sys_state();
 static void reset_clean_warning();
 static void rebuild_axis_positions_from_feedback();
 
+#ifdef UNIT_TEST
+void emcmot_test_rebuild_axis_positions_from_feedback()
+{
+    rebuild_axis_positions_from_feedback();
+    update_pos_flag = 1;
+}
+#endif
+
 static int32_t x_cmd_Pulses, y_cmd_Pulses, z_cmd_Pulses;
 static int32_t x_target_pos, y_target_pos, z_target_pos;
 const char *mode_names[] = {"编辑", "AUTO", "MDI", "DNC", "手轮", "手动", "回零", "空闲"};
@@ -85,14 +93,6 @@ void emcmotPathPlan()
         // unif_block();
     }
 }
-
-#ifdef UNIT_TEST
-void emcmot_test_rebuild_axis_positions_from_feedback()
-{
-    rebuild_axis_positions_from_feedback();
-    update_pos_flag = 1;
-}
-#endif
 
 // 通道周期状态机
 static void chan_do_period()
@@ -303,12 +303,12 @@ static void read_from_hal() {
     rt_data->axis_data[AXIS_Z].motor_act_pos = rt_data->axis_data[AXIS_Z].motor_cmd_pos;
     #else
     Hal_Driver_Get_Actual_Pos(&x_axis_driver, &x_target_pos);
-    rt_data->axis_data[AXIS_X].motor_act_pos = pulses_to_position(par_axis[AXIS_X], x_target_pos);
+    rt_data->axis_data[AXIS_X].motor_act_pos = pulses_to_position(&rt_data->axis_data[AXIS_X], x_target_pos);
     Hal_Driver_Get_Actual_Pos(&y_axis_driver, &y_target_pos);
-    rt_data->axis_data[AXIS_Y].motor_act_pos = pulses_to_position(par_axis[AXIS_Y], y_target_pos);
+    rt_data->axis_data[AXIS_Y].motor_act_pos = pulses_to_position(&rt_data->axis_data[AXIS_Y], y_target_pos);
     Hal_Driver_Get_Actual_Pos(&z_axis_driver, &z_target_pos);
-    rt_data->axis_data[AXIS_Z].motor_act_pos = pulses_to_position(par_axis[AXIS_Z], z_target_pos);
-#endif
+    rt_data->axis_data[AXIS_Z].motor_act_pos = pulses_to_position(&rt_data->axis_data[AXIS_Z], z_target_pos);
+    #endif
     // 电机脉冲
     rt_data->axis_data[AXIS_X].enc_cntr = x_target_pos;
     rt_data->axis_data[AXIS_Y].enc_cntr = y_target_pos;
@@ -330,11 +330,11 @@ static void read_from_hal() {
 static void output_to_hal()
 {
     // 发送给驱动器
-    x_cmd_Pulses = position_to_pulses(par_axis[AXIS_X], rt_data->axis_data[AXIS_X].motor_cmd_pos);
+    x_cmd_Pulses = position_to_pulses(&rt_data->axis_data[AXIS_X], rt_data->axis_data[AXIS_X].motor_cmd_pos);
     Hal_Driver_Set_Target_Pos(&x_axis_driver, x_cmd_Pulses);
-    y_cmd_Pulses = position_to_pulses(par_axis[AXIS_Y], rt_data->axis_data[AXIS_Y].motor_cmd_pos);
+    y_cmd_Pulses = position_to_pulses(&rt_data->axis_data[AXIS_Y], rt_data->axis_data[AXIS_Y].motor_cmd_pos);
     Hal_Driver_Set_Target_Pos(&y_axis_driver, y_cmd_Pulses);
-    z_cmd_Pulses = position_to_pulses(par_axis[AXIS_Z], rt_data->axis_data[AXIS_Z].motor_cmd_pos);
+    z_cmd_Pulses = position_to_pulses(&rt_data->axis_data[AXIS_Z], rt_data->axis_data[AXIS_Z].motor_cmd_pos);
     Hal_Driver_Set_Target_Pos(&z_axis_driver, z_cmd_Pulses);
 }
 

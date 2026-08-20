@@ -10,6 +10,7 @@
 #define EGEAR_RATIO_H
 
 #include "pardata.h"
+#include "rt_data.h"
 #include <stdint.h>
 
 #ifdef __cplusplus
@@ -27,7 +28,7 @@ extern "C"
  * @param target_pos_mm 机械坐标系下的目标位置，单位：mm。
  * @return 驱动器目标脉冲数；axis_para 为空或电子齿轮比分子为 0 时返回 0。
  */
-extern int32_t position_to_pulses(const ParamUnit *axis_para, double target_pos_mm);
+extern int32_t position_to_pulses(const RT_AXIS* rt_axis, double target_pos_mm);
 
 /**
  * @brief 将驱动器反馈脉冲数转换为机械坐标位置。
@@ -39,7 +40,7 @@ extern int32_t position_to_pulses(const ParamUnit *axis_para, double target_pos_
  * @param feedback_pulses 驱动器反馈脉冲数，单位：pulse。
  * @return 机械坐标系下的位置，单位：mm；axis_para 为空或电子齿轮比分母为 0 时返回 0.0。
  */
-extern double pulses_to_position(const ParamUnit *axis_para, int32_t feedback_pulses);
+extern double pulses_to_position(const RT_AXIS* rt_axis, int32_t feedback_pulses);
 
 /**
  * @brief 根据编码器原始脉冲和目标机械位置计算反馈偏置。
@@ -52,7 +53,7 @@ extern double pulses_to_position(const ParamUnit *axis_para, int32_t feedback_pu
  * @return 编码器反馈偏置，单位：mm；axis_para 为空或电子齿轮比分母为 0 时返回 0.0。
  */
 extern double calcul_enc_off(
-    const ParamUnit *axis_para,
+    const RT_AXIS* rt_axis,
     int32_t raw_encoder_pulses,
     double target_pos_mm
 );

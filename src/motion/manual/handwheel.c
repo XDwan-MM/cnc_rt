@@ -94,7 +94,7 @@ void Handlewheels_Motion(simple_tp_t_handwheel *tp)
 
 void Simple_Tp_Update(simple_tp_t_handwheel *tp)
 {
-    double ncu_cycle = (double)par_ncu[PAR_NCU_CYCLE].value.val_uint / TIME_US_2_S;
+    double ncu_cycle = rt_data->ncu_data.cycle;
     double max_dv, tiny_dp, pos_err, vel_req;
     /* 计算每个伺服周期内允许的最大速度变化量 */
     max_dv = tp->max_acc * ncu_cycle;
@@ -170,8 +170,8 @@ void handle_mpg_cmd() {
         simple_tp[axis].joint.rate = rate;
         simple_tp[axis].axis = axis;
 
-        simple_tp[axis].joint.vel_limit = par_axis[axis][PAR_AX_MPG_SPD].value.val_real;
-        simple_tp[axis].joint.jaccel_limit = par_axis[axis][PAR_AX_FEED_ACC].value.val_real;
+        simple_tp[axis].joint.vel_limit = rt_data->axis_data[axis].mpg_spd;
+        simple_tp[axis].joint.jaccel_limit = rt_data->axis_data[axis].max_feed_acc;
 
         //初始化
         if (mpg_statis) {
@@ -187,8 +187,8 @@ void handle_mpg_cmd() {
     }
     if (!mpg_statis) {
         rt_data->axis_data[axis].wcs_cmd_pos_cur = simple_tp[axis].joint.pos_cmd;
-        setVarAxisDouble(axis, VAR_AXIS_CMD_VEL_EX, fabs(simple_tp[axis].curr_vel) * 60, 0);
-        setVarChanDouble(0, VAR_CHAN_CMD_FEEDRATE, fabs(simple_tp[axis].curr_vel) * 60, 0);
+        rt_data->axis_data[axis].cmd_vel =  fabs(simple_tp[axis].curr_vel) * 60;
+        rt_data->chan_data[0].cmd_vel =  fabs(simple_tp[axis].curr_vel) * 60;
     }
     last_axis = axis;
     last_rate = rate;
