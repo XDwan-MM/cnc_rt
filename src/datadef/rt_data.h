@@ -100,8 +100,8 @@ typedef struct
     double mpg_spd;                     // 手摇进给速度  
     double corner_vel_diff;             // 拐角的容许速度差
     double corner_acc_diff;             // 拐角的容许加速度差        
-    double static_ferror;               // 轴静态跟随误差
-    double dynamic_ferror;              // 轴动态跟随误差
+    double max_static_ferror;           // 轴静态最大跟随误差
+    double max_dynamic_ferror;          // 轴动态最大跟随误差
     double pos_tol;                     // 轴定位允差
     unsigned int home_way;              // 回参考点方式
     double ref_range;                   // 轴回零参考点范围偏差
@@ -111,9 +111,9 @@ typedef struct
     double plmt2;                       // 第二级正软极限
     double nlmt2;                       // 第二级负软极限
     // 重启生效
+    int pm_munit;                       // 电子齿轮比分子
+    int pm_pulse;                       // 电子齿轮比分母
     double enc_off;                     // 编码器反馈偏置量
-    unsigned int pm_munit;              // 电子齿轮比分子
-    unsigned int pm_pulse;              // 电子齿轮比分母
     // 内部
     double act_vel;                     // 轴实际速度
     double act_acc;                     // 轴实际加速度

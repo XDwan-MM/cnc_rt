@@ -203,9 +203,9 @@ static void rt_reset_axis_data(){
         getParData(PARAMAN_FILE_AXIS, i, PAR_AX_CORNER_ACC_DIFF, &par_union);
         rt_data->axis_data[i].corner_acc_diff = par_union.value.val_real;                     // 拐角的容许加速度差 (HMI unit: 单位：mm/s2)
         getParData(PARAMAN_FILE_AXIS, i, PAR_AX_MAX_DYNAMIC_LAG, &par_union);
-        rt_data->axis_data[i].dynamic_ferror = par_union.value.val_real;                      // 轴动态跟随误差 (HMI unit: mm)
+        rt_data->axis_data[i].max_dynamic_ferror = par_union.value.val_real;                  // 轴动态最大跟随误差 (HMI unit: mm)
         getParData(PARAMAN_FILE_AXIS, i, PAR_AX_MAX_STATIC_LAG, &par_union);
-        rt_data->axis_data[i].static_ferror = par_union.value.val_real;                       // 轴静态跟随误差 (HMI unit: mm)
+        rt_data->axis_data[i].max_static_ferror = par_union.value.val_real;                   // 轴静态最大跟随误差 (HMI unit: mm)
         getParData(PARAMAN_FILE_AXIS, i, PAR_AX_POS_TOL, &par_union);
         rt_data->axis_data[i].pos_tol = par_union.value.val_real;                             // 轴定位允差 (HMI unit: mm)
         getParData(PARAMAN_FILE_AXIS, i, PAR_AX_HOME_WAY, &par_union);
@@ -238,7 +238,7 @@ static void rt_reboot_axis_data(){
     ParamUnit par_union = {};
     for(int i = 0; i < SYS_AXES_NUM; i++){
         getParData(PARAMAN_FILE_AXIS, i, PAR_AX_PM_MUNIT, &par_union);
-        rt_data->axis_data[i].pm_munit = par_union.value.val_int;                        // 轴电子齿轮比分子 (HMI unit: um, | 实时 单位: mm)
+        rt_data->axis_data[i].pm_munit = CONV_UM_TO_MM(par_union.value.val_int);         // 轴电子齿轮比分子 (HMI unit: um, | 实时 单位: mm)
         getParData(PARAMAN_FILE_AXIS, i, PAR_AX_PM_PULSE, &par_union);
         rt_data->axis_data[i].pm_pulse = par_union.value.val_int;                        // 轴电子齿轮比分母 (HMI unit: 脉冲)
         getParData(PARAMAN_FILE_AXIS, i, PAR_AX_ENC_OFF, &par_union);

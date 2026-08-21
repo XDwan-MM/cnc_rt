@@ -90,7 +90,7 @@ void handle_jog_cmd()
 
         /* 4. 指令输出给外部系统变量 */
         rt_data->axis_data[i].wcs_cmd_pos_cur = jog_tp[i].curr_pos;
-        rt_data->axis_data[i].cmd_vel = jog_tp[i].curr_vel;
+        rt_data->axis_data[i].cmd_vel = jog_tp[i].curr_vel;  // unit: mm/s
     }
 
     /* 计算合成进给速度并更新给人机交互显示 */
@@ -100,12 +100,12 @@ void handle_jog_cmd()
         f_sq += (jog_tp[i].curr_vel * jog_tp[i].curr_vel);
     }
 
-    rt_data->chan_data[0].cmd_vel = f_sq;
+    rt_data->chan_data[0].cmd_vel = sqrt(f_sq);
 
     // 减速完成信号：仅在限位触发且速度归零时置位，否则清零
     for (int i = 0; i < SYS_AXES_NUM_JOG; i++)
     {
-        if (fabs(rt_data->chan_data[0].cmd_vel * 60) < SPEED_THRESHOLD &&
+        if (fabs(rt_data->axis_data[i].cmd_vel) < SPEED_THRESHOLD &&
             (rt_data->axis_data[i].axis_status.is_fwd_limit || rt_data->axis_data[i].axis_status.is_rev_limit))
         {
             rt_data->axis_data[i].axis_status.is_decel_done = 1;

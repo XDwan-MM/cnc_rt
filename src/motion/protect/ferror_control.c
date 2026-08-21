@@ -22,7 +22,7 @@ static const char *axis_names[] = {"X", "Y", "Z"};
 
 /* ---------- 内部函数声明 ---------- */
 static void check_axis_ferror(ferror_control_t *ferror_ctrl,
-                              const ParamUnit *axis_para,
+                              const RT_AXIS *axis_para,
                               double pos_cmd,
                               double pos_fb,
                               double vel_cmd);
@@ -97,7 +97,7 @@ void reset_ferror_control(void)
  *   - 停止时 (|vel_cmd| <= SPEED_THRESHOLD) 使用 PAR_AX_MIN_FERROR（PRM 1829）
  */
 static void check_axis_ferror(ferror_control_t *ferror_ctrl,
-                              const ParamUnit *axis_para,
+                              const RT_AXIS *axis_para,
                               double pos_cmd,
                               double pos_fb,
                               double vel_cmd)
@@ -110,13 +110,13 @@ static void check_axis_ferror(ferror_control_t *ferror_ctrl,
     if (fabs(vel_cmd) > SPEED_THRESHOLD)
     {
         /* 运动中：使用动态最大跟随误差 */
-        ferror_ctrl->ferror_limit = axis_para[PAR_AX_MAX_DYNAMIC_LAG].value.val_real;
+        ferror_ctrl->ferror_limit = axis_para->max_dynamic_ferror;
         ferror_ctrl->is_moving = true;
     }
     else
     {
         /* 停止中：使用静态最大跟随误差 */
-        ferror_ctrl->ferror_limit = axis_para[PAR_AX_MAX_STATIC_LAG].value.val_real;
+        ferror_ctrl->ferror_limit = axis_para->max_static_ferror;
         ferror_ctrl->is_moving = false;
     }
 
