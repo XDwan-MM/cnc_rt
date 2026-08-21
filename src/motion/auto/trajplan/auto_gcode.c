@@ -139,8 +139,7 @@ void auto_execute_pos_cmd(){
         LOG(LOG_LEVEL_ERR, "v %f, t[2] %f, t %d", cycle_tp->pos_cmd_data.traj_data->v, cycle_tp->pos_cmd_data.vel_profile->t[2], cycle_tp->pos_cmd_data.interp_cycle);
         cycle_tp->pos_cmd_data.traj_data->v = 0;
     }
-    cycle_tp->pos_cmd_data.current_vel = cycle_tp->pos_cmd_data.traj_data->v;
-    setVarChanDouble(0, VAR_CHAN_CMD_FEEDRATE, cycle_tp->pos_cmd_data.traj_data->v * TIME_MINUS_2_S, 0);
+    cycle_tp->pos_cmd_data.current_vel = rt_data->chan_data[0].cmd_vel = cycle_tp->pos_cmd_data.traj_data->v;
     auto_cal_axis_vel(&cycle_tp->pos_cmd_data.current_pos, &interp_pos, cycle_tp->pos_cmd_data.traj_data->v);
 }
 
@@ -269,11 +268,11 @@ static void auto_cal_target_vel(){
         switch (cycle_tp->plan_block->type)
         {
         case RAPID:
-            if(rt_get_sys_state(SYS_IS_DRY_RUN)) cycle_tp->pos_cmd_data.target_vel = MIN(par_chan[0][PAR_CH_DRYRUN_SPD].value.val_real * var_chan[0][VAR_CHAN_RAPID_OVERRIDE].value.f / OVERRIDE_PERCENT, cycle_tp->max_rapid_vel);
+            if(rt_get_sys_state(SYS_IS_DRY_RUN)) cycle_tp->pos_cmd_data.target_vel = MIN(rt_data->chan_data[0].dryrun_spd * var_chan[0][VAR_CHAN_RAPID_OVERRIDE].value.f / OVERRIDE_PERCENT, cycle_tp->max_rapid_vel);
             else cycle_tp->pos_cmd_data.target_vel = MIN(cycle_tp->plan_block->feed_vel * var_chan[0][VAR_CHAN_RAPID_OVERRIDE].value.f / OVERRIDE_PERCENT, cycle_tp->max_rapid_vel);
             break;
         default:
-            if(rt_get_sys_state(SYS_IS_DRY_RUN)) cycle_tp->pos_cmd_data.target_vel = MIN(par_chan[0][PAR_CH_DRYRUN_SPD].value.val_real * var_chan[0][VAR_CHAN_FEED_OVERRIDE].value.f / OVERRIDE_PERCENT, cycle_tp->max_feed_vel);
+            if(rt_get_sys_state(SYS_IS_DRY_RUN)) cycle_tp->pos_cmd_data.target_vel = MIN(rt_data->chan_data[0].dryrun_spd * var_chan[0][VAR_CHAN_FEED_OVERRIDE].value.f / OVERRIDE_PERCENT, cycle_tp->max_feed_vel);
             else cycle_tp->pos_cmd_data.target_vel = MIN(cycle_tp->plan_block->feed_vel * var_chan[0][VAR_CHAN_FEED_OVERRIDE].value.f / OVERRIDE_PERCENT, cycle_tp->max_feed_vel);
             break;
         }
@@ -314,7 +313,7 @@ static void auto_look_ahead(){
     // 判断是否大于最大速度
     if(cur_block->start_vel > cur_block->max_vel) cur_block->max_vel = cur_block->start_vel;
     // 速度前瞻
-    vp_cal_bid_lookahead(velplan_mode, plan_queue, ncu_cycle, par_axis[0][PAR_AX_CORNER_VEL_DIFF].value.val_real, par_axis[1][PAR_AX_CORNER_VEL_DIFF].value.val_real, par_axis[2][PAR_AX_CORNER_VEL_DIFF].value.val_real);
+    vp_cal_bid_lookahead(velplan_mode, plan_queue, ncu_cycle, rt_data->axis_data[0].corner_vel_diff, rt_data->axis_data[1].corner_vel_diff, rt_data->axis_data[2].corner_vel_diff);
     // if(cur_block->type == CIRCLE_CW || cur_block->type == CIRCLE_CCW){
     //     LOG(LOG_LEVEL_DEBUG, "速度前瞻 %d, angle:%f, length:%f, radius:%f, max_vel:%f, start_vel:%f end_vel:%f", cur_block->line_number, cur_block->angle_rad, cur_block->length, cur_block->circular_data.radius, cur_block->max_vel, cur_block->start_vel, cur_block->end_vel);
     // }else{
@@ -374,7 +373,7 @@ static void cycle_tp_update_block_data(){
 }
 
 static void cycle_tp_update_pos_cmd_data(){
-    cycle_tp->pos_cmd_data.current_vel = var_chan[0][VAR_CHAN_CMD_FEEDRATE].value.f / TIME_MINUS_2_S;
+    cycle_tp->pos_cmd_data.current_vel = rt_data->chan_data[0].cmd_vel;
     cycle_tp->pos_cmd_data.current_pos.x = rt_data->axis_data[AXIS_X].wcs_cmd_pos_cur;
     cycle_tp->pos_cmd_data.current_pos.y = rt_data->axis_data[AXIS_Y].wcs_cmd_pos_cur;
     cycle_tp->pos_cmd_data.current_pos.z = rt_data->axis_data[AXIS_Z].wcs_cmd_pos_cur;
@@ -498,7 +497,7 @@ static void block_cal_exact_stop_vel(PLAN_BLOCK* current_block){
             // 当参数RDR（No.1401#6）的值为1时为空运行速度×JV，其值为0时则为快速移动速度
             if (rt_get_sys_state(SYS_IS_DRY_RUN))
             {
-                current_block->max_vel = MIN(par_chan[0][PAR_CH_DRYRUN_SPD].value.val_real * var_chan[0][VAR_CHAN_RAPID_OVERRIDE].value.f / OVERRIDE_PERCENT, cycle_tp->max_rapid_vel);        
+                current_block->max_vel = MIN(rt_data->chan_data[0].dryrun_spd * var_chan[0][VAR_CHAN_RAPID_OVERRIDE].value.f / OVERRIDE_PERCENT, cycle_tp->max_rapid_vel);        
             }
             else{
                 current_block->max_vel = MIN(current_block->feed_vel * var_chan[0][VAR_CHAN_RAPID_OVERRIDE].value.f / OVERRIDE_PERCENT, cycle_tp->max_rapid_vel);
@@ -514,7 +513,7 @@ static void block_cal_exact_stop_vel(PLAN_BLOCK* current_block){
             // 被钳制在最大切削进给速度上
             if (rt_get_sys_state(SYS_IS_DRY_RUN))
             {
-                current_block->max_vel = MIN(par_chan[0][PAR_CH_DRYRUN_SPD].value.val_real * var_chan[0][VAR_CHAN_FEED_OVERRIDE].value.f / OVERRIDE_PERCENT, cycle_tp->max_feed_vel);
+                current_block->max_vel = MIN(rt_data->chan_data[0].dryrun_spd * var_chan[0][VAR_CHAN_FEED_OVERRIDE].value.f / OVERRIDE_PERCENT, cycle_tp->max_feed_vel);
             }
             else{
                 current_block->max_vel = MIN(current_block->feed_vel * var_chan[0][VAR_CHAN_FEED_OVERRIDE].value.f / OVERRIDE_PERCENT, cycle_tp->max_feed_vel);
@@ -533,7 +532,7 @@ static void block_cal_tap_vel(PLAN_BLOCK* current_block){
         case RAPID:
             if (rt_get_sys_state(SYS_IS_DRY_RUN))
             {
-                current_block->max_vel = MIN(par_chan[0][PAR_CH_DRYRUN_SPD].value.val_real, cycle_tp->max_rapid_vel);
+                current_block->max_vel = MIN(rt_data->chan_data[0].dryrun_spd, cycle_tp->max_rapid_vel);
             }
             else{
                 current_block->max_vel = MIN(current_block->feed_vel, cycle_tp->max_rapid_vel);
@@ -544,7 +543,7 @@ static void block_cal_tap_vel(PLAN_BLOCK* current_block){
         case LINE:
             if (rt_get_sys_state(SYS_IS_DRY_RUN))
             {
-                current_block->max_vel = MIN(par_chan[0][PAR_CH_DRYRUN_SPD].value.val_real, cycle_tp->max_feed_vel);
+                current_block->max_vel = MIN(rt_data->chan_data[0].dryrun_spd, cycle_tp->max_feed_vel);
             }
             else{
                 current_block->max_vel = MIN(current_block->feed_vel, cycle_tp->max_feed_vel);
@@ -559,7 +558,7 @@ static void block_cal_tap_vel(PLAN_BLOCK* current_block){
         case HELIX_CCW:
             if (rt_get_sys_state(SYS_IS_DRY_RUN))
             {
-                current_block->max_vel = MIN(par_chan[0][PAR_CH_DRYRUN_SPD].value.val_real, cycle_tp->max_feed_vel);
+                current_block->max_vel = MIN(rt_data->chan_data[0].dryrun_spd, cycle_tp->max_feed_vel);
             }
             else{
                 current_block->max_vel = MIN(current_block->feed_vel, cycle_tp->max_feed_vel);
@@ -577,7 +576,7 @@ static void block_cal_chop_vel(PLAN_BLOCK* current_block){
         case RAPID:
             if (rt_get_sys_state(SYS_IS_DRY_RUN))
             {
-                current_block->max_vel = MIN(par_chan[0][PAR_CH_DRYRUN_SPD].value.val_real * var_chan[0][VAR_CHAN_RAPID_OVERRIDE].value.f / OVERRIDE_PERCENT, cycle_tp->max_rapid_vel);
+                current_block->max_vel = MIN(rt_data->chan_data[0].dryrun_spd * var_chan[0][VAR_CHAN_RAPID_OVERRIDE].value.f / OVERRIDE_PERCENT, cycle_tp->max_rapid_vel);
             }
             else{
                 current_block->max_vel = MIN(current_block->feed_vel * var_chan[0][VAR_CHAN_RAPID_OVERRIDE].value.f / OVERRIDE_PERCENT, cycle_tp->max_rapid_vel);
@@ -588,7 +587,7 @@ static void block_cal_chop_vel(PLAN_BLOCK* current_block){
         case LINE:
             if (rt_get_sys_state(SYS_IS_DRY_RUN))
             {
-                current_block->max_vel = MIN(par_chan[0][PAR_CH_DRYRUN_SPD].value.val_real * var_chan[0][VAR_CHAN_FEED_OVERRIDE].value.f / OVERRIDE_PERCENT, cycle_tp->max_feed_vel);
+                current_block->max_vel = MIN(rt_data->chan_data[0].dryrun_spd * var_chan[0][VAR_CHAN_FEED_OVERRIDE].value.f / OVERRIDE_PERCENT, cycle_tp->max_feed_vel);
             }
             else{
                 current_block->max_vel = MIN(current_block->feed_vel * var_chan[0][VAR_CHAN_FEED_OVERRIDE].value.f / OVERRIDE_PERCENT, cycle_tp->max_feed_vel);
@@ -603,7 +602,7 @@ static void block_cal_chop_vel(PLAN_BLOCK* current_block){
         case HELIX_CCW:
             if (rt_get_sys_state(SYS_IS_DRY_RUN))
             {
-                current_block->max_vel = MIN(par_chan[0][PAR_CH_DRYRUN_SPD].value.val_real * var_chan[0][VAR_CHAN_FEED_OVERRIDE].value.f / OVERRIDE_PERCENT, cycle_tp->max_feed_vel);
+                current_block->max_vel = MIN(rt_data->chan_data[0].dryrun_spd * var_chan[0][VAR_CHAN_FEED_OVERRIDE].value.f / OVERRIDE_PERCENT, cycle_tp->max_feed_vel);
             }
             else{
                 current_block->max_vel = MIN(current_block->feed_vel * var_chan[0][VAR_CHAN_FEED_OVERRIDE].value.f / OVERRIDE_PERCENT, cycle_tp->max_feed_vel);
@@ -618,17 +617,17 @@ static void block_cal_chop_vel(PLAN_BLOCK* current_block){
 static bool auto_pos_cmd_axis_arrive_check(){
     int res = 0;
     bool is_arrived = true;
-    if((fabs(rt_data->axis_data[AXIS_X].mac_cmd_pos - rt_data->axis_data[AXIS_X].fb_pos_no_comp)) > par_axis[AXIS_X][PAR_AX_POS_TOL].value.val_real) {
+    if((fabs(rt_data->axis_data[AXIS_X].mac_cmd_pos - rt_data->axis_data[AXIS_X].fb_pos_no_comp)) > rt_data->axis_data[0].pos_tol) {
         is_arrived = false;
         res = setAlarm(ALARM_AX, ALARM_WARNING, 103);
         if (res != -8) LOG(LOG_LEVEL_DEBUG, "X轴终点%f,实际偏差%f超过目标%f允差,等待到位...", cycle_tp->plan_block->end_pos.x, fabs(cycle_tp->plan_block->end_pos.x - rt_data->axis_data[AXIS_X].fb_pos_no_comp), par_axis[AXIS_X][PAR_AX_POS_TOL].value.val_real);
     }
-    if((fabs(rt_data->axis_data[AXIS_Y].mac_cmd_pos - rt_data->axis_data[AXIS_Y].fb_pos_no_comp)) > par_axis[AXIS_Y][PAR_AX_POS_TOL].value.val_real) {
+    if((fabs(rt_data->axis_data[AXIS_Y].mac_cmd_pos - rt_data->axis_data[AXIS_Y].fb_pos_no_comp)) > rt_data->axis_data[1].pos_tol) {
         is_arrived = false;
         res = setAlarm(ALARM_AX, ALARM_WARNING, 104);
         if (res != -8) LOG(LOG_LEVEL_DEBUG, "Y轴终点%f,实际偏差%f超过目标%f允差,等待到位...", cycle_tp->plan_block->end_pos.y, fabs(cycle_tp->plan_block->end_pos.y - rt_data->axis_data[AXIS_Y].fb_pos_no_comp), par_axis[AXIS_Y][PAR_AX_POS_TOL].value.val_real);
     }
-    if((fabs(rt_data->axis_data[AXIS_Z].mac_cmd_pos - rt_data->axis_data[AXIS_Z].fb_pos_no_comp)) > par_axis[AXIS_Z][PAR_AX_POS_TOL].value.val_real) {
+    if((fabs(rt_data->axis_data[AXIS_Z].mac_cmd_pos - rt_data->axis_data[AXIS_Z].fb_pos_no_comp)) > rt_data->axis_data[2].pos_tol) {
         is_arrived = false;
         res = setAlarm(ALARM_AX, ALARM_WARNING, 105);
         if (res != -8) LOG(LOG_LEVEL_DEBUG, "Z轴终点%f,实际偏差%f超过目标%f允差,等待到位...", cycle_tp->plan_block->end_pos.z, fabs(cycle_tp->plan_block->end_pos.z - rt_data->axis_data[AXIS_Z].fb_pos_no_comp), par_axis[AXIS_Z][PAR_AX_POS_TOL].value.val_real);
@@ -677,14 +676,8 @@ static bool auto_pos_cmd_arrive_check(){
 
 // 计算单轴速度
 static void auto_cal_axis_vel(POS *current_pos, POS *target_pos, double target_vel){
-    double x_axis_vel = 0;
-    double y_axis_vel = 0;
-    double z_axis_vel = 0;
     VECTOR vec = VECTOR_Unit(current_pos, target_pos);
-    x_axis_vel = target_vel * vec.x;
-    y_axis_vel = target_vel * vec.y;
-    z_axis_vel = target_vel * vec.z;
-    setVarAxisDouble(AXIS_X, VAR_AXIS_CMD_VEL, x_axis_vel, 0);
-    setVarAxisDouble(AXIS_Y, VAR_AXIS_CMD_VEL, y_axis_vel, 0);
-    setVarAxisDouble(AXIS_Z, VAR_AXIS_CMD_VEL, z_axis_vel, 0);
+    rt_data->axis_data[AXIS_X].cmd_vel = target_vel * vec.x;
+    rt_data->axis_data[AXIS_Y].cmd_vel = target_vel * vec.y;
+    rt_data->axis_data[AXIS_Z].cmd_vel = target_vel * vec.z;
 }

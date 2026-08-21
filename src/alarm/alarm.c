@@ -51,6 +51,7 @@ void handle_alarm_cmd()
         setVarChanInt(0, VAR_CHAN_IS_ESTOP, 0, 0);
         // 状态复位、数据重置
         tp_reset();
+        rt_data_reset();
         // 重置事件
         event_queue_reset(event_queue);
         // 更新cmd_pos位置

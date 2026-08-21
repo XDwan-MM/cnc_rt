@@ -24,13 +24,13 @@ void Axis_Limit_Manager_Init(void)
     {
         //level 1
         runtime[i].config.level1.is_enabled = 1;
-        runtime[i].config.level1.positive_limit = par_axis[i][PAR_AX_PLMT].value.val_real;
-        runtime[i].config.level1.negative_limit = par_axis[i][PAR_AX_NLMT].value.val_real;
+        runtime[i].config.level1.positive_limit = rt_data->axis_data[i].plmt;
+        runtime[i].config.level1.negative_limit = rt_data->axis_data[i].nlmt;
         //level 2
         runtime[i].config.level2.is_enabled = par_axis[i][503].value.val_int;
         runtime[i].config.level2_mode = par_axis[i][502].value.val_int;
-        runtime[i].config.level2.positive_limit = par_axis[i][PAR_AX_PLMT2].value.val_real;
-        runtime[i].config.level2.negative_limit = par_axis[i][PAR_AX_NLMT2].value.val_real;
+        runtime[i].config.level2.positive_limit = rt_data->axis_data[i].plmt2;
+        runtime[i].config.level2.negative_limit = rt_data->axis_data[i].nlmt2;
         //level 3
         runtime[i].config.level3.is_enabled = par_axis[i][504].value.val_int;
         runtime[i].config.level3.positive_limit = par_axis[i][500].value.val_real;
@@ -164,9 +164,9 @@ uint8_t Check_Axis_Limit_Violation(AxisLimitRuntime *runtime, double pos,AxisLim
 }
 
 void lookahead_check_soft_limit(POS *target_pos){
-    runtime[0].active_levels = Check_Axis_Limit_Violation(&runtime[0], target_pos->x,LOOKAHEAD_CHECK_USED);
-    runtime[1].active_levels = Check_Axis_Limit_Violation(&runtime[1], target_pos->y,LOOKAHEAD_CHECK_USED);
-    runtime[2].active_levels = Check_Axis_Limit_Violation(&runtime[2], target_pos->z,LOOKAHEAD_CHECK_USED);
+    runtime[0].active_levels = Check_Axis_Limit_Violation(&runtime[0], target_pos->x, LOOKAHEAD_CHECK_USED);
+    runtime[1].active_levels = Check_Axis_Limit_Violation(&runtime[1], target_pos->y, LOOKAHEAD_CHECK_USED);
+    runtime[2].active_levels = Check_Axis_Limit_Violation(&runtime[2], target_pos->z, LOOKAHEAD_CHECK_USED);
 }
 
 void auto_check_soft_limit_del_done(){

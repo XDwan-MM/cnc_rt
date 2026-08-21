@@ -90,7 +90,7 @@ void handle_jog_cmd()
 
         /* 4. 指令输出给外部系统变量 */
         rt_data->axis_data[i].wcs_cmd_pos_cur = jog_tp[i].curr_pos;
-        var_axis[i][VAR_AXIS_CMD_VEL].value.f = jog_tp[i].curr_vel;
+        rt_data->axis_data[i].cmd_vel = jog_tp[i].curr_vel;  // unit: mm/s
     }
 
     /* 计算合成进给速度并更新给人机交互显示 */
@@ -99,12 +99,13 @@ void handle_jog_cmd()
     {
         f_sq += (jog_tp[i].curr_vel * jog_tp[i].curr_vel);
     }
-    setVarChanDouble(0, VAR_CHAN_CMD_FEEDRATE, sqrt(f_sq) * 60.0, 0);
+
+    rt_data->chan_data[0].cmd_vel = sqrt(f_sq);
 
     // 减速完成信号：仅在限位触发且速度归零时置位，否则清零
     for (int i = 0; i < SYS_AXES_NUM_JOG; i++)
     {
-        if (fabs(var_axis[i][VAR_AXIS_CMD_VEL].value.f) < SPEED_THRESHOLD &&
+        if (fabs(rt_data->axis_data[i].cmd_vel) < SPEED_THRESHOLD &&
             (rt_data->axis_data[i].axis_status.is_fwd_limit || rt_data->axis_data[i].axis_status.is_rev_limit))
         {
             rt_data->axis_data[i].axis_status.is_decel_done = 1;
@@ -315,10 +316,10 @@ static void execute_axis_motion(int i, JOG_AXIS_CTRL *jog_axis_ctrl, jog_planner
         /* 1. 更新运动参数 */
         // 根据模式选择速度与加速度参数  普通jog：1）慢速点动速度 2）加工加速度；
         // 快速：1）快速点动速度 2）快速加速度
-        double base_vel = is_rapid ? par_axis[i][PAR_AX_JOG_FASTSPD].value.val_real
-                                   : par_axis[i][PAR_AX_JOG_LOWSPD].value.val_real;
-        double base_acc = is_rapid ? par_axis[i][PAR_AX_RAPID_ACC].value.val_real
-                                   : par_axis[i][PAR_AX_FEED_ACC].value.val_real;
+        double base_vel = is_rapid ? rt_data->axis_data[i].jog_fastspd
+                                   : rt_data->axis_data[i].jog_lowspd;
+        double base_acc = is_rapid ? rt_data->axis_data[i].max_rapid_acc
+                                   : rt_data->axis_data[i].max_feed_acc;
         // 设置目标速度：实时获取倍率，设定带方向的目标速度
         double current_override = is_rapid ? (var_chan[0][VAR_CHAN_RAPID_OVERRIDE].value.f / 100.0)
                                            : (var_chan[0][VAR_CHAN_FEED_OVERRIDE].value.f / 100.0);
@@ -326,8 +327,8 @@ static void execute_axis_motion(int i, JOG_AXIS_CTRL *jog_axis_ctrl, jog_planner
         axis_jog_tp->max_acc = base_acc;
 
         /* 2. 软限位前瞻拦截预测 */
-        double p_limit = par_axis[i][PAR_AX_PLMT].value.val_real;
-        double n_limit = par_axis[i][PAR_AX_NLMT].value.val_real;
+        double p_limit = rt_data->axis_data[i].plmt;
+        double n_limit = rt_data->axis_data[i].nlmt;
 
         // 兼容工业规范：如果正限位严格大于负限位，视为有限位直线轴。
         // 如果正负限位设置相等(如全是0)，则视为无限旋转轴，跳过限位检查。

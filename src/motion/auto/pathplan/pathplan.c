@@ -142,28 +142,28 @@ static void block_cal_pos(PLAN_BLOCK* parser_block, PLAN_BLOCK* current_block, P
 
 // 计算段最大允许速度
 static void block_cal_vel(PLAN_BLOCK* current_block){
-    double min_feed = MIN3(par_axis[0][PAR_AX_FEED_SPD].value.val_real, par_axis[1][PAR_AX_FEED_SPD].value.val_real, par_axis[2][PAR_AX_FEED_SPD].value.val_real);
-    double min_rapid_feed = MIN3(MIN(par_axis[0][PAR_AX_JOG_LOWSPD].value.val_real, par_axis[0][PAR_AX_RAPID_SPD].value.val_real), MIN(par_axis[1][PAR_AX_JOG_LOWSPD].value.val_real, par_axis[1][PAR_AX_RAPID_SPD].value.val_real), MIN(par_axis[2][PAR_AX_JOG_LOWSPD].value.val_real, par_axis[2][PAR_AX_RAPID_SPD].value.val_real));  // G00最大速度为设置的快速进给速度
+    double min_feed = MIN3(rt_data->axis_data[0].max_feed_vel, rt_data->axis_data[1].max_feed_vel, rt_data->axis_data[2].max_feed_vel);
+    double min_rapid_feed = MIN3(MIN(rt_data->axis_data[0].jog_lowspd, rt_data->axis_data[0].max_rapid_vel), MIN(rt_data->axis_data[1].jog_lowspd, rt_data->axis_data[1].max_rapid_vel), MIN(rt_data->axis_data[2].jog_lowspd, rt_data->axis_data[2].max_rapid_vel));  // G00最大速度为设置的快速进给速度
     switch(current_block->type){
         case RAPID:
             current_block->max_vel = current_block->feed_vel = min_rapid_feed;
-            current_block->max_acc = MIN3(par_axis[0][PAR_AX_RAPID_ACC].value.val_real, par_axis[1][PAR_AX_RAPID_ACC].value.val_real, par_axis[2][PAR_AX_RAPID_ACC].value.val_real);
-            current_block->max_jerk = MIN3(par_axis[0][PAR_AX_RAPID_JK].value.val_real, par_axis[1][PAR_AX_RAPID_JK].value.val_real, par_axis[2][PAR_AX_RAPID_JK].value.val_real);
+            current_block->max_acc = MIN3(rt_data->axis_data[0].max_rapid_acc, rt_data->axis_data[1].max_rapid_acc, rt_data->axis_data[2].max_rapid_acc);
+            current_block->max_jerk = MIN3(rt_data->axis_data[0].max_rapid_jk, rt_data->axis_data[1].max_rapid_jk, rt_data->axis_data[3].max_rapid_jk);
             break;
         case LINE:
         case RIGID_TAP:
         case TAP_RETURN:
             current_block->max_vel = current_block->feed_vel = MIN(current_block->feed_vel, min_feed);   // G01最大速度
-            current_block->max_acc = MIN3(par_axis[0][PAR_AX_FEED_ACC].value.val_real, par_axis[1][PAR_AX_FEED_ACC].value.val_real, par_axis[2][PAR_AX_FEED_ACC].value.val_real);
-            current_block->max_jerk = MIN3(par_axis[0][PAR_AX_FEED_JK].value.val_real, par_axis[1][PAR_AX_FEED_JK].value.val_real, par_axis[2][PAR_AX_FEED_JK].value.val_real);
+            current_block->max_acc = MIN3(rt_data->axis_data[0].max_feed_acc, rt_data->axis_data[1].max_feed_acc, rt_data->axis_data[2].max_feed_acc);
+            current_block->max_jerk = MIN3(rt_data->axis_data[0].max_feed_jk, rt_data->axis_data[1].max_feed_jk, rt_data->axis_data[2].max_feed_jk);
             break;
         case CIRCLE_CCW:
         case CIRCLE_CW:
         case HELIX_CW:
         case HELIX_CCW:
-            current_block->max_acc = MIN3(par_axis[0][PAR_AX_FEED_ACC].value.val_real, par_axis[1][PAR_AX_FEED_ACC].value.val_real, par_axis[2][PAR_AX_FEED_ACC].value.val_real);
-            current_block->max_jerk = MIN3(par_axis[0][PAR_AX_FEED_JK].value.val_real, par_axis[1][PAR_AX_FEED_JK].value.val_real, par_axis[2][PAR_AX_FEED_JK].value.val_real);
-            double vc = vp_cal_circular_max_vel(current_block, par_chan[0][PAR_CH_PATH_TOLERANCE].value.val_real, (double)par_ncu[PAR_NCU_CYCLE].value.val_uint / TIME_US_2_S);
+            current_block->max_acc = MIN3(rt_data->axis_data[0].max_feed_acc, rt_data->axis_data[1].max_feed_acc, rt_data->axis_data[2].max_feed_acc);
+            current_block->max_jerk = MIN3(rt_data->axis_data[0].max_feed_jk, rt_data->axis_data[1].max_feed_jk, rt_data->axis_data[2].max_feed_jk);
+            double vc = vp_cal_circular_max_vel(current_block, rt_data->chan_data[0].path_tolerance, rt_data->ncu_data.cycle);
             current_block->max_vel = current_block->feed_vel = MIN3(current_block->feed_vel, min_feed, vc);   // G02G03最大速度
             break;
         default:

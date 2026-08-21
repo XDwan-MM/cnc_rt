@@ -621,12 +621,9 @@ static void auto_start_run(){
     queue_reset(pretreat_queue);
     queue_reset(parser_queue);
     cycle_tp_reset();
+    auto_set_zero_vel_params();
     setVarChanInt(0, VAR_CHAN_IS_RUNNING, 1, 0);
     setVarChanInt(0, VAR_CHAN_IS_MOVING, 1, 0);
-    setVarChanDouble(0, VAR_CHAN_CMD_FEEDRATE, 0, 0);
-    setVarAxisDouble(AXIS_X, VAR_AXIS_CMD_VEL, 0, 0);
-    setVarAxisDouble(AXIS_Y, VAR_AXIS_CMD_VEL, 0, 0);
-    setVarAxisDouble(AXIS_Z, VAR_AXIS_CMD_VEL, 0, 0);
     // 通知译码运行，初始化译码器
     rt_set_chan_state(0, CHAN_IS_PARSER_RERUN, true);
     // 译码正在运行，译码结束译码器将其置false
@@ -638,10 +635,7 @@ static void auto_start_run(){
 static void auto_pause_run(){
     cycle_tp->exec_cmd = DO_NULL_CMD;
     setVarChanInt(0, VAR_CHAN_IS_MOVING, 0, 0);
-    setVarChanDouble(0, VAR_CHAN_CMD_FEEDRATE, 0, 0);
-    setVarAxisDouble(AXIS_X, VAR_AXIS_CMD_VEL, 0, 0);
-    setVarAxisDouble(AXIS_Y, VAR_AXIS_CMD_VEL, 0, 0);
-    setVarAxisDouble(AXIS_Z, VAR_AXIS_CMD_VEL, 0, 0);
+    auto_set_zero_vel_params();
 }
 
 static void auto_reset_run(){
@@ -654,10 +648,7 @@ static void auto_reset_run(){
     rt_set_chan_state(0, CHAN_IS_PARSERING, false);
     setVarChanInt(0, VAR_CHAN_IS_RUNNING, 0, 0);
     setVarChanInt(0, VAR_CHAN_IS_MOVING, 0, 0);
-    setVarChanDouble(0, VAR_CHAN_CMD_FEEDRATE, 0, 0);
-    setVarAxisDouble(AXIS_X, VAR_AXIS_CMD_VEL, 0, 0);
-    setVarAxisDouble(AXIS_Y, VAR_AXIS_CMD_VEL, 0, 0);
-    setVarAxisDouble(AXIS_Z, VAR_AXIS_CMD_VEL, 0, 0);
+    auto_set_zero_vel_params();
     // LOG(LOG_LEVEL_DEBUG, "vel %f", var_chan[0][VAR_CHAN_CMD_FEEDRATE].value.f);
 }
 
@@ -680,10 +671,7 @@ static void auto_update_var(){
     case PMC_MODE_M_CMD:
     case PMC_MODE_STOPSKIP:
     case PMC_MODE_NULL:
-        setVarChanDouble(0, VAR_CHAN_CMD_FEEDRATE, 0, 0);
-        setVarAxisDouble(AXIS_X, VAR_AXIS_CMD_VEL, 0, 0);
-        setVarAxisDouble(AXIS_Y, VAR_AXIS_CMD_VEL, 0, 0);
-        setVarAxisDouble(AXIS_Z, VAR_AXIS_CMD_VEL, 0, 0);
+        auto_set_zero_vel_params();
     default:
         break;
     }
@@ -754,14 +742,14 @@ void cycle_tp_reset(){
     cycle_tp->target_stage = PROGRAM_END;
     cycle_tp->exec_cmd = DO_NULL_CMD;
     cycle_tp->plan_block->type = UNKNOWN;
-    cycle_tp->ncu_cycle = (double)par_ncu[PAR_NCU_CYCLE].value.val_uint / TIME_US_2_S;
-    cycle_tp->velplan_mode = par_chan[0][PAR_CH_VPLAN_MODE].value.val_int;
-    cycle_tp->max_rapid_vel = MIN3(MIN(par_axis[0][PAR_AX_JOG_LOWSPD].value.val_real, par_axis[0][PAR_AX_RAPID_SPD].value.val_real), MIN(par_axis[1][PAR_AX_JOG_LOWSPD].value.val_real, par_axis[1][PAR_AX_RAPID_SPD].value.val_real), MIN(par_axis[2][PAR_AX_JOG_LOWSPD].value.val_real, par_axis[2][PAR_AX_RAPID_SPD].value.val_real));
-    cycle_tp->max_rapid_acc = MIN3(par_axis[0][PAR_AX_RAPID_ACC].value.val_real, par_axis[1][PAR_AX_RAPID_ACC].value.val_real, par_axis[2][PAR_AX_RAPID_ACC].value.val_real);
-    cycle_tp->max_rapid_jerk = MIN3(par_axis[0][PAR_AX_RAPID_JK].value.val_real, par_axis[1][PAR_AX_RAPID_JK].value.val_real, par_axis[2][PAR_AX_RAPID_JK].value.val_real);
-    cycle_tp->max_feed_vel = MIN3(par_axis[0][PAR_AX_FEED_SPD].value.val_real, par_axis[1][PAR_AX_FEED_SPD].value.val_real, par_axis[2][PAR_AX_FEED_SPD].value.val_real);
-    cycle_tp->max_feed_acc = MIN3(par_axis[0][PAR_AX_FEED_ACC].value.val_real, par_axis[1][PAR_AX_FEED_ACC].value.val_real, par_axis[2][PAR_AX_FEED_ACC].value.val_real);
-    cycle_tp->max_feed_jerk = MIN3(par_axis[0][PAR_AX_FEED_JK].value.val_real, par_axis[1][PAR_AX_FEED_JK].value.val_real, par_axis[2][PAR_AX_FEED_JK].value.val_real);
+    cycle_tp->ncu_cycle = rt_data->ncu_data.cycle;
+    cycle_tp->velplan_mode = rt_data->chan_data->vplan_mode;
+    cycle_tp->max_rapid_vel = MIN3(MIN(rt_data->axis_data[0].max_rapid_vel, rt_data->axis_data[0].jog_lowspd), MIN(rt_data->axis_data[1].max_rapid_vel, rt_data->axis_data[1].jog_lowspd), MIN(rt_data->axis_data[2].max_rapid_vel, rt_data->axis_data[2].jog_lowspd));
+    cycle_tp->max_rapid_acc = MIN3(rt_data->axis_data[0].max_rapid_acc, rt_data->axis_data[1].max_rapid_acc, rt_data->axis_data[2].max_rapid_acc);
+    cycle_tp->max_rapid_jerk = MIN3(rt_data->axis_data[0].max_rapid_jk, rt_data->axis_data[1].max_rapid_jk, rt_data->axis_data[2].max_rapid_jk);
+    cycle_tp->max_feed_vel = MIN3(rt_data->axis_data[0].max_feed_vel, rt_data->axis_data[1].max_feed_vel, rt_data->axis_data[2].max_feed_vel);
+    cycle_tp->max_feed_acc = MIN3(rt_data->axis_data[0].max_feed_acc, rt_data->axis_data[1].max_feed_acc, rt_data->axis_data[2].max_feed_acc);
+    cycle_tp->max_feed_jerk = MIN3(rt_data->axis_data[0].max_feed_jk, rt_data->axis_data[1].max_feed_jk, rt_data->axis_data[2].max_feed_jk);
     cycle_tp_reset_pos_cmd_data();
     cycle_tp_reset_dwell_cmd_data();
     cycle_tp_mstb_cmd_data_reset();

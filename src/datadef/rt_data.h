@@ -65,48 +65,88 @@ typedef struct
     bool is_disable; // 轴是否被屏蔽
 } AxisStatus;
 
-// 目前仅轨迹线程使用
-typedef struct 
-{
-    double act_vel;
-    double act_acc;
-    double act_jk;
-    double cmd_vel;
-    double cmd_acc;
-    double cmd_jk;
-    int enc_cntr;                  // 电机位置
-    double wcs_cmd_pos_cur;        // 工件插补计算位置
-    double wcs_cmd_pos_pre;        // 工件插补计算位置(上一插补)
-    double mac_cmd_pos;            // 机床指令位置
-    double mac_act_pos;            // 机床实际位置 = fb_pos_no_comp
-    double motor_cmd_pos;          // 驱动器指令位置（带补偿）
-    double motor_act_pos;          // 驱动器反馈位置（带补偿）
-    double fb_pos_no_comp;         // 反馈位置（去除补偿）
-    double pitch_comp_val;         // 当前位置螺距误差补偿值 (单位:mm)
-    double backlash_comp_val;      // 当前位置反向间隙补偿值 (单位:mm)
-    double straightness1_comp_val; // 当前位置第一组直线度误差补偿值 (单位:mm)
-    double straightness2_comp_val; // 当前位置第二组直线度误差补偿值 (单位:mm)
-    double total_comp_cal;         // 当前位置总误差补偿值 (单位:mm)
-    AxisStatus axis_status;
-} RT_AXIS;
+typedef struct{
+    double cycle;       // 插补周期
+} RT_NCU;
 
 // 目前仅轨迹线程使用
 typedef struct
 {
-    double act_vel;
-    double act_acc;
-    double act_jk;
-    double cmd_vel;
-    double cmd_acc;
-    double cmd_jk;
+    double act_vel;         // 通道实际合成速度 
+    double act_acc;         // 通道实际合成加速度 
+    double act_jk;          // 通道实际合成加加速度 
+    double cmd_vel;         // 通道指令合成速度 
+    double cmd_acc;         // 通道指令合成加速度 
+    double cmd_jk;          // 通道指令合成加加速度
+    double dryrun_spd;      // 空运行速度
+    double max_tang_acc;    // 最大向心加速度
+    int vplan_mode;         // 速度规划模式
+    int lookahead_num;      // 速度规划前瞻段数
+    double path_tolerance;  // 轨迹轮廓允差
 } RT_CHAN;
+
+// 目前仅轨迹线程使用
+typedef struct 
+{
+    // 复位生效
+    double max_feed_vel;                // 轴最大进给速度
+    double max_feed_acc;                // 轴最大加速度
+    double max_feed_jk;                 // 轴最大加加速度
+    double max_rapid_vel;               // 轴最大快速速度
+    double max_rapid_acc;               // 轴最大快速加速度
+    double max_rapid_jk;                // 轴最大快速加加速度
+    double jog_fastspd;                 // 轴快速点动速度
+    double jog_lowspd;                  // 轴慢速点动速度
+    double mpg_spd;                     // 手摇进给速度  
+    double corner_vel_diff;             // 拐角的容许速度差
+    double corner_acc_diff;             // 拐角的容许加速度差        
+    double max_static_ferror;           // 轴静态最大跟随误差
+    double max_dynamic_ferror;          // 轴动态最大跟随误差
+    double pos_tol;                     // 轴定位允差
+    unsigned int home_way;              // 回参考点方式
+    double ref_range;                   // 轴回零参考点范围偏差
+    double home_crds;                   // 参考点坐标值  
+    double plmt;                        // 正软极限
+    double nlmt;                        // 负软极限
+    double plmt2;                       // 第二级正软极限
+    double nlmt2;                       // 第二级负软极限
+    // 重启生效
+    int pm_munit;                       // 电子齿轮比分子
+    int pm_pulse;                       // 电子齿轮比分母
+    double enc_off;                     // 编码器反馈偏置量
+    // 内部
+    double act_vel;                     // 轴实际速度
+    double act_acc;                     // 轴实际加速度
+    double act_jk;                      // 轴实际加加速度
+    double cmd_vel;                     // 轴指令速度
+    double cmd_acc;                     // 轴指令加速度
+    double cmd_jk;                      // 轴指令加加速度
+    int enc_cntr;                       // 电机位置
+    double wcs_cmd_pos_cur;             // 工件插补计算位置
+    double wcs_cmd_pos_pre;             // 工件插补计算位置(上一插补)
+    double mac_cmd_pos;                 // 机床指令位置
+    double mac_act_pos;                 // 机床实际位置 = fb_pos_no_comp
+    double motor_cmd_pos;               // 驱动器指令位置（带补偿）
+    double motor_act_pos;               // 驱动器反馈位置（带补偿）
+    double fb_pos_no_comp;              // 反馈位置（去除补偿）
+    double pitch_comp_val;              // 当前位置螺距误差补偿值 (单位:mm)
+    double backlash_comp_val;           // 当前位置反向间隙补偿值 (单位:mm)
+    double straightness1_comp_val;      // 当前位置第一组直线度误差补偿值 (单位:mm)
+    double straightness2_comp_val;      // 当前位置第二组直线度误差补偿值 (单位:mm)
+    double total_comp_cal;              // 当前位置总误差补偿值 (单位:mm)
+    AxisStatus axis_status;
+} RT_AXIS;
+
+typedef struct{
+    // 补偿参数
+} RT_COMP;
 
 typedef enum
 {
-    ESTOP_RESET = 0, // 1.紧急停止信号ESP
-    OUTSIDE_RESET,   // 2.外部复位信号ERS
-    BACKWARD_RESET,  // 3.复位&倒带信号RRW
-    HMI_RESET,       // 4.按下MDI的RESET键
+    ESTOP_RESET = 0,    // 1.紧急停止信号ESP
+    OUTSIDE_RESET,      // 2.外部复位信号ERS
+    BACKWARD_RESET,     // 3.复位&倒带信号RRW
+    HMI_RESET,          // 4.按下MDI的RESET键
 } RESET_TRIGGER;
 
 typedef struct
@@ -128,16 +168,20 @@ typedef struct
 
 typedef struct
 {
+    // 内部
     SYS_EVENT nc_event;
     SYS_RESET nc_reset;
     NC_MODE target_mode;
     NC_MODE current_mode;
     bool sys_state[SYS_STATE_NUM];
     bool chan_state[SYS_CHAN_NUM][CHAN_STATE_NUM];
-    RT_AXIS axis_data[SYS_AXES_NUM];
-    RT_CHAN chan_data[SYS_CHAN_NUM];
-    pthread_mutex_t mutex;
     PARSER_ERROR_DATA parser_error;
+    pthread_mutex_t mutex;
+    // 参数
+    RT_NCU ncu_data;
+    RT_CHAN chan_data[SYS_CHAN_NUM];
+    RT_AXIS axis_data[SYS_AXES_NUM];
+    RT_COMP comp_data[SYS_AXES_NUM];
 } RT_DATA;
 
 GNC_RES rt_data_init(void);
@@ -151,6 +195,9 @@ void rt_set_chan_state(int chan_index, ChanStateIndex state, bool value);
 bool rt_get_chan_state(int chan_index, ChanStateIndex state);
 void nc_set_resetting(RESET_TRIGGER reset_trigger);
 void nc_set_resetted();
+void rt_upate_reset_valid_data();
+void rt_update_reboot_valid_data();
+void auto_set_zero_vel_params();
 
 #ifdef __cplusplus
 }
