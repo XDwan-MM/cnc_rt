@@ -409,7 +409,7 @@ static void compute_error_comp()
                                                rt_data->axis_data[i].total_comp_cal;
     }
     // 螺补
-    // printf("pitch_comp_val%f\n",rt_data->axis_data[AXIS_X].pitch_comp_val);
+    // printf("mac_cmd_pos%f pitch_comp_val%f motor_cmd_pos%f\n", rt_data->axis_data[AXIS_X].mac_cmd_pos, rt_data->axis_data[AXIS_X].pitch_comp_val, rt_data->axis_data[AXIS_X].motor_cmd_pos);
     // printf("mac_cmd_pos_x %f motor_act_pos %f driver_actual_pos %d total_comp_cal %f chazhi %f motor_cmd_pos %f\n",
     //        rt_data->axis_data[AXIS_X].mac_cmd_pos,
     //        rt_data->axis_data[AXIS_X].motor_act_pos,
@@ -518,8 +518,6 @@ static void rebuild_axis_positions_from_feedback()
     // motor_act_pos 是带补偿反馈；wcs_cmd_pos_*、mac_cmd_pos 和 fb_pos_no_comp 是未补偿机床坐标。
     for (int i = 0; i < SYS_AXES_NUM; i++)
     {
-
-        // 暂时这样做，后续等待断电保持
         rt_data->axis_data[i].motor_cmd_pos = rt_data->axis_data[i].motor_act_pos;
         double uncompensated_pos;
         uncompensated_pos = rt_data->axis_data[i].motor_act_pos - rt_data->axis_data[i].total_comp_cal;
@@ -528,21 +526,23 @@ static void rebuild_axis_positions_from_feedback()
         rt_data->axis_data[i].wcs_cmd_pos_pre = uncompensated_pos;
         rt_data->axis_data[i].fb_pos_no_comp = uncompensated_pos;
     }
-    // 暂时这样做，后续等待断电保持
-    // 　补偿状态机
+
     for (int axis = 0; axis < 3; axis++)
     {
-        // 螺距补偿
-        // pitch_comp_seqlist_init(&pitch_comp_table[axis]);
-        // pitch_comp_init(&pitch_comp_state[axis], 0.001);
-        pitch_comp_state[axis].last_pos_cmd = rt_data->axis_data[axis].mac_cmd_pos;
-        // 反向间隙
-        // backlash_comp_init(&backlash_comp_state[axis]);
-        backlash_comp_state[axis].last_pos_cmd = rt_data->axis_data[axis].mac_cmd_pos;
-        // 直线度补偿
-        // straightness_comp_seqlist_init(&straightness1_comp_table[axis]);
-        // straightness_comp_seqlist_init(&straightness2_comp_table[axis]);
-        // straightness_comp_init(&straightness1_comp_state[axis], 0.001);
-        // straightness_comp_init(&straightness2_comp_state[axis], 0.001);
+        double mac_cmd_pos = rt_data->axis_data[axis].mac_cmd_pos;
+
+        pitch_comp_state[axis].last_pos_cmd = mac_cmd_pos;
+        pitch_comp_state[axis].pos_initialized = true;
+        backlash_comp_state[axis].last_pos_cmd = mac_cmd_pos;
+        backlash_comp_state[axis].pos_initialized = true;
+
+        for (int snapshot_axis = 0; snapshot_axis < 3; snapshot_axis++)
+        {
+            double snapshot_pos = rt_data->axis_data[snapshot_axis].mac_cmd_pos;
+            straightness1_comp_state[axis].last_axis_pos[snapshot_axis] = snapshot_pos;
+            straightness2_comp_state[axis].last_axis_pos[snapshot_axis] = snapshot_pos;
+        }
+        straightness1_comp_state[axis].pos_initialized = true;
+        straightness2_comp_state[axis].pos_initialized = true;
     }
 }

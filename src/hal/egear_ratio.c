@@ -2,7 +2,7 @@
 #include <stddef.h>
 
 // 将机械坐标位置转换为驱动器目标脉冲数。
-int32_t position_to_pulses(const RT_AXIS* rt_axis, double target_pos_mm)
+int32_t position_to_pulses(const RT_AXIS *rt_axis, double target_pos_mm)
 {
     // 验证参数有效性
     if (rt_axis == NULL || rt_axis->pm_munit == 0)
@@ -11,8 +11,7 @@ int32_t position_to_pulses(const RT_AXIS* rt_axis, double target_pos_mm)
     }
 
     // 预计算pulse_per_mm，提高运行效率
-    const double pulse_per_mm = (double)rt_axis->pm_pulse /
-                                ((double)rt_axis->pm_munit);
+    const double pulse_per_mm = (double)rt_axis->pm_pulse / ((double)rt_axis->pm_munit);
 
     // 编码器反馈偏置量
     double enc_fb_offset = rt_axis->enc_off; // 编码器反馈偏置[unit: mm]
@@ -35,7 +34,7 @@ int32_t position_to_pulses(const RT_AXIS* rt_axis, double target_pos_mm)
 }
 
 // 将驱动器反馈脉冲数转换为机械坐标位置。
-double pulses_to_position(const RT_AXIS* rt_axis, int32_t feedback_pulses)
+double pulses_to_position(const RT_AXIS *rt_axis, int32_t feedback_pulses)
 {
     // 验证参数有效性
     if (rt_axis == NULL || rt_axis->pm_pulse == 0)
@@ -44,8 +43,7 @@ double pulses_to_position(const RT_AXIS* rt_axis, int32_t feedback_pulses)
     }
 
     // 预计算每脉冲位移量（mm/pulse），提高运行效率
-    const double mm_per_pulse = ((double)rt_axis->pm_munit) /
-                                (double)rt_axis->pm_pulse;
+    const double mm_per_pulse = ((double)rt_axis->pm_munit) / (double)rt_axis->pm_pulse;
 
     // 电机端绝对物理位移
     double motor_pos_mm = ((double)feedback_pulses) * mm_per_pulse;
@@ -58,7 +56,7 @@ double pulses_to_position(const RT_AXIS* rt_axis, int32_t feedback_pulses)
 }
 
 // 计算编码器反馈偏置量
-double calcul_enc_off(const RT_AXIS* rt_axis, int32_t raw_encoder_pulses, double target_pos_mm)
+double calcul_enc_off(const RT_AXIS *rt_axis, int32_t raw_encoder_pulses, double target_pos_mm)
 {
     if (rt_axis == NULL || rt_axis->pm_pulse == 0)
     {
@@ -66,8 +64,7 @@ double calcul_enc_off(const RT_AXIS* rt_axis, int32_t raw_encoder_pulses, double
     }
 
     // 预计算每脉冲位移量（mm/pulse），提高运行效率
-    const double mm_per_pulse = ((double)rt_axis->pm_munit) /
-                                (double)rt_axis->pm_pulse;
+    const double mm_per_pulse = ((double)rt_axis->pm_munit) / (double)rt_axis->pm_pulse;
 
     // 计算当前编码器原始脉冲对应的电机未补偿物理位置 (mm)
     double current_raw_pos_mm = (double)raw_encoder_pulses * mm_per_pulse;

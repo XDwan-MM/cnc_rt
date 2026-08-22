@@ -88,6 +88,10 @@ int main() {
     // 同步补偿参数(同步补偿参数和建立螺距补偿表)
     comp_data_init();
     RT_LOG(INFO, "同步补偿参数和建立螺补表成功");
+    if (comp_data_load_saved_compensation() != 0) {
+        RT_LOG(WARN, "读取断电保存误差补偿值失败，使用当前实时补偿初始值");
+        LOG(LOG_LEVEL_WARN, "读取断电保存误差补偿值失败，使用当前实时补偿初始值");
+    }
     // 初始化译码器
     parser_new();
     RT_LOG(INFO, "初始化译码器成功");
@@ -143,10 +147,6 @@ int main() {
     #endif
     RT_LOG(INFO, "获取到实时关闭信号");
     LOG(LOG_LEVEL_INFO, "获取到实时关闭信号");
-    // 发送实时关闭完成信号
-    setSysCommInt(SYS_CLOSE_RT_FINISH, 1, 0);
-    RT_LOG(INFO, "发送实时关闭完成信号");
-    LOG(LOG_LEVEL_INFO, "发送实时关闭完成信号");
     thread_exit_flag = 1;
     RT_LOG(INFO, "关闭线程");
     LOG(LOG_LEVEL_INFO, "关闭线程");
@@ -156,6 +156,10 @@ int main() {
     }
     // 释放线程
     threads_joint();
+    if (comp_data_save_current_compensation() != 0) {
+        RT_LOG(WARN, "写入断电保存误差补偿值失败");
+        LOG(LOG_LEVEL_WARN, "写入断电保存误差补偿值失败");
+    }
     destroy_rt_sem();
     #ifndef DEBUG_MODE_ENABLED
     // 关闭主轴
@@ -167,6 +171,10 @@ int main() {
     rt_global_delete();
     RT_LOG(INFO, "释放全局变量");
     LOG(LOG_LEVEL_INFO, "释放全局变量");
+    // 发送实时关闭完成信号，确保误差补偿值已写回共享内存
+    setSysCommInt(SYS_CLOSE_RT_FINISH, 1, 0);
+    RT_LOG(INFO, "发送实时关闭完成信号");
+    LOG(LOG_LEVEL_INFO, "发送实时关闭完成信号");
     RT_LOG(INFO,  "退出实时程序");
     LOG(LOG_LEVEL_INFO, "退出实时程序");
     RT_LOG(INFO, "********************************************************");
@@ -174,4 +182,3 @@ int main() {
     RT_LOG_CLOSE();
     return 0;
 }
-

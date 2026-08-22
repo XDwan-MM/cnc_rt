@@ -35,6 +35,10 @@ extern OP_RES straightness2_comp_table_status[3]; // 第二组直线度补偿表
 // 外部接口声明
 extern void comp_data_init(void);
 
+extern int comp_data_load_saved_compensation(void);
+
+extern int comp_data_save_current_compensation(void);
+
 extern void sync_comp_params(void);
 
 extern void establish_pitch_comp_table(void);

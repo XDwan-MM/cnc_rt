@@ -1,5 +1,6 @@
 #include "comp_data.h"
 #include "global.h"
+#include <errorcompensationapi.h>
 #include <hmisysapi.h>
 
 typedef enum
@@ -41,6 +42,7 @@ static const char *comp_table_result_reason(OP_RES status);
 static void establish_straightness_comp_group(int axis, StraightnessTableGroup group);
 static int getStraightnessData(int start, int point_cnt, int *fwd_comp_arr_um, int *rev_comp_arr_um);
 static void notify_comp_params_synced(void);
+static void restore_compensation_state(int axis, const AxisErrorCompSavedData *saved_data);
 
 /* ========================================================================== */
 /* 外部函数定义                                                               */
@@ -108,6 +110,82 @@ void comp_data_init(void)
     sync_comp_params();
     establish_pitch_comp_table();
     establish_straightness_comp_table();
+}
+
+int comp_data_load_saved_compensation(void)
+{
+    ErrorCompData saved_data = {0};
+    int result;
+
+    if (rt_data == NULL)
+    {
+        LOG(LOG_LEVEL_ERR, "读取断电保存误差补偿值失败：实时数据未初始化");
+        return -1;
+    }
+
+    result = getErrorCompData(&saved_data);
+    if (result != 0)
+    {
+        LOG(LOG_LEVEL_ERR, "读取断电保存误差补偿值失败，错误码=%d", result);
+        return result;
+    }
+
+    for (int axis = 0; axis < SYS_AXES_NUM; axis++)
+    {
+        AxisErrorCompSavedData *saved_axis;
+        RT_AXIS *runtime_axis;
+
+        saved_axis = &saved_data.axisErrorCompSavedData[axis];
+        runtime_axis = &rt_data->axis_data[axis];
+        runtime_axis->pitch_comp_val = saved_axis->pitch_comp_val;
+        runtime_axis->backlash_comp_val = saved_axis->backlash_comp_val;
+        runtime_axis->straightness1_comp_val = saved_axis->straightness1_comp_val;
+        runtime_axis->straightness2_comp_val = saved_axis->straightness2_comp_val;
+        runtime_axis->total_comp_cal = runtime_axis->pitch_comp_val + runtime_axis->backlash_comp_val +
+                                       runtime_axis->straightness1_comp_val + runtime_axis->straightness2_comp_val;
+    }
+
+    for (int axis = 0; axis < 3 && axis < SYS_AXES_NUM; axis++)
+        restore_compensation_state(axis, &saved_data.axisErrorCompSavedData[axis]);
+
+    return 0;
+}
+
+int comp_data_save_current_compensation(void)
+{
+    ErrorCompData saved_data = {0};
+    int result;
+
+    if (rt_data == NULL)
+    {
+        LOG(LOG_LEVEL_ERR, "写入断电保存误差补偿值失败：实时数据未初始化");
+        return -1;
+    }
+
+    result = getErrorCompData(&saved_data);
+    if (result != 0)
+    {
+        LOG(LOG_LEVEL_ERR, "读取待更新的断电保存误差补偿值失败，错误码=%d", result);
+        return result;
+    }
+
+    for (int axis = 0; axis < SYS_AXES_NUM; axis++)
+    {
+        AxisErrorCompSavedData *saved_axis;
+        RT_AXIS *runtime_axis;
+
+        saved_axis = &saved_data.axisErrorCompSavedData[axis];
+        runtime_axis = &rt_data->axis_data[axis];
+        saved_axis->pitch_comp_val = runtime_axis->pitch_comp_val;
+        saved_axis->backlash_comp_val = runtime_axis->backlash_comp_val;
+        saved_axis->straightness1_comp_val = runtime_axis->straightness1_comp_val;
+        saved_axis->straightness2_comp_val = runtime_axis->straightness2_comp_val;
+    }
+
+    result = setErrorCompData(&saved_data);
+    if (result != 0)
+        LOG(LOG_LEVEL_ERR, "写入断电保存误差补偿值失败，错误码=%d", result);
+    return result;
 }
 
 // 从共享内存读取螺距误差补偿数据, 并建立各轴螺距误差补偿表
@@ -402,6 +480,29 @@ static void notify_comp_params_synced(void)
         straightness_comp_on_params_synced(&straightness1_comp_state[axis]);
         straightness_comp_on_params_synced(&straightness2_comp_state[axis]);
     }
+}
+
+static void restore_compensation_state(int axis, const AxisErrorCompSavedData *saved_data)
+{
+    pitch_comp_state[axis].current_output = saved_data->pitch_comp_val;
+    pitch_comp_state[axis].last_dir_sign = 0.0;
+    pitch_comp_state[axis].pos_initialized = false;
+    pitch_comp_state[axis].phase = COMP_PHASE_LOCKED;
+
+    backlash_comp_state[axis].current_output = saved_data->backlash_comp_val;
+    backlash_comp_state[axis].last_dir_sign = 0.0;
+    backlash_comp_state[axis].pos_initialized = false;
+    backlash_comp_state[axis].phase = COMP_PHASE_LOCKED;
+
+    straightness1_comp_state[axis].current_output = saved_data->straightness1_comp_val;
+    straightness1_comp_state[axis].last_dir_sign = 0.0;
+    straightness1_comp_state[axis].pos_initialized = false;
+    straightness1_comp_state[axis].phase = COMP_PHASE_LOCKED;
+
+    straightness2_comp_state[axis].current_output = saved_data->straightness2_comp_val;
+    straightness2_comp_state[axis].last_dir_sign = 0.0;
+    straightness2_comp_state[axis].pos_initialized = false;
+    straightness2_comp_state[axis].phase = COMP_PHASE_LOCKED;
 }
 
 // todo: 待删除
