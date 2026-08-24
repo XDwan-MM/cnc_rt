@@ -35,6 +35,11 @@ extern OP_RES straightness2_comp_table_status[3]; // 第二组直线度补偿表
 // 外部接口声明
 extern void comp_data_init(void);
 
+/**
+ * @brief 加载共享内存误差补偿计算数据块中的断电保存数据
+ * 
+ * @return int 
+ */
 extern int comp_data_load_saved_compensation(void);
 
 extern int comp_data_save_current_compensation(void);

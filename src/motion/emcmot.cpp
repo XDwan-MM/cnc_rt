@@ -48,8 +48,9 @@ void emcmot_test_rebuild_axis_positions_from_feedback()
 }
 #endif
 
-static int32_t x_cmd_Pulses, y_cmd_Pulses, z_cmd_Pulses;
-static int32_t x_target_pos, y_target_pos, z_target_pos;
+// 绝对式电机编码器位置(指令，反馈)
+static int32_t x_cmd_pulse_pos, y_cmd_pulse_pos, z_cmd_pulse_pos;
+static int32_t x_act_pulse_pos, y_act_pulse_pos, z_act_pulse_pos;
 const char *mode_names[] = {"编辑", "AUTO", "MDI", "DNC", "手轮", "手动", "回零", "空闲"};
 
 // 轨迹规划
@@ -277,8 +278,8 @@ static void check_for_fault()
     getAlarmCount(ALARM_HM, ALARM_ERROR, &alarm_count7);
     getAlarmCount(ALARM_ETHCAT_SV, ALARM_ERROR, &alarm_count8);
 
-    int alarm_count = alarm_count0 + alarm_count1 + alarm_count2 + alarm_count3 + alarm_count4 + alarm_count5 +
-                      alarm_count6 + alarm_count7 + alarm_count8;
+    int alarm_count = alarm_count0 + alarm_count1 + alarm_count2 + alarm_count3 + alarm_count4 + alarm_count5 + alarm_count6 +
+                      alarm_count7 + alarm_count8;
 
     if (alarm_count > 0 || rt_data->sys_state[SYS_IS_ESTOP_ACTIVE])
     {
@@ -295,29 +296,31 @@ static void check_for_fault()
     }
 }
 
-static void read_from_hal() {
-    // 读取实际位置
-    #ifdef DEBUG_MODE_ENABLED
+static void read_from_hal()
+{
+// 读取实际位置
+#ifdef DEBUG_MODE_ENABLED
     rt_data->axis_data[AXIS_X].motor_act_pos = rt_data->axis_data[AXIS_X].motor_cmd_pos;
     rt_data->axis_data[AXIS_Y].motor_act_pos = rt_data->axis_data[AXIS_Y].motor_cmd_pos;
     rt_data->axis_data[AXIS_Z].motor_act_pos = rt_data->axis_data[AXIS_Z].motor_cmd_pos;
-    #else
-    Hal_Driver_Get_Actual_Pos(&x_axis_driver, &x_target_pos);
-    rt_data->axis_data[AXIS_X].motor_act_pos = pulses_to_position(&rt_data->axis_data[AXIS_X], x_target_pos);
-    Hal_Driver_Get_Actual_Pos(&y_axis_driver, &y_target_pos);
-    rt_data->axis_data[AXIS_Y].motor_act_pos = pulses_to_position(&rt_data->axis_data[AXIS_Y], y_target_pos);
-    Hal_Driver_Get_Actual_Pos(&z_axis_driver, &z_target_pos);
-    rt_data->axis_data[AXIS_Z].motor_act_pos = pulses_to_position(&rt_data->axis_data[AXIS_Z], z_target_pos);
-    #endif
+#else
+    Hal_Driver_Get_Actual_Pos(&x_axis_driver, &x_act_pulse_pos);
+    rt_data->axis_data[AXIS_X].motor_act_pos = pulses_to_position(&rt_data->axis_data[AXIS_X], x_act_pulse_pos);
+    Hal_Driver_Get_Actual_Pos(&y_axis_driver, &y_act_pulse_pos);
+    rt_data->axis_data[AXIS_Y].motor_act_pos = pulses_to_position(&rt_data->axis_data[AXIS_Y], y_act_pulse_pos);
+    Hal_Driver_Get_Actual_Pos(&z_axis_driver, &z_act_pulse_pos);
+    rt_data->axis_data[AXIS_Z].motor_act_pos = pulses_to_position(&rt_data->axis_data[AXIS_Z], z_act_pulse_pos);
+#endif
     // 电机脉冲
-    rt_data->axis_data[AXIS_X].enc_cntr = x_target_pos;
-    rt_data->axis_data[AXIS_Y].enc_cntr = y_target_pos;
-    rt_data->axis_data[AXIS_Z].enc_cntr = z_target_pos;
+    rt_data->axis_data[AXIS_X].enc_cntr = x_act_pulse_pos;
+    rt_data->axis_data[AXIS_Y].enc_cntr = y_act_pulse_pos;
+    rt_data->axis_data[AXIS_Z].enc_cntr = z_act_pulse_pos;
     // 读取实际速度
     rt_data->axis_data[AXIS_X].act_vel = x_axis_driver.actual_vel;
     rt_data->axis_data[AXIS_Y].act_vel = y_axis_driver.actual_vel;
     rt_data->axis_data[AXIS_Z].act_vel = z_axis_driver.actual_vel;
-    rt_data->chan_data[0].act_vel = sqrt(pow(x_axis_driver.actual_vel, 2) + pow(y_axis_driver.actual_vel, 2) + pow(z_axis_driver.actual_vel, 2));
+    rt_data->chan_data[0].act_vel = sqrt(pow(x_axis_driver.actual_vel, 2) + pow(y_axis_driver.actual_vel, 2) +
+                                         pow(z_axis_driver.actual_vel, 2));
 
     if (!update_pos_flag)
     {
@@ -330,12 +333,12 @@ static void read_from_hal() {
 static void output_to_hal()
 {
     // 发送给驱动器
-    x_cmd_Pulses = position_to_pulses(&rt_data->axis_data[AXIS_X], rt_data->axis_data[AXIS_X].motor_cmd_pos);
-    Hal_Driver_Set_Target_Pos(&x_axis_driver, x_cmd_Pulses);
-    y_cmd_Pulses = position_to_pulses(&rt_data->axis_data[AXIS_Y], rt_data->axis_data[AXIS_Y].motor_cmd_pos);
-    Hal_Driver_Set_Target_Pos(&y_axis_driver, y_cmd_Pulses);
-    z_cmd_Pulses = position_to_pulses(&rt_data->axis_data[AXIS_Z], rt_data->axis_data[AXIS_Z].motor_cmd_pos);
-    Hal_Driver_Set_Target_Pos(&z_axis_driver, z_cmd_Pulses);
+    x_cmd_pulse_pos = position_to_pulses(&rt_data->axis_data[AXIS_X], rt_data->axis_data[AXIS_X].motor_cmd_pos);
+    Hal_Driver_Set_Target_Pos(&x_axis_driver, x_cmd_pulse_pos);
+    y_cmd_pulse_pos = position_to_pulses(&rt_data->axis_data[AXIS_Y], rt_data->axis_data[AXIS_Y].motor_cmd_pos);
+    Hal_Driver_Set_Target_Pos(&y_axis_driver, y_cmd_pulse_pos);
+    z_cmd_pulse_pos = position_to_pulses(&rt_data->axis_data[AXIS_Z], rt_data->axis_data[AXIS_Z].motor_cmd_pos);
+    Hal_Driver_Set_Target_Pos(&z_axis_driver, z_cmd_pulse_pos);
 }
 
 static void compute_error_comp()
@@ -365,15 +368,9 @@ static void compute_error_comp()
     {
         double mac_cmd_pos = rt_data->axis_data[i].mac_cmd_pos;
         // 螺距误差补偿值计算(计算出来的补偿值 单位为:mm)
-        pitch_comp_val[i] = calcul_pitch_comp_val(&pitch_comp_state[i],
-                                                  &par_comp_lib[i],
-                                                  &pitch_comp_table[i],
-                                                  mac_cmd_pos);
+        pitch_comp_val[i] = calcul_pitch_comp_val(&pitch_comp_state[i], &par_comp_lib[i], &pitch_comp_table[i], mac_cmd_pos);
         // 反向间隙补偿值计算(计算出来的补偿值 单位为:mm)
-        backlash_comp_val[i] = calcul_backlash_comp_val(&par_comp_lib[i],
-                                                        &backlash_comp_state[i],
-                                                        mac_cmd_pos,
-                                                        is_rapid);
+        backlash_comp_val[i] = calcul_backlash_comp_val(&par_comp_lib[i], &backlash_comp_state[i], mac_cmd_pos, is_rapid);
         // 第一组直线度误差补偿值计算
         straightness1_comp_val[i] = 0.0;
         // straightness1_comp_val[i] = calcul_straightness1_comp_val(&par_comp_lib[i],
@@ -396,8 +393,7 @@ static void compute_error_comp()
         rt_data->axis_data[i].straightness1_comp_val = straightness1_comp_val[i];
         rt_data->axis_data[i].straightness2_comp_val = straightness2_comp_val[i];
 
-        rt_data->axis_data[i].total_comp_cal = rt_data->axis_data[i].pitch_comp_val +
-                                               rt_data->axis_data[i].backlash_comp_val +
+        rt_data->axis_data[i].total_comp_cal = rt_data->axis_data[i].pitch_comp_val + rt_data->axis_data[i].backlash_comp_val +
                                                rt_data->axis_data[i].straightness1_comp_val +
                                                rt_data->axis_data[i].straightness2_comp_val;
 
@@ -405,18 +401,29 @@ static void compute_error_comp()
         rt_data->axis_data[i].motor_cmd_pos = mac_cmd_pos + rt_data->axis_data[i].total_comp_cal;
 
         // 反馈位置（去除补偿）
-        rt_data->axis_data[i].fb_pos_no_comp = rt_data->axis_data[i].motor_act_pos -
-                                               rt_data->axis_data[i].total_comp_cal;
+        rt_data->axis_data[i].fb_pos_no_comp = rt_data->axis_data[i].motor_act_pos - rt_data->axis_data[i].total_comp_cal;
     }
     // 螺补
-    // printf("mac_cmd_pos%f pitch_comp_val%f motor_cmd_pos%f\n", rt_data->axis_data[AXIS_X].mac_cmd_pos, rt_data->axis_data[AXIS_X].pitch_comp_val, rt_data->axis_data[AXIS_X].motor_cmd_pos);
-    // printf("mac_cmd_pos_x %f motor_act_pos %f driver_actual_pos %d total_comp_cal %f chazhi %f motor_cmd_pos %f\n",
+    // printf("mac_cmd_pos%f pitch_comp_val%f motor_cmd_pos%f \n",
     //        rt_data->axis_data[AXIS_X].mac_cmd_pos,
-    //        rt_data->axis_data[AXIS_X].motor_act_pos,
-    //        x_axis_driver.actual_pos,
+    //     //    rt_data->axis_data[AXIS_Y].mac_cmd_pos,
+    //     //    rt_data->axis_data[AXIS_Z].mac_cmd_pos,
+    //        rt_data->axis_data[AXIS_X].pitch_comp_val,
+    //     //    rt_data->axis_data[AXIS_Y].pitch_comp_val,
+    //     //    rt_data->axis_data[AXIS_Z].pitch_comp_val,
+    //        rt_data->axis_data[AXIS_X].motor_cmd_pos
+    //     //    rt_data->axis_data[AXIS_Y].motor_cmd_pos,
+    //     //    rt_data->axis_data[AXIS_Y].motor_cmd_pos,
+    //     );
+
+    // printf("mac_cmd_pos_x%f total_comp_x%f motor_cmd_pos_x%f motor_act_pos_x%f driver_act_pos_x%d\n ",
+    //        rt_data->axis_data[AXIS_X].mac_cmd_pos,
     //        rt_data->axis_data[AXIS_X].total_comp_cal,
-    //        rt_data->axis_data[AXIS_X].motor_act_pos - rt_data->axis_data[AXIS_X].mac_cmd_pos,
-    //        rt_data->axis_data[AXIS_X].motor_cmd_pos);
+    //        rt_data->axis_data[AXIS_X].motor_cmd_pos,
+    //        rt_data->axis_data[AXIS_X].motor_act_pos,
+    //        x_axis_driver.actual_pos);
+    // // 编码器
+    // printf("x_axis_driver.actual_pos %d\n", x_axis_driver.actual_pos);
 #ifdef ENABLE_COMP_DATA_LOG
     {
         static FILE *comp_log_file = NULL;
@@ -429,11 +436,7 @@ static void compute_error_comp()
 
         if (comp_log_file != NULL)
         {
-            fprintf(comp_log_file,
-                    "%d,%.10f,%.10f\n",
-                    comp_log_cycle,
-                    rt_data->axis_data[0].mac_cmd_pos,
-                    pitch_comp_val[0]);
+            fprintf(comp_log_file, "%d,%.10f,%.10f\n", comp_log_cycle, rt_data->axis_data[0].mac_cmd_pos, pitch_comp_val[0]);
             fflush(comp_log_file);
             comp_log_cycle++;
         }
@@ -448,8 +451,7 @@ static void calcul_mac_cmd_pos()
         // 机床锁住或者轴拆卸，不下发位置
         if (!rt_data->sys_state[SYS_IS_MAC_LOCK_READY] && !rt_data->axis_data[i].axis_status.is_disable)
         {
-            rt_data->axis_data[i].mac_cmd_pos += (rt_data->axis_data[i].wcs_cmd_pos_cur -
-                                                  rt_data->axis_data[i].wcs_cmd_pos_pre);
+            rt_data->axis_data[i].mac_cmd_pos += (rt_data->axis_data[i].wcs_cmd_pos_cur - rt_data->axis_data[i].wcs_cmd_pos_pre);
         }
         // 上一周期插补位置
         rt_data->axis_data[i].wcs_cmd_pos_pre = rt_data->axis_data[i].wcs_cmd_pos_cur;
@@ -520,6 +522,7 @@ static void rebuild_axis_positions_from_feedback()
     {
         rt_data->axis_data[i].motor_cmd_pos = rt_data->axis_data[i].motor_act_pos;
         double uncompensated_pos;
+        // printf("total_comp_cal %f\n", rt_data->axis_data[i].total_comp_cal);
         uncompensated_pos = rt_data->axis_data[i].motor_act_pos - rt_data->axis_data[i].total_comp_cal;
         rt_data->axis_data[i].mac_cmd_pos = uncompensated_pos;
         rt_data->axis_data[i].wcs_cmd_pos_cur = uncompensated_pos;

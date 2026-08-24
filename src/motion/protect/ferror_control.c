@@ -36,8 +36,8 @@ static void check_axis_ferror(ferror_control_t *ferror_ctrl,
 void check_ferror_fault(void)
 {
     /* 报警状态、急停拍下情况、(空闲、编辑状态)时不检查跟随误差，避免上电无运动误报 */
-    if (rt_data->sys_state[SYS_IS_ALARMING] || rt_data->sys_state[SYS_IS_ESTOP_ACTIVE] ||
-        rt_data->current_mode == MODE_IDLE || rt_data->current_mode == MODE_EDIT)
+    if (rt_data->sys_state[SYS_IS_ALARMING] || rt_data->sys_state[SYS_IS_ESTOP_ACTIVE] || rt_data->current_mode == MODE_IDLE ||
+        rt_data->current_mode == MODE_EDIT)
     {
         return;
     }
@@ -54,7 +54,7 @@ void check_ferror_fault(void)
         double pos_cmd = rt_data->axis_data[i].motor_cmd_pos;
         double pos_fb = rt_data->axis_data[i].motor_act_pos;
 
-        check_axis_ferror(&ferror_control[i], par_axis[i], pos_cmd, pos_fb, vel_cmd);
+        check_axis_ferror(&ferror_control[i], &rt_data->axis_data[i], pos_cmd, pos_fb, vel_cmd);
 
         if (ferror_control[i].error_flag)
         {

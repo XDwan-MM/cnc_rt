@@ -112,6 +112,7 @@ void comp_data_init(void)
     establish_straightness_comp_table();
 }
 
+// 加载共享内存误差补偿计算数据块中的断电保存数据
 int comp_data_load_saved_compensation(void)
 {
     ErrorCompData saved_data = {0};
@@ -143,6 +144,7 @@ int comp_data_load_saved_compensation(void)
         runtime_axis->straightness2_comp_val = saved_axis->straightness2_comp_val;
         runtime_axis->total_comp_cal = runtime_axis->pitch_comp_val + runtime_axis->backlash_comp_val +
                                        runtime_axis->straightness1_comp_val + runtime_axis->straightness2_comp_val;
+        // printf("rt_data->axis_data[axis] pitch_comp_val %f\n", rt_data->axis_data[axis].pitch_comp_val);
     }
 
     for (int axis = 0; axis < 3 && axis < SYS_AXES_NUM; axis++)
@@ -151,6 +153,7 @@ int comp_data_load_saved_compensation(void)
     return 0;
 }
 
+// 保存误差补偿计算数据到共享内存对应块
 int comp_data_save_current_compensation(void)
 {
     ErrorCompData saved_data = {0};
