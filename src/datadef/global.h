@@ -25,10 +25,10 @@
 #include <varapi.h>
 #include <parapi.h>
 
-#define IRQ_TIMEOUT 5000        // 周期中断超时时间(ms)（主站通讯周期超时，当超过此超时时间还未收到主站信息时，自动判定错误，结束程序）
-#define TIME_MINUS_2_S 60
-#define TIME_US_2_S 1000000
-#define OVERRIDE_PERCENT 100
+#define IRQ_TIMEOUT (5000)        // 周期中断超时时间(ms)（主站通讯周期超时，当超过此超时时间还未收到主站信息时，自动判定错误，结束程序）
+#define TIME_MINUS_2_S (60.0)
+#define TIME_US_2_S (1000000.0)
+#define OVERRIDE_PERCENT (100.0)
 /**
  * @brief 长度单位转换：微米(um) 转 毫米(mm)
  */

@@ -7,6 +7,14 @@
         "thread": "c",
         "logapi.h": "c",
         "cnc_math.h": "c",
-        "rt_data.h": "c"
+        "rt_data.h": "c",
+        "array": "cpp",
+        "deque": "cpp",
+        "list": "cpp",
+        "string": "cpp",
+        "unordered_map": "cpp",
+        "vector": "cpp",
+        "string_view": "cpp",
+        "initializer_list": "cpp"
     }
 }

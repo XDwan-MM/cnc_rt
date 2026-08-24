@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 #include <cstring>
 #include "comp_data.h"
+#include "errorcompensationapi.h"
 #include "global.h"
 #include "test_env.h"
 
@@ -298,4 +299,114 @@ TEST_F(TestCompData, InitInitializesBothStraightnessGroupsForEveryAxis)
         EXPECT_FALSE(straightness1_comp_state[axis].pos_initialized);
         EXPECT_FALSE(straightness2_comp_state[axis].pos_initialized);
     }
+}
+
+TEST_F(TestCompData, LoadsSavedCompensationIntoRuntimeAxesAndStates)
+{
+    if (!testEnvReady())
+        GTEST_SKIP() << testEnvMessage();
+
+    ErrorCompData original_data = {};
+    ErrorCompData saved_data = {};
+    RT_AXIS original_axes[SYS_AXES_NUM] = {};
+
+    if (getErrorCompData(&original_data) != 0)
+        GTEST_SKIP() << "共享内存误差补偿数据读取失败";
+    std::memcpy(original_axes, rt_data->axis_data, sizeof(original_axes));
+    saved_data = original_data;
+
+    for (int axis = 0; axis < SYS_AXES_NUM; axis++)
+    {
+        saved_data.axisErrorCompSavedData[axis].pitch_comp_val = 0.1 + axis;
+        saved_data.axisErrorCompSavedData[axis].backlash_comp_val = -0.2 - axis;
+        saved_data.axisErrorCompSavedData[axis].straightness1_comp_val = 0.03 + axis;
+        saved_data.axisErrorCompSavedData[axis].straightness2_comp_val = -0.04 - axis;
+    }
+
+    if (setErrorCompData(&saved_data) != 0)
+        GTEST_SKIP() << "共享内存误差补偿数据写入失败";
+
+    EXPECT_EQ(comp_data_load_saved_compensation(), 0);
+    for (int axis = 0; axis < SYS_AXES_NUM; axis++)
+    {
+        const RT_AXIS &runtime_axis = rt_data->axis_data[axis];
+        const AxisErrorCompSavedData &saved_axis = saved_data.axisErrorCompSavedData[axis];
+        EXPECT_DOUBLE_EQ(runtime_axis.pitch_comp_val, saved_axis.pitch_comp_val);
+        EXPECT_DOUBLE_EQ(runtime_axis.backlash_comp_val, saved_axis.backlash_comp_val);
+        EXPECT_DOUBLE_EQ(runtime_axis.straightness1_comp_val, saved_axis.straightness1_comp_val);
+        EXPECT_DOUBLE_EQ(runtime_axis.straightness2_comp_val, saved_axis.straightness2_comp_val);
+        EXPECT_DOUBLE_EQ(runtime_axis.total_comp_cal,
+                         saved_axis.pitch_comp_val + saved_axis.backlash_comp_val +
+                             saved_axis.straightness1_comp_val + saved_axis.straightness2_comp_val);
+    }
+    for (int axis = 0; axis < 3; axis++)
+    {
+        EXPECT_DOUBLE_EQ(pitch_comp_state[axis].current_output,
+                         saved_data.axisErrorCompSavedData[axis].pitch_comp_val);
+        EXPECT_DOUBLE_EQ(backlash_comp_state[axis].current_output,
+                         saved_data.axisErrorCompSavedData[axis].backlash_comp_val);
+        EXPECT_DOUBLE_EQ(straightness1_comp_state[axis].current_output,
+                         saved_data.axisErrorCompSavedData[axis].straightness1_comp_val);
+        EXPECT_DOUBLE_EQ(straightness2_comp_state[axis].current_output,
+                         saved_data.axisErrorCompSavedData[axis].straightness2_comp_val);
+    }
+
+    EXPECT_EQ(setErrorCompData(&original_data), 0);
+    std::memcpy(rt_data->axis_data, original_axes, sizeof(original_axes));
+}
+
+TEST_F(TestCompData, SavesCurrentCompensationAndPreservesUnimplementedFields)
+{
+    if (!testEnvReady())
+        GTEST_SKIP() << testEnvMessage();
+
+    ErrorCompData original_data = {};
+    ErrorCompData saved_data = {};
+    ErrorCompData result_data = {};
+    RT_AXIS original_axes[SYS_AXES_NUM] = {};
+
+    if (getErrorCompData(&original_data) != 0)
+        GTEST_SKIP() << "共享内存误差补偿数据读取失败";
+    std::memcpy(original_axes, rt_data->axis_data, sizeof(original_axes));
+    saved_data = original_data;
+
+    for (int axis = 0; axis < SYS_AXES_NUM; axis++)
+    {
+        saved_data.axisErrorCompSavedData[axis].squareness1_comp_val = 10.0 + axis;
+        saved_data.axisErrorCompSavedData[axis].thermal_comp_val = 20.0 + axis;
+        saved_data.axisErrorCompSavedData[axis].space_geometry_comp_val = 30.0 + axis;
+        saved_data.axisErrorCompSavedData[axis].angular_comp_val = 40.0 + axis;
+        saved_data.axisErrorCompSavedData[axis].quadrant_comp_val = 50.0 + axis;
+        rt_data->axis_data[axis].pitch_comp_val = 0.11 + axis;
+        rt_data->axis_data[axis].backlash_comp_val = -0.12 - axis;
+        rt_data->axis_data[axis].straightness1_comp_val = 0.13 + axis;
+        rt_data->axis_data[axis].straightness2_comp_val = -0.14 - axis;
+    }
+
+    if (setErrorCompData(&saved_data) != 0)
+        GTEST_SKIP() << "共享内存误差补偿数据写入失败";
+
+    EXPECT_EQ(comp_data_save_current_compensation(), 0);
+    EXPECT_EQ(getErrorCompData(&result_data), 0);
+    for (int axis = 0; axis < SYS_AXES_NUM; axis++)
+    {
+        const AxisErrorCompSavedData &result_axis = result_data.axisErrorCompSavedData[axis];
+        EXPECT_DOUBLE_EQ(result_axis.pitch_comp_val, rt_data->axis_data[axis].pitch_comp_val);
+        EXPECT_DOUBLE_EQ(result_axis.backlash_comp_val, rt_data->axis_data[axis].backlash_comp_val);
+        EXPECT_DOUBLE_EQ(result_axis.straightness1_comp_val, rt_data->axis_data[axis].straightness1_comp_val);
+        EXPECT_DOUBLE_EQ(result_axis.straightness2_comp_val, rt_data->axis_data[axis].straightness2_comp_val);
+        EXPECT_DOUBLE_EQ(result_axis.squareness1_comp_val,
+                         saved_data.axisErrorCompSavedData[axis].squareness1_comp_val);
+        EXPECT_DOUBLE_EQ(result_axis.thermal_comp_val,
+                         saved_data.axisErrorCompSavedData[axis].thermal_comp_val);
+        EXPECT_DOUBLE_EQ(result_axis.space_geometry_comp_val,
+                         saved_data.axisErrorCompSavedData[axis].space_geometry_comp_val);
+        EXPECT_DOUBLE_EQ(result_axis.angular_comp_val,
+                         saved_data.axisErrorCompSavedData[axis].angular_comp_val);
+        EXPECT_DOUBLE_EQ(result_axis.quadrant_comp_val,
+                         saved_data.axisErrorCompSavedData[axis].quadrant_comp_val);
+    }
+
+    EXPECT_EQ(setErrorCompData(&original_data), 0);
+    std::memcpy(rt_data->axis_data, original_axes, sizeof(original_axes));
 }
