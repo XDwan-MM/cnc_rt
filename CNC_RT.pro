@@ -96,7 +96,6 @@ debug_mode {
 }
 
 HEADERS += \
-    src/alarm/alarm.h \
     src/common/debug_mode.h \
     src/compensation/comp_data.h \
     src/datadef/datatype.h \
@@ -121,8 +120,13 @@ HEADERS += \
     src/motion/manual/homing.h \
     src/motion/manual/jog/jog.h \
     src/motion/manual/jog/jog_planner.h \
-    src/motion/protect/ferror_control.h \
-    src/motion/protect/stored_stroke_check.h \
+    src/motion/servo_sample/servosamplesampler.h \
+    src/motion/servo_sample/servosampleevents.h \
+    src/motion/rerun/rerun.h \
+    src/protect/alarm.h \
+    src/protect/ferror_control.h \
+    src/protect/stored_stroke_check.h \
+    src/protect/reset.h \
     src/plc/pmc_scanner/pmc_a_input_scanner.h \
     src/plc/pmc_scanner/pmc_g_input_scanner.h \
     src/plc/pmc_scanner/pmc_io_map.h \
@@ -130,8 +134,6 @@ HEADERS += \
     src/plc/pmc_scanner/signal_utils.h \
     src/plc/plc_task/plctask.h \
     src/plc/lad_trace/ladtracesampler.h \
-    src/motion/servo_sample/servosamplesampler.h \
-    src/motion/servo_sample/servosampleevents.h \
     src/task/task.h \
     src/task/hmi_scanner.h \
     src/threads/threads_api.h \
@@ -145,7 +147,6 @@ HEADERS += \
 
 SOURCES += \
     main.cpp \
-    src/alarm/alarm.c \
     src/compensation/comp_data.c \
     src/datadef/datatype.c \
     src/datadef/event_queue.c \
@@ -167,14 +168,17 @@ SOURCES += \
     src/motion/manual/homing.c \
     src/motion/manual/jog/jog.c \
     src/motion/manual/jog/jog_planner.c \
-    src/motion/protect/ferror_control.c \
-    src/motion/protect/stored_stroke_check.c \
+    src/motion/servo_sample/servosamplesampler.cpp \
+    src/motion/rerun/rerun.c \
+    src/protect/alarm.c \
+    src/protect/ferror_control.c \
+    src/protect/stored_stroke_check.c \
+    src/protect/reset.c \
     src/plc/pmc_scanner/pmc_a_input_scanner.c \
     src/plc/pmc_scanner/pmc_g_input_scanner.c \
     src/plc/pmc_scanner/pmc_output_handler.c \
     src/plc/plc_task/plctask.cpp \
     src/plc/lad_trace/ladtracesampler.cpp \
-    src/motion/servo_sample/servosamplesampler.cpp \
     src/task/task.c \
     src/task/hmi_scanner.c \
     src/threads/thread_manager.cpp \
@@ -186,7 +190,6 @@ SOURCES += \
 
 
 INCLUDEPATH += \
-    src/alarm \
     src/common \
     src/compensation \
     src/datadef \
@@ -200,8 +203,9 @@ INCLUDEPATH += \
     src/motion/manual/jog \
     src/motion/spindle \
     src/motion/manual \
-    src/motion/protect \
     src/motion/servo_sample \
+    src/motion/rerun \
+    src/protect \
     src/plc \
     src/plc/pmc_scanner \
     src/plc/plc_task \

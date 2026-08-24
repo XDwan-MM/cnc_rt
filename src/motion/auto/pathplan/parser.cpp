@@ -362,7 +362,7 @@ static GNC_RES parser_handle_gcode(pmc_data* motion_data, NcItpState *itp_state,
             return GNC_PARSER_OVER;
     }
     // 进给速度
-    plan_block.feed_vel = motion_data->feed.value;
+    plan_block.feed_vel = motion_data->feed.value / TIME_MINUS_2_S;
     // 位置
     plan_block.end_pos.x = motion_data->position.x;
     plan_block.end_pos.y = motion_data->position.y;

@@ -1,6 +1,7 @@
 #include "alarm.h"
 #include "master.h"
 #include "rt_data.h"
+#include "reset.h"
 #include <alarmapi.h>
 #include <hmisysapi.h>
 #include "handwheel.h"

@@ -16,6 +16,8 @@
 #include "pathplan.h"
 #include "pitch_comp.h"
 #include "rt_data.h"
+#include "rerun.h"
+#include "reset.h"
 #include "rt_sem.h"
 #include "spl_control.h"
 #include "stored_stroke_check.h"
@@ -169,10 +171,10 @@ static void set_operating_mode()
     case MODE_IDLE:
         rt_data->current_mode = rt_data->target_mode;
         break;
-    case MODE_EDIT:
     case MODE_MPG:
         rt_data->current_mode = rt_data->target_mode;
         LOG(LOG_LEVEL_INFO, "系统模式切换为 %s", mode_names[rt_data->current_mode]);
+        rerun_update_when_swithing();
         break;
     case MODE_JOG:
         // 当前点动速度为零,才能切模式成功
@@ -182,6 +184,7 @@ static void set_operating_mode()
             rt_data->current_mode = rt_data->target_mode;
             rt_data->sys_state[SYS_IS_SWITCHING_MODE] = false;
             LOG(LOG_LEVEL_INFO, "系统模式切换为 %s", mode_names[rt_data->current_mode]);
+            rerun_update_when_swithing();
         }
         break;
     case MODE_HOMING:
@@ -190,17 +193,23 @@ static void set_operating_mode()
             rt_data->current_mode = rt_data->target_mode;
             rt_data->sys_state[SYS_IS_SWITCHING_MODE] = false;
             LOG(LOG_LEVEL_INFO, "系统模式切换为 %s", mode_names[rt_data->current_mode]);
+            rerun_update_when_swithing();
         }
         break;
     case MODE_MDI:
     case MODE_MEM:
     case MODE_DNC:
-        if (!var_chan[0][VAR_CHAN_IS_RUNNING].value.i)
+        if (cycle_tp->exec_state == EXEC_IDLE)
         {
             rt_data->current_mode = rt_data->target_mode;
             rt_data->sys_state[SYS_IS_SWITCHING_MODE] = false;
             LOG(LOG_LEVEL_INFO, "系统模式切换为 %s", mode_names[rt_data->current_mode]);
+            rerun_update_when_swithing();
         }
+        break;
+    case MODE_EDIT:
+        rt_data->current_mode = rt_data->target_mode;
+        LOG(LOG_LEVEL_INFO, "系统模式切换为 %s", mode_names[rt_data->current_mode]);
         break;
     default:
         break;

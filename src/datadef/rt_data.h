@@ -12,6 +12,7 @@
 #define RT_DATA_H
 
 #include "datatype.h"
+#include "plan_queue.h"
 #include <gncdatadef.h>
 #include <pthread.h>
 #include <stdbool.h>
@@ -27,46 +28,46 @@ extern "C"
 // 路径和轨迹线程使用
 typedef enum
 {
-    SYS_IS_READY = 0,      // 准备就绪
-    SYS_IS_ESTOP_ACTIVE,   // 系统是否急停
-    SYS_ESTOP_INPUT,       // 系统急停输入
-    SYS_IS_ALARMING,       // 是否正在报警中
-    SYS_IS_SWITCHING_MODE, // 是否正在切换模式
-    SYS_IS_MAC_LOCK_ON,    // 机床锁住开启
-    SYS_IS_MAC_LOCK_READY, // 机床锁住完成
-    SYS_IS_DRY_RUN,        // 空运行
-    SYS_IS_BLOCK_SKIP,     // 程序段跳过（路径和轨迹线程使用）
-    SYS_IS_SINGLE_BLOCK,   // 单段
-    SYS_IS_MSBT_LOCK,      // 辅助功能锁住
-    SYS_IS_RAPID,          // 是否快速
+    SYS_IS_READY = 0,           // 准备就绪
+    SYS_IS_ESTOP_ACTIVE,        // 系统是否急停
+    SYS_ESTOP_INPUT,            // 系统急停输入
+    SYS_IS_ALARMING,            // 是否正在报警中
+    SYS_IS_SWITCHING_MODE,      // 是否正在切换模式
+    SYS_IS_MAC_LOCK_ON,         // 机床锁住开启
+    SYS_IS_MAC_LOCK_READY,      // 机床锁住完成
+    SYS_IS_DRY_RUN,             // 空运行
+    SYS_IS_BLOCK_SKIP,          // 程序段跳过（路径和轨迹线程使用）
+    SYS_IS_SINGLE_BLOCK,        // 单段
+    SYS_IS_MSBT_LOCK,           // 辅助功能锁住
+    SYS_IS_RAPID,               // 是否快速
 } SysStateIndex;
 
 // 路径和轨迹两个线程使用
 typedef enum
 {
-    CHAN_IS_PARSER_RESET = 0, // 译码器复位  is_parser_reset
-    CHAN_IS_PARSERING,        // 解释器是否运行中 is_parsering
-    CHAN_IS_PARSER_RERUN,     // 译码器是否运行中 is_parser_running
-    CHAN_IS_FIRST_RUN,        // 是否为第一次运行 is_first_run
+    CHAN_IS_PARSER_RESET = 0,   // 译码器复位  is_parser_reset
+    CHAN_IS_PARSERING,          // 解释器是否运行中 is_parsering
+    CHAN_IS_PARSER_RERUN,       // 译码器是否运行中 is_parser_running
+    CHAN_IS_FIRST_RUN,          // 是否为第一次运行 is_first_run
 } ChanStateIndex;
 
 typedef struct
 {
     double last_pos;
     double current_pos;
-    bool is_moving; // 是否在运动  1运动　0静止
-    bool direction; // 运动方向　　１正向  0负向
+    bool is_moving;         // 是否在运动  1运动　0静止
+    bool direction;         // 运动方向　　１正向  0负向
     bool is_init;
-    bool is_error;      // 驱动器是否报警 １是　0否
-    bool is_decel_done; // 报警减速是否完成
-    bool is_fwd_limit;  // 手动正方向限制
-    bool is_rev_limit;  // 手动负方向限制
+    bool is_error;          // 驱动器是否报警 １是　0否
+    bool is_decel_done;     // 报警减速是否完成
+    bool is_fwd_limit;      // 手动正方向限制
+    bool is_rev_limit;      // 手动负方向限制
     bool plc_is_disable;
-    bool is_disable; // 轴是否被屏蔽
+    bool is_disable;        // 轴是否被屏蔽
 } AxisStatus;
 
 typedef struct{
-    double cycle;       // 插补周期
+    double cycle;           // 插补周期
 } RT_NCU;
 
 // 目前仅轨迹线程使用
@@ -142,41 +143,22 @@ typedef struct{
     // 补偿参数
 } RT_COMP;
 
-typedef enum
-{
-    ESTOP_RESET = 0,    // 1.紧急停止信号ESP
-    OUTSIDE_RESET,      // 2.外部复位信号ERS
-    BACKWARD_RESET,     // 3.复位&倒带信号RRW
-    HMI_RESET,          // 4.按下MDI的RESET键
-} RESET_TRIGGER;
-
 typedef struct
 {
-    RESET_TRIGGER reset_trigger;
-    bool is_resetting;
-    bool is_resetted;
-    bool is_reset_delaying;
-    int reset_tic;
-    bool is_mdi_reset;
-    int mdi_reset_tic;
-} SYS_RESET;
-
-typedef struct
-{
+    // 译码错误
     int parser_error_line;
     int parser_error_no;
-} PARSER_ERROR_DATA;
+} PATH_DATA;
 
 typedef struct
 {
     // 内部
     SYS_EVENT nc_event;
-    SYS_RESET nc_reset;
     NC_MODE target_mode;
     NC_MODE current_mode;
     bool sys_state[SYS_STATE_NUM];
     bool chan_state[SYS_CHAN_NUM][CHAN_STATE_NUM];
-    PARSER_ERROR_DATA parser_error;
+    PATH_DATA path_data;
     pthread_mutex_t mutex;
     // 参数
     RT_NCU ncu_data;
@@ -194,11 +176,7 @@ void rt_set_sys_state(SysStateIndex state, bool value);
 bool rt_get_sys_state(SysStateIndex state);
 void rt_set_chan_state(int chan_index, ChanStateIndex state, bool value);
 bool rt_get_chan_state(int chan_index, ChanStateIndex state);
-void nc_set_resetting(RESET_TRIGGER reset_trigger);
-void nc_set_resetted();
-void rt_upate_reset_valid_data();
-void rt_update_reboot_valid_data();
-void auto_set_zero_vel_params();
+void rt_set_zero_vel_params();
 
 #ifdef __cplusplus
 }

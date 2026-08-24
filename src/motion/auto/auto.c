@@ -3,6 +3,7 @@
 #include "auto_gcode.h"
 #include "global.h"
 #include "rt_data.h"
+#include "rerun.h"
 #include <hmisysapi.h> 
 #include <alarmapi.h>
 #include "stored_stroke_check.h"
@@ -16,6 +17,7 @@ static void auto_execute_cmd();
 static void auto_start_run();
 static void auto_reset_run();
 static void auto_pause_run();
+static void auto_restart_run();
 static void auto_update_cur_cmd();
 static void auto_get_next_cmd();
 static void auto_handle_alarm();
@@ -56,6 +58,8 @@ static void auto_update_state(){
         {
         case SYS_EVENT_RERUN:
             LOG(LOG_LEVEL_INFO, "自动模式处理循环启动");
+            // 判断是否从首行开始
+            if(check_is_program_rerun()) break;
             auto_start_run();
             cycle_tp->exec_state = EXEC_RUNNING;
             cycle_tp->running_stage = PROGRAM_START;
@@ -159,10 +163,9 @@ static void auto_update_state(){
             break;
         case SYS_EVENT_RERUN:
             LOG(LOG_LEVEL_INFO, "自动模式处理循环启动");
-            setVarChanInt(0, VAR_CHAN_IS_RUNNING, 1, 0);
-            setVarChanInt(0, VAR_CHAN_IS_MOVING, 1, 0);
             cycle_tp->exec_state = EXEC_RUNNING;
             cycle_tp->running_stage = BLOCK_BREAKPOINT;
+            auto_restart_run();
             break;
         default:
             break;
@@ -576,6 +579,7 @@ static void auto_get_next_cmd(){
         cycle_tp->exec_cmd = DO_NULL_CMD;
     }
     auto_update_var();
+    rerun_data_store(cycle_tp->plan_block);
 }
 
 static void auto_update_cur_cmd(){
@@ -621,21 +625,36 @@ static void auto_start_run(){
     queue_reset(pretreat_queue);
     queue_reset(parser_queue);
     cycle_tp_reset();
-    auto_set_zero_vel_params();
+    rt_set_zero_vel_params();
     setVarChanInt(0, VAR_CHAN_IS_RUNNING, 1, 0);
     setVarChanInt(0, VAR_CHAN_IS_MOVING, 1, 0);
+    setVarChanInt(0, VAR_CHAN_IS_PROGEND, 0, 0);
+    setVarChanInt(0, VAR_CHAN_CYCLE, 1, 0);
+    setVarChanInt(0, VAR_CHAN_HOLD, 0, 0);
     // 通知译码运行，初始化译码器
     rt_set_chan_state(0, CHAN_IS_PARSER_RERUN, true);
     // 译码正在运行，译码结束译码器将其置false
     rt_set_chan_state(0, CHAN_IS_PARSERING, true);
-    setVarChanInt(0, VAR_CHAN_RUN_ROW, 0, 0);
-    LOG(LOG_LEVEL_DEBUG, "开始加工，速度规划模式 %d", par_chan[0][PAR_CH_VPLAN_MODE].value.val_int);
+    // 设置运行行号
+    setVarChanInt(0, VAR_CHAN_RUN_ROW, rerun_data->rerun_row, 0);
+    LOG(LOG_LEVEL_DEBUG, "开始加工，速度规划模式 %d, 开启行号 %d", rt_data->chan_data[0].vplan_mode, rerun_data->rerun_row); 
 }
 
 static void auto_pause_run(){
     cycle_tp->exec_cmd = DO_NULL_CMD;
+    // setVarChanInt(0, VAR_CHAN_IS_RUNNING, 0, 0);
     setVarChanInt(0, VAR_CHAN_IS_MOVING, 0, 0);
-    auto_set_zero_vel_params();
+    setVarChanInt(0, VAR_CHAN_CYCLE, 0, 0);
+    setVarChanInt(0, VAR_CHAN_HOLD, 1, 0);
+    rt_set_zero_vel_params();
+    rerun_store_breakpoint();
+}
+
+static void auto_restart_run(){
+    setVarChanInt(0, VAR_CHAN_IS_RUNNING, 1, 0);
+    setVarChanInt(0, VAR_CHAN_IS_MOVING, 1, 0);
+    setVarChanInt(0, VAR_CHAN_CYCLE, 1, 0);
+    setVarChanInt(0, VAR_CHAN_HOLD, 0, 0);
 }
 
 static void auto_reset_run(){
@@ -648,8 +667,11 @@ static void auto_reset_run(){
     rt_set_chan_state(0, CHAN_IS_PARSERING, false);
     setVarChanInt(0, VAR_CHAN_IS_RUNNING, 0, 0);
     setVarChanInt(0, VAR_CHAN_IS_MOVING, 0, 0);
-    auto_set_zero_vel_params();
-    // LOG(LOG_LEVEL_DEBUG, "vel %f", var_chan[0][VAR_CHAN_CMD_FEEDRATE].value.f);
+    setVarChanInt(0, VAR_CHAN_IS_PROGEND, 1, 0);
+    setVarChanInt(0, VAR_CHAN_CYCLE, 0, 0);
+    setVarChanInt(0, VAR_CHAN_HOLD, 0, 0);
+    rt_set_zero_vel_params();
+    rerun_store_breakpoint();
 }
 
 static void auto_update_var(){
@@ -671,7 +693,7 @@ static void auto_update_var(){
     case PMC_MODE_M_CMD:
     case PMC_MODE_STOPSKIP:
     case PMC_MODE_NULL:
-        auto_set_zero_vel_params();
+        rt_set_zero_vel_params();
     default:
         break;
     }
