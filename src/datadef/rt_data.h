@@ -90,11 +90,11 @@ typedef struct
 {
     // 复位生效
     double max_feed_vel;                // 轴最大进给速度
-    double max_feed_acc;                // 轴最大加速度
-    double max_feed_jk;                 // 轴最大加加速度
-    double max_rapid_vel;               // 轴最大快速速度
-    double max_rapid_acc;               // 轴最大快速加速度
-    double max_rapid_jk;                // 轴最大快速加加速度
+    double max_feed_acc;                // 轴最大进给加速度
+    double max_feed_jk;                 // 轴最大进给加加速度
+    double max_rapid_vel;               // 轴最大快移速度
+    double max_rapid_acc;               // 轴最大快移加速度
+    double max_rapid_jk;                // 轴最大快移加加速度
     double jog_fastspd;                 // 轴快速点动速度
     double jog_lowspd;                  // 轴慢速点动速度
     double mpg_spd;                     // 手摇进给速度  
