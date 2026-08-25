@@ -181,17 +181,17 @@ static void rt_reset_axis_data(){
     ParamUnit par_union = {};
     for(int i = 0; i < SYS_AXES_NUM; i++){
         getParData(PARAMAN_FILE_AXIS, i, PAR_AX_RAPID_SPD, &par_union);
-        rt_data->axis_data[i].max_rapid_vel = CONV_MM_MIN_TO_MM_S(par_union.value.val_real);  // 轴快移速度 (HMI unit: mm/min | 实时 单位：mm/s)
+        rt_data->axis_data[i].max_rapid_vel = CONV_MM_MIN_TO_MM_S(par_union.value.val_real);  // 轴最大快移速度 (HMI unit: mm/min | 实时 单位：mm/s)
         getParData(PARAMAN_FILE_AXIS, i, PAR_AX_RAPID_ACC, &par_union);
-        rt_data->axis_data[i].max_rapid_acc = par_union.value.val_real;                       // 轴快移加速度 unit:mm/s2
+        rt_data->axis_data[i].max_rapid_acc = CONV_T_MS_TO_ACCEL(par_union.value.val_real);   // 轴快移加速度 (HMI unit: ms | 实时 单位：mm/s^2)
         getParData(PARAMAN_FILE_AXIS, i, PAR_AX_RAPID_JK, &par_union);
-        rt_data->axis_data[i].max_rapid_jk = par_union.value.val_real;                        // 轴快移加加速度 unit:mm/s3
+        rt_data->axis_data[i].max_rapid_jk = CONV_T_MS_TO_JERK(par_union.value.val_real);     // 轴快移加加速度 (HMI unit: ms | 实时 单位：mm/s^3)
         getParData(PARAMAN_FILE_AXIS, i, PAR_AX_FEED_SPD, &par_union);
-        rt_data->axis_data[i].max_feed_vel = CONV_MM_MIN_TO_MM_S(par_union.value.val_real);   // 轴最高进给速度 (HMI unit: mm/min | 实时 单位：mm/s)
+        rt_data->axis_data[i].max_feed_vel = CONV_MM_MIN_TO_MM_S(par_union.value.val_real);   // 轴最大进给速度 (HMI unit: mm/min | 实时 单位：mm/s)
         getParData(PARAMAN_FILE_AXIS, i, PAR_AX_FEED_ACC, &par_union);
-        rt_data->axis_data[i].max_feed_acc = par_union.value.val_real;                        // 轴进给加速度 unit:mm/s2
+        rt_data->axis_data[i].max_feed_acc = CONV_T_MS_TO_ACCEL(par_union.value.val_real);    // 轴进给加速度 (HMI unit: ms | 实时 单位：mm/s^2)
         getParData(PARAMAN_FILE_AXIS, i, PAR_AX_FEED_JK, &par_union);
-        rt_data->axis_data[i].max_feed_jk = par_union.value.val_real;                         // 轴进给加加速度 unit:mm/s3
+        rt_data->axis_data[i].max_feed_jk = CONV_T_MS_TO_JERK(par_union.value.val_real);      // 轴进给加加速度 (HMI unit: ms | 实时 单位：mm/s^3)
         getParData(PARAMAN_FILE_AXIS, i, PAR_AX_JOG_LOWSPD, &par_union);
         rt_data->axis_data[i].jog_lowspd = CONV_MM_MIN_TO_MM_S(par_union.value.val_real);     // 轴慢速点动速度 (HMI unit: mm/min | 实时 单位：mm/s)
         getParData(PARAMAN_FILE_AXIS, i, PAR_AX_JOG_FASTSPD, &par_union);
@@ -222,6 +222,8 @@ static void rt_reset_axis_data(){
         rt_data->axis_data[i].plmt2 = par_union.value.val_real;                               // 轴第二级正软极限
         getParData(PARAMAN_FILE_AXIS, i, PAR_AX_NLMT2, &par_union);
         rt_data->axis_data[i].nlmt2 = par_union.value.val_real;                               // 轴第二级负软极限
+        getParData(PARAMAN_FILE_AXIS, i, PAR_SPDL_MAX_SPEED, &par_union);
+        rt_data->axis_data[i].spdl_max_speed = par_union.value.val_real;                      // 主轴最大转速 (HMI unit: r/min)
     }
 }
 
