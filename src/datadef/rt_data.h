@@ -110,6 +110,7 @@ typedef struct
     double nlmt;                        // 负软极限
     double plmt2;                       // 第二级正软极限
     double nlmt2;                       // 第二级负软极限
+    double spdl_max_speed;              // 主轴最大转速(r/min)
     // 重启生效
     int pm_munit;                       // 电子齿轮比分子
     int pm_pulse;                       // 电子齿轮比分母

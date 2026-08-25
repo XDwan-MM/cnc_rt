@@ -290,8 +290,8 @@ void shm_var_update(){
         // 运行模式
         setVarChanInt(0, VAR_CHAN_MODE, rt_data->current_mode, 0);
         // 实际速度
-        setVarChanDouble(i, VAR_CHAN_ACT_FEEDRATE, rt_data->chan_data[i].act_vel * TIME_MINUS_2_S, 0);
+        setVarChanDouble(i, VAR_CHAN_ACT_FEEDRATE, CONV_MM_S_TO_MM_MIN(rt_data->chan_data[i].act_vel), 0);
         // 指令速度
-        setVarChanDouble(i, VAR_CHAN_CMD_FEEDRATE, rt_data->chan_data[i].cmd_vel * TIME_MINUS_2_S, 0);
+        setVarChanDouble(i, VAR_CHAN_CMD_FEEDRATE, CONV_MM_S_TO_MM_MIN(rt_data->chan_data[i].cmd_vel), 0);
     }
 }

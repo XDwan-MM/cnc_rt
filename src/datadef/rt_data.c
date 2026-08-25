@@ -222,6 +222,8 @@ static void rt_reset_axis_data(){
         rt_data->axis_data[i].plmt2 = par_union.value.val_real;                               // 轴第二级正软极限
         getParData(PARAMAN_FILE_AXIS, i, PAR_AX_NLMT2, &par_union);
         rt_data->axis_data[i].nlmt2 = par_union.value.val_real;                               // 轴第二级负软极限
+        getParData(PARAMAN_FILE_AXIS, i, PAR_SPDL_MAX_SPEED, &par_union);
+        rt_data->axis_data[i].spdl_max_speed = par_union.value.val_real;                      // 主轴最大转速 (HMI unit: r/min)
     }
 }
 
