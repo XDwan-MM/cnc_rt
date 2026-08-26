@@ -248,8 +248,6 @@ void shm_var_update(){
             setVarAxisDouble(i, VAR_AXIS_CMD_POS_WCS_EX, act_pos_wcs_ex, 0);
         }
         if(rt_data->current_mode == MODE_MEM || rt_data->current_mode == MODE_MDI || rt_data->current_mode == MODE_DNC){
-            // 剩余移动量
-            crds_remain = var_axis[i][VAR_AXIS_PROG_POS_EX].value.f - var_axis[i][VAR_AXIS_CMD_POS_WCS_EX].value.f;
             // 工件指令位置 = 编程位置
             if(queue_is_empty(plan_queue)){
                 setVarAxisDouble(AXIS_X, VAR_AXIS_PROG_POS_EX, var_axis[0][VAR_AXIS_CMD_POS_WCS_EX].value.f, 0);
@@ -260,6 +258,8 @@ void shm_var_update(){
                 setVarAxisDouble(AXIS_Y, VAR_AXIS_PROG_POS_EX, cycle_tp->plan_block->end_pos.y, 0);
                 setVarAxisDouble(AXIS_Z, VAR_AXIS_PROG_POS_EX, cycle_tp->plan_block->end_pos.z, 0);
             }
+            // 剩余移动量
+            crds_remain = var_axis[i][VAR_AXIS_PROG_POS_EX].value.f - rt_data->axis_data[i].wcs_cmd_pos_cur;
         }else{
             crds_remain = 0;
         }
