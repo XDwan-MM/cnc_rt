@@ -25,6 +25,7 @@ int Get_Multiplier_Switch(int output)
         return -1;
     }
 }
+
 int Get_Axis_Switch(int output)
 {
     switch (output) {
@@ -44,6 +45,15 @@ int Get_Axis_Switch(int output)
         return -1;
     }
 }
+
+void handwheel_handle_estop()
+{
+    for (int i = 0; i < 5; i++)
+    {
+        memset(&simple_tp[i], 0, sizeof(simple_tp_t_handwheel));
+    }
+}
+
 void Handlewheels_Motion(simple_tp_t_handwheel *tp)
 {
     int new_hw_counts, delta;
@@ -147,8 +157,9 @@ void Simple_Tp_Update(simple_tp_t_handwheel *tp)
     tp->curr_pos += tp->curr_vel * ncu_cycle;
 }
 
-
 void handle_mpg_cmd() {
+    // 急停不执行
+    if (rt_data->sys_state[SYS_IS_ESTOP_ACTIVE]) return;
     HW_Get_Count(&current_count);
     HW_Get_Axis_And_Rate(&axisandrate);
     rate = axisandrate & 0b111;

@@ -134,7 +134,6 @@ void* motion_controller_thread_func(void*) {
         ServoSampleSampler::instance().execute();
         Hal_Driver_Update_All(false, true);
         end = get_ns();
-        // printf("%10f", (end - start) / 1e6);
         #ifndef DEBUG_MODE_ENABLED
         if(IsGreaterThan((end - start) / 1e6, 0.9)){
             int res = setAlarm(ALARM_SY, ALARM_ERROR, 1);

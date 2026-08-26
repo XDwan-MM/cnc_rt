@@ -59,6 +59,7 @@ void Simple_Tp_Update(simple_tp_t_handwheel *tp);
 int Get_Multiplier_Switch(int output);
 int Get_Axis_Switch(int output);
 void handle_mpg_cmd();
+void handwheel_handle_estop();
 
 #ifdef __cplusplus
 }

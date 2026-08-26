@@ -3,6 +3,7 @@
 #include "rt_data.h"
 #include <alarmapi.h>
 #include <hmisysapi.h>
+#include "handwheel.h"
 
 // 急停处理逻辑
 void handle_estop_cmd()
@@ -21,7 +22,18 @@ void handle_estop_cmd()
         auto_handle_estop();
         homing_handle_estop();
         jog_handle_estop();
+        handwheel_handle_estop();
         LOG(LOG_LEVEL_INFO, "处理按下急停");
+    }
+    // 急停下不生效的事件
+    switch (rt_data->nc_event)
+    {
+    case SYS_EVENT_RERUN:
+        rt_data->nc_event = SYS_EVENT_NONE;
+        LOG(LOG_LEVEL_ERR, "急停下操作 %d 按键无效", rt_data->nc_event);
+        break;
+    default:
+        break;
     }
 }
 
@@ -56,7 +68,7 @@ void handle_alarm_cmd()
         event_queue_reset(event_queue);
         // 更新cmd_pos位置
         update_pos_flag = 0;
-// 清除驱动器报警
+        // 清除驱动器报警
 #ifndef DEBUG_MODE_ENABLED
         Master_Reset();
 #endif
@@ -83,7 +95,7 @@ void handle_alarm_cmd()
     case SYS_EVENT_Z_NEG_PRESS:
     case SYS_EVENT_Z_NEG_RELEASE:
     default:
-        // todo：报警时由pmc控制面板按键是否可执行，nc侧不约束
+        // 报警时由pmc控制面板按键是否可执行，nc侧不约束
         LOG(LOG_LEVEL_ERR, "报警下操作 %d 按键", rt_data->nc_event);
         break;
     }
