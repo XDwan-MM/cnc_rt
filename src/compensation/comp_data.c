@@ -225,10 +225,7 @@ void establish_pitch_comp_table(void)
         if (point_cnt < 1 || point_cnt > COMP_ARRAY_MAX_SIZE)
         {
             pitch_comp_table_status[axis] = OP_RES_ERR_OUT_OF_RANGE;
-            LOG(LOG_LEVEL_ERR,
-                "%s轴的螺距补偿表建立失败，原因: invalid point count (point_cnt=%d)",
-                axis_names[axis],
-                point_cnt);
+            LOG(LOG_LEVEL_ERR, "%s轴的螺距补偿表建立失败，原因: invalid point count (point_cnt=%d)", axis_names[axis], point_cnt);
             pitch_comp_seqlist_init(&pitch_comp_table[axis]);
             continue;
         }
@@ -416,11 +413,7 @@ static void establish_straightness_comp_group(int axis, StraightnessTableGroup g
     if (step <= 0.0)
     {
         *status = OP_RES_ERR_OUT_OF_RANGE;
-        LOG(LOG_LEVEL_ERR,
-            "%s轴第%d组直线度补偿表建立失败，原因: invalid step (step=%f)",
-            axis_names[axis],
-            group,
-            step);
+        LOG(LOG_LEVEL_ERR, "%s轴第%d组直线度补偿表建立失败，原因: invalid step (step=%f)", axis_names[axis], group, step);
         straightness_comp_seqlist_init(table);
         return;
     }
@@ -440,8 +433,12 @@ static void establish_straightness_comp_group(int axis, StraightnessTableGroup g
     int fwd_comp_arr_um[point_cnt];
     int rev_comp_arr_um[point_cnt];
     double moving_ax_pos_arr_mm[point_cnt];
-
-    read_result = getStraightnessData(table_start, point_cnt, fwd_comp_arr_um, rev_comp_arr_um);
+    // 正负补偿数组赋值
+    read_result = getStraightData(table_start, point_cnt, fwd_comp_arr_um);
+    if (read_result == 0)
+    {
+        read_result = getStraightData(table_start + point_cnt, point_cnt, rev_comp_arr_um);
+    }
     if (read_result != 0)
     {
         *status = OP_RES_ERR_OUT_OF_RANGE;
@@ -453,15 +450,17 @@ static void establish_straightness_comp_group(int axis, StraightnessTableGroup g
         straightness_comp_seqlist_init(table);
         return;
     }
-
+    // 移动轴位置数组赋值
     for (int i = 0; i < point_cnt; i++)
+    {
         moving_ax_pos_arr_mm[i] = start_pos + (double)i * step;
-
-    *status = generate_straightness_comp_table(table,
-                                               moving_ax_pos_arr_mm,
-                                               fwd_comp_arr_um,
-                                               rev_comp_arr_um,
-                                               point_cnt);
+    }
+    // 正负直线度补偿表打印
+    for (int i = 0; i < point_cnt; i++)
+    {
+        printf("straight%f %d %d\n", moving_ax_pos_arr_mm[i], fwd_comp_arr_um[i], rev_comp_arr_um[i]);
+    }
+    *status = generate_straightness_comp_table(table, moving_ax_pos_arr_mm, fwd_comp_arr_um, rev_comp_arr_um, point_cnt);
     if (*status != OP_RES_OK)
     {
         LOG(LOG_LEVEL_ERR,
