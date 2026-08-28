@@ -81,18 +81,15 @@ static void auto_update_state(){
             case DO_HOME_CMD:
             case DO_MSTB_CMD:
             case DO_NULL_CMD:
+                cycle_tp->exec_state = EXEC_PAUSING;
                 switch (cycle_tp->running_stage)
                 {
-                case PROGRAM_END:
-                case PROGRAM_START:
-                case PROGRAM_WAIT:
-                case BLOCK_STOP_2_END:
+                case PROGRAM_RUNNING:
                 case BLOCK_PAUSED:
-                    cycle_tp->exec_state = EXEC_PAUSING;
+                case BLOCK_BREAKPOINT:
+                    cycle_tp->running_stage = BLOCK_BREAKPOINT;
                     break;
                 default:
-                    cycle_tp->exec_state = EXEC_PAUSING;
-                    cycle_tp->running_stage = BLOCK_BREAKPOINT;
                     break; 
                 }
                 break; 
@@ -103,18 +100,15 @@ static void auto_update_state(){
             break;
         case SYS_EVENT_HMI_RESET:
             LOG(LOG_LEVEL_INFO, "自动模式处理MDI复位");
+            cycle_tp->exec_state = EXEC_RESET;
             switch (cycle_tp->running_stage)
             {
-            case PROGRAM_END:
-            case PROGRAM_START:
-            case PROGRAM_WAIT:
-            case BLOCK_STOP_2_END:
+            case PROGRAM_RUNNING:
             case BLOCK_PAUSED:
-                cycle_tp->exec_state = EXEC_RESET;
+            case BLOCK_BREAKPOINT:
+                cycle_tp->running_stage = BLOCK_BREAKPOINT;
                 break;
             default:
-                cycle_tp->exec_state = EXEC_RESET;
-                cycle_tp->running_stage = BLOCK_BREAKPOINT;
                 break; 
             }
             break;
@@ -142,18 +136,15 @@ static void auto_update_state(){
             case DO_DWELL_CMD:
             case DO_MSTB_CMD:
             case DO_NULL_CMD:
+                cycle_tp->exec_state = EXEC_RESET;
                 switch (cycle_tp->running_stage)
                 {
-                case PROGRAM_END:
-                case PROGRAM_START:
-                case PROGRAM_WAIT:
-                case BLOCK_STOP_2_END:
+                case PROGRAM_RUNNING:
                 case BLOCK_PAUSED:
-                    cycle_tp->exec_state = EXEC_RESET;
+                case BLOCK_BREAKPOINT:
+                    cycle_tp->running_stage = BLOCK_BREAKPOINT;
                     break;
                 default:
-                    cycle_tp->exec_state = EXEC_RESET;
-                    cycle_tp->running_stage = BLOCK_BREAKPOINT;
                     break; 
                 }
                 break;
@@ -164,8 +155,17 @@ static void auto_update_state(){
         case SYS_EVENT_RERUN:
             LOG(LOG_LEVEL_INFO, "自动模式处理循环启动");
             cycle_tp->exec_state = EXEC_RUNNING;
-            cycle_tp->running_stage = BLOCK_BREAKPOINT;
             auto_restart_run();
+            switch (cycle_tp->running_stage)
+            {
+            case PROGRAM_RUNNING:
+            case BLOCK_PAUSED:
+            case BLOCK_BREAKPOINT:
+                cycle_tp->running_stage = BLOCK_BREAKPOINT;
+                break;
+            default:
+                break; 
+            }
             break;
         default:
             break;

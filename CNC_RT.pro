@@ -105,6 +105,7 @@ HEADERS += \
     src/datadef/rt_data.h \
     src/datadef/plan_queue.h \
     src/datadef/rt_data.h \
+    src/datadef/record_queue.h \
     src/hal/hal_driver.h \
     src/hal/hal_io.h \
     src/hal/egear_ratio.h \
@@ -153,6 +154,7 @@ SOURCES += \
     src/datadef/global.c \
     src/datadef/plan_queue.c \
     src/datadef/rt_data.c \
+    src/datadef/record_queue.c \
     src/hal/hal_driver.c \
     src/hal/hal_io.c \
     src/hal/egear_ratio.c \

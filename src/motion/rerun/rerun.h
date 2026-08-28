@@ -13,7 +13,9 @@
 
 #include "datatype.h"
 #include "plan_queue.h"
+#include "record_queue.h"
 #include <stdbool.h>
+#include "hmisysapi.h"
 
 #ifdef __cplusplus
 extern "C"
@@ -22,6 +24,7 @@ extern "C"
 
 #define RECORD_M_NUM 35
 #define RECORD_T_NUM 2
+#define RECORD_S_NUM 1
 
 typedef enum{
     BEFORE_THE_RERUN_ROW,
@@ -32,16 +35,17 @@ typedef enum{
 typedef struct
 {
     bool is_rerun;
-    int rerun_row;                          // 再启动行号
+    int rerun_row;                     // 再启动行号
     bool is_mem_rerun;
     int mem_rerun_row;
     ROW_STATE row_state;
     // 断点信息
-    POS breakpoint;                         // 断点位置
-    PLAN_BLOCK break_block;                 // 再启动程序段
-    PLAN_BLOCK record_mcode[RECORD_M_NUM];  // 保存的M指令
-    PLAN_BLOCK record_tcode[RECORD_T_NUM];  // 保存的T指令
-    PLAN_BLOCK record_scode;                // 保存的S指令
+    char parser_file_path[NCFILEPATH_CHAR_LEN];
+    POS breakpoint;                    // 断点位置
+    PLAN_BLOCK break_block;            // 再启动程序段
+    RECORD_QUEUE record_mcode;         // 保存的M指令
+    RECORD_QUEUE record_tcode;         // 保存的T指令
+    RECORD_QUEUE record_scode;         // 保存的S指令
     bool is_first_time_click_rerun;
 } RERUN_DATA;
 
