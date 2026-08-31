@@ -10,16 +10,16 @@
 #include <stdlib.h>
 
 
-static PMC_EVENT event_data;
-static GNC_RES task_handle_pmc_event(PMC_EVENT *event_data);
-static void task_handle_mode_event(PMC_EVENT *event_data);
-static void task_handle_feed_event(PMC_EVENT *event_data);
-static void task_handle_spl_event(PMC_EVENT *event_data);
-static void task_handle_overrate_event(PMC_EVENT *event_data);
-static void task_handle_auto_event(PMC_EVENT *event_data);
-static void task_handle_enable_event(PMC_EVENT *event_data);
-static void task_handle_reset_event(PMC_EVENT *event_data);
-static void task_handle_hmi_event(PMC_EVENT *event_data);
+static PLC_EVENT event_data;
+static GNC_RES task_handle_plc_event(PLC_EVENT *event_data);
+static void task_handle_mode_event(PLC_EVENT *event_data);
+static void task_handle_feed_event(PLC_EVENT *event_data);
+static void task_handle_spl_event(PLC_EVENT *event_data);
+static void task_handle_overrate_event(PLC_EVENT *event_data);
+static void task_handle_auto_event(PLC_EVENT *event_data);
+static void task_handle_enable_event(PLC_EVENT *event_data);
+static void task_handle_reset_event(PLC_EVENT *event_data);
+static void task_handle_hmi_event(PLC_EVENT *event_data);
 
 // 任务消息队列初始化
 GNC_RES task_mq_init()
@@ -44,63 +44,63 @@ GNC_RES task_mq_proc()
         return GNC_DATA_EMPTY;
     }
     // 处理事件
-    task_handle_pmc_event(&event_data);
+    task_handle_plc_event(&event_data);
     return GNC_OPERATOR_SUCCESS;
 }
 
-static GNC_RES task_handle_pmc_event(PMC_EVENT *event_data)
+static GNC_RES task_handle_plc_event(PLC_EVENT *event_data)
 {
     if (!event_data || !rt_data)
         return GNC_DATA_NULL;
 
     switch (event_data->id)
     {
-    case EV_MSG_NONE:
+    case PLC_EV_MSG_NONE:
     {
         rt_data->nc_event = SYS_EVENT_NONE;
         break;
     }
-    case EV_MSG_MODE:
+    case PLC_EV_MSG_MODE:
     {
         task_handle_mode_event(event_data);
         break;
     }
-    case EV_MSG_FEEDAXIS_KEY:
+    case PLC_EV_MSG_FEEDAXIS_KEY:
     {
         task_handle_feed_event(event_data);
         break;
     }
-    case EV_MSG_SPINDLE:
+    case PLC_EV_MSG_SPINDLE:
     {
         task_handle_spl_event(event_data);
         break;
     }
-    case EV_MSG_OVERRIDE:
+    case PLC_EV_MSG_OVERRIDE:
     {
         task_handle_overrate_event(event_data);
         break;
     }
-    case EV_MSG_AUTO_RUN:
+    case PLC_EV_MSG_AUTO_RUN:
     {
         task_handle_auto_event(event_data);
         break;
     }
-    case EV_MSG_ENANLE:
+    case PLC_EV_MSG_ENANLE:
     {
         task_handle_enable_event(event_data);
         break;
     }
-    case EV_MSG_HMI:
+    case PLC_EV_MSG_HMI:
     {
         task_handle_hmi_event(event_data);
         break;
     }
-    case EV_MSG_RESET:
+    case PLC_EV_MSG_RESET:
     {
         task_handle_reset_event(event_data);
         break;
     }
-    case EV_MSG_SPD_ORI:
+    case PLC_EV_MSG_SPD_ORI:
     {
         LOG(LOG_LEVEL_INFO, "处理主轴定向事件");
         break;
@@ -111,7 +111,7 @@ static GNC_RES task_handle_pmc_event(PMC_EVENT *event_data)
     return GNC_OPERATOR_SUCCESS;
 }
 
-static void task_handle_mode_event(PMC_EVENT *event_data)
+static void task_handle_mode_event(PLC_EVENT *event_data)
 {
     LOG(LOG_LEVEL_INFO, "处理模式切换事件 %d", rt_data->target_mode);
     switch (event_data->mode_payload.mode)
@@ -143,7 +143,7 @@ static void task_handle_mode_event(PMC_EVENT *event_data)
     }
 }
 
-static void task_handle_feed_event(PMC_EVENT *event_data)
+static void task_handle_feed_event(PLC_EVENT *event_data)
 {
     LOG(LOG_LEVEL_INFO,
         "处理进给轴按键事件 轴选键%d 动作%d 当前模式%d",
@@ -235,7 +235,7 @@ static void task_handle_feed_event(PMC_EVENT *event_data)
     }
 }
 
-static void task_handle_spl_event(PMC_EVENT *event_data)
+static void task_handle_spl_event(PLC_EVENT *event_data)
 {
     LOG(LOG_LEVEL_INFO, "处理主轴事件 动作%d", event_data->spindle_payload.direction);
     if (event_data->spindle_payload.direction == 1)
@@ -258,7 +258,7 @@ static void task_handle_spl_event(PMC_EVENT *event_data)
     }
 }
 
-static void task_handle_overrate_event(PMC_EVENT *event_data)
+static void task_handle_overrate_event(PLC_EVENT *event_data)
 {
     // 1.进给倍率
     if (event_data->override_payload.override_type == 0)
@@ -301,7 +301,7 @@ static void task_handle_overrate_event(PMC_EVENT *event_data)
     }
 }
 
-static void task_handle_auto_event(PMC_EVENT *event_data)
+static void task_handle_auto_event(PLC_EVENT *event_data)
 {
     // check：复位在F1.1置高，实时不响应启动和暂停事件
     if (rt_data->nc_reset.is_resetting)
@@ -333,7 +333,7 @@ static void task_handle_auto_event(PMC_EVENT *event_data)
     }
 }
 
-static void task_handle_enable_event(PMC_EVENT *event_data)
+static void task_handle_enable_event(PLC_EVENT *event_data)
 {
     switch (event_data->enable_payload.enable_key)
     {
@@ -394,7 +394,7 @@ static void task_handle_enable_event(PMC_EVENT *event_data)
     }
 }
 
-static void task_handle_reset_event(PMC_EVENT *event_data)
+static void task_handle_reset_event(PLC_EVENT *event_data)
 {
     if (event_data->reset_payload.reset_state == 1)
     {
@@ -411,7 +411,7 @@ static void task_handle_reset_event(PMC_EVENT *event_data)
     }
 }
 
-static void task_handle_hmi_event(PMC_EVENT *event_data)
+static void task_handle_hmi_event(PLC_EVENT *event_data)
 {
     switch (event_data->hmi_payload.press_key)
     {

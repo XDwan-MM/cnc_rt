@@ -4,7 +4,7 @@
 #include "global.h"
 
 static OperateKeyEvent hmi_events[DEMO_MAX_EVENTS_PER_POLL];
-static PMC_EVENT event;
+static PLC_EVENT event;
 
 void hmi_events_scan(void)
 {
@@ -23,7 +23,7 @@ void hmi_events_scan(void)
             {
             case KEY_KP_0:
                 if (pressed){
-                    event.id = EV_MSG_HMI;
+                    event.id = PLC_EV_MSG_HMI;
                     event.hmi_payload.press_key = code;
                     event_queue_push(event_queue, &event);
                     LOG(LOG_LEVEL_INFO, "扫描到HMI按下reset");
@@ -39,7 +39,7 @@ void hmi_events_scan(void)
             switch (code)
             {
             case CMD_RESET_PIECE_COUNT:
-                event.id = EV_MSG_HMI;
+                event.id = PLC_EV_MSG_HMI;
                 event.hmi_payload.press_key = code;
                 event_queue_push(event_queue, &event);
                 LOG(LOG_LEVEL_INFO, "扫描到HMI按下重置加工件数");

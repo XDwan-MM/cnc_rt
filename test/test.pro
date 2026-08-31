@@ -85,11 +85,11 @@ HEADERS += \
     ../src/motion/servo_sample/servosamplesampler.h \
     ../src/motion/servo_sample/servosampleevents.h \
     ../src/plc/lad_trace/ladtracesampler.h \
-    ../src/plc/pmc_scanner/pmc_a_input_scanner.h \
-    ../src/plc/pmc_scanner/pmc_g_input_scanner.h \
-    ../src/plc/pmc_scanner/pmc_io_map.h \
-    ../src/plc/pmc_scanner/pmc_output_handler.h \
-    ../src/plc/pmc_scanner/signal_utils.h \
+    ../src/plc/plc_scanner/plc_a_signal_scanner.h \
+    ../src/plc/plc_scanner/plc_g_signal_scanner.h \
+    ../src/plc/plc_scanner/plc_event_types.h \
+    ../src/plc/plc_scanner/plc_f_signal_handler.h \
+    ../src/plc/plc_scanner/signal_utils.h \
     ../src/plc/lad_trace/ladtracesampler.h \
     ../src/plc/plc_task/plctask.h \
     ../src/task/hmi_scanner.h \
@@ -133,9 +133,9 @@ SOURCES += \
     ../src/motion/protect/stored_stroke_check.c \
     ../src/motion/servo_sample/servosamplesampler.cpp \
     ../src/plc/lad_trace/ladtracesampler.cpp \
-    ../src/plc/pmc_scanner/pmc_a_input_scanner.c \
-    ../src/plc/pmc_scanner/pmc_g_input_scanner.c \
-    ../src/plc/pmc_scanner/pmc_output_handler.c \
+    ../src/plc/plc_scanner/plc_a_signal_scanner.c \
+    ../src/plc/plc_scanner/plc_g_signal_scanner.c \
+    ../src/plc/plc_scanner/plc_f_signal_handler.c \
     ../src/plc/lad_trace/ladtracesampler.cpp \
     ../src/plc/plc_task/plctask.cpp \
     ../src/task/hmi_scanner.c \
@@ -168,7 +168,7 @@ INCLUDEPATH += \
     ../src/motion/servo_sample \
     ../src/plc/lad_trace \
     ../src/plc \
-    ../src/plc/pmc_scanner \
+    ../src/plc/plc_scanner \
     ../src/plc/plc_task \
     ../src/plc/lad_trace \
     ../src/task \

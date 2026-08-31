@@ -16,7 +16,7 @@ extern "C" {
 
 #include <pthread.h>
 #include <stdbool.h>
-#include "pmc_io_map.h"
+#include "plc_event_types.h"
 #include "datatype.h"
 
 // 循环队列长度
@@ -36,7 +36,7 @@ typedef enum{
 typedef struct
 {
     pthread_mutex_t mutex;
-    PMC_EVENT* event_data;
+    PLC_EVENT* event_data;
     int head;
     int tail;
     int size;
@@ -46,9 +46,9 @@ GNC_RES event_queue_init(EVENT_QUEUE* queue);
 
 GNC_RES event_queue_reset(EVENT_QUEUE* queue);
 
-GNC_RES event_queue_push(EVENT_QUEUE* queue, PMC_EVENT* event_data);
+GNC_RES event_queue_push(EVENT_QUEUE* queue, PLC_EVENT* event_data);
 
-GNC_RES event_queue_pop(EVENT_QUEUE* queue, PMC_EVENT* event_data);
+GNC_RES event_queue_pop(EVENT_QUEUE* queue, PLC_EVENT* event_data);
 
 int event_queue_get_size(EVENT_QUEUE* queue);
 

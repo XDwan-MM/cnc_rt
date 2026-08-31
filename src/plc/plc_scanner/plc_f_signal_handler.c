@@ -1,37 +1,34 @@
-/**
- * @file pmc_output_handler.c
- */
-#include "pmc_output_handler.h"
+#include "plc_f_signal_handler.h"
+#include "alarmapi.h"
+#include "global.h"
 #include "regapi.h"
 #include "regdata.h"
-#include "global.h"
-#include <hmisysapi.h>
 #include "spl_control.h"
-#include "alarmapi.h"
+#include <hmisysapi.h>
 
-static void pmc_output_alarm();
-static void pmc_output_mode();
-static void pmc_output_home();
-static void pmc_output_auto();
-static void pmc_output_reset();
-static void pmc_output_axis_status();
-static void pmc_outpus_spl_vel_status();
-static void pmc_outpus_spl_vel();
+static void plc_output_alarm();
+static void plc_output_mode();
+static void plc_output_home();
+static void plc_output_auto();
+static void plc_output_reset();
+static void plc_output_axis_status();
+static void plc_outpus_spl_vel_status();
+static void plc_outpus_spl_vel();
 
-
-void pmc_output_feedback()
+void plc_f_signal_handler_cycle()
 {
-    pmc_output_alarm();
-    pmc_output_mode();
-    pmc_output_auto();
-    pmc_output_home();
-    pmc_output_reset();
-    pmc_output_axis_status();
-    pmc_outpus_spl_vel_status();
-    pmc_outpus_spl_vel();
+    plc_output_alarm();
+    plc_output_mode();
+    plc_output_auto();
+    plc_output_home();
+    plc_output_reset();
+    plc_output_axis_status();
+    plc_outpus_spl_vel_status();
+    plc_outpus_spl_vel();
 }
 
-static void pmc_output_alarm(){
+static void plc_output_alarm()
+{
     // F1.0 报警中：TH报警、TV报警、PS报警、超程报警、过热报警、伺服报警，不包括急停报警
     int ax_cnt, dv_cnt = 0;
     getAlarmCount(ALARM_AX, ALARM_ERROR, &ax_cnt);
@@ -41,14 +38,14 @@ static void pmc_output_alarm(){
     else
         clearRegBit(REG_F, 1, 0);
     // 准备就绪
-    if(rt_get_sys_state(SYS_IS_READY))
+    if (rt_get_sys_state(SYS_IS_READY))
         setRegBit(REG_F, 1, 7);
     else
         clearRegBit(REG_F, 1, 7);
 }
 
 // 自动运行启动中、运行中信号、休止中信号
-static void pmc_output_auto()
+static void plc_output_auto()
 {
     // OP：运行中信号
     if (var_chan[0][VAR_CHAN_IS_RUNNING].value.i)
@@ -66,41 +63,45 @@ static void pmc_output_auto()
     else
         clearRegBit(REG_F, 0, 4);
     // 切削进给中
-    if(cycle_tp->exec_state == EXEC_RUNNING && cycle_tp->plan_block->mode == PMC_MODE_CHOP){
+    if (cycle_tp->exec_state == EXEC_RUNNING && cycle_tp->plan_block->mode == PMC_MODE_CHOP)
+    {
         setRegBit(REG_F, 2, 6);
     }
     else
-        clearRegBit(REG_F, 2, 6); 
+        clearRegBit(REG_F, 2, 6);
     // 可选程序段跳过
-    if(rt_get_sys_state(SYS_IS_BLOCK_SKIP)){
+    if (rt_get_sys_state(SYS_IS_BLOCK_SKIP))
+    {
         setRegBit(REG_F, 4, 0);
-    }else{
+    }
+    else
+    {
         clearRegBit(REG_F, 4, 0);
     }
     // 辅助功能锁住
-    if(rt_data->sys_state[SYS_IS_MSBT_LOCK])
+    if (rt_data->sys_state[SYS_IS_MSBT_LOCK])
         setRegBit(REG_F, 4, 4);
     else
         clearRegBit(REG_F, 4, 4);
     // 空运行
-    if(rt_data->sys_state[SYS_IS_DRY_RUN])
+    if (rt_data->sys_state[SYS_IS_DRY_RUN])
         setRegBit(REG_F, 2, 7);
     else
         clearRegBit(REG_F, 2, 7);
     // 机械锁住
-    if(rt_data->sys_state[SYS_IS_MAC_LOCK_READY])
+    if (rt_data->sys_state[SYS_IS_MAC_LOCK_READY])
         setRegBit(REG_F, 4, 1);
     else
         clearRegBit(REG_F, 4, 1);
     // 单程序段
-    if(rt_data->sys_state[SYS_IS_SINGLE_BLOCK])
+    if (rt_data->sys_state[SYS_IS_SINGLE_BLOCK])
         setRegBit(REG_F, 4, 3);
     else
         clearRegBit(REG_F, 4, 3);
 }
 
 // 各轴返回零点完成、参考点建立
-static void pmc_output_home()
+static void plc_output_home()
 {
     for (int i = 0; i < SYS_AXES_NUM; i++)
     {
@@ -116,7 +117,7 @@ static void pmc_output_home()
     }
 }
 
-static void pmc_output_reset()
+static void plc_output_reset()
 {
     if (rt_data->nc_reset.is_resetting)
     {
@@ -124,20 +125,26 @@ static void pmc_output_reset()
         {
         // 基于MDI的复位确认信号
         case HMI_RESET:
-            if(rt_data->nc_reset.is_mdi_reset) {
+            if (rt_data->nc_reset.is_mdi_reset)
+            {
                 setRegBit(REG_F, 6, 1);
                 setVarChanInt(0, VAR_CHAN_IS_RESETTING, 1, 0);
             }
-            else {
+            else
+            {
                 clearRegBit(REG_F, 6, 1);
                 setVarChanInt(0, VAR_CHAN_IS_RESETTING, 0, 0);
             }
-            if(rt_data->sys_state[SYS_ESTOP_INPUT]){
-                if(rt_data->nc_reset.mdi_reset_tic < 24){
+            if (rt_data->sys_state[SYS_ESTOP_INPUT])
+            {
+                if (rt_data->nc_reset.mdi_reset_tic < 24)
+                {
                     rt_data->nc_reset.mdi_reset_tic++;
-                }else{
+                }
+                else
+                {
                     rt_data->nc_reset.is_mdi_reset = 0;
-                } 
+                }
             }
             break;
         default:
@@ -173,7 +180,7 @@ static void pmc_output_reset()
 }
 
 // 方式选择
-static void pmc_output_mode()
+static void plc_output_mode()
 {
     if (rt_data->current_mode == MODE_IDLE)
     {
@@ -274,7 +281,7 @@ static void pmc_output_mode()
 }
 
 // 轴移动状态输出
-static void pmc_output_axis_status()
+static void plc_output_axis_status()
 {
     for (int i = 0; i < 3; i++)
     {
@@ -306,7 +313,7 @@ static void pmc_output_axis_status()
             clearRegBit(REG_F, 110, i);
         }
     }
-    if(rt_data->axis_data[0].axis_status.is_error || rt_data->axis_data[1].axis_status.is_error ||
+    if (rt_data->axis_data[0].axis_status.is_error || rt_data->axis_data[1].axis_status.is_error ||
         rt_data->axis_data[2].axis_status.is_error || rt_data->axis_data[3].axis_status.is_error)
     {
         clearRegBit(REG_F, 0, 6);
@@ -315,7 +322,7 @@ static void pmc_output_axis_status()
     {
         setRegBit(REG_F, 0, 6);
     }
-    if(rt_data->axis_data[3].axis_status.is_error)
+    if (rt_data->axis_data[3].axis_status.is_error)
     {
         setRegBit(REG_F, 45, 0);
     }
@@ -323,11 +330,10 @@ static void pmc_output_axis_status()
     {
         clearRegBit(REG_F, 45, 0);
     }
-
 }
-static void pmc_outpus_spl_vel_status()
+static void plc_outpus_spl_vel_status()
 {
-    if(spl_data.spl_vel_state == SPINDLE_VEL_ARRIVED)
+    if (spl_data.spl_vel_state == SPINDLE_VEL_ARRIVED)
     {
         setRegBit(REG_F, 45, 3);
     }
@@ -335,15 +341,15 @@ static void pmc_outpus_spl_vel_status()
     {
         clearRegBit(REG_F, 45, 3);
     }
-//    if(spl_data.spl_vel_state == SPINDLE_VEL_ZERO)
-//    {
-//        setRegBit(REG_F, 45, 1);
-//    }
-//    else
-//    {
-//        clearRegBit(REG_F, 45, 1);
-//    }
-    if(spindle.actual_vel < 5)
+    //    if(spl_data.spl_vel_state == SPINDLE_VEL_ZERO)
+    //    {
+    //        setRegBit(REG_F, 45, 1);
+    //    }
+    //    else
+    //    {
+    //        clearRegBit(REG_F, 45, 1);
+    //    }
+    if (spindle.actual_vel < 5)
     {
         setRegBit(REG_F, 45, 1);
         spl_data.spl_vel_state = SPINDLE_VEL_ZERO;
@@ -353,7 +359,7 @@ static void pmc_outpus_spl_vel_status()
         clearRegBit(REG_F, 45, 1);
     }
 }
-static void pmc_outpus_spl_vel()
+static void plc_outpus_spl_vel()
 {
     uint8_t bytes[4];
     uint32_t vel = (uint32_t)spl_data.mcp_target_speed;
@@ -367,5 +373,4 @@ static void pmc_outpus_spl_vel()
     setRegValue8(REG_F, 23, bytes[1]);
     setRegValue8(REG_F, 24, bytes[2]);
     setRegValue8(REG_F, 25, bytes[3]);
-
 }
