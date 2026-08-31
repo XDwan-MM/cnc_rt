@@ -32,6 +32,7 @@ private:
     bool validateConfig(const CncServoSampleConfig& config, int32_t* error) const;
     bool machineReady(const CncServoSampleConfig& config) const;
     bool isCompositeConfig(const CncServoSampleConfig& config) const;
+    bool isExternalMotionConfig(const CncServoSampleConfig& config) const;
     bool programActive() const;
     bool programFinished() const;
     double actualVelocityMmPerMin(double actualPosition);
