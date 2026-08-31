@@ -33,7 +33,20 @@ typedef enum {
     EV_MSG_ENANLE,
     EV_MSG_SPD_ORI,     /**< 主轴定向 */
     EV_MSG_HMI,         /**< HMI按键 */
+    EV_MSG_EXTERNAL_DECEL, /**< 外部减速信号 */
 } PMC_EVENT_ID;
+
+/**
+ * @brief 外部减速功能编号
+ * 每类功能分别由一组正向和负向 G 信号控制。
+ */
+typedef enum {
+    EXTERNAL_DECEL_FUNCTION_1 = 1,
+    EXTERNAL_DECEL_FUNCTION_2,
+    EXTERNAL_DECEL_FUNCTION_3,
+    EXTERNAL_DECEL_FUNCTION_4,
+    EXTERNAL_DECEL_FUNCTION_5,
+} EXTERNAL_DECEL_FUNCTION;
 
 typedef enum{
     MSBT_LOCK = 0,       // 辅助功能锁住
@@ -96,6 +109,18 @@ typedef struct{
 } EV_MSG_HMI_PAYLOAD;
 
 /**
+ * @brief 外部减速事件负载
+ * active 为 1 表示对应 G 位为 0、减速生效；为 0 表示减速释放。
+ * axis_num 使用 0~7 的逻辑轴编号，direction 使用 +1/-1 表示正/负方向。
+ */
+typedef struct {
+    int function;
+    int axis_num;
+    int direction;
+    int active;
+} EV_MSG_EXTERNAL_DECEL_PAYLOAD;
+
+/**
  * @brief CNC 事件通用结构
  * 用于在内存中统一事件格式，方便解析
  */
@@ -111,6 +136,7 @@ typedef struct {
         EV_MSG_ENABLE_PAYLOAD enable_payload;
         EV_MSG_SPD_ORI_PAYLOAD spd_ori_payload;
         EV_MSG_HMI_PAYLOAD hmi_payload;
+        EV_MSG_EXTERNAL_DECEL_PAYLOAD external_decel_payload;
     };
 } PMC_EVENT;
 
