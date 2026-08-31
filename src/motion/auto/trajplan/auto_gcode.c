@@ -121,7 +121,7 @@ void auto_execute_pos_cmd(){
         setAlarm(ALARM_CH, ALARM_ERROR, 2);
         cycle_tp->target_stage = PROGRAM_END;
         cycle_tp->exec_cmd = DO_NULL_CMD;
-        LOG(LOG_LEVEL_ERR, "在插补段%d插补距离计算失败", cycle_tp->plan_block->line_number);
+        LOG(LOG_LEVEL_ERR, "自动加工错误！在插补段%d插补距离计算失败", cycle_tp->plan_block->line_number);
         LOG(LOG_LEVEL_DEBUG, "vs:%.10f, ve:%.10f, vmax:%.10f, vpeak:%.10f, acc:%.10f, jerk:%.10f, length:%.10f\n", cycle_tp->pos_cmd_data.vel_profile->vs,  cycle_tp->pos_cmd_data.vel_profile->ve, cycle_tp->plan_block->max_vel,cycle_tp->pos_cmd_data.vel_profile->vpeak, cycle_tp->plan_block->max_acc,  cycle_tp->plan_block->max_jerk, cycle_tp->plan_block->length);
         LOG(LOG_LEVEL_DEBUG, "target %f, s %f, accum_distance %f, t_cycle %f, t[0] %f, ", cycle_tp->pos_cmd_data.target_distance, cycle_tp->pos_cmd_data.traj_data->s, cycle_tp->pos_cmd_data.accum_distance, cycle_tp->pos_cmd_data.vel_profile->t_cycle, cycle_tp->pos_cmd_data.vel_profile->t[0]);
         return;
@@ -135,7 +135,8 @@ void auto_execute_pos_cmd(){
     cycle_tp->pos_cmd_data.current_pos.y = rt_data->axis_data[AXIS_Y].wcs_cmd_pos_cur = interp_pos.y;
     cycle_tp->pos_cmd_data.current_pos.z = rt_data->axis_data[AXIS_Z].wcs_cmd_pos_cur = interp_pos.z;
     // TODO：计算误差
-    if(IsLessThan(cycle_tp->pos_cmd_data.traj_data->v, 0) && IsGreaterThan(cycle_tp->pos_cmd_data.traj_data->v, -VEL_EPSILON)) {
+    if(IsLessThan(cycle_tp->pos_cmd_data.traj_data->v, 0)) {
+        LOG(LOG_LEVEL_ERR, "自动加工错误！在插补段%d插补速度计算失败", cycle_tp->plan_block->line_number);
         LOG(LOG_LEVEL_ERR, "v %f, t[2] %f, t %d", cycle_tp->pos_cmd_data.traj_data->v, cycle_tp->pos_cmd_data.vel_profile->t[2], cycle_tp->pos_cmd_data.interp_cycle);
         cycle_tp->pos_cmd_data.traj_data->v = 0;
     }
@@ -324,6 +325,12 @@ static void auto_look_ahead(){
         double del_dist = vp_cal_decel_dist(velplan_mode, cur_block->start_vel, cur_block->end_vel, cur_block->max_acc, cur_block->max_jerk);
         if(IsGreaterThan(del_dist, cur_block->length)) {
             double del_vel = vp_cal_decel_vel(velplan_mode, cur_block->start_vel, cur_block->max_acc, cur_block->max_jerk, cur_block->length);
+            if(IsLessThan(del_vel, 0)) {
+                LOG(LOG_LEVEL_ERR, "自动加工错误！在插补段%d前瞻计算失败", cycle_tp->plan_block->line_number);
+                LOG(LOG_LEVEL_ERR, "速度前瞻末速度：%f", del_vel);
+                LOG(LOG_LEVEL_DEBUG, "vs:%.10f, ve:%.10f, vmax:%.10f, acc:%.10f, jerk:%.10f, length:%.10f\n", cur_block->start_vel,  cur_block->end_vel, cur_block->max_vel, cur_block->max_acc, cur_block->max_jerk, cur_block->length);
+                del_vel = 0.0;
+            }
             cur_block->end_vel = del_vel;
         }
     }
@@ -345,8 +352,10 @@ static GNC_RES auto_do_vel_plan(){
         else cycle_tp->target_stage = BLOCK_ARRIVE_2_END;
     }
     if(res != VP_CAL_SUCCESS){
-        LOG(LOG_LEVEL_ERR, "自动模式报警 %d", res);
         setAlarm(ALARM_CH, ALARM_ERROR, 2);
+        LOG(LOG_LEVEL_ERR, "自动加工错误！自动模式报警 %d", res);
+        LOG(LOG_LEVEL_ERR, "在插补段%d计算速度曲线失败", cycle_tp->plan_block->line_number);
+        LOG(LOG_LEVEL_DEBUG, "vs:%.10f, ve:%.10f, vmax:%.10f, vpeak:%.10f, acc:%.10f, jerk:%.10f, length:%.10f\n", cycle_tp->pos_cmd_data.vel_profile->vs,  cycle_tp->pos_cmd_data.vel_profile->ve, cycle_tp->plan_block->max_vel,cycle_tp->pos_cmd_data.vel_profile->vpeak, cycle_tp->plan_block->max_acc,  cycle_tp->plan_block->max_jerk, cycle_tp->plan_block->length);
         cycle_tp->target_stage = PROGRAM_END;
         cycle_tp->exec_cmd = DO_NULL_CMD;
     }
@@ -427,7 +436,9 @@ static GNC_RES vp_val_decline_profile(){
             setAlarm(ALARM_CH, ALARM_ERROR, 2);
             cycle_tp->target_stage = PROGRAM_END;
             cycle_tp->exec_cmd = DO_NULL_CMD;
-            LOG(LOG_LEVEL_DEBUG, "VP_CAL_ERROR: end_vel %f", cycle_tp->plan_block->end_vel);
+            LOG(LOG_LEVEL_DEBUG, "自动加工错误！VP_CAL_ERROR: end_vel %f", cycle_tp->plan_block->end_vel);
+            LOG(LOG_LEVEL_ERR, "在插补段%d计算速度曲线失败", cycle_tp->plan_block->line_number);
+            LOG(LOG_LEVEL_DEBUG, "vs:%.10f, ve:%.10f, vmax:%.10f, vpeak:%.10f, acc:%.10f, jerk:%.10f, length:%.10f\n", cycle_tp->pos_cmd_data.vel_profile->vs,  cycle_tp->pos_cmd_data.vel_profile->ve, cycle_tp->plan_block->max_vel,cycle_tp->pos_cmd_data.vel_profile->vpeak, cycle_tp->plan_block->max_acc,  cycle_tp->plan_block->max_jerk, cycle_tp->plan_block->length);
             return VP_CAL_ERROR; 
         } 
         cycle_tp->plan_block->max_vel = vs;
