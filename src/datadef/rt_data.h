@@ -83,6 +83,18 @@ typedef struct
     int vplan_mode;         // 速度规划模式
     int lookahead_num;      // 速度规划前瞻段数
     double path_tolerance;  // 轨迹轮廓允差
+    // 重启生效
+    bool ex_dec_enable;     // 是否开启外部减速功能
+    // 复位生效
+    bool ex_dec2_enable;    // 是否开启外部减速功能2
+    bool ex_dec3_enable;    // 是否开启外部减速功能3
+    bool ex_dec4_enable;    // 是否开启外部减速功能4
+    bool ex_dec5_enable;    // 是否开启外部减速功能5
+    double cut_ex_dec1_vel; // 切削外部减速1的减速速度
+    double cut_ex_dec2_vel; // 切削外部减速2的减速速度
+    double cut_ex_dec3_vel; // 切削外部减速3的减速速度
+    double cut_ex_dec4_vel; // 切削外部减速4的减速速度
+    double cut_ex_dec5_vel; // 切削外部减速5的减速速度
 } RT_CHAN;
 
 // 目前仅轨迹线程使用
@@ -111,6 +123,13 @@ typedef struct
     double plmt2;                       // 第二级正软极限
     double nlmt2;                       // 第二级负软极限
     double spdl_max_speed;              // 主轴最大转速(r/min)
+    bool ex_dec_enable_pos_cut;         // 外部减速信号对正向切削进给是否生效
+    bool ex_dec_enable_neg_cut;         // 外部减速信号对负向切削进给是否生效
+    double rpd_ex_dec1_vel;             // 快移外部减速1的减速速度
+    double rpd_ex_dec2_vel;             // 快移外部减速2的减速速度
+    double rpd_ex_dec3_vel;             // 快移外部减速3的减速速度
+    double rpd_ex_dec4_vel;             // 快移外部减速4的减速速度
+    double rpd_ex_dec5_vel;             // 快移外部减速5的减速速度
     // 重启生效
     int pm_munit;                       // 电子齿轮比分子
     int pm_pulse;                       // 电子齿轮比分母
