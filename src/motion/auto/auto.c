@@ -647,7 +647,7 @@ static void auto_pause_run(){
     setVarChanInt(0, VAR_CHAN_CYCLE, 0, 0);
     setVarChanInt(0, VAR_CHAN_HOLD, 1, 0);
     rt_set_zero_vel_params();
-    rerun_store_breakpoint();
+    rerun_store_breakpoint(cycle_tp->plan_block->is_breakpoint);
 }
 
 static void auto_restart_run(){
@@ -671,7 +671,7 @@ static void auto_reset_run(){
     setVarChanInt(0, VAR_CHAN_CYCLE, 0, 0);
     setVarChanInt(0, VAR_CHAN_HOLD, 0, 0);
     rt_set_zero_vel_params();
-    rerun_store_breakpoint();
+    rerun_store_breakpoint(cycle_tp->plan_block->is_breakpoint);
 }
 
 static void auto_update_var(){

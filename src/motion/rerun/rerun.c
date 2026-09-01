@@ -47,6 +47,7 @@ void rerun_data_store(PLAN_BLOCK* break_block){
         case PMC_MODE_TAP:
         case PMC_MODE_TAP_RETURE:
         case PMC_MODE_PAUSE:
+            if(break_block->is_breakpoint) return;
             memcpy(&rerun_data->break_block, break_block, sizeof(PLAN_BLOCK));
             break;
         case PMC_MODE_M_CMD:
@@ -72,10 +73,12 @@ void rerun_data_store(PLAN_BLOCK* break_block){
 }
 
 /// @brief 自动加工过程中记录断点位置
-void rerun_store_breakpoint(){
+void rerun_store_breakpoint(bool is_breakpoint){
     switch (rt_data->current_mode)
     {
     case MODE_MEM:
+        // 回断点时不记录
+        if(is_breakpoint) return;
         rerun_data->breakpoint.x = rt_data->axis_data[AXIS_X].wcs_cmd_pos_cur;
         rerun_data->breakpoint.y = rt_data->axis_data[AXIS_Y].wcs_cmd_pos_cur;
         rerun_data->breakpoint.z = rt_data->axis_data[AXIS_Z].wcs_cmd_pos_cur;
@@ -145,6 +148,7 @@ void create_rerun_block(PLAN_BLOCK* rerun_block){
     rerun_block->mode = PMC_MODE_CHOP;
     rerun_block->type = RAPID;
     rerun_block->feed_vel = rt_data->chan_data[0].dryrun_spd;
+    rerun_block->is_breakpoint = true;
     LOG(LOG_LEVEL_DEBUG, "断点程序 %s, 行号 %d", rerun_data->parser_file_path, rerun_block->line_number);
     LOG(LOG_LEVEL_DEBUG, "刀具位置 %f %f %f", rt_data->axis_data[AXIS_X].wcs_cmd_pos_cur, rt_data->axis_data[AXIS_Y].wcs_cmd_pos_cur, rt_data->axis_data[AXIS_Z].wcs_cmd_pos_cur);
     LOG(LOG_LEVEL_DEBUG, "断点位置 %f %f %f", rerun_block->end_pos.x, rerun_block->end_pos.y, rerun_block->end_pos.z);  

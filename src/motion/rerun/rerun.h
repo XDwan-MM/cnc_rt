@@ -53,7 +53,7 @@ GNC_RES rerun_data_init();
 void rerun_data_reset();
 void rerun_update_when_swithing();
 void rerun_data_store(PLAN_BLOCK* break_block);
-void rerun_store_breakpoint();
+void rerun_store_breakpoint(bool is_breakpoint);
 bool check_is_program_rerun();
 void rerun_reset_is_rerun();
 void create_rerun_block(PLAN_BLOCK* rerun_block);
