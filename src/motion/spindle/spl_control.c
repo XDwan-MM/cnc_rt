@@ -26,6 +26,8 @@ void spindle_set_state(){
         spl_data.spl_event = SPINDLE_EVENT_STOP;
         spl_data.emot_speed = 0;
     }
+    
+
     // 根据主轴事件设置主轴状态（事件：面板按键和M代码）
     switch (spl_data.spl_event)
     {

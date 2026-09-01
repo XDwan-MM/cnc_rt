@@ -130,8 +130,8 @@ protected:
         rt_data->nc_event = SYS_EVENT_NONE;
         rt_data->target_mode = MODE_MEM;
         rt_data->current_mode = MODE_MEM;
-        rt_data->parser_error.parser_error_no = -1;
-        rt_data->parser_error.parser_error_line = 0;
+        rt_data->path_data.parser_error_no = -1;
+        rt_data->path_data.parser_error_line = 0;
 
         resetRegData();
         setVarChanInt(0, VAR_CHAN_PART_CNTR, 0, 0);
@@ -584,7 +584,7 @@ TEST_F(TestAuto, EmptyQueuesAndStoppedParserEndProgram)
     cycle_tp->exec_state = EXEC_RUNNING;
     cycle_tp->running_stage = PROGRAM_WAIT;
     rt_data->chan_state[0][CHAN_IS_PARSERING] = false;
-    rt_data->parser_error.parser_error_no = -1;
+    rt_data->path_data.parser_error_no = -1;
 
     handle_auto_cmd();
 

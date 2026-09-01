@@ -14,6 +14,8 @@
 #include "plan_queue.h"
 #include "event_queue.h"
 #include "rt_data.h"
+#include "rerun.h"
+#include "reset.h"
 #include "auto.h"
 #include "homing.h"
 #include "trajectory.h"
@@ -112,6 +114,8 @@ extern ParamUnit *par_table;                                 // 刀具和刀库�
 
 // 实时数据
 extern RT_DATA* rt_data;       
+extern RERUN_DATA* rerun_data;
+extern RESET_DATA* nc_reset;
 extern EVENT_QUEUE* event_queue;        // 事件队列         
 extern PLAN_QUEUE *parser_queue;        // 译码队列
 extern PLAN_QUEUE *pretreat_queue;      // 预处理队列

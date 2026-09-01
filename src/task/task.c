@@ -8,7 +8,7 @@
 #include <alarmapi.h>
 #include <hmisysapi.h>
 #include <stdlib.h>
-
+#include "reset.h"
 
 static PMC_EVENT event_data;
 static GNC_RES task_handle_pmc_event(PMC_EVENT *event_data);
@@ -304,7 +304,7 @@ static void task_handle_overrate_event(PMC_EVENT *event_data)
 static void task_handle_auto_event(PMC_EVENT *event_data)
 {
     // check：复位在F1.1置高，实时不响应启动和暂停事件
-    if (rt_data->nc_reset.is_resetting)
+    if (nc_reset->is_resetting)
     {
         if (event_data->run_payload.run_state == 1)
             LOG(LOG_LEVEL_WARN, "复位中...循环启动无效");

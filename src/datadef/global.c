@@ -63,6 +63,8 @@ SysData* sys_data = NULL;
 
 // 实时数据
 RT_DATA* rt_data;               // 实时数据
+RERUN_DATA* rerun_data;
+RESET_DATA* nc_reset;
 EVENT_QUEUE* event_queue;       // 事件队列
 PLAN_QUEUE *parser_queue;       // 译码队列
 PLAN_QUEUE *pretreat_queue;     // 预处理队列
@@ -100,6 +102,7 @@ static GNC_RES shm_var_init(){
         setVarChanInt(i, VAR_CHAN_IS_ESTOP, 0, 0);              // 急停
         setVarChanInt(i, VAR_CHAN_IS_RESETTING, 0, 0);          // 复位中
         setVarChanInt(i, VAR_CHAN_IS_MOVING, 0, 0);             // 轴移动中
+        setVarChanInt(0, VAR_CHAN_IS_PROGEND, 1, 0);            // 程序完成
     }
     // 坐标轴数据
     for(int i = 0; i < SYS_AXES_NUM; i++){    
@@ -175,6 +178,16 @@ GNC_RES rt_global_init(){
         rt_global_delete();
         return res;
     }
+    res = rerun_data_init();
+    if(res != GNC_OPERATOR_SUCCESS){
+        rt_global_delete();
+        return res;
+    }
+    reset_data_init();
+    if(res != GNC_OPERATOR_SUCCESS){
+        rt_global_delete();
+        return res;
+    }
     if(pthread_mutex_init(&shm_mutex, NULL) != 0){
         rt_global_delete();
         return GNC_OPERATOR_ERROR;
@@ -210,6 +223,14 @@ GNC_RES rt_global_delete(){
         pthread_mutex_destroy(&rt_data->mutex);
         free(rt_data);
         rt_data = NULL;
+    }
+    if(rerun_data != NULL){
+        free(rerun_data);
+        rerun_data = NULL;
+    }
+    if(nc_reset != NULL){
+        free(nc_reset);
+        nc_reset = NULL;
     }
     if(shm_mutex_initialized){
         pthread_mutex_destroy(&shm_mutex);

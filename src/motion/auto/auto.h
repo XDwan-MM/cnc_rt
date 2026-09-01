@@ -110,7 +110,7 @@ typedef struct{
     CMD_TYPE exec_cmd;
     RUNNING_STAGE running_stage;
     RUNNING_STAGE target_stage;
-    TRIGGER_EVENT trigger_event;
+    TRIGGER_EVENT trigger_event;          
     // 执行指令
     POS_CMD_DATA pos_cmd_data;
     DWELL_CMD_DATA dwell_cmd_data;
