@@ -31,6 +31,11 @@
 #define OVERRIDE_PERCENT (100.0)
 
 /**
+ * @brief 时间单位转换：微秒(us) 转 秒(s)
+ */
+#define CONV_US_TO_S(us) ((double)(us) / 1000000.0)
+
+/**
  * @brief 长度单位转换：微米(um) 转 毫米(mm)
  */
 #define CONV_UM_TO_MM(um) ((double)(um) / 1000.0)
