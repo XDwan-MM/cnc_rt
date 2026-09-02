@@ -57,12 +57,13 @@ typedef struct
     bool is_moving; // 是否在运动  1运动　0静止
     bool direction; // 运动方向　　１正向  0负向
     bool is_init;
-    bool is_error;      // 驱动器是否报警 １是　0否
-    bool is_decel_done; // 报警减速是否完成
+    bool is_error;      // 驱动器是否报警 1是 0否
+    bool is_decel_done; // 限位触发后减速是否完成 
     bool is_fwd_limit;  // 手动正方向限制
     bool is_rev_limit;  // 手动负方向限制
     bool plc_is_disable;
-    bool is_disable; // 轴是否被屏蔽
+    bool is_disable;   // 轴是否被屏蔽
+    bool is_lag_error; // 是否跟随误差报警 1是 0否
 } AxisStatus;
 
 typedef struct{
@@ -112,8 +113,8 @@ typedef struct
     double mpg_spd;                     // 手摇进给速度  
     double corner_vel_diff;             // 拐角的容许速度差
     double corner_acc_diff;             // 拐角的容许加速度差        
-    double max_static_ferror;           // 轴静态最大跟随误差
-    double max_dynamic_ferror;          // 轴动态最大跟随误差
+    double max_static_lag;           // 轴静态最大跟随误差
+    double max_dynamic_lag;          // 轴动态最大跟随误差
     double pos_tol;                     // 轴定位允差
     unsigned int home_way;              // 回参考点方式
     double ref_range;                   // 轴回零参考点范围偏差

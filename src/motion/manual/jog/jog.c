@@ -1,5 +1,4 @@
 #include "jog.h"
-#include "ferror_control.h" // 必须引入以获取具体的跟随误差状态
 #include "global.h"
 #include <math.h>
 #include <string.h>
@@ -64,7 +63,7 @@ void handle_jog_cmd()
         bool any_pure_limit = false;
         for (int j = 0; j < SYS_AXES_NUM_JOG; j++)
         {
-            if (rt_data->axis_data[j].axis_status.is_error || ferror_control[j].error_flag)
+            if (rt_data->axis_data[j].axis_status.is_error || rt_data->axis_data[j].axis_status.is_lag_error)
                 any_non_limit = true;
             else if (rt_data->axis_data[j].axis_status.is_fwd_limit || rt_data->axis_data[j].axis_status.is_rev_limit)
                 any_pure_limit = true;
@@ -102,7 +101,7 @@ void handle_jog_cmd()
 
     rt_data->chan_data[0].cmd_vel = sqrt(f_sq);
 
-    // 减速完成信号：仅在限位触发且速度归零时置位，否则清零
+    // 减速完成信号：仅在限位触发且速度归零时置位
     for (int i = 0; i < SYS_AXES_NUM_JOG; i++)
     {
         if (fabs(rt_data->axis_data[i].cmd_vel) < SPEED_THRESHOLD &&
@@ -110,10 +109,6 @@ void handle_jog_cmd()
         {
             rt_data->axis_data[i].axis_status.is_decel_done = 1;
         }
-        // else
-        // {
-        //     rt_data->axis_data[i].axis_status.is_decel_done = 0;
-        // }
     }
 
     // 无动作时将通道事件全局变量置为NONE事件

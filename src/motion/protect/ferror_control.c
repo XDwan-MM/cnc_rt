@@ -1,17 +1,5 @@
-/********************************************************************
- * @file        ferror_control.c
- * @brief       跟随误差控制功能（FANUC PRM 1828/1829 双阈值模型）
- *             - PRM 1828: 移动中各轴的位置偏差极限值
- *             - PRM 1829: 停止时各轴的位置偏差极限值
- * @version     V2.00
- * @date        2026/06/10
- * @author      伍臣发
- * @copyright   珠海格力电器股份有限公司装备动力技术研究院三所
- ********************************************************************/
-
 #include "ferror_control.h"
 #include "global.h"
-#include "jog.h"
 #include <alarmapi.h>
 #include <hmisysapi.h>
 #include <math.h>
@@ -21,11 +9,7 @@ ferror_control_t ferror_control[SYS_AXES_NUM]; // 跟随误差控制器
 static const char *axis_names[] = {"X", "Y", "Z"};
 
 /* ---------- 内部函数声明 ---------- */
-static void check_axis_ferror(ferror_control_t *ferror_ctrl,
-                              const RT_AXIS *axis_para,
-                              double pos_cmd,
-                              double pos_fb,
-                              double vel_cmd);
+static void check_axis_ferror(ferror_control_t *ferror_ctrl, const RT_AXIS *axis_para, double pos_cmd, double pos_fb, double vel_cmd);
 
 /* ---------- 外部函数定义 ---------- */
 
@@ -36,8 +20,7 @@ static void check_axis_ferror(ferror_control_t *ferror_ctrl,
 void check_ferror_fault(void)
 {
     /* 报警状态、急停拍下情况、(空闲、编辑状态)时不检查跟随误差，避免上电无运动误报 */
-    if (rt_data->sys_state[SYS_IS_ALARMING] || rt_data->sys_state[SYS_IS_ESTOP_ACTIVE] || rt_data->current_mode == MODE_IDLE ||
-        rt_data->current_mode == MODE_EDIT)
+    if (rt_data->sys_state[SYS_IS_ALARMING] || rt_data->sys_state[SYS_IS_ESTOP_ACTIVE] || rt_data->current_mode == MODE_IDLE || rt_data->current_mode == MODE_EDIT)
     {
         return;
     }
@@ -58,6 +41,7 @@ void check_ferror_fault(void)
 
         if (ferror_control[i].error_flag)
         {
+            rt_data->axis_data[i].axis_status.is_lag_error = true;
             int alarm_code;
             const char *fault_type;
             if (ferror_control[i].is_moving)
@@ -85,6 +69,7 @@ void reset_ferror_control(void)
     {
         ferror_control[i].error_flag = false;
         ferror_control[i].is_moving = false;
+        rt_data->axis_data[i].axis_status.is_lag_error = false;
     }
 }
 
@@ -96,11 +81,7 @@ void reset_ferror_control(void)
  *   - 运动中 (|vel_cmd| > SPEED_THRESHOLD) 使用 PAR_AX_MAX_FERROR（PRM 1828）
  *   - 停止时 (|vel_cmd| <= SPEED_THRESHOLD) 使用 PAR_AX_MIN_FERROR（PRM 1829）
  */
-static void check_axis_ferror(ferror_control_t *ferror_ctrl,
-                              const RT_AXIS *axis_para,
-                              double pos_cmd,
-                              double pos_fb,
-                              double vel_cmd)
+static void check_axis_ferror(ferror_control_t *ferror_ctrl, const RT_AXIS *axis_para, double pos_cmd, double pos_fb, double vel_cmd)
 {
     if (ferror_ctrl == NULL || axis_para == NULL)
         return;
@@ -110,16 +91,20 @@ static void check_axis_ferror(ferror_control_t *ferror_ctrl,
     if (fabs(vel_cmd) > SPEED_THRESHOLD)
     {
         /* 运动中：使用动态最大跟随误差 */
-        ferror_ctrl->ferror_limit = axis_para->max_dynamic_ferror;
+        ferror_ctrl->ferror_limit = axis_para->max_dynamic_lag;
         ferror_ctrl->is_moving = true;
     }
     else
     {
         /* 停止中：使用静态最大跟随误差 */
-        ferror_ctrl->ferror_limit = axis_para->max_static_ferror;
+        ferror_ctrl->ferror_limit = axis_para->max_static_lag;
         ferror_ctrl->is_moving = false;
     }
 
     ferror_ctrl->ferror = ferror;
-    ferror_ctrl->error_flag = (ferror > ferror_ctrl->ferror_limit);
+
+    if(ferror > ferror_ctrl->ferror_limit)
+    {
+        ferror_ctrl->error_flag = true;
+    }
 }
