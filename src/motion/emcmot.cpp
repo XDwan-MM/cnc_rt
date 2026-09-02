@@ -32,6 +32,7 @@ static void axis_write_out();
 static void check_for_fault();
 static void set_operating_mode();
 static void spindle_control();
+static void handle_nc_event();
 static void get_cmd_pos();
 static void update_status();
 static void output_to_hal();
@@ -115,6 +116,8 @@ static void chan_do_period()
         check_ferror_fault();
         // 判断运动模式
         set_operating_mode();
+        // 处理系统事件
+        handle_nc_event();
         // 主轴控制
         spindle_control();
         // 根据运动模式计算运动位置
@@ -234,8 +237,6 @@ static void spindle_control()
 // 不同加工模式的运动控制
 static void get_cmd_pos()
 {
-    // todo：临时，机械锁住第一阶段，不支持手动模式
-    manual_unset_sys_state();
     switch (rt_data->current_mode)
     {
     case MODE_EDIT: // 编辑
@@ -496,6 +497,28 @@ static void reset_clean_warning()
     }
 }
 
+/// @brief 所有模式下都统一处理的事件
+static void handle_nc_event(){
+    manual_unset_sys_state();
+    switch (rt_data->nc_event)
+    {
+    case SYS_EVENT_PROGRAM_RESTART_ON:
+        rt_set_sys_state(SYS_IS_PROG_RESTAR, true);
+        break;
+    case SYS_EVENT_PROGRAM_RESTART_OFF:
+        rt_set_sys_state(SYS_IS_PROG_RESTAR, false);
+        break;
+    case SYS_EVENT_BLOCK_SKIP_ON:
+        rt_set_sys_state(SYS_IS_BLOCK_SKIP, true);
+        break;
+    case SYS_EVENT_BLOCK_SKIP_OFF:
+        rt_set_sys_state(SYS_IS_BLOCK_SKIP, false);
+        break;
+    default:
+        break;
+    }
+}
+
 static void manual_unset_sys_state()
 {
     if (rt_data->current_mode == MODE_MDI || rt_data->current_mode == MODE_MEM || rt_data->current_mode == MODE_DNC)
@@ -507,28 +530,6 @@ static void manual_unset_sys_state()
         rt_data->sys_state[SYS_IS_MAC_LOCK_ON] = false;
     if (rt_data->sys_state[SYS_IS_ALL_AXIS_LOCK])
         rt_data->sys_state[SYS_IS_ALL_AXIS_LOCK] = false;
-    switch (rt_data->nc_event)
-    {
-    case SYS_EVENT_MAC_LOCK_ON:
-    case SYS_EVENT_MAC_LOCK_OFF:
-        LOG(LOG_LEVEL_WARN, "手动模式暂不支持机械锁住");
-        rt_data->sys_state[SYS_IS_MAC_LOCK_READY] = false;
-        rt_data->sys_state[SYS_IS_MAC_LOCK_ON] = false;
-        break;
-    case SYS_EVENT_ALL_AXIS_LOCK_ON:
-    case SYS_EVENT_ALL_AXIS_LOCK_OFF:
-        LOG(LOG_LEVEL_WARN, "手动模式暂不支持所有轴互锁");
-        rt_data->sys_state[SYS_IS_ALL_AXIS_LOCK] = false;
-        break;
-    case SYS_EVENT_BLOCK_SKIP_ON:
-        rt_set_sys_state(SYS_IS_BLOCK_SKIP, true);
-        break;
-    case SYS_EVENT_BLOCK_SKIP_OFF:
-        rt_set_sys_state(SYS_IS_BLOCK_SKIP, false);
-        break;
-    default:
-        break;
-    }
 }
 
 static void rebuild_axis_positions_from_feedback()

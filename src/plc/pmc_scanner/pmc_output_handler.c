@@ -98,6 +98,11 @@ static void pmc_output_auto()
         setRegBit(REG_F, 4, 3);
     else
         clearRegBit(REG_F, 4, 3);
+    // 程序再启动
+    if(rt_data->sys_state[SYS_IS_PROG_RESTAR])
+        setRegBit(REG_F, 2, 4);
+    else
+        clearRegBit(REG_F, 2, 4);
 }
 
 // 各轴返回零点完成、参考点建立
