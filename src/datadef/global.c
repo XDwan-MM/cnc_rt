@@ -111,6 +111,12 @@ static GNC_RES shm_var_init(){
         setVarAxisDouble(i, VAR_AXIS_CMD_POS_WCS_EX, 0, 0);     // 绝对坐标系
         setVarAxisDouble(i, VAR_AXIS_CMD_POS_EX, 0, 0);         // 轴指令位置 
         setVarAxisDouble(i, VAR_AXIS_ACT_POS_EX, 0, 0);         // 轴实际位置   
+        setVarAxisDouble(i, VAR_AXIS_IS_DISABLE, 0, 0);         // 轴拆卸  
+        setVarAxisDouble(i, VAR_AXIS_IS_MAC_LOCK, 0, 0);        // 机械锁住  
+        setVarAxisDouble(i, VAR_AXIS_IS_INTER_LOCK, 0, 0);      // 互锁  
+        setVarAxisDouble(i, VAR_AXIS_IS_MOVING, 0, 0);          // 移动中
+        setVarAxisDouble(i, VAR_AXIS_IS_SERVO_OFF, 0, 0);       // 伺服关断
+        setVarAxisDouble(i, VAR_AXIS_IS_MIRROR, 0, 0);          // 镜像   
     }
     return GNC_OPERATOR_SUCCESS;
 }
@@ -305,6 +311,13 @@ void shm_var_update(){
         if(fabs(rt_data->axis_data[i].home_crds - rt_data->axis_data[i].mac_cmd_pos) > rt_data->axis_data[i].ref_range){
             setVarAxisInt(i, VAR_AXIS_IS_HOMEF, 0, 0);
         }
+        // 轴状态显示：机械锁住、互锁、移动中
+        if(rt_data->sys_state[SYS_IS_MAC_LOCK_READY]) setVarAxisInt(i, VAR_AXIS_IS_MAC_LOCK, 1, 0);
+        else setVarAxisInt(i, VAR_AXIS_IS_MAC_LOCK, 0, 0);
+        if(rt_data->sys_state[SYS_IS_ALL_AXIS_LOCK]) setVarAxisInt(i, VAR_AXIS_IS_INTER_LOCK, 1, 0);
+        else setVarAxisInt(i, VAR_AXIS_IS_INTER_LOCK, 0, 0);
+        if(IsEqualTo(rt_data->axis_data[i].cmd_vel, 0)) setVarAxisInt(i, VAR_AXIS_IS_MOVING, 0, 0);
+        else setVarAxisInt(i, VAR_AXIS_IS_MOVING, 1, 0);
     }
     for (int i = 0; i < SYS_CHAN_NUM; i++)
     {

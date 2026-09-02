@@ -318,6 +318,19 @@ void pmc_g_input_scan_cycle(void)
         LOG(LOG_LEVEL_INFO, "扫描到G4.1 发生下降沿");
         pmc_dispatch_event(EV_MSG_ENANLE, MAC_LOCK, 0);
     }
+
+    /* 所有互锁 G8.0 */
+    if (SIGNAL_RISING(curr_g.g_regs[4], last_g.g_regs[4], 1))
+    {
+        LOG(LOG_LEVEL_INFO, "扫描到G8.0 发生上升沿");
+        pmc_dispatch_event(EV_MSG_ENANLE, ALL_AXIS_LK, 1);
+    }
+    if (SIGNAL_FALLING(curr_g.g_regs[4], last_g.g_regs[4], 1))
+    {
+        LOG(LOG_LEVEL_INFO, "扫描到G8.0 发生下降沿");
+        pmc_dispatch_event(EV_MSG_ENANLE, ALL_AXIS_LK, 0);
+    }
+
     /* G54 用户宏程序输入指令*/
     if (SIGNAL_BYTE_CHANGED(curr_g.g_regs[54], last_g.g_regs[54]))
     {

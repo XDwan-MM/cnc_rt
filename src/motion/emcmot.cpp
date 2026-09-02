@@ -500,11 +500,13 @@ static void manual_unset_sys_state()
 {
     if (rt_data->current_mode == MODE_MDI || rt_data->current_mode == MODE_MEM || rt_data->current_mode == MODE_DNC)
         return;
-    // todo：手动模式暂不支持机械锁住
+    // todo：手动模式暂不支持机械锁住和所有轴互锁
     if (rt_data->sys_state[SYS_IS_MAC_LOCK_READY])
         rt_data->sys_state[SYS_IS_MAC_LOCK_READY] = false;
     if (rt_data->sys_state[SYS_IS_MAC_LOCK_ON])
         rt_data->sys_state[SYS_IS_MAC_LOCK_ON] = false;
+    if (rt_data->sys_state[SYS_IS_ALL_AXIS_LOCK])
+        rt_data->sys_state[SYS_IS_ALL_AXIS_LOCK] = false;
     switch (rt_data->nc_event)
     {
     case SYS_EVENT_MAC_LOCK_ON:
@@ -512,6 +514,11 @@ static void manual_unset_sys_state()
         LOG(LOG_LEVEL_WARN, "手动模式暂不支持机械锁住");
         rt_data->sys_state[SYS_IS_MAC_LOCK_READY] = false;
         rt_data->sys_state[SYS_IS_MAC_LOCK_ON] = false;
+        break;
+    case SYS_EVENT_ALL_AXIS_LOCK_ON:
+    case SYS_EVENT_ALL_AXIS_LOCK_OFF:
+        LOG(LOG_LEVEL_WARN, "手动模式暂不支持所有轴互锁");
+        rt_data->sys_state[SYS_IS_ALL_AXIS_LOCK] = false;
         break;
     case SYS_EVENT_BLOCK_SKIP_ON:
         rt_set_sys_state(SYS_IS_BLOCK_SKIP, true);
