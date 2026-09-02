@@ -39,7 +39,8 @@ typedef enum{
     MSBT_LOCK = 0,       // 辅助功能锁住
     DRY_RUN,             // 空运行
     SINGLE_BLOCK,        // 单段
-    BLOCK_SKIP = 3,      // 程序段跳过（1~9）    
+    BLOCK_SKIP = 3,      // 程序段跳过（1~9） 
+    ALL_AXIS_LK,         // 所有轴互锁   
     MAC_LOCK = 12,       // 所有轴机床锁住（MLK,MLK1~4）
     MAC_LOCK1,           // 各轴轴机床锁住   
     MAC_LOCK2,

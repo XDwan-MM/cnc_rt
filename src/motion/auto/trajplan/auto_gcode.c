@@ -130,18 +130,19 @@ void auto_execute_pos_cmd(){
     cycle_tp->pos_cmd_data.remain_distance = cycle_tp->plan_block->length - cycle_tp->pos_cmd_data.accum_distance;
     // 计算插补位置
     POS interp_pos = auto_cal_interp_pos(cycle_tp->pos_cmd_data.current_pos, cycle_tp->pos_cmd_data.accum_distance);
-    // 更新运动数据
-    cycle_tp->pos_cmd_data.current_pos.x = rt_data->axis_data[AXIS_X].wcs_cmd_pos_cur = interp_pos.x;
-    cycle_tp->pos_cmd_data.current_pos.y = rt_data->axis_data[AXIS_Y].wcs_cmd_pos_cur = interp_pos.y;
-    cycle_tp->pos_cmd_data.current_pos.z = rt_data->axis_data[AXIS_Z].wcs_cmd_pos_cur = interp_pos.z;
     // TODO：计算误差
     if(IsLessThan(cycle_tp->pos_cmd_data.traj_data->v, 0)) {
         LOG(LOG_LEVEL_ERR, "自动加工错误！在插补段%d插补速度计算失败", cycle_tp->plan_block->line_number);
         LOG(LOG_LEVEL_ERR, "v %f, t[2] %f, t %d", cycle_tp->pos_cmd_data.traj_data->v, cycle_tp->pos_cmd_data.vel_profile->t[2], cycle_tp->pos_cmd_data.interp_cycle);
         cycle_tp->pos_cmd_data.traj_data->v = 0;
     }
+    // 更新插补速度
     cycle_tp->pos_cmd_data.current_vel = rt_data->chan_data[0].cmd_vel = cycle_tp->pos_cmd_data.traj_data->v;
     auto_cal_axis_vel(&cycle_tp->pos_cmd_data.current_pos, &interp_pos, cycle_tp->pos_cmd_data.traj_data->v);
+    // 更新插补位置
+    cycle_tp->pos_cmd_data.current_pos.x = rt_data->axis_data[AXIS_X].wcs_cmd_pos_cur = interp_pos.x;
+    cycle_tp->pos_cmd_data.current_pos.y = rt_data->axis_data[AXIS_Y].wcs_cmd_pos_cur = interp_pos.y;
+    cycle_tp->pos_cmd_data.current_pos.z = rt_data->axis_data[AXIS_Z].wcs_cmd_pos_cur = interp_pos.z;
 }
 
 static bool auto_pos_cmd_cycle_is_finished(){
@@ -279,6 +280,7 @@ static void auto_cal_target_vel(){
         }
         if(!rt_data->sys_state[SYS_IS_MAC_LOCK_READY] && rt_data->sys_state[SYS_IS_MAC_LOCK_ON]) cycle_tp->pos_cmd_data.target_vel = 0;
         if(rt_data->sys_state[SYS_IS_MAC_LOCK_READY] && !rt_data->sys_state[SYS_IS_MAC_LOCK_ON]) cycle_tp->pos_cmd_data.target_vel = 0;
+        if(rt_data->sys_state[SYS_IS_ALL_AXIS_LOCK]) cycle_tp->pos_cmd_data.target_vel = 0;
         break;
     case EXEC_PAUSING:
     case EXEC_RESET:

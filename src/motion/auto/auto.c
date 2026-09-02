@@ -264,7 +264,29 @@ static void auto_check_event(){
             rt_data->sys_state[SYS_IS_MAC_LOCK_ON] = false;
             break;
         }
-        break;         
+        break;    
+    case SYS_EVENT_ALL_AXIS_LOCK_ON:
+        LOG(LOG_LEVEL_INFO, "自动模式处理开启所有轴互锁");
+        switch (cycle_tp->exec_state)
+        {
+        case EXEC_RUNNING:
+            cycle_tp->running_stage = BLOCK_BREAKPOINT;
+        default:
+            rt_set_sys_state(SYS_IS_ALL_AXIS_LOCK, true);
+            break;
+        }
+        break;
+    case SYS_EVENT_ALL_AXIS_LOCK_OFF:
+        LOG(LOG_LEVEL_INFO, "自动模式处理关闭所有轴互锁");
+        switch (cycle_tp->exec_state)
+        {
+        case EXEC_RUNNING:
+            cycle_tp->running_stage = BLOCK_BREAKPOINT;
+        default:
+            rt_set_sys_state(SYS_IS_ALL_AXIS_LOCK, false);
+            break;
+        }
+        break;     
     case SYS_EVENT_BLOCK_SKIP_ON:
         LOG(LOG_LEVEL_INFO, "自动模式处理开启跳段");
         cycle_tp->trigger_event = BLOCK_SKIP_ENABLE;
@@ -441,6 +463,7 @@ static void auto_update_stage(){
                 else rt_data->sys_state[SYS_IS_MAC_LOCK_READY] = false;
                 break;
             case BLOCK_PAUSED:
+            case PROGRAM_WAIT:
                 if (rt_data->sys_state[SYS_IS_MAC_LOCK_ON]) rt_data->sys_state[SYS_IS_MAC_LOCK_READY] = true;
                 else rt_data->sys_state[SYS_IS_MAC_LOCK_READY] = false;
                 break;

@@ -373,6 +373,18 @@ static void task_handle_enable_event(PMC_EVENT *event_data)
             LOG(LOG_LEVEL_INFO, "处理机床锁住关闭事件");
         }
         break;
+    case ALL_AXIS_LK:
+        if (event_data->enable_payload.enable_state)
+        {
+            rt_data->nc_event = SYS_EVENT_ALL_AXIS_LOCK_ON;
+            LOG(LOG_LEVEL_INFO, "处理所有轴互锁开启事件");
+        }
+        else
+        {
+            rt_data->nc_event = SYS_EVENT_ALL_AXIS_LOCK_OFF;
+            LOG(LOG_LEVEL_INFO, "处理所有轴互锁关闭事件");
+        }
+        break;
     case MSBT_LOCK:
         rt_data->sys_state[SYS_IS_MSBT_LOCK] = event_data->enable_payload.enable_state;
         LOG(LOG_LEVEL_INFO, "处理辅助功能锁住事件");
