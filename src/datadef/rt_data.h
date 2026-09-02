@@ -41,6 +41,7 @@ typedef enum
     SYS_IS_SINGLE_BLOCK,        // 单段
     SYS_IS_MSBT_LOCK,           // 辅助功能锁住
     SYS_IS_RAPID,               // 是否快速
+    SYS_IS_PROG_RESTAR,         // 程序再启动
 } SysStateIndex;
 
 // 路径和轨迹两个线程使用

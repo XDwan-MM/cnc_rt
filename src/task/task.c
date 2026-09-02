@@ -303,13 +303,15 @@ static void task_handle_overrate_event(PMC_EVENT *event_data)
 
 static void task_handle_auto_event(PMC_EVENT *event_data)
 {
-    // check：复位在F1.1置高，实时不响应启动和暂停事件
-    if (nc_reset->is_resetting)
+    // check：复位在F1.1置高，实时不响应启动事件
+    if (nc_reset->is_resetting && event_data->run_payload.run_state == 1)
     {
-        if (event_data->run_payload.run_state == 1)
-            LOG(LOG_LEVEL_WARN, "复位中...循环启动无效");
-        if (event_data->run_payload.run_state == 0)
-            LOG(LOG_LEVEL_WARN, "复位中...进给保持无效");
+        LOG(LOG_LEVEL_WARN, "复位中，循环启动无效");
+        return;
+    }
+    // 如果程序再启动时，实时不响应启动事件
+    if(rt_data->sys_state[SYS_IS_PROG_RESTAR] && event_data->run_payload.run_state == 1) {
+        LOG(LOG_LEVEL_INFO, "程序再启动中，循环启动无效");
         return;
     }
     if (event_data->run_payload.run_state == 1)
@@ -337,6 +339,18 @@ static void task_handle_enable_event(PMC_EVENT *event_data)
 {
     switch (event_data->enable_payload.enable_key)
     {
+    case PROG_RESTAR:
+        if (event_data->enable_payload.enable_state)
+        {
+            rt_data->nc_event = SYS_EVENT_PROGRAM_RESTART_ON;
+            LOG(LOG_LEVEL_INFO, "处理程序再启动开启事件");
+        }
+        else
+        {
+            rt_data->nc_event = SYS_EVENT_PROGRAM_RESTART_OFF;
+            LOG(LOG_LEVEL_INFO, "处理程序再启动关闭事件");
+        }
+        break;
     case BLOCK_SKIP:
         if (event_data->enable_payload.enable_state)
         {
