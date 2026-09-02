@@ -335,12 +335,12 @@ void pmc_g_input_scan_cycle(void)
     if (SIGNAL_RISING(curr_g.g_regs[8], last_g.g_regs[8], 0))
     {
         LOG(LOG_LEVEL_INFO, "扫描到G8.0 发生上升沿");
-        pmc_dispatch_event(EV_MSG_ENANLE, ALL_AXIS_LK, 1);
+        pmc_dispatch_event(EV_MSG_ENANLE, ALL_AXIS_LK, 0);
     }
     if (SIGNAL_FALLING(curr_g.g_regs[8], last_g.g_regs[8], 0))
     {
         LOG(LOG_LEVEL_INFO, "扫描到G8.0 发生下降沿");
-        pmc_dispatch_event(EV_MSG_ENANLE, ALL_AXIS_LK, 0);
+        pmc_dispatch_event(EV_MSG_ENANLE, ALL_AXIS_LK, 1);
     }
 
     /* G54 用户宏程序输入指令*/
