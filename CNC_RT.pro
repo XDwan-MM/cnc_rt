@@ -125,6 +125,7 @@ HEADERS += \
     src/motion/protect/stored_stroke_check.h \
     src/plc/plc_scanner/plc_a_signal_scanner.h \
     src/plc/plc_scanner/plc_g_signal_scanner.h \
+    src/plc/plc_scanner/plc_x_signal_scanner.h \
     src/plc/plc_scanner/plc_event_types.h \
     src/plc/plc_scanner/plc_f_signal_handler.h \
     src/plc/plc_scanner/signal_utils.h \
@@ -171,6 +172,7 @@ SOURCES += \
     src/motion/protect/stored_stroke_check.c \
     src/plc/plc_scanner/plc_a_signal_scanner.c \
     src/plc/plc_scanner/plc_g_signal_scanner.c \
+    src/plc/plc_scanner/plc_x_signal_scanner.c \
     src/plc/plc_scanner/plc_f_signal_handler.c \
     src/plc/plc_task/plctask.cpp \
     src/plc/lad_trace/ladtracesampler.cpp \

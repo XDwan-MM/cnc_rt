@@ -13,6 +13,7 @@
 #include "servosamplesampler.h"
 #include "plc_a_signal_scanner.h"
 #include "plc_g_signal_scanner.h"
+#include "plc_x_signal_scanner.h"
 #include "plc_f_signal_handler.h"
 #include "master.h"
 #include <hmisysapi.h>
@@ -128,6 +129,7 @@ void* motion_controller_thread_func(void*) {
         start = get_ns();
         Hal_Driver_Update_All(true, false);
         hmi_events_scan();
+        // plc_x_signal_scan_cycle();
         task_mq_proc();
         emcmotTrajPlan();
         plc_f_signal_handler_cycle();

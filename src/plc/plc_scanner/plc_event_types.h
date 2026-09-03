@@ -173,6 +173,18 @@ typedef struct
 {
     char g_regs[REG_G_NUM];
 } G_INPUT_MAP;
+
+/**
+ * @brief X 变量本地快照映射
+ * 采用数组方式管理。
+ * x_regs 明确指代 PLC 中的 X 寄存器数据 (机床 -> PLC)。
+ * 索引值即为 X 寄存器的偏移量，例如 x_regs[8] 对应 X0008。
+ * REG_X_NUM: 共享内存支持的最大 X 寄存器索引大小
+ */
+typedef struct
+{
+    char x_regs[REG_X_NUM];
+} X_INPUT_MAP;
 #pragma pack(pop)
 
 #ifdef __cplusplus

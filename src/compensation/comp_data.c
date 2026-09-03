@@ -142,8 +142,7 @@ int comp_data_load_saved_compensation(void)
         runtime_axis->backlash_comp_val = saved_axis->backlash_comp_val;
         runtime_axis->straightness1_comp_val = saved_axis->straightness1_comp_val;
         runtime_axis->straightness2_comp_val = saved_axis->straightness2_comp_val;
-        runtime_axis->total_comp_cal = runtime_axis->pitch_comp_val + runtime_axis->backlash_comp_val +
-                                       runtime_axis->straightness1_comp_val + runtime_axis->straightness2_comp_val;
+        runtime_axis->total_comp_cal = runtime_axis->pitch_comp_val + runtime_axis->backlash_comp_val + runtime_axis->straightness1_comp_val + runtime_axis->straightness2_comp_val;
         // printf("rt_data->axis_data[axis] pitch_comp_val %f\n", rt_data->axis_data[axis].pitch_comp_val);
     }
 
@@ -214,10 +213,7 @@ void establish_pitch_comp_table(void)
         if (par->pitch_type != 1 && par->pitch_type != 2)
         {
             pitch_comp_table_status[axis] = OP_RES_ERR_OUT_OF_RANGE;
-            LOG(LOG_LEVEL_ERR,
-                "%s轴的螺距补偿表建立失败，原因: invalid compensation type (type=%d)",
-                axis_names[axis],
-                par->pitch_type);
+            LOG(LOG_LEVEL_ERR, "%s轴的螺距补偿表建立失败，原因: invalid compensation type (type=%d)", axis_names[axis], par->pitch_type);
             pitch_comp_seqlist_init(&pitch_comp_table[axis]);
             continue;
         }
@@ -233,10 +229,7 @@ void establish_pitch_comp_table(void)
         if (par->pitch_table < 0)
         {
             pitch_comp_table_status[axis] = OP_RES_ERR_OUT_OF_RANGE;
-            LOG(LOG_LEVEL_ERR,
-                "%s轴的螺距补偿表建立失败，原因: invalid table start (start=%d)",
-                axis_names[axis],
-                par->pitch_table);
+            LOG(LOG_LEVEL_ERR, "%s轴的螺距补偿表建立失败，原因: invalid table start (start=%d)", axis_names[axis], par->pitch_table);
             pitch_comp_seqlist_init(&pitch_comp_table[axis]);
             continue;
         }
@@ -251,10 +244,7 @@ void establish_pitch_comp_table(void)
         if (read_result != 0)
         {
             pitch_comp_table_status[axis] = OP_RES_ERR_OUT_OF_RANGE;
-            LOG(LOG_LEVEL_ERR,
-                "%s轴的螺距补偿表建立失败，原因: shared-memory read failed (result=%d)",
-                axis_names[axis],
-                read_result);
+            LOG(LOG_LEVEL_ERR, "%s轴的螺距补偿表建立失败，原因: shared-memory read failed (result=%d)", axis_names[axis], read_result);
             pitch_comp_seqlist_init(&pitch_comp_table[axis]);
             continue;
         }
@@ -262,18 +252,10 @@ void establish_pitch_comp_table(void)
         for (int i = 0; i < point_cnt; i++)
             meas_pos_arr_mm[i] = par->pitch_start + (double)i * par->pitch_step;
 
-        pitch_comp_table_status[axis] = generate_pitch_comp_table(&pitch_comp_table[axis],
-                                                                  meas_pos_arr_mm,
-                                                                  fwd_comp_arr_um,
-                                                                  rev_comp_arr_um,
-                                                                  point_cnt);
+        pitch_comp_table_status[axis] = generate_pitch_comp_table(&pitch_comp_table[axis], meas_pos_arr_mm, fwd_comp_arr_um, rev_comp_arr_um, point_cnt);
         if (pitch_comp_table_status[axis] != OP_RES_OK)
         {
-            LOG(LOG_LEVEL_ERR,
-                "%s轴的螺距补偿表建立失败，原因: %s (status=%d)",
-                axis_names[axis],
-                comp_table_result_reason(pitch_comp_table_status[axis]),
-                pitch_comp_table_status[axis]);
+            LOG(LOG_LEVEL_ERR, "%s轴的螺距补偿表建立失败，原因: %s (status=%d)", axis_names[axis], comp_table_result_reason(pitch_comp_table_status[axis]), pitch_comp_table_status[axis]);
             pitch_comp_seqlist_init(&pitch_comp_table[axis]);
         }
     }
@@ -389,11 +371,7 @@ static void establish_straightness_comp_group(int axis, StraightnessTableGroup g
     if (type != 1 && type != 2)
     {
         *status = OP_RES_ERR_OUT_OF_RANGE;
-        LOG(LOG_LEVEL_ERR,
-            "%s轴第%d组直线度补偿表建立失败，原因: invalid compensation type (type=%d)",
-            axis_names[axis],
-            group,
-            type);
+        LOG(LOG_LEVEL_ERR, "%s轴第%d组直线度补偿表建立失败，原因: invalid compensation type (type=%d)", axis_names[axis], group, type);
         straightness_comp_seqlist_init(table);
         return;
     }
@@ -401,11 +379,7 @@ static void establish_straightness_comp_group(int axis, StraightnessTableGroup g
     if (point_cnt < 1 || point_cnt > COMP_ARRAY_MAX_SIZE)
     {
         *status = OP_RES_ERR_OUT_OF_RANGE;
-        LOG(LOG_LEVEL_ERR,
-            "%s轴第%d组直线度补偿表建立失败，原因: invalid point count (point_cnt=%d)",
-            axis_names[axis],
-            group,
-            point_cnt);
+        LOG(LOG_LEVEL_ERR, "%s轴第%d组直线度补偿表建立失败，原因: invalid point count (point_cnt=%d)", axis_names[axis], group, point_cnt);
         straightness_comp_seqlist_init(table);
         return;
     }
@@ -421,11 +395,7 @@ static void establish_straightness_comp_group(int axis, StraightnessTableGroup g
     if (table_start < 0)
     {
         *status = OP_RES_ERR_OUT_OF_RANGE;
-        LOG(LOG_LEVEL_ERR,
-            "%s轴第%d组直线度补偿表建立失败，原因: invalid table start (start=%d)",
-            axis_names[axis],
-            group,
-            table_start);
+        LOG(LOG_LEVEL_ERR, "%s轴第%d组直线度补偿表建立失败，原因: invalid table start (start=%d)", axis_names[axis], group, table_start);
         straightness_comp_seqlist_init(table);
         return;
     }
@@ -442,11 +412,7 @@ static void establish_straightness_comp_group(int axis, StraightnessTableGroup g
     if (read_result != 0)
     {
         *status = OP_RES_ERR_OUT_OF_RANGE;
-        LOG(LOG_LEVEL_ERR,
-            "%s轴第%d组直线度补偿表建立失败，原因: shared-memory read failed (result=%d)",
-            axis_names[axis],
-            group,
-            read_result);
+        LOG(LOG_LEVEL_ERR, "%s轴第%d组直线度补偿表建立失败，原因: shared-memory read failed (result=%d)", axis_names[axis], group, read_result);
         straightness_comp_seqlist_init(table);
         return;
     }
@@ -456,19 +422,14 @@ static void establish_straightness_comp_group(int axis, StraightnessTableGroup g
         moving_ax_pos_arr_mm[i] = start_pos + (double)i * step;
     }
     // 正负直线度补偿表打印
-    for (int i = 0; i < point_cnt; i++)
-    {
-        printf("straight%f %d %d\n", moving_ax_pos_arr_mm[i], fwd_comp_arr_um[i], rev_comp_arr_um[i]);
-    }
+    // for (int i = 0; i < point_cnt; i++)
+    // {
+    //     printf("straight%f %d %d\n", moving_ax_pos_arr_mm[i], fwd_comp_arr_um[i], rev_comp_arr_um[i]);
+    // }
     *status = generate_straightness_comp_table(table, moving_ax_pos_arr_mm, fwd_comp_arr_um, rev_comp_arr_um, point_cnt);
     if (*status != OP_RES_OK)
     {
-        LOG(LOG_LEVEL_ERR,
-            "%s轴第%d组直线度补偿表建立失败，原因: %s (status=%d)",
-            axis_names[axis],
-            group,
-            comp_table_result_reason(*status),
-            *status);
+        LOG(LOG_LEVEL_ERR, "%s轴第%d组直线度补偿表建立失败，原因: %s (status=%d)", axis_names[axis], group, comp_table_result_reason(*status), *status);
         straightness_comp_seqlist_init(table);
     }
 }
