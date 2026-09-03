@@ -35,7 +35,9 @@ typedef enum
     SYS_IS_SWITCHING_MODE,      // 是否正在切换模式
     SYS_IS_MAC_LOCK_ON,         // 机床锁住开启
     SYS_IS_MAC_LOCK_READY,      // 机床锁住完成
-    SYS_IS_ALL_AXIS_LOCK,       // 所有轴互锁
+    SYS_IS_IT_LOCK,             // 所有轴互锁
+    SYS_IS_BSL_LOCK,            // 程序段开始锁住
+    SYS_IS_CSL_LOCK,            // 切削程序段开始锁住
     SYS_IS_DRY_RUN,             // 空运行
     SYS_IS_BLOCK_SKIP,          // 程序段跳过（路径和轨迹线程使用）
     SYS_IS_SINGLE_BLOCK,        // 单段

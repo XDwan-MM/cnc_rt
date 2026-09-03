@@ -331,16 +331,93 @@ void pmc_g_input_scan_cycle(void)
         pmc_dispatch_event(EV_MSG_ENANLE, MAC_LOCK, 0);
     }
 
-    /* 所有互锁 G8.0 */
+    /* 起动锁停 G7.1 1有效*/
+    if (SIGNAL_RISING(curr_g.g_regs[7], last_g.g_regs[7], 1))
+    {
+        LOG(LOG_LEVEL_INFO, "扫描到G7.1 发生上升沿");
+        pmc_dispatch_event(EV_MSG_ENANLE, STLK, 1);
+    }
+    if (SIGNAL_FALLING(curr_g.g_regs[7], last_g.g_regs[7], 1))
+    {
+        LOG(LOG_LEVEL_INFO, "扫描到G7.1 发生下降沿");
+        pmc_dispatch_event(EV_MSG_ENANLE, STLK, 0);
+    }
+
+    /* 所有互锁 G8.0 0有效*/
     if (SIGNAL_RISING(curr_g.g_regs[8], last_g.g_regs[8], 0))
     {
         LOG(LOG_LEVEL_INFO, "扫描到G8.0 发生上升沿");
-        pmc_dispatch_event(EV_MSG_ENANLE, ALL_AXIS_LK, 0);
+        pmc_dispatch_event(EV_MSG_ENANLE, IT, 0);
     }
     if (SIGNAL_FALLING(curr_g.g_regs[8], last_g.g_regs[8], 0))
     {
         LOG(LOG_LEVEL_INFO, "扫描到G8.0 发生下降沿");
-        pmc_dispatch_event(EV_MSG_ENANLE, ALL_AXIS_LK, 1);
+        pmc_dispatch_event(EV_MSG_ENANLE, IT, 1);
+    }
+
+    /* 切削程序段开始互锁 G8.1 0有效*/
+    if (SIGNAL_RISING(curr_g.g_regs[8], last_g.g_regs[8], 1))
+    {
+        LOG(LOG_LEVEL_INFO, "扫描到G8.1 发生上升沿");
+        pmc_dispatch_event(EV_MSG_ENANLE, CSL, 0);
+    }
+    if (SIGNAL_FALLING(curr_g.g_regs[8], last_g.g_regs[8], 1))
+    {
+        LOG(LOG_LEVEL_INFO, "扫描到G8.1 发生下降沿");
+        pmc_dispatch_event(EV_MSG_ENANLE, CSL, 1);
+    }
+
+    /* 程序段开始互锁 G8.3 0有效*/
+    if (SIGNAL_RISING(curr_g.g_regs[8], last_g.g_regs[8], 3))
+    {
+        LOG(LOG_LEVEL_INFO, "扫描到G8.3 发生上升沿");
+        pmc_dispatch_event(EV_MSG_ENANLE, BSL, 0);
+    }
+    if (SIGNAL_FALLING(curr_g.g_regs[8], last_g.g_regs[8], 3))
+    {
+        LOG(LOG_LEVEL_INFO, "扫描到G8.3 发生下降沿");
+        pmc_dispatch_event(EV_MSG_ENANLE, BSL, 1);
+    }
+
+    /* 各轴互锁 G130.0-130.4 0有效*/
+    for(int i = 0; i < 5; i++){
+        if (SIGNAL_RISING(curr_g.g_regs[130], last_g.g_regs[130], i))
+        {
+            LOG(LOG_LEVEL_INFO, "扫描到G130.%d 发生上升沿", i);
+            pmc_dispatch_event(EV_MSG_ENANLE, IT1 + i, 0);
+        }
+        if (SIGNAL_FALLING(curr_g.g_regs[130], last_g.g_regs[130], i))
+        {
+            LOG(LOG_LEVEL_INFO, "扫描到G130.%d 发生下降沿", i);
+            pmc_dispatch_event(EV_MSG_ENANLE, IT1 + i, 1);
+        }
+    }
+    
+    /* 不同轴向互锁 G132.0-132.4 1有效*/
+    for(int i = 0; i < 5; i++){
+        if (SIGNAL_RISING(curr_g.g_regs[132], last_g.g_regs[132], i))
+        {
+            LOG(LOG_LEVEL_INFO, "扫描到G132.%d 发生上升沿", i);
+            pmc_dispatch_event(EV_MSG_ENANLE, PMIT1 + i, 1);
+        }
+        if (SIGNAL_FALLING(curr_g.g_regs[132], last_g.g_regs[132], i))
+        {
+            LOG(LOG_LEVEL_INFO, "扫描到G132.%d 发生下降沿", i);
+            pmc_dispatch_event(EV_MSG_ENANLE, PMIT1 + i, 0);
+        }
+    }
+    /* 不同轴向互锁 G134.0-134.4 1有效*/
+    for(int i = 0; i < 5; i++){
+        if (SIGNAL_RISING(curr_g.g_regs[134], last_g.g_regs[134], i))
+        {
+            LOG(LOG_LEVEL_INFO, "扫描到G134.%d 发生上升沿", i);
+            pmc_dispatch_event(EV_MSG_ENANLE, NMIT1 + i, 1);
+        }
+        if (SIGNAL_FALLING(curr_g.g_regs[134], last_g.g_regs[134], i))
+        {
+            LOG(LOG_LEVEL_INFO, "扫描到G134.%d 发生下降沿", i);
+            pmc_dispatch_event(EV_MSG_ENANLE, NMIT1 + i, 0);
+        }
     }
 
     /* G54 用户宏程序输入指令*/
