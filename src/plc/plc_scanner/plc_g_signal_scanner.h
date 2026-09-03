@@ -17,8 +17,8 @@ extern "C"
 {
 #endif
 
-/** 外部减速功能每个方向支持的逻辑轴数量。 */
-#define PLC_EXTERNAL_DECEL_AXIS_COUNT (8)
+/** 外部减速功能每个方向支持的逻辑轴数量（当前暂支持 X/Y/Z 三轴）。 */
+#define PLC_EXTERNAL_DECEL_AXIS_COUNT (3)
 
 /**
  * @brief 周期性扫描任务

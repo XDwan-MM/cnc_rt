@@ -22,6 +22,7 @@ static void task_handle_enable_event(PLC_EVENT *event_data);
 static void task_handle_reset_event(PLC_EVENT *event_data);
 static void task_handle_hmi_event(PLC_EVENT *event_data);
 static void task_handle_external_decel_event(PLC_EVENT *event_data);
+static bool task_external_decel_enabled(int function);
 
 /* 外部函数定义 */
 
@@ -113,7 +114,18 @@ static GNC_RES task_handle_plc_event(PLC_EVENT *event_data)
     }
     case PLC_EV_MSG_EXTERNAL_DECEL:
     {
-        LOG(LOG_LEVEL_INFO, "处理PLC外部减速事件");
+        if (task_external_decel_enabled(event_data->external_decel_payload.function))
+        {
+            LOG(LOG_LEVEL_INFO,
+                "处理PLC外部减速事件: 功能号=%d, 轴号=%d, 方向=%s(%d), 状态=%s(%d)",
+                event_data->external_decel_payload.function,
+                event_data->external_decel_payload.axis_num,
+                event_data->external_decel_payload.direction > 0 ? "正向" :
+                    (event_data->external_decel_payload.direction < 0 ? "负向" : "未知"),
+                event_data->external_decel_payload.direction,
+                event_data->external_decel_payload.active != 0 ? "生效" : "解除",
+                event_data->external_decel_payload.active);
+        }
         task_handle_external_decel_event(event_data);
         break;
     }
@@ -472,5 +484,28 @@ static void task_handle_external_decel_event(PLC_EVENT *event_data)
     else
     {
         rt_data->nc_event = active ? SYS_EVENT_EXTERNAL_DECEL_NEG_ON : SYS_EVENT_EXTERNAL_DECEL_NEG_OFF;
+    }
+}
+
+static bool task_external_decel_enabled(int function)
+{
+    if (rt_data == NULL || !rt_data->chan_data[0].ex_dec_enable)
+        return false;
+
+    /* 功能 1 使用总开关，功能 2~5 还需检查各自的独立开关。 */
+    switch (function)
+    {
+    case PLC_EXTERNAL_DECEL_FUNCTION_1:
+        return true;
+    case PLC_EXTERNAL_DECEL_FUNCTION_2:
+        return rt_data->chan_data[0].ex_dec2_enable;
+    case PLC_EXTERNAL_DECEL_FUNCTION_3:
+        return rt_data->chan_data[0].ex_dec3_enable;
+    case PLC_EXTERNAL_DECEL_FUNCTION_4:
+        return rt_data->chan_data[0].ex_dec4_enable;
+    case PLC_EXTERNAL_DECEL_FUNCTION_5:
+        return rt_data->chan_data[0].ex_dec5_enable;
+    default:
+        return false;
     }
 }
