@@ -14,8 +14,7 @@
  * 3. 以后若想增加 G19 或 G32，只需在此数组末尾添加数字 19, 32 即可，无需改动获取数据的函数。
  */
 static const int SCAN_G_REGS[] = {
-    4,  5,  6,   7,   8,   12,  14,  19,  29,  30,  32,  33,  43,  44,  45,  46,  54,  55,  56,  61,
-    62, 70, 100, 101, 102, 103, 107, 108, 109, 118, 120, 124, 130, 132, 134, 341, 342, 343, 344, /* 已有及外部减速信号地址 */
+    4, 5, 6, 7, 8, 12, 14, 19, 29, 30, 32, 33, 43, 44, 45, 46, 54, 55, 56, 61, 62, 70, 100, 101, 102, 103, 107, 108, 109, 118, 120, 124, 130, 132, 134, 341, 342, 343, 344, /* 已有及外部减速信号地址 */
 };
 
 /** 计算注册表中元素的个数，用于驱动循环扫描 */
@@ -539,33 +538,45 @@ static void process_external_deceleration_function(const G_INPUT_MAP *curr_g, in
         // 首次扫描
         if (is_first_scan)
         {
-            int positive_active;
-            int negative_active;
+            int positive_active = 0;
+            int negative_active = 0;
 
             positive_active = !GET_BIT(curr_g->g_regs[positive_reg], axis);
-            plc_dispatch_event(PLC_EV_MSG_EXTERNAL_DECEL, function, axis, 1, positive_active);
+            if (positive_active)
+            {
+                plc_dispatch_event(PLC_EV_MSG_EXTERNAL_DECEL, function, axis, 1, 1);
+            }
 
             negative_active = !GET_BIT(curr_g->g_regs[negative_reg], axis);
-            plc_dispatch_event(PLC_EV_MSG_EXTERNAL_DECEL, function, axis, -1, negative_active);
+            if (negative_active)
+            {
+                plc_dispatch_event(PLC_EV_MSG_EXTERNAL_DECEL, function, axis, -1, 1);
+            }
         }
         else
         {
             // 正向减速G信号扫描
             if (SIGNAL_FALLING(curr_g->g_regs[positive_reg], last_g.g_regs[positive_reg], axis))
             {
+                LOG(LOG_LEVEL_INFO, "扫描到G%d.%d 发生下降沿", positive_reg, axis);
+                // 正向减速信号生效
                 plc_dispatch_event(PLC_EV_MSG_EXTERNAL_DECEL, function, axis, 1, 1);
             }
             else if (SIGNAL_RISING(curr_g->g_regs[positive_reg], last_g.g_regs[positive_reg], axis))
             {
+                LOG(LOG_LEVEL_INFO, "扫描到G%d.%d 发生上升沿", positive_reg, axis);
                 plc_dispatch_event(PLC_EV_MSG_EXTERNAL_DECEL, function, axis, 1, 0);
             }
             // 负向减速G信号扫描
             if (SIGNAL_FALLING(curr_g->g_regs[negative_reg], last_g.g_regs[negative_reg], axis))
             {
+                LOG(LOG_LEVEL_INFO, "扫描到G%d.%d 发生下降沿", negative_reg, axis);
+                // 负向减速信号生效
                 plc_dispatch_event(PLC_EV_MSG_EXTERNAL_DECEL, function, axis, -1, 1);
             }
             else if (SIGNAL_RISING(curr_g->g_regs[negative_reg], last_g.g_regs[negative_reg], axis))
             {
+                LOG(LOG_LEVEL_INFO, "扫描到G%d.%d 发生上升沿", negative_reg, axis);
                 plc_dispatch_event(PLC_EV_MSG_EXTERNAL_DECEL, function, axis, -1, 0);
             }
         }

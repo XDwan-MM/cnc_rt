@@ -1,417 +1,603 @@
 #include "jog.h"
 #include "global.h"
+#include "jog_planner.h"
 #include <math.h>
 #include <string.h>
 
-/* JOG规划器实例 */
-jog_planner_t jog_tp[SYS_AXES_NUM_JOG];
-
-/* 控制状态初始化 */
-static JOG_AXIS_CTRL jog_ctrls[SYS_AXES_NUM_JOG] = {{JOG_STATE_IDLE, JOG_DIR_NONE},
-                                                    {JOG_STATE_IDLE, JOG_DIR_NONE},
-                                                    {JOG_STATE_IDLE, JOG_DIR_NONE}};
-
-/* 在 jog.c 的文件头部定义 */
-static NC_MODE last_sys_mode = MODE_IDLE; // 记录进入当前模式前，上一次的操作模式
-
-/* 本地按键保持状态 -- 由 nc_event 边沿更新，替代原先 rt_data 中的 is_jog_pos_req / is_jog_neg_req
+/*
+ * JOG 的公共入口只有周期处理、急停和速度查询；外部减速状态保存在 AxisStatus。
+ * 本文件把输入锁存、保护判断、状态迁移、速度计算、规划器和输出
+ * 按阶段分开；新增停止条件时优先扩展 stop_reason 或保护判断，
+ * 不要再为每一种原因增加一个运动状态。
  */
-static bool jog_pos_held[SYS_AXES_NUM_JOG];
-static bool jog_neg_held[SYS_AXES_NUM_JOG];
 
-/* 内部私有函数声明 */
-static void update_axis_state(int i, JOG_AXIS_CTRL *jog_axis_ctrl, bool global_fatal);
-static void execute_axis_motion(int i, JOG_AXIS_CTRL *jog_axis_ctrl, jog_planner_t *axis_jog_tp, const bool is_rapid);
-static void sync_jog_on_mode_entry();
-static bool check_all_axes_idle_jog();
+typedef enum
+{
+    /* 状态只描述运动阶段；停止的具体原因由 stop_reason 单独记录。 */
+    JOG_AXIS_STATE_IDLE = 0,
+    JOG_AXIS_STATE_RUNNING,
+    JOG_AXIS_STATE_STOPPING,
+} jog_axis_state_t;
+
+typedef enum
+{
+    JOG_DIRECTION_NONE = JOG_DIR_NONE,
+    JOG_DIRECTION_POSITIVE = JOG_DIR_POSITIVE,
+    JOG_DIRECTION_NEGATIVE = JOG_DIR_NEGATIVE,
+} jog_direction_t;
+
+typedef enum
+{
+    /* 状态机只需要记住一个最近停止原因，报警原因还承担“复位解锁”职责。 */
+    JOG_STOP_REASON_NONE = 0,
+    JOG_STOP_REASON_RELEASE,
+    JOG_STOP_REASON_LIMIT,
+    JOG_STOP_REASON_MODE,
+    JOG_STOP_REASON_ALARM,
+    JOG_STOP_REASON_RESET,
+} jog_stop_reason_t;
+
+typedef struct
+{
+    bool positive;
+    bool negative;
+} jog_key_latch_t;
+
+typedef struct
+{
+    SYS_EVENT positive_press;
+    SYS_EVENT positive_release;
+    SYS_EVENT negative_press;
+    SYS_EVENT negative_release;
+} jog_key_event_map_t;
+
+typedef struct
+{
+    jog_axis_state_t state;        /* 当前运动阶段 */
+    jog_direction_t direction;     /* 当前/目标方向 */
+    jog_key_latch_t key;           /* 两个方向键的保持状态 */
+    jog_stop_reason_t stop_reason; /* 最近一次停止原因；报警会锁定重启 */
+    jog_planner_t planner;         /* 该轴唯一的速度/位置规划器 */
+} jog_axis_t;
+
+typedef struct
+{
+    jog_axis_t axis[JOG_AXIS_COUNT];
+    NC_MODE last_sys_mode; /* 用于检测重新进入 JOG 的首个周期 */
+} jog_context_t;
+
+static jog_context_t jog_context = {
+    .last_sys_mode = MODE_IDLE,
+};
+
+static const jog_key_event_map_t jog_key_event_map[JOG_AXIS_COUNT] = {
+    {SYS_EVENT_X_POS_PRESS, SYS_EVENT_X_POS_RELEASE, SYS_EVENT_X_NEG_PRESS, SYS_EVENT_X_NEG_RELEASE},
+    {SYS_EVENT_Y_POS_PRESS, SYS_EVENT_Y_POS_RELEASE, SYS_EVENT_Y_NEG_PRESS, SYS_EVENT_Y_NEG_RELEASE},
+    {SYS_EVENT_Z_POS_PRESS, SYS_EVENT_Z_POS_RELEASE, SYS_EVENT_Z_NEG_PRESS, SYS_EVENT_Z_NEG_RELEASE},
+};
+
+/* 内部函数声明 */
+static void jog_reset_axis(jog_axis_t *axis, double position, bool sync_position);
+static void jog_sync_on_mode_entry(void);
+static void jog_update_key_latches(SYS_EVENT event);
+static jog_direction_t jog_get_requested_direction(const jog_axis_t *axis);
+static bool jog_is_global_fatal_alarm(void);
+static double jog_get_axis_acceleration(int axis, bool is_rapid);
+static bool jog_is_hard_limit_active(int axis, jog_direction_t direction);
+static bool jog_is_direction_blocked(int axis, jog_direction_t direction, double max_acc);
+static int jog_get_direction_index(jog_direction_t direction);
+/*
+ * 状态迁移规则：
+ *   IDLE -> RUNNING    有效按键且目标方向未被阻挡
+ *   RUNNING -> STOPPING 松键、限位、切模或报警
+ *   STOPPING -> IDLE   规划器已经停稳
+ *   STOPPING -> RUNNING 停止过程中重新按下可行方向
+ */
+static void jog_transition_axis(jog_axis_t *axis, int axis_index, jog_direction_t desired_direction, bool global_fatal, bool reset_requested, bool switching_mode);
+static double jog_get_target_velocity(int axis, const jog_axis_t *jog_axis, bool is_rapid);
+static double jog_get_external_decel_velocity(int axis, const jog_axis_t *jog_axis, jog_direction_t direction);
+static void jog_execute_axis(int axis, jog_axis_t *jog_axis, bool is_rapid);
+static void jog_process_axis(int axis, bool is_rapid, bool global_fatal, bool reset_requested, bool switching_mode);
+static void jog_update_outputs(void);
+
+/* 外部函数定义 */
 
 /**
  * @brief JOG 任务主循环 (由 1ms 伺服中断调用)
  */
-void handle_jog_cmd()
+void handle_jog_cmd(void)
 {
-    // 内部急停标志触发，立即停止规划，复位规划器
+    bool global_fatal;
+    bool reset_requested;
+    bool switching_mode;
+    bool is_rapid;
+    SYS_EVENT event;
+
+    if (rt_data == NULL)
+        return;
+
     if (rt_data->sys_state[SYS_IS_ESTOP_ACTIVE])
     {
         jog_handle_estop();
         return;
     }
 
-    // 模式切换中：重置进入标志，确保下次切回 JOG 时重新同步规划器位置
-    if (rt_data->sys_state[SYS_IS_SWITCHING_MODE])
-        last_sys_mode = MODE_IDLE;
-    // 模式切换完成后首次进入 JOG：同步规划器坐标到当前物理位置
-    if (last_sys_mode != MODE_JOG && !rt_data->sys_state[SYS_IS_SWITCHING_MODE])
-    {
-        sync_jog_on_mode_entry();
-        last_sys_mode = MODE_JOG;
-    }
+    /* 1. 读取本周期输入，并处理模式进入。 */
+    event = rt_data->nc_event;
+    switching_mode = rt_data->sys_state[SYS_IS_SWITCHING_MODE];
+    is_rapid = rt_data->sys_state[SYS_IS_RAPID];
+    reset_requested = (event == SYS_EVENT_HMI_RESET);
 
-    /* 报警分类预计算：每周期一次，判定是否为全局致命报警。
-       - 仅当报警纯粹由限位开关引起时，不致命，放行各轴自行处理（X轴限位不影响Y/Z轴）。
-       - 其余一切情况（非限位报警、限位+非限位混合、系统级报警）均为致命，三轴全停。
+    /* 切换模式期间不接受新的 JOG 运动请求，等速度降为零后再离开。 */
+    if (switching_mode)
+        jog_context.last_sys_mode = MODE_IDLE;
 
-       SYS_IS_ALARMING 为真时：
-         non_limit   pure_limit   →  global_fatal
-         ✓           任意          →  true   非限位报警
-         ✗           ✓            →  false  纯限位报警（放行）
-         ✗           ✗            →  true   系统级报警（无限位标志） */
-    bool global_fatal = false;
-    if (rt_data->sys_state[SYS_IS_ALARMING])
-    {
-        bool any_non_limit = false;
-        bool any_pure_limit = false;
-        for (int j = 0; j < SYS_AXES_NUM_JOG; j++)
-        {
-            if (rt_data->axis_data[j].axis_status.is_error || rt_data->axis_data[j].axis_status.is_lag_error)
-                any_non_limit = true;
-            else if (rt_data->axis_data[j].axis_status.is_fwd_limit || rt_data->axis_data[j].axis_status.is_rev_limit)
-                any_pure_limit = true;
-        }
-        global_fatal = (any_non_limit || !any_pure_limit);
-    }
+    if (jog_context.last_sys_mode != MODE_JOG && !switching_mode)
+        jog_sync_on_mode_entry();
 
-    for (int i = 0; i < SYS_AXES_NUM_JOG; i++)
-    {
-        /* 1. 静态同步：IDLE状态下强制同步位置，防止从JOG切入其他模式时位置突跳 */
-        if (jog_ctrls[i].state == JOG_STATE_IDLE)
-        {
-            jog_tp[i].curr_pos = rt_data->axis_data[i].wcs_cmd_pos_cur;
-            jog_tp[i].curr_vel = 0.0;
-            jog_tp[i].enable = 0;
-        }
+    /* 2. 将事件转换为按键保持状态，报警只在本周期计算一次。 */
+    jog_update_key_latches(event);
+    global_fatal = jog_is_global_fatal_alarm();
 
-        /* 2. 处理按键信号与状态机切换 */
-        update_axis_state(i, &jog_ctrls[i], global_fatal);
+    /* 3. 每轴独立完成状态迁移和规划器更新。 */
+    for (int i = 0; i < JOG_AXIS_COUNT; i++)
+        jog_process_axis(i, is_rapid, global_fatal, reset_requested, switching_mode);
 
-        /* 3. 执行JOG运动计算逻辑 */
-        execute_axis_motion(i, &jog_ctrls[i], &jog_tp[i], rt_data->sys_state[SYS_IS_RAPID]);
-
-        /* 4. 指令输出给外部系统变量 */
-        rt_data->axis_data[i].wcs_cmd_pos_cur = jog_tp[i].curr_pos;
-        rt_data->axis_data[i].cmd_vel = jog_tp[i].curr_vel;  // unit: mm/s
-    }
-
-    /* 计算合成进给速度并更新给人机交互显示 */
-    double f_sq = 0;
-    for (int i = 0; i < SYS_AXES_NUM_JOG; i++)
-    {
-        f_sq += (jog_tp[i].curr_vel * jog_tp[i].curr_vel);
-    }
-
-    rt_data->chan_data[0].cmd_vel = sqrt(f_sq);
-
-    // 减速完成信号：仅在限位触发且速度归零时置位
-    for (int i = 0; i < SYS_AXES_NUM_JOG; i++)
-    {
-        if (fabs(rt_data->axis_data[i].cmd_vel) < SPEED_THRESHOLD &&
-            (rt_data->axis_data[i].axis_status.is_fwd_limit || rt_data->axis_data[i].axis_status.is_rev_limit))
-        {
-            rt_data->axis_data[i].axis_status.is_decel_done = 1;
-        }
-    }
-
-    // 无动作时将通道事件全局变量置为NONE事件
-    if (check_all_axes_idle_jog())
-    {
-        rt_data->nc_event = SYS_EVENT_NONE;
-    }
+    /* 4. 汇总轴输出，并在停止完成后消费本周期事件。 */
+    jog_update_outputs();
 }
 
 /**
  * @brief 处理急停异常情况
  */
-void jog_handle_estop()
+void jog_handle_estop(void)
 {
-    for (int i = 0; i < SYS_AXES_NUM_JOG; i++)
+    /* 急停直接清空所有运动状态；PLC 外部减速电平保存在 AxisStatus 中。 */
+    for (int i = 0; i < JOG_AXIS_COUNT; i++)
+        jog_reset_axis(&jog_context.axis[i], 0.0, false);
+
+    if (rt_data != NULL)
     {
-        // JOG急停复位
-        jog_ctrls[i].state = JOG_STATE_IDLE;
-        jog_ctrls[i].direction = JOG_DIR_NONE;
-        memset(&jog_tp[i], 0, sizeof(jog_planner_t));
-        /* 清除本地保持状态 */
-        jog_pos_held[i] = false;
-        jog_neg_held[i] = false;
+        for (int i = 0; i < JOG_AXIS_COUNT; i++)
+        {
+            /* handle_jog_cmd 在急停分支会立即返回，因此这里同步清零对外速度。 */
+            rt_data->axis_data[i].cmd_vel = 0.0;
+        }
+        rt_data->chan_data[0].cmd_vel = 0.0;
+    }
+    jog_context.last_sys_mode = MODE_IDLE;
+}
+
+double jog_get_axis_velocity(int axis)
+{
+    if (axis < 0 || axis >= JOG_AXIS_COUNT)
+        return 0.0;
+    return jog_context.axis[axis].planner.curr_vel;
+}
+
+/* 内部函数定义 */
+
+/* 清除一轴运动状态；sync_position 只在模式进入时用于对齐当前位置。 */
+static void jog_reset_axis(jog_axis_t *axis, double position, bool sync_position)
+{
+    if (axis == NULL)
+        return;
+
+    axis->state = JOG_AXIS_STATE_IDLE;
+    axis->direction = JOG_DIRECTION_NONE;
+    axis->key.positive = false;
+    axis->key.negative = false;
+    axis->stop_reason = JOG_STOP_REASON_NONE;
+
+    memset(&axis->planner, 0, sizeof(axis->planner));
+    if (sync_position)
+        axis->planner.curr_pos = position;
+}
+
+static void jog_sync_on_mode_entry(void)
+{
+    /* 进入 JOG 时从当前指令位置重新开始，避免继承其他模式的规划器状态。 */
+    for (int i = 0; i < JOG_AXIS_COUNT; i++)
+    {
+        bool alarm_latched;
+
+        /* 模式切换只重置规划器，不能绕过非限位报警的 RESET 解锁要求。 */
+        alarm_latched = (jog_context.axis[i].stop_reason == JOG_STOP_REASON_ALARM);
+        jog_reset_axis(&jog_context.axis[i], rt_data->axis_data[i].wcs_cmd_pos_cur, true);
+        if (alarm_latched)
+            jog_context.axis[i].stop_reason = JOG_STOP_REASON_ALARM;
+    }
+    jog_context.last_sys_mode = MODE_JOG;
+}
+
+static void jog_update_key_latches(SYS_EVENT event)
+{
+    /* 一个周期只处理一个 nc_event；非 JOG 事件直接忽略，保持上一周期电平。 */
+    for (int i = 0; i < JOG_AXIS_COUNT; i++)
+    {
+        if (event == jog_key_event_map[i].positive_press)
+            jog_context.axis[i].key.positive = true;
+        else if (event == jog_key_event_map[i].positive_release)
+            jog_context.axis[i].key.positive = false;
+        else if (event == jog_key_event_map[i].negative_press)
+            jog_context.axis[i].key.negative = true;
+        else if (event == jog_key_event_map[i].negative_release)
+            jog_context.axis[i].key.negative = false;
     }
 }
 
-/**
- * @brief 根据 nc_event 边沿更新本地保持状态，并驱动 JOG 状态机
- *
- * 状态机完全由 nc_event 边沿事件驱动，不再依赖 rt_data 中的电平标志。
- * 本函数将 nc_event 边沿转换为本地保持状态（jog_pos_held / jog_neg_held），
- * 供状态机作为电平信号消费。
- *
- * 行为规则：
- * - 仅正向按键按住 → 正向运动
- * - 仅负向按键按住 → 负向运动
- * - 正负同时按住  → 停止（工业安全互锁）
- * - 正向按住时松开负向 → 继续正向运动（不受负向释放影响）
- * - 全松开 → 停止
- */
-static void update_axis_state(int i, JOG_AXIS_CTRL *jog_axis_ctrl, bool global_fatal)
+/* 将两个按键保持状态转换为单一方向；双按和全松开均视为无方向。 */
+static jog_direction_t jog_get_requested_direction(const jog_axis_t *axis)
 {
-    SYS_EVENT event = rt_data->nc_event;
+    if (axis == NULL || axis->key.positive == axis->key.negative)
+        return JOG_DIRECTION_NONE;
+    return axis->key.positive ? JOG_DIRECTION_POSITIVE : JOG_DIRECTION_NEGATIVE;
+}
 
-    /* 0. nc_event 边沿 → 本地保持状态 */
-    switch (i)
+/* 判断是否为需要所有 JOG 轴停止的报警。纯限位报警留给对应轴处理。 */
+static bool jog_is_global_fatal_alarm(void)
+{
+    bool any_non_limit;
+    bool any_pure_limit;
+
+    if (!rt_data->sys_state[SYS_IS_ALARMING])
+        return false;
+
+    any_non_limit = false;
+    any_pure_limit = false;
+    for (int i = 0; i < JOG_AXIS_COUNT; i++)
     {
-    case 0:
-        if (event == SYS_EVENT_X_POS_PRESS)
-            jog_pos_held[0] = true;
-        else if (event == SYS_EVENT_X_POS_RELEASE)
-            jog_pos_held[0] = false;
-        else if (event == SYS_EVENT_X_NEG_PRESS)
-            jog_neg_held[0] = true;
-        else if (event == SYS_EVENT_X_NEG_RELEASE)
-            jog_neg_held[0] = false;
-        break;
-    case 1:
-        if (event == SYS_EVENT_Y_POS_PRESS)
-            jog_pos_held[1] = true;
-        else if (event == SYS_EVENT_Y_POS_RELEASE)
-            jog_pos_held[1] = false;
-        else if (event == SYS_EVENT_Y_NEG_PRESS)
-            jog_neg_held[1] = true;
-        else if (event == SYS_EVENT_Y_NEG_RELEASE)
-            jog_neg_held[1] = false;
-        break;
-    case 2:
-        if (event == SYS_EVENT_Z_POS_PRESS)
-            jog_pos_held[2] = true;
-        else if (event == SYS_EVENT_Z_POS_RELEASE)
-            jog_pos_held[2] = false;
-        else if (event == SYS_EVENT_Z_NEG_PRESS)
-            jog_neg_held[2] = true;
-        else if (event == SYS_EVENT_Z_NEG_RELEASE)
-            jog_neg_held[2] = false;
-        break;
+        if (rt_data->axis_data[i].axis_status.is_error || rt_data->axis_data[i].axis_status.is_lag_error)
+            any_non_limit = true;
+        else if (rt_data->axis_data[i].axis_status.is_fwd_limit || rt_data->axis_data[i].axis_status.is_rev_limit)
+            any_pure_limit = true;
     }
+    /* 只有明确的纯限位报警才允许各轴独立处理；其他报警需要 RESET 解锁。 */
+    return any_non_limit || !any_pure_limit;
+}
 
-    /* 本地保持状态（替代原先 is_jog_pos_req / is_jog_neg_req） */
-    bool pos_held = jog_pos_held[i];
-    bool neg_held = jog_neg_held[i];
-    bool is_fwd_limit = rt_data->axis_data[i].axis_status.is_fwd_limit;
-    bool is_rev_limit = rt_data->axis_data[i].axis_status.is_rev_limit;
+/* 读取当前 JOG 模式的加速度，并将无效参数钳制为 0。 */
+static double jog_get_axis_acceleration(int axis, bool is_rapid)
+{
+    double acceleration;
 
-    /* 1. 复位事件：清除本地保持状态并强制刹车 */
-    if (event == SYS_EVENT_HMI_RESET)
+    if (axis < 0 || axis >= JOG_AXIS_COUNT)
+        return 0.0;
+    acceleration = is_rapid ? rt_data->axis_data[axis].max_rapid_acc : rt_data->axis_data[axis].max_feed_acc;
+    if (!isfinite(acceleration) || acceleration < 0.0)
+        return 0.0;
+    return acceleration;
+}
+
+/* 查询指定方向的硬限位；反方向硬限位不会阻挡当前运动。 */
+static bool jog_is_hard_limit_active(int axis, jog_direction_t direction)
+{
+    if (axis < 0 || axis >= JOG_AXIS_COUNT)
+        return false;
+    if (direction == JOG_DIRECTION_POSITIVE)
+        return rt_data->axis_data[axis].axis_status.is_fwd_limit;
+    if (direction == JOG_DIRECTION_NEGATIVE)
+        return rt_data->axis_data[axis].axis_status.is_rev_limit;
+    return false;
+}
+
+/* 将方向映射到外部减速矩阵的第二维。 */
+static int jog_get_direction_index(jog_direction_t direction)
+{
+    if (direction == JOG_DIRECTION_POSITIVE)
+        return 0;
+    if (direction == JOG_DIRECTION_NEGATIVE)
+        return 1;
+    return -1;
+}
+
+/* 判断请求方向是否受硬限位、软限位前瞻或无效加速度约束。 */
+static bool jog_is_direction_blocked(int axis, jog_direction_t direction, double max_acc)
+{
+    double current_velocity;
+    double stop_distance;
+    double positive_limit;
+    double negative_limit;
+    bool hard_limit;
+
+    if (axis < 0 || axis >= JOG_AXIS_COUNT || direction == JOG_DIRECTION_NONE)
+        return false;
+
+    hard_limit = jog_is_hard_limit_active(axis, direction);
+    if (hard_limit)
+        return true;
+
+    positive_limit = rt_data->axis_data[axis].plmt;
+    negative_limit = rt_data->axis_data[axis].nlmt;
+    /* 没有有效加速度时不能建立速度斜坡，保守地禁止新的运动请求。 */
+    if (!isfinite(max_acc) || max_acc <= 0.0)
+        return true;
+    if (positive_limit <= negative_limit)
+        return false;
+
+    current_velocity = jog_context.axis[axis].planner.curr_vel;
+    /* 预估按当前速度刹停所需距离，提前禁止会来不及刹停的方向。 */
+    stop_distance = (current_velocity * current_velocity) / (2.0 * max_acc) * JOG_BRAKE_FACTOR;
+    if (direction == JOG_DIRECTION_POSITIVE)
+        return (jog_context.axis[axis].planner.curr_pos + stop_distance) >= positive_limit;
+    return (jog_context.axis[axis].planner.curr_pos - stop_distance) <= negative_limit;
+}
+
+static void jog_transition_axis(jog_axis_t *axis, int axis_index, jog_direction_t desired_direction, bool global_fatal, bool reset_requested, bool switching_mode)
+{
+    bool direction_blocked;
+    bool current_direction_hard_blocked;
+    bool same_direction_limit_stop;
+
+    if (axis == NULL)
+        return;
+
+    direction_blocked = jog_is_direction_blocked(axis_index, desired_direction, axis->planner.max_acc);
+    same_direction_limit_stop = (axis->stop_reason == JOG_STOP_REASON_LIMIT && desired_direction == axis->direction);
+
+    /* 优先级：复位、全局报警、报警复位锁存，然后才处理模式/按键/限位。 */
+    if (reset_requested)
     {
-        jog_pos_held[i] = false;
-        jog_neg_held[i] = false;
-        jog_axis_ctrl->state = JOG_STATE_STOPPING;
+        axis->key.positive = false;
+        axis->key.negative = false;
+        axis->stop_reason = JOG_STOP_REASON_RESET;
+        axis->state = JOG_AXIS_STATE_STOPPING;
         return;
     }
 
-    /* 2. 切模式：强制停止 */
-    if (rt_data->sys_state[SYS_IS_SWITCHING_MODE])
-    {
-        jog_axis_ctrl->state = JOG_STATE_STOPPING;
-        return;
-    }
-
-    /* 3. 全局致命报警 */
     if (global_fatal)
     {
-        if (jog_axis_ctrl->state != JOG_STATE_IDLE)
-            jog_axis_ctrl->state = JOG_STATE_STOPPING;
+        /* 即使轴已经停稳，也要保留报警原因，防止报警消失后直接重启。 */
+        axis->stop_reason = JOG_STOP_REASON_ALARM;
+        if (axis->state != JOG_AXIS_STATE_IDLE)
+            axis->state = JOG_AXIS_STATE_STOPPING;
         return;
     }
 
-    /* 4. 按键保持状态 → 期望方向：
-     *    仅当有且仅有一个方向按住时才产生有效方向；
-     *    双按（互锁）、全松均映射为 JOG_DIR_NONE（停止）。 */
-    int desired_dir = JOG_DIR_NONE;
-    if (pos_held && !neg_held)
-        desired_dir = JOG_DIR_POSITIVE;
-    else if (neg_held && !pos_held)
-        desired_dir = JOG_DIR_NEGATIVE;
-
-    /* 软限位前瞻：预测刹车距离，若超出限位则阻止该方向运动 */
-    bool soft_limit_blocked = false;
+    if (axis->stop_reason == JOG_STOP_REASON_ALARM)
     {
-        double p_limit = par_axis[i][PAR_AX_PLMT].value.val_real;
-        double n_limit = par_axis[i][PAR_AX_NLMT].value.val_real;
-        // p_limit > n_limit 视为有限位直线轴；相等(如全0)视为无限旋转轴，跳过检查
-        if (p_limit > n_limit && jog_tp[i].max_acc > 0.0)
-        {
-            double curr_v = jog_tp[i].curr_vel;
-            double stop_dist = (curr_v * curr_v) / (2.0 * jog_tp[i].max_acc) * BRAKE_FACTOR;
-            if (desired_dir == JOG_DIR_POSITIVE)
-                soft_limit_blocked = ((jog_tp[i].curr_pos + stop_dist) >= p_limit);
-            else if (desired_dir == JOG_DIR_NEGATIVE)
-                soft_limit_blocked = ((jog_tp[i].curr_pos - stop_dist) <= n_limit);
-        }
+        /* 非限位报警解除后仍保持锁定，必须收到 HMI_RESET 才能再次 JOG。 */
+        return;
     }
 
-    /* dir_blocked 是一个方向阻塞标志，用于判断当前期望的运动方向是否被禁止 */
-    // 三个条件，任一为true即阻塞：
-    // desired_dir == JOG_DIR_POSITIVE && is_fwd_limit	想往正向走，但正向硬件限位开关已触发
-    // desired_dir == JOG_DIR_NEGATIVE && is_rev_limit	想往负向走，但负向硬件限位开关已触发
-    // soft_limit_blocked	想走的方向，软限位前瞻预测会冲过限位
-    bool dir_blocked = (desired_dir == JOG_DIR_POSITIVE && is_fwd_limit) ||
-                       (desired_dir == JOG_DIR_NEGATIVE && is_rev_limit) || soft_limit_blocked;
-
-    /* 5. 状态机切换 */
-    switch (jog_axis_ctrl->state)
+    if (switching_mode)
     {
-    case JOG_STATE_IDLE:
-        if (desired_dir != JOG_DIR_NONE && !dir_blocked)
+        axis->stop_reason = JOG_STOP_REASON_MODE;
+        axis->state = JOG_AXIS_STATE_STOPPING;
+        return;
+    }
+
+    /* 当前方向只检查硬限位；软限位通过 desired_direction 的阻挡处理，允许换向退出。 */
+    current_direction_hard_blocked = jog_is_hard_limit_active(axis_index, axis->direction);
+    switch (axis->state)
+    {
+    case JOG_AXIS_STATE_IDLE:
+        if (desired_direction != JOG_DIRECTION_NONE && !direction_blocked)
         {
-            jog_axis_ctrl->state = JOG_STATE_RUNNING;
-            jog_axis_ctrl->direction = desired_dir;
+            axis->state = JOG_AXIS_STATE_RUNNING;
+            axis->direction = desired_direction;
+            axis->stop_reason = JOG_STOP_REASON_NONE;
         }
         break;
 
-    case JOG_STATE_RUNNING:
-        /* 运行中运动方向限位触发 → 刹车 */
-        if ((jog_axis_ctrl->direction == JOG_DIR_POSITIVE && is_fwd_limit) ||
-            (jog_axis_ctrl->direction == JOG_DIR_NEGATIVE && is_rev_limit))
+    case JOG_AXIS_STATE_RUNNING:
+        if (current_direction_hard_blocked)
         {
-            jog_axis_ctrl->state = JOG_STATE_STOPPING;
-            break;
+            axis->stop_reason = JOG_STOP_REASON_LIMIT;
+            axis->state = JOG_AXIS_STATE_STOPPING;
         }
-
-        if (desired_dir != JOG_DIR_NONE && !dir_blocked)
+        else if (desired_direction != JOG_DIRECTION_NONE && !direction_blocked)
         {
-            /* 平滑换向/保持：规划器自动处理减速过零 */
-            jog_axis_ctrl->direction = desired_dir;
+            /* 运行中允许直接换向，规划器会先按当前加速度减速再反向。 */
+            axis->direction = desired_direction;
+            axis->stop_reason = JOG_STOP_REASON_NONE;
         }
         else
         {
-            /* 无有效方向 → 刹车（双按互锁、全松、或被限位阻挡） */
-            jog_axis_ctrl->state = JOG_STATE_STOPPING;
+            axis->stop_reason = (desired_direction == JOG_DIRECTION_NONE) ? JOG_STOP_REASON_RELEASE : JOG_STOP_REASON_LIMIT;
+            axis->state = JOG_AXIS_STATE_STOPPING;
         }
         break;
 
-    case JOG_STATE_STOPPING:
-        /* 减速过程中恢复：按键电平有效且方向无障碍则切回 RUNNING */
-        if (desired_dir != JOG_DIR_NONE && !dir_blocked)
+    case JOG_AXIS_STATE_STOPPING:
+        /* 限位停止后必须先换向；松键后重新按同方向仍可再次点动。 */
+        if (desired_direction != JOG_DIRECTION_NONE && !same_direction_limit_stop && !direction_blocked)
         {
-            jog_axis_ctrl->state = JOG_STATE_RUNNING;
-            jog_axis_ctrl->direction = desired_dir;
+            /* 停止尚未完成时重新按键，恢复运行而不丢失规划器当前速度。 */
+            axis->state = JOG_AXIS_STATE_RUNNING;
+            axis->direction = desired_direction;
+            axis->stop_reason = JOG_STOP_REASON_NONE;
         }
         break;
-    }
-}
 
-/**
- * @brief 轴运动执行逻辑 (带前瞻软限位拦截)
- * 根据快速标志位选择 运动类型：快速JOG/普通JOG。
- */
-static void execute_axis_motion(int i, JOG_AXIS_CTRL *jog_axis_ctrl, jog_planner_t *axis_jog_tp, bool is_rapid)
-{
-    switch (jog_axis_ctrl->state)
-    {
-    case JOG_STATE_RUNNING:
-    {
-        /* 使能规划器 */
-        axis_jog_tp->enable = 1; // 保持使能开启
-
-        /* 1. 更新运动参数 */
-        // 根据模式选择速度与加速度参数  普通jog：1）慢速点动速度 2）加工加速度；
-        // 快速：1）快速点动速度 2）快速加速度
-        double base_vel = is_rapid ? rt_data->axis_data[i].jog_fastspd
-                                   : rt_data->axis_data[i].jog_lowspd;
-        double base_acc = is_rapid ? rt_data->axis_data[i].max_rapid_acc
-                                   : rt_data->axis_data[i].max_feed_acc;
-        // 设置目标速度：实时获取倍率，设定带方向的目标速度
-        double current_override = is_rapid ? (var_chan[0][VAR_CHAN_RAPID_OVERRIDE].value.f / 100.0)
-                                           : (var_chan[0][VAR_CHAN_FEED_OVERRIDE].value.f / 100.0);
-        axis_jog_tp->target_vel = base_vel * current_override * jog_axis_ctrl->direction;
-        axis_jog_tp->max_acc = base_acc;
-
-        /* 2. 软限位前瞻拦截预测 */
-        double p_limit = rt_data->axis_data[i].plmt;
-        double n_limit = rt_data->axis_data[i].nlmt;
-
-        // 兼容工业规范：如果正限位严格大于负限位，视为有限位直线轴。
-        // 如果正负限位设置相等(如全是0)，则视为无限旋转轴，跳过限位检查。
-        if (p_limit > n_limit)
-        {
-            double curr_v = axis_jog_tp->curr_vel;
-            double decel = axis_jog_tp->max_acc;
-
-            // 计算理论刹车距离，乘以 1.05 作为安全余量，防止浮点累加误差导致轻微越界
-            // 减小系数，就可以超过限位
-            double stop_dist = (curr_v * curr_v) / (2.0 * decel) * BRAKE_FACTOR;
-
-            bool is_limit = false;
-            if (jog_axis_ctrl->direction == JOG_DIR_POSITIVE)
-            {
-                is_limit = ((axis_jog_tp->curr_pos + stop_dist) >= p_limit);
-            }
-            else if (jog_axis_ctrl->direction == JOG_DIR_NEGATIVE)
-            {
-                is_limit = ((axis_jog_tp->curr_pos - stop_dist) <= n_limit);
-            }
-            // 超出限位，则降速
-            if (is_limit)
-            {
-                jog_axis_ctrl->state = JOG_STATE_STOPPING;
-            }
-        }
-        break;
-    }
-
-    case JOG_STATE_STOPPING:
-    {
-        // 注意：这里不要设 enable = 0，而是让 target_vel = 0
-        axis_jog_tp->target_vel = 0.0;
-        axis_jog_tp->enable = 1;
-
-        /* 检查是否完全停稳 */
-        if (!axis_jog_tp->active)
-        {
-            jog_axis_ctrl->state = JOG_STATE_IDLE;
-            jog_axis_ctrl->direction = JOG_DIR_NONE;
-            axis_jog_tp->enable = 0;
-        }
-        break;
-    }
-    case JOG_STATE_IDLE:
-    {
-        axis_jog_tp->enable = 0;
-        axis_jog_tp->target_vel = 0.0;
-        break;
-    }
     default:
+        axis->state = JOG_AXIS_STATE_IDLE;
+        axis->direction = JOG_DIRECTION_NONE;
+        axis->stop_reason = JOG_STOP_REASON_NONE;
         break;
     }
-    // 统一调用更新
-    jog_planner_update(axis_jog_tp, JOG_CYCLE_TIME);
 }
 
-/**
- * @brief 内部同步函数：当检测到模式切换进入点动时，强制对齐所有状态
- */
-static void sync_jog_on_mode_entry()
+/* 计算最终目标速度：基础 JOG 速度乘倍率，再叠加同轴同向外部减速上限。 */
+static double jog_get_target_velocity(int axis, const jog_axis_t *jog_axis, bool is_rapid)
 {
-    for (int i = 0; i < SYS_AXES_NUM_JOG; i++)
+    double base_velocity;
+    double override;
+    double target_velocity;
+    double target_speed;
+    double external_limit;
+
+    if (jog_axis == NULL)
+        return 0.0;
+    if (is_rapid)
     {
-        double actual_pos = rt_data->axis_data[i].wcs_cmd_pos_cur;
-        jog_ctrls[i].state = JOG_STATE_IDLE;
-        jog_ctrls[i].direction = JOG_DIR_NONE;
-        jog_tp[i].curr_pos = actual_pos;
-        jog_tp[i].curr_vel = 0.0;
-        jog_tp[i].enable = 0;
-        /* 清除本地保持状态，防止切模式时残留的 hold 状态导致误动作 */
-        jog_pos_held[i] = false;
-        jog_neg_held[i] = false;
+        base_velocity = rt_data->axis_data[axis].jog_fastspd;
+        override = var_chan[0][VAR_CHAN_RAPID_OVERRIDE].value.f / 100.0;
     }
+    else
+    {
+        base_velocity = rt_data->axis_data[axis].jog_lowspd;
+        override = var_chan[0][VAR_CHAN_FEED_OVERRIDE].value.f / 100.0;
+    }
+    /* SYS_IS_RAPID 只决定基础 JOG 速度/倍率；外部减速统一使用 rpd_ex_decN_vel。 */
+    target_velocity = base_velocity * override * (double)jog_axis->direction;
+    target_speed = fabs(target_velocity);
+    external_limit = jog_get_external_decel_velocity(axis, jog_axis, jog_axis->direction);
+    if (external_limit < target_speed)
+        target_speed = external_limit;
+    return copysign(target_speed, target_velocity);
 }
 
-/**
- * @brief jog模式下 检查所有轴是否都处于静止空闲状态
- */
-static bool check_all_axes_idle_jog()
+/* 返回有效外部减速中的最小速度；没有信号时返回无穷大表示“不限速”。 */
+static double jog_get_external_decel_velocity(int axis, const jog_axis_t *jog_axis, jog_direction_t direction)
 {
-    for (int i = 0; i < SYS_AXES_NUM_JOG; i++)
+    bool function_enabled[SYS_EXTERNAL_DECEL_FUNCTION_COUNT];
+    double configured_velocity[SYS_EXTERNAL_DECEL_FUNCTION_COUNT];
+    double limit;
+    int direction_index;
+
+    if (jog_axis == NULL || !rt_data->chan_data[0].ex_dec_enable)
+        return HUGE_VAL;
+
+    direction_index = jog_get_direction_index(direction);
+    if (direction_index < 0)
+        return HUGE_VAL;
+
+    /* 下标 0~4 分别对应外部减速功能 1~5。 */
+    function_enabled[0] = true; /* 功能 1 没有独立开关。 */
+    function_enabled[1] = rt_data->chan_data[0].ex_dec2_enable;
+    function_enabled[2] = rt_data->chan_data[0].ex_dec3_enable;
+    function_enabled[3] = rt_data->chan_data[0].ex_dec4_enable;
+    function_enabled[4] = rt_data->chan_data[0].ex_dec5_enable;
+    configured_velocity[0] = rt_data->axis_data[axis].rpd_ex_dec1_vel;
+    configured_velocity[1] = rt_data->axis_data[axis].rpd_ex_dec2_vel;
+    configured_velocity[2] = rt_data->axis_data[axis].rpd_ex_dec3_vel;
+    configured_velocity[3] = rt_data->axis_data[axis].rpd_ex_dec4_vel;
+    configured_velocity[4] = rt_data->axis_data[axis].rpd_ex_dec5_vel;
+
+    limit = HUGE_VAL;
+    for (int function = 0; function < SYS_EXTERNAL_DECEL_FUNCTION_COUNT; function++)
     {
-        if (jog_ctrls[i].state != JOG_STATE_IDLE)
+        if (!rt_data->axis_data[axis].axis_status.external_decel_active[function][direction_index] || !function_enabled[function])
+            continue;
+
+        if (!isfinite(configured_velocity[function]) || configured_velocity[function] < 0.0)
+            configured_velocity[function] = 0.0;
+        if (configured_velocity[function] < limit)
+            limit = configured_velocity[function];
+    }
+    return limit;
+}
+
+/* 根据状态设置规划器目标，并推进一个伺服周期。 */
+static void jog_execute_axis(int axis, jog_axis_t *jog_axis, bool is_rapid)
+{
+    if (!isfinite(jog_axis->planner.max_acc) || jog_axis->planner.max_acc <= 0.0)
+    {
+        /* 规划器无法在无效加速度下减速；清零输出，避免轴保持在不可停止状态。 */
+        jog_axis->planner.target_vel = 0.0;
+        jog_axis->planner.enable = 0;
+        jog_axis->planner.curr_vel = 0.0;
+        jog_axis->planner.active = 0;
+        jog_axis->state = JOG_AXIS_STATE_IDLE;
+        jog_axis->direction = JOG_DIRECTION_NONE;
+        if (jog_axis->stop_reason != JOG_STOP_REASON_ALARM)
+            jog_axis->stop_reason = JOG_STOP_REASON_NONE;
+        return;
+    }
+
+    switch (jog_axis->state)
+    {
+    case JOG_AXIS_STATE_RUNNING:
+        jog_axis->planner.enable = 1;
+        jog_axis->planner.target_vel = jog_get_target_velocity(axis, jog_axis, is_rapid);
+        break;
+
+    case JOG_AXIS_STATE_STOPPING:
+        /* 保持 enable，让规划器按正常加速度斜坡减到 0。 */
+        jog_axis->planner.target_vel = 0.0;
+        jog_axis->planner.enable = 1;
+        if (!jog_axis->planner.active)
         {
-            return false;
+            jog_axis->state = JOG_AXIS_STATE_IDLE;
+            jog_axis->direction = JOG_DIRECTION_NONE;
+            /* 报警原因必须保留到 RESET；其他停止原因在停稳后即可清除。 */
+            if (jog_axis->stop_reason != JOG_STOP_REASON_ALARM)
+                jog_axis->stop_reason = JOG_STOP_REASON_NONE;
+            jog_axis->planner.enable = 0;
         }
+        break;
+
+    case JOG_AXIS_STATE_IDLE:
+        jog_axis->planner.enable = 0;
+        jog_axis->planner.target_vel = 0.0;
+        break;
+
+    default:
+        jog_axis->state = JOG_AXIS_STATE_IDLE;
+        jog_axis->direction = JOG_DIRECTION_NONE;
+        jog_axis->planner.enable = 0;
+        jog_axis->planner.target_vel = 0.0;
+        break;
     }
-    return true;
+    jog_planner_update(&jog_axis->planner, JOG_CYCLE_TIME);
+}
+
+/* 执行单轴的完整周期：同步、解析请求、迁移状态、更新规划器和输出。 */
+static void jog_process_axis(int axis, bool is_rapid, bool global_fatal, bool reset_requested, bool switching_mode)
+{
+    jog_axis_t *jog_axis;
+    jog_direction_t desired_direction;
+
+    jog_axis = &jog_context.axis[axis];
+
+    /* 空闲轴持续同步当前位置，避免从其他模式切回 JOG 时产生位置跳变。 */
+    if (jog_axis->state == JOG_AXIS_STATE_IDLE)
+    {
+        jog_axis->planner.curr_pos = rt_data->axis_data[axis].wcs_cmd_pos_cur;
+        jog_axis->planner.curr_vel = 0.0;
+        jog_axis->planner.enable = 0;
+    }
+
+    desired_direction = jog_get_requested_direction(jog_axis);
+
+    /* 软限位预估和速度规划必须使用同一个加速度。 */
+    jog_axis->planner.max_acc = jog_get_axis_acceleration(axis, is_rapid);
+    jog_transition_axis(jog_axis, axis, desired_direction, global_fatal, reset_requested, switching_mode);
+    jog_execute_axis(axis, jog_axis, is_rapid);
+
+    /* 规划器是 JOG 的唯一运动输出源。 */
+    rt_data->axis_data[axis].wcs_cmd_pos_cur = jog_axis->planner.curr_pos;
+    rt_data->axis_data[axis].cmd_vel = jog_axis->planner.curr_vel;
+}
+
+/* 汇总通道速度、限位减速完成标志，并在所有轴空闲后消费事件。 */
+static void jog_update_outputs(void)
+{
+    double feed_velocity_squared;
+    bool all_axes_idle;
+
+    feed_velocity_squared = 0.0;
+    all_axes_idle = true;
+    for (int i = 0; i < JOG_AXIS_COUNT; i++)
+    {
+        double axis_velocity;
+
+        axis_velocity = jog_context.axis[i].planner.curr_vel;
+        feed_velocity_squared += axis_velocity * axis_velocity;
+
+        /* 只有限位触发导致的停止才置减速完成标志。 */
+        if (fabs(axis_velocity) < JOG_SPEED_THRESHOLD && (rt_data->axis_data[i].axis_status.is_fwd_limit || rt_data->axis_data[i].axis_status.is_rev_limit))
+        {
+            rt_data->axis_data[i].axis_status.is_decel_done = 1;
+        }
+
+        if (jog_context.axis[i].state != JOG_AXIS_STATE_IDLE)
+            all_axes_idle = false;
+    }
+
+    /* 通道速度是各轴速度的矢量合成，不是各轴速度的代数和。 */
+    rt_data->chan_data[0].cmd_vel = sqrt(feed_velocity_squared);
+    if (all_axes_idle)
+        rt_data->nc_event = SYS_EVENT_NONE;
 }

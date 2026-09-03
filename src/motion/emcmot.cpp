@@ -176,8 +176,9 @@ static void set_operating_mode()
         break;
     case MODE_JOG:
         // 当前点动速度为零,才能切模式成功
-        if (fabs(jog_tp[AXIS_X].curr_vel) < SPEED_THRESHOLD && fabs(jog_tp[AXIS_Y].curr_vel) < SPEED_THRESHOLD &&
-            fabs(jog_tp[AXIS_Z].curr_vel) < SPEED_THRESHOLD)
+        if (fabs(jog_get_axis_velocity(AXIS_X)) < SPEED_THRESHOLD &&
+            fabs(jog_get_axis_velocity(AXIS_Y)) < SPEED_THRESHOLD &&
+            fabs(jog_get_axis_velocity(AXIS_Z)) < SPEED_THRESHOLD)
         {
             rt_data->current_mode = rt_data->target_mode;
             rt_data->sys_state[SYS_IS_SWITCHING_MODE] = false;

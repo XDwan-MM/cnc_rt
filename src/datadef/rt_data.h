@@ -64,6 +64,8 @@ typedef struct
     bool plc_is_disable;
     bool is_disable;   // 轴是否被屏蔽
     bool is_lag_error; // 是否跟随误差报警 1是 0否
+    // 外部减速状态：[0~4]功能号，[0]正向减速状态寄存，[1]负向减速状态寄存
+    bool external_decel_active[SYS_EXTERNAL_DECEL_FUNCTION_COUNT][SYS_EXTERNAL_DECEL_DIRECTION_COUNT];
 } AxisStatus;
 
 typedef struct{
@@ -91,11 +93,11 @@ typedef struct
     bool ex_dec3_enable;    // 是否开启外部减速功能3
     bool ex_dec4_enable;    // 是否开启外部减速功能4
     bool ex_dec5_enable;    // 是否开启外部减速功能5
-    double cut_ex_dec1_vel; // 切削外部减速1的减速速度
-    double cut_ex_dec2_vel; // 切削外部减速2的减速速度
-    double cut_ex_dec3_vel; // 切削外部减速3的减速速度
-    double cut_ex_dec4_vel; // 切削外部减速4的减速速度
-    double cut_ex_dec5_vel; // 切削外部减速5的减速速度
+    double cut_ex_dec1_vel; // 外部减速1对切削进给的减速速度
+    double cut_ex_dec2_vel; // 外部减速2对切削进给的减速速度
+    double cut_ex_dec3_vel; // 外部减速3对切削进给的减速速度
+    double cut_ex_dec4_vel; // 外部减速4对切削进给的减速速度
+    double cut_ex_dec5_vel; // 外部减速5对切削进给的减速速度
 } RT_CHAN;
 
 // 目前仅轨迹线程使用
@@ -126,11 +128,11 @@ typedef struct
     double spdl_max_speed;              // 主轴最大转速(r/min)
     bool ex_dec_enable_pos_cut;         // 外部减速信号对正向切削进给是否生效
     bool ex_dec_enable_neg_cut;         // 外部减速信号对负向切削进给是否生效
-    double rpd_ex_dec1_vel;             // 快移外部减速1的减速速度
-    double rpd_ex_dec2_vel;             // 快移外部减速2的减速速度
-    double rpd_ex_dec3_vel;             // 快移外部减速3的减速速度
-    double rpd_ex_dec4_vel;             // 快移外部减速4的减速速度
-    double rpd_ex_dec5_vel;             // 快移外部减速5的减速速度
+    double rpd_ex_dec1_vel;             // 外部减速1对快速进给的减速速度
+    double rpd_ex_dec2_vel;             // 外部减速2对快速进给的减速速度
+    double rpd_ex_dec3_vel;             // 外部减速3对快速进给的减速速度
+    double rpd_ex_dec4_vel;             // 外部减速4对快速进给的减速速度
+    double rpd_ex_dec5_vel;             // 外部减速5对快速进给的减速速度
     // 重启生效
     int pm_munit;                       // 电子齿轮比分子
     int pm_pulse;                       // 电子齿轮比分母

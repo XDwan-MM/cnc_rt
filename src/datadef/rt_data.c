@@ -171,10 +171,10 @@ static void rt_reset_chan_data()
         rt_data->chan_data[i].lookahead_num = par_chan[i][PAR_CH_LOOKAHEAD_NUM].value.val_uint;                // 速度规划前瞻段数
         rt_data->chan_data[i].path_tolerance = par_chan[i][PAR_CH_PATH_TOLERANCE].value.val_real;              // 轨迹轮廓允差
         // 外部减速功能暂时手动赋值
-        rt_data->chan_data[i].ex_dec2_enable = true;
-        rt_data->chan_data[i].ex_dec3_enable = true;
-        rt_data->chan_data[i].ex_dec4_enable = true;
-        rt_data->chan_data[i].ex_dec5_enable = true;
+        rt_data->chan_data[i].ex_dec2_enable = false;
+        rt_data->chan_data[i].ex_dec3_enable = false;
+        rt_data->chan_data[i].ex_dec4_enable = false;
+        rt_data->chan_data[i].ex_dec5_enable = false;
         rt_data->chan_data[i].cut_ex_dec1_vel = 500.0;
         rt_data->chan_data[i].cut_ex_dec2_vel = 400.0;
         rt_data->chan_data[i].cut_ex_dec3_vel = 300.0;
@@ -212,11 +212,11 @@ static void rt_reset_axis_data()
         // 外部减速功能暂时手动赋值
         rt_data->axis_data[i].ex_dec_enable_pos_cut = true;                                                              // 外部减速信号对正向切削进给是否生效
         rt_data->axis_data[i].ex_dec_enable_neg_cut = true;                                                              // 外部减速信号对负向切削进给是否生效
-        rt_data->axis_data[i].rpd_ex_dec1_vel = 1000.0;                                                                  // 快移外部减速1的减速速度
-        rt_data->axis_data[i].rpd_ex_dec2_vel = 900.0;                                                                   // 快移外部减速2的减速速度
-        rt_data->axis_data[i].rpd_ex_dec3_vel = 800.0;                                                                   // 快移外部减速3的减速速度
-        rt_data->axis_data[i].rpd_ex_dec4_vel = 700.0;                                                                   // 快移外部减速4的减速速度
-        rt_data->axis_data[i].rpd_ex_dec5_vel = 600.0;                                                                   // 快移外部减速5的减速速度
+        rt_data->axis_data[i].rpd_ex_dec1_vel = 10.0;                                                                    // 快移外部减速1的减速速度
+        rt_data->axis_data[i].rpd_ex_dec2_vel = 9.0;                                                                     // 快移外部减速2的减速速度
+        rt_data->axis_data[i].rpd_ex_dec3_vel = 8.0;                                                                     // 快移外部减速3的减速速度
+        rt_data->axis_data[i].rpd_ex_dec4_vel = 7.0;                                                                     // 快移外部减速4的减速速度
+        rt_data->axis_data[i].rpd_ex_dec5_vel = 6.0;                                                                     // 快移外部减速5的减速速度
     }
 }
 

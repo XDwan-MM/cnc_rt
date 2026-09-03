@@ -3,14 +3,15 @@
 #include "global.h"
 #include "hmi_scanner.h"
 #include "regapi.h"
-#include "spl_control.h"
 #include "servosampleevents.h"
+#include "spl_control.h"
 #include <alarmapi.h>
 #include <hmisysapi.h>
 #include <stdlib.h>
 
-
 static PLC_EVENT event_data;
+
+/* 内部函数声明 */
 static GNC_RES task_handle_plc_event(PLC_EVENT *event_data);
 static void task_handle_mode_event(PLC_EVENT *event_data);
 static void task_handle_feed_event(PLC_EVENT *event_data);
@@ -20,6 +21,9 @@ static void task_handle_auto_event(PLC_EVENT *event_data);
 static void task_handle_enable_event(PLC_EVENT *event_data);
 static void task_handle_reset_event(PLC_EVENT *event_data);
 static void task_handle_hmi_event(PLC_EVENT *event_data);
+static void task_handle_external_decel_event(PLC_EVENT *event_data);
+
+/* 外部函数定义 */
 
 // 任务消息队列初始化
 GNC_RES task_mq_init()
@@ -47,6 +51,8 @@ GNC_RES task_mq_proc()
     task_handle_plc_event(&event_data);
     return GNC_OPERATOR_SUCCESS;
 }
+
+/* 内部函数定义 */
 
 static GNC_RES task_handle_plc_event(PLC_EVENT *event_data)
 {
@@ -105,6 +111,12 @@ static GNC_RES task_handle_plc_event(PLC_EVENT *event_data)
         LOG(LOG_LEVEL_INFO, "处理主轴定向事件");
         break;
     }
+    case PLC_EV_MSG_EXTERNAL_DECEL:
+    {
+        LOG(LOG_LEVEL_INFO, "处理PLC外部减速事件");
+        task_handle_external_decel_event(event_data);
+        break;
+    }
     default:
         break;
     }
@@ -145,11 +157,7 @@ static void task_handle_mode_event(PLC_EVENT *event_data)
 
 static void task_handle_feed_event(PLC_EVENT *event_data)
 {
-    LOG(LOG_LEVEL_INFO,
-        "处理进给轴按键事件 轴选键%d 动作%d 当前模式%d",
-        event_data->feedaxis_key_payload.axis_num,
-        event_data->feedaxis_key_payload.direction,
-        rt_data->current_mode);
+    LOG(LOG_LEVEL_INFO, "处理进给轴按键事件 轴选键%d 动作%d 当前模式%d", event_data->feedaxis_key_payload.axis_num, event_data->feedaxis_key_payload.direction, rt_data->current_mode);
     int axis = event_data->feedaxis_key_payload.axis_num;       // 0:X, 1:Y, 2:Z
     int direction = event_data->feedaxis_key_payload.direction; // 1:正按, -1:正释放, 2:负按，-2:负释放
 
@@ -426,5 +434,43 @@ static void task_handle_hmi_event(PLC_EVENT *event_data)
         break;
     default:
         break;
+    }
+}
+
+static void task_handle_external_decel_event(PLC_EVENT *event_data)
+{
+    int axis;
+    int function;
+    int direction;
+    int direction_index;
+    bool active;
+    AxisStatus *axis_status;
+
+    if (event_data == NULL || rt_data == NULL)
+        return;
+
+    axis = event_data->external_decel_payload.axis_num;
+    function = event_data->external_decel_payload.function;
+    direction = event_data->external_decel_payload.direction;
+    active = (event_data->external_decel_payload.active != 0);
+
+    if (axis < 0 || axis >= SYS_AXES_NUM)
+        return;
+    if (function < 1 || function > SYS_EXTERNAL_DECEL_FUNCTION_COUNT)
+        return;
+    if (direction != 1 && direction != -1)
+        return;
+
+    direction_index = (direction > 0) ? 0 : 1;
+    axis_status = &rt_data->axis_data[axis].axis_status;
+    axis_status->external_decel_active[function - 1][direction_index] = active;
+
+    if (direction > 0)
+    {
+        rt_data->nc_event = active ? SYS_EVENT_EXTERNAL_DECEL_POS_ON : SYS_EVENT_EXTERNAL_DECEL_POS_OFF;
+    }
+    else
+    {
+        rt_data->nc_event = active ? SYS_EVENT_EXTERNAL_DECEL_NEG_ON : SYS_EVENT_EXTERNAL_DECEL_NEG_OFF;
     }
 }
