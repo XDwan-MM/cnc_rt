@@ -16,7 +16,7 @@ typedef enum pmc_mode_t
     PMC_MODE_TOOL_CHANGE,   //换刀
     PMC_MODE_ARRIVE_CHECK,  //到位检测
     PMC_MODE_STOPSKIP,      //跳转
-    PMC_MODE_NULL,          //空包
+    PMC_MODE_NULL,          // 空包
 }pmc_mode;
 
 typedef enum pmc_interp_t
@@ -147,6 +147,7 @@ typedef struct pmc_data_t
 
     int endSpeedMode;           //终点速度模式 0：默认 1：转角平滑测试
     int passWay;                // 通道 0 1 2 3
+    int ref_point_number;       //返回参考点号 G28→1，G30(P2~P4)→2~4，其他包为0
 }pmc_data;
 
 #ifdef __cplusplus
