@@ -265,28 +265,100 @@ static void auto_check_event(){
             break;
         }
         break;    
-    case SYS_EVENT_ALL_AXIS_LOCK_ON:
+    case SYS_EVENT_STLK_ON:
+    case SYS_EVENT_IT_ON:
+    case SYS_EVENT_IT1_ON:
+    case SYS_EVENT_IT2_ON:
+    case SYS_EVENT_IT3_ON:
+    case SYS_EVENT_IT4_ON:
+    case SYS_EVENT_IT5_ON:
+    case SYS_EVENT_PMIT2_ON:
+    case SYS_EVENT_PMIT3_ON:
+    case SYS_EVENT_PMIT4_ON:
+    case SYS_EVENT_PMIT5_ON:
+    case SYS_EVENT_NMIT2_ON:
+    case SYS_EVENT_NMIT3_ON:
+    case SYS_EVENT_NMIT4_ON:
+    case SYS_EVENT_NMIT5_ON:
         LOG(LOG_LEVEL_INFO, "自动模式处理开启所有轴互锁");
         switch (cycle_tp->exec_state)
         {
         case EXEC_RUNNING:
             cycle_tp->running_stage = BLOCK_BREAKPOINT;
         default:
-            rt_set_sys_state(SYS_IS_ALL_AXIS_LOCK, true);
+            rt_set_sys_state(SYS_IS_IT_LOCK, true);
             break;
         }
         break;
-    case SYS_EVENT_ALL_AXIS_LOCK_OFF:
+    case SYS_EVENT_STLK_OFF:
+    case SYS_EVENT_IT_OFF:
+    case SYS_EVENT_IT1_OFF:
+    case SYS_EVENT_IT2_OFF:
+    case SYS_EVENT_IT3_OFF:
+    case SYS_EVENT_IT4_OFF:
+    case SYS_EVENT_IT5_OFF:
+    case SYS_EVENT_PMIT2_OFF:
+    case SYS_EVENT_PMIT3_OFF:
+    case SYS_EVENT_PMIT4_OFF:
+    case SYS_EVENT_PMIT5_OFF:
+    case SYS_EVENT_NMIT2_OFF:
+    case SYS_EVENT_NMIT3_OFF:
+    case SYS_EVENT_NMIT4_OFF:
+    case SYS_EVENT_NMIT5_OFF:
         LOG(LOG_LEVEL_INFO, "自动模式处理关闭所有轴互锁");
         switch (cycle_tp->exec_state)
         {
         case EXEC_RUNNING:
             cycle_tp->running_stage = BLOCK_BREAKPOINT;
         default:
-            rt_set_sys_state(SYS_IS_ALL_AXIS_LOCK, false);
+            rt_set_sys_state(SYS_IS_IT_LOCK, false);
             break;
         }
-        break;     
+        break;   
+    case SYS_EVENT_BSL_ON:
+        LOG(LOG_LEVEL_INFO, "自动模式处理开启程序段开始锁住");
+        switch (cycle_tp->exec_state)
+        {
+        case EXEC_RUNNING:
+            cycle_tp->running_stage = BLOCK_BREAKPOINT;
+        default:
+            rt_set_sys_state(SYS_IS_BSL_LOCK, true);
+            break;
+        }
+        break;
+    case SYS_EVENT_BSL_OFF:
+        LOG(LOG_LEVEL_INFO, "自动模式处理关闭程序段开始锁住");
+        switch (cycle_tp->exec_state)
+        {
+        case EXEC_RUNNING:
+            cycle_tp->running_stage = BLOCK_BREAKPOINT;
+        default:
+            rt_set_sys_state(SYS_IS_BSL_LOCK, false);
+            break;
+        }
+        break;
+    case SYS_EVENT_CSL_ON:
+        LOG(LOG_LEVEL_INFO, "自动模式处理开启切削程序段开始锁住");
+        switch (cycle_tp->exec_state)
+        {
+        case EXEC_RUNNING:
+            cycle_tp->running_stage = BLOCK_BREAKPOINT;
+        default:
+            rt_set_sys_state(SYS_IS_CSL_LOCK, true);
+            break;
+        }
+        break;
+    case SYS_EVENT_CSL_OFF:
+        LOG(LOG_LEVEL_INFO, "自动模式处理关闭切削程序段开始锁住");
+        switch (cycle_tp->exec_state)
+        {
+        case EXEC_RUNNING:
+            cycle_tp->running_stage = BLOCK_BREAKPOINT;
+        default:
+            rt_set_sys_state(SYS_IS_CSL_LOCK, false);
+            break;
+        }
+        break;
     case SYS_EVENT_BLOCK_SKIP_ON:
         LOG(LOG_LEVEL_INFO, "自动模式处理开启跳段");
         cycle_tp->trigger_event = BLOCK_SKIP_ENABLE;

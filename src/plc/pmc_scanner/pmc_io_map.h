@@ -40,13 +40,33 @@ typedef enum{
     DRY_RUN,             // 空运行
     SINGLE_BLOCK,        // 单段
     BLOCK_SKIP = 3,      // 程序段跳过（1~9） 
-    ALL_AXIS_LK,         // 所有轴互锁   
     PROG_RESTAR,         // 程序再启动
+    // 机械锁住
     MAC_LOCK = 12,       // 所有轴机床锁住（MLK,MLK1~4）
     MAC_LOCK1,           // 各轴轴机床锁住   
     MAC_LOCK2,
     MAC_LOCK3,
     MAC_LOCK4,
+    // 互锁
+    STLK,                // 起动锁停
+    IT,                  // 所有轴互锁   
+    BSL,                 // 程序段开始互锁
+    CSL,                 // 切削程序段开始互锁
+    IT1,
+    IT2,
+    IT3,
+    IT4,
+    IT5,
+    PMIT1,
+    PMIT2,
+    PMIT3,
+    PMIT4,
+    PMIT5,
+    NMIT1,
+    NMIT2,
+    NMIT3,
+    NMIT4,
+    NMIT5,
 }ENABLE_KEY;
 
 // 各个PMC事件对应的参数结构体定义（子结构体）, 六种事件类型对应六个参数结构体

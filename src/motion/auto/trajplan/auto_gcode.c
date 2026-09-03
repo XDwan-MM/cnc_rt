@@ -22,6 +22,7 @@ static GNC_RES auto_do_vel_plan();
 static GNC_RES vp_val_decline_profile();
 static bool is_newval_unvalid();
 static void auto_cal_target_vel();
+static void auto_cal_lock_vel();
 static void block_cal_lookahead_vel(PLAN_BLOCK* current_block);
 static void block_cal_exact_stop_vel(PLAN_BLOCK* current_block);
 static void block_cal_tap_vel(PLAN_BLOCK* current_block);
@@ -51,6 +52,7 @@ void auto_get_pos_cmd(){
     }
     // 更新目标速度
     auto_cal_target_vel();
+    // auto_cal_lock_vel();
     // 当前速度和目标速度为0
     if (IsEqualTo(cycle_tp->pos_cmd_data.current_vel, 0) && IsEqualTo(cycle_tp->pos_cmd_data.target_vel, 0)) {
         cycle_tp->target_stage = PROGRAM_WAIT;
@@ -280,13 +282,38 @@ static void auto_cal_target_vel(){
         }
         if(!rt_data->sys_state[SYS_IS_MAC_LOCK_READY] && rt_data->sys_state[SYS_IS_MAC_LOCK_ON]) cycle_tp->pos_cmd_data.target_vel = 0;
         if(rt_data->sys_state[SYS_IS_MAC_LOCK_READY] && !rt_data->sys_state[SYS_IS_MAC_LOCK_ON]) cycle_tp->pos_cmd_data.target_vel = 0;
-        if(rt_data->sys_state[SYS_IS_ALL_AXIS_LOCK]) cycle_tp->pos_cmd_data.target_vel = 0;
+        if(rt_data->sys_state[SYS_IS_IT_LOCK]) cycle_tp->pos_cmd_data.target_vel = 0;
         break;
     case EXEC_PAUSING:
     case EXEC_RESET:
     case EXEC_IDLE:
     default:
         cycle_tp->pos_cmd_data.target_vel = 0;
+        break;
+    }
+}
+
+/// @brief 计算程序段开始锁住和切削程序段开始锁住
+static void auto_cal_lock_vel(){
+    switch (cycle_tp->exec_state)
+    {
+    case EXEC_RUNNING:
+        switch (cycle_tp->plan_block->mode)
+        {
+        // 切削程序段开始锁住：禁止定位以外的移动指令运行
+        case PMC_MODE_CHOP:
+            if(rt_data->sys_state[SYS_IS_CSL_LOCK]) cycle_tp->pos_cmd_data.target_vel = 0;
+            break;
+        default:
+            break;
+        }
+        // 程序段开始锁住：禁止下一个程序段开始
+        if(rt_data->sys_state[SYS_IS_BSL_LOCK]) cycle_tp->pos_cmd_data.target_vel = 0;
+        break;
+    case EXEC_PAUSING:
+    case EXEC_RESET:
+    case EXEC_IDLE:
+    default:
         break;
     }
 }

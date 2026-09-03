@@ -528,8 +528,8 @@ static void manual_unset_sys_state()
         rt_data->sys_state[SYS_IS_MAC_LOCK_READY] = false;
     if (rt_data->sys_state[SYS_IS_MAC_LOCK_ON])
         rt_data->sys_state[SYS_IS_MAC_LOCK_ON] = false;
-    if (rt_data->sys_state[SYS_IS_ALL_AXIS_LOCK])
-        rt_data->sys_state[SYS_IS_ALL_AXIS_LOCK] = false;
+    if (rt_data->sys_state[SYS_IS_IT_LOCK])
+        rt_data->sys_state[SYS_IS_IT_LOCK] = false;
 }
 
 static void rebuild_axis_positions_from_feedback()

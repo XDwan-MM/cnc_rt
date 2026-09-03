@@ -314,7 +314,7 @@ void shm_var_update(){
         // 轴状态显示：机械锁住、互锁、移动中
         if(rt_data->sys_state[SYS_IS_MAC_LOCK_READY]) setVarAxisInt(i, VAR_AXIS_IS_MAC_LOCK, 1, 0);
         else setVarAxisInt(i, VAR_AXIS_IS_MAC_LOCK, 0, 0);
-        if(rt_data->sys_state[SYS_IS_ALL_AXIS_LOCK]) setVarAxisInt(i, VAR_AXIS_IS_INTER_LOCK, 1, 0);
+        if(rt_data->sys_state[SYS_IS_IT_LOCK]) setVarAxisInt(i, VAR_AXIS_IS_INTER_LOCK, 1, 0);
         else setVarAxisInt(i, VAR_AXIS_IS_INTER_LOCK, 0, 0);
         if(IsEqualTo(rt_data->axis_data[i].cmd_vel, 0)) setVarAxisInt(i, VAR_AXIS_IS_MOVING, 0, 0);
         else setVarAxisInt(i, VAR_AXIS_IS_MOVING, 1, 0);
