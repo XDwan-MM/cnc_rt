@@ -41,7 +41,6 @@ void Axis_Limit_Manager_Init(void)
         rt_data->axis_data[i].axis_status.is_decel_done = 0;
         runtime[i].is_first_run = 1;
         runtime[i].axis = i;
-        // update_pos_flag = 0;
     }
 }
 

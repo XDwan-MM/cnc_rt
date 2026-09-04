@@ -103,7 +103,7 @@ static void jog_update_outputs(void);
 /* 外部函数定义 */
 
 /**
- * @brief JOG 任务主循环 (由 1ms 伺服中断调用)
+ * @brief JOG 任务主循环 (由伺服周期调用)
  */
 void handle_jog_cmd(void)
 {
@@ -546,7 +546,7 @@ static void jog_execute_axis(int axis, jog_axis_t *jog_axis, bool is_rapid)
         jog_axis->planner.target_vel = 0.0;
         break;
     }
-    jog_planner_update(&jog_axis->planner, JOG_CYCLE_TIME);
+    jog_planner_update(&jog_axis->planner, rt_data->ncu_data.cycle);
 }
 
 /* 执行单轴的完整周期：同步、解析请求、迁移状态、更新规划器和输出。 */

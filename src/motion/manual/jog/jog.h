@@ -1,3 +1,11 @@
+/**
+ * @file        jog.h
+ * @brief       JOG模式控制主模块
+ * @date        2026/09/04
+ * @author      伍臣发
+ * @copyright   珠海格力电器股份有限公司装备动力技术研究院一所
+ */
+
 #ifndef JOG_H
 #define JOG_H
 
@@ -12,7 +20,6 @@
 #define JOG_DIR_NEGATIVE (-1)
 
 /* 运行控制常量 */
-#define JOG_CYCLE_TIME (0.001)       /* 伺服周期 1ms */
 #define JOG_SPEED_THRESHOLD (1.0e-5) /* 停止速度判断阈值 */
 #define JOG_AXIS_COUNT (3)           /* JOG支持的轴数 */
 

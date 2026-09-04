@@ -340,6 +340,8 @@ static void output_to_hal()
     Hal_Driver_Set_Target_Pos(&y_axis_driver, y_cmd_pulse_pos);
     z_cmd_pulse_pos = position_to_pulses(&rt_data->axis_data[AXIS_Z], rt_data->axis_data[AXIS_Z].motor_cmd_pos);
     Hal_Driver_Set_Target_Pos(&z_axis_driver, z_cmd_pulse_pos);
+    // 编码器位置打印
+    // printf("Z_PULSE_cmd%d Z_PULSE_act%d\n",z_cmd_pulse_pos, z_act_pulse_pos);
 }
 
 static void compute_error_comp()
