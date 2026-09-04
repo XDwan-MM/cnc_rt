@@ -129,6 +129,8 @@ static void rt_reset_chan_data(){
         rt_data->chan_data[i].lookahead_num = par_union.value.val_uint;                     // 速度规划前瞻段数
         getParData(PARAMAN_FILE_CHAN, i, PAR_CH_PATH_TOLERANCE, &par_union);
         rt_data->chan_data[i].path_tolerance = par_union.value.val_real;                    // 轨迹轮廓允差
+        getParData(PARAMAN_FILE_CHAN, i, PAR_CH_CONER_DEC_FACTOR, &par_union);
+        rt_data->chan_data[i].corner_dec_factor = par_union.value.val_int;                  // 拐角降速比例因子 ("def": "100", "min": "1", "max": "200")
     }
 }
 
