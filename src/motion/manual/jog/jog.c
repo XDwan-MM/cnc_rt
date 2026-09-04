@@ -237,23 +237,29 @@ static jog_direction_t jog_get_requested_direction(const jog_axis_t *axis)
 /* 判断是否为需要所有 JOG 轴停止的报警。纯限位报警留给对应轴处理。 */
 static bool jog_is_global_fatal_alarm(void)
 {
-    bool any_non_limit;
-    bool any_pure_limit;
+    bool has_limit_alarm;
 
     if (!rt_data->sys_state[SYS_IS_ALARMING])
         return false;
 
-    any_non_limit = false;
-    any_pure_limit = false;
+    has_limit_alarm = false;
     for (int i = 0; i < JOG_AXIS_COUNT; i++)
     {
-        if (rt_data->axis_data[i].axis_status.is_error || rt_data->axis_data[i].axis_status.is_lag_error)
-            any_non_limit = true;
-        else if (rt_data->axis_data[i].axis_status.is_fwd_limit || rt_data->axis_data[i].axis_status.is_rev_limit)
-            any_pure_limit = true;
+        AxisStatus *status;
+
+        status = &rt_data->axis_data[i].axis_status;
+        /* 伺服错误和跟随误差需要所有 JOG 轴停止，并由 RESET 解锁。 */
+        if (status->is_error || status->is_lag_error)
+            return true;
+
+        if (status->is_fwd_limit || status->is_rev_limit)
+            has_limit_alarm = true;
     }
-    /* 只有明确的纯限位报警才允许各轴独立处理；其他报警需要 RESET 解锁。 */
-    return any_non_limit || !any_pure_limit;
+
+    /* 只有明确的纯限位报警允许各轴独立处理；其他报警默认按全局报警处理。 */
+    if (has_limit_alarm)
+        return false;
+    return true;
 }
 
 /* 读取当前 JOG 模式的加速度，并将无效参数钳制为 0。 */

@@ -19,11 +19,6 @@
 /* 软限位刹车距离系数，增大该值会更早停止。 */
 #define JOG_BRAKE_FACTOR (0.9999)
 
-/* 旧模块仍使用这些名字，暂时保留兼容别名。 */
-#define SPEED_THRESHOLD JOG_SPEED_THRESHOLD
-#define SYS_AXES_NUM_JOG JOG_AXIS_COUNT
-#define BRAKE_FACTOR JOG_BRAKE_FACTOR
-
 #ifdef __cplusplus
 extern "C"
 {

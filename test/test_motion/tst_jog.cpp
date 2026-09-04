@@ -102,14 +102,18 @@ TEST_F(TestJog, PressAndReleasePreserveVelocityRamp)
 {
     cycle(SYS_EVENT_X_POS_PRESS);
     EXPECT_GT(jog_get_axis_velocity(AXIS_X), 0.0);
+    EXPECT_DOUBLE_EQ(rt_data->axis_data[AXIS_X].cmd_vel, jog_get_axis_velocity(AXIS_X));
 
     run_cycles(120);
     EXPECT_NEAR(jog_get_axis_velocity(AXIS_X), 10.0, 1.0e-6);
+    EXPECT_DOUBLE_EQ(rt_data->axis_data[AXIS_X].cmd_vel, jog_get_axis_velocity(AXIS_X));
 
     cycle(SYS_EVENT_X_POS_RELEASE);
     EXPECT_LT(jog_get_axis_velocity(AXIS_X), 10.0);
+    EXPECT_DOUBLE_EQ(rt_data->axis_data[AXIS_X].cmd_vel, jog_get_axis_velocity(AXIS_X));
     run_cycles(120);
     EXPECT_NEAR(jog_get_axis_velocity(AXIS_X), 0.0, 1.0e-9);
+    EXPECT_DOUBLE_EQ(rt_data->axis_data[AXIS_X].cmd_vel, 0.0);
 }
 
 TEST_F(TestJog, ExternalDecelerationUsesRpdVelocityForNormalAndRapidJog)
