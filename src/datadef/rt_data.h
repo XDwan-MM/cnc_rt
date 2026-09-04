@@ -83,11 +83,13 @@ typedef struct
     double cmd_vel;         // 通道指令合成速度 
     double cmd_acc;         // 通道指令合成加速度 
     double cmd_jk;          // 通道指令合成加加速度
-    double dryrun_spd;      // 空运行速度
-    double max_tang_acc;    // 最大向心加速度
-    int vplan_mode;         // 速度规划模式
-    int lookahead_num;      // 速度规划前瞻段数
-    double path_tolerance;  // 轨迹轮廓允差
+    // 复位生效
+    int corner_dec_factor;      // 拐角降速比例因子
+    double dryrun_spd;          // 空运行速度
+    double max_tang_acc;        // 最大向心加速度
+    int vplan_mode;             // 速度规划模式
+    int lookahead_num;          // 速度规划前瞻段数
+    double path_tolerance;      // 轨迹轮廓允差
 } RT_CHAN;
 
 // 目前仅轨迹线程使用

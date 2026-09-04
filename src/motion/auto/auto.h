@@ -46,8 +46,8 @@ typedef enum{
     DO_CHOP_CMD,       // 插补指令
     DO_DWELL_CMD,      // 等待指令 G04
     DO_MSTB_CMD,       // MST指令
-    DO_HOME_CMD,       // 回参考点 G27 G28 G29
-    DO_TAP_CMD,        // 攻丝指令 G84
+    DO_HOME_CMD,       // 回参考点 G27 G28 G29 G30
+    DO_TAP_CMD,        // 攻丝指令 G73 G84
 }CMD_TYPE;
 
 typedef enum{
