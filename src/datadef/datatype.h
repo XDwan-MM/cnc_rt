@@ -32,6 +32,7 @@ typedef int int32_t;
 
 // 返回值类型
 typedef enum result {
+    // NC
     GNC_OPERATOR_SUCCESS = 0,   // 操作成功
     GNC_OPERATOR_ERROR = 1,     // 操作失败
     GNC_OPERATOR_WARNING = 2,   // 操作警告
@@ -47,6 +48,7 @@ typedef enum result {
     GNC_ARRIVE_CHECK_FAIL,      // 轴定位超差
     GNC_SBL_ARRIVE,
     GNC_LENGTH_IS_ZERO,
+    // 运动控制
     VP_CAL_SUCCESS = 400,
     VP_IS_NULL,
     VP_PARAM_UNVALID,

@@ -15,6 +15,7 @@
 #include "interpolation.h"
 #include "stored_stroke_check.h"
 #include <alarmapi.h>
+#include "homing.h"
 
 static void auto_cal_target_vel();
 static void auto_look_ahead();
@@ -152,6 +153,7 @@ static bool auto_pos_cmd_cycle_is_finished(){
 }
 
 bool auto_pos_cmd_is_finished(){
+    if(!auto_pos_cmd_cycle_is_finished()) return false;
     if(auto_pos_cmd_arrive_check()) {
         switch(cycle_tp->target_stage){
             case BLOCK_PAUSED:
@@ -210,12 +212,12 @@ bool auto_dwell_cmd_is_finished(){
     return false;
 }
 
-void auto_get_modal_cmd(){
+void auto_get_null_cmd(){
     cycle_tp->exec_cmd = DO_NULL_CMD;
     cycle_tp->target_stage = BLOCK_STOP_2_END;
 }
 
-void auto_update_modal_cmd(){
+void auto_update_null_cmd(){
     cycle_tp->exec_cmd = DO_NULL_CMD;
     switch (cycle_tp->exec_state)
     {
@@ -231,6 +233,10 @@ void auto_update_modal_cmd(){
     default:
         break;
     }
+}
+
+void auto_execute_null_cmd(){
+    auto_pos_cmd_arrive_check();
 }
 
 void cycle_tp_add_block(){
@@ -683,7 +689,6 @@ static bool auto_pos_cmd_axis_arrive_check(){
 }
 
 static bool auto_pos_cmd_arrive_check(){
-    if(!auto_pos_cmd_cycle_is_finished()) return false;
     // 机械锁住时不进行到位检测
     if(rt_data->sys_state[SYS_IS_MAC_LOCK_READY]) return true;
     switch (cycle_tp->target_stage)
@@ -694,9 +699,14 @@ static bool auto_pos_cmd_arrive_check(){
         case PMC_MODE_ARRIVE_CHECK:
         case PMC_MODE_EXACT_STOP:
             if(!auto_pos_cmd_axis_arrive_check()) return false;
+            // 回参考点检测
+            if(IsGreaterThan(cycle_tp->plan_block->ref_number, 0)){
+                auto_set_ref_state(cycle_tp->plan_block->ref_number, cycle_tp->plan_block->ref_axis);
+                LOG(LOG_LEVEL_DEBUG,  "[回%d参考点完成] %f %f %f", cycle_tp->plan_block->ref_number, rt_data->axis_data[AXIS_X].motor_cmd_pos, rt_data->axis_data[AXIS_Y].motor_cmd_pos, rt_data->axis_data[AXIS_Z].motor_cmd_pos);         
+            }
             LOG(LOG_LEVEL_DEBUG,  "[到位检测] 机床指令位置:%f %f %f vel:%f", rt_data->axis_data[AXIS_X].motor_cmd_pos, rt_data->axis_data[AXIS_Y].motor_cmd_pos, rt_data->axis_data[AXIS_Z].motor_cmd_pos, cycle_tp->plan_block->end_vel);
             LOG(LOG_LEVEL_DEBUG,  "[到位检测] 电机无补偿位置:%f %f %f vel:%f", rt_data->axis_data[AXIS_X].fb_pos_no_comp, rt_data->axis_data[AXIS_Y].fb_pos_no_comp, rt_data->axis_data[AXIS_Z].fb_pos_no_comp,cycle_tp->plan_block->end_vel);
-            LOG(LOG_LEVEL_DEBUG,  "[到位检测] 电机反馈位置:%f %f %f vel:%f", rt_data->axis_data[AXIS_X].motor_act_pos, rt_data->axis_data[AXIS_Y].motor_act_pos, rt_data->axis_data[AXIS_Z].motor_act_pos,cycle_tp->plan_block->end_vel);
+            LOG(LOG_LEVEL_DEBUG,  "[到位检测] 电机反馈位置:%f %f %f vel:%f", rt_data->axis_data[AXIS_X].motor_act_pos, rt_data->axis_data[AXIS_Y].motor_act_pos, rt_data->axis_data[AXIS_Z].motor_act_pos,cycle_tp->plan_block->end_vel); 
             return true;
         case PMC_MODE_CHOP:
             // 判断G00到位宽度

@@ -7,6 +7,7 @@
 #include <hmisysapi.h>
 #include "alarmapi.h"
 #include "reset.h"
+#include "homing.h"
 
 static void plc_output_alarm();
 static void plc_output_mode();
@@ -109,17 +110,19 @@ static void plc_output_auto()
 // 各轴返回零点完成、参考点建立
 static void plc_output_home()
 {
+    update_ref_state();
     for (int i = 0; i < SYS_AXES_NUM; i++)
     {
-        if (var_axis[i][VAR_AXIS_IS_HOMEF].value.i)
-        {
-            setRegBit(REG_F, 94, i);
-            setRegBit(REG_F, 120, i);
-        }
-        else
-        {
-            clearRegBit(REG_F, 94, i);
-        }
+        if(rt_data->axis_data[i].ref_status.ref_setup) setRegBit(REG_F, 120, i);
+        else clearRegBit(REG_F, 120, i);
+        if(rt_data->axis_data[i].ref_status.ref_on) setRegBit(REG_F, 94, i);
+        else clearRegBit(REG_F, 94, i);
+        if(rt_data->axis_data[i].ref_status.second_ref_on) setRegBit(REG_F, 96, i);
+        else clearRegBit(REG_F, 96, i);
+        if(rt_data->axis_data[i].ref_status.third_ref_on) setRegBit(REG_F, 98, i);
+        else clearRegBit(REG_F, 98, i);
+        if(rt_data->axis_data[i].ref_status.forth_ref_on) setRegBit(REG_F, 100, i);
+        else clearRegBit(REG_F, 100, i);
     }
 }
 
@@ -332,6 +335,7 @@ static void plc_output_axis_status()
         clearRegBit(REG_F, 45, 0);
     }
 }
+
 static void plc_output_spl_vel_status()
 {
     if (spl_data.spl_vel_state == SPINDLE_VEL_ARRIVED)

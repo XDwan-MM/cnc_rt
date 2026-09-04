@@ -292,6 +292,10 @@ static void check_for_fault()
     int alarm_count = alarm_count0 + alarm_count1 + alarm_count2 + alarm_count3 + alarm_count4 + alarm_count5 + alarm_count6 +
                       alarm_count7 + alarm_count8;
 
+    // 伺服驱动报警下清除回参考点信号
+    if(alarm_count3 > 0){
+        reset_ref_state();
+    }
     if (alarm_count > 0 || rt_data->sys_state[SYS_IS_ESTOP_ACTIVE])
     {
         rt_data->sys_state[SYS_IS_ALARMING] = true;

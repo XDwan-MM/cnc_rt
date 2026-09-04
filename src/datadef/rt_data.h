@@ -73,6 +73,15 @@ typedef struct
     bool external_decel_active[SYS_EXTERNAL_DECEL_FUNCTION_COUNT][SYS_EXTERNAL_DECEL_DIRECTION_COUNT];
 } AXIS_STATUS;
 
+typedef struct
+{
+    int ref_setup;         // 建立回参考点
+    int ref_on;            // 回参考点信号
+    int second_ref_on;     // 回第二参考点信号
+    int third_ref_on;      // 回第三参考点信号
+    int forth_ref_on;      // 回第四参考点信号
+}REF_STATUS;
+
 typedef struct{
     double cycle;           // 插补周期
 } RT_NCU;
@@ -86,11 +95,6 @@ typedef struct
     double cmd_vel;         // 通道指令合成速度 
     double cmd_acc;         // 通道指令合成加速度 
     double cmd_jk;          // 通道指令合成加加速度
-    double dryrun_spd;      // 空运行速度
-    double max_tang_acc;    // 最大向心加速度
-    int vplan_mode;         // 速度规划模式
-    int lookahead_num;      // 速度规划前瞻段数
-    double path_tolerance;  // 轨迹轮廓允差
     // 重启生效
     bool ex_dec_enable;     // 是否开启外部减速功能
     // 复位生效
@@ -103,6 +107,11 @@ typedef struct
     double cut_ex_dec3_vel; // 外部减速3对切削进给的减速速度
     double cut_ex_dec4_vel; // 外部减速4对切削进给的减速速度
     double cut_ex_dec5_vel; // 外部减速5对切削进给的减速速度
+    double dryrun_spd;      // 空运行速度
+    double max_tang_acc;    // 最大向心加速度
+    int vplan_mode;         // 速度规划模式
+    int lookahead_num;      // 速度规划前瞻段数
+    double path_tolerance;  // 轨迹轮廓允差
     int corner_dec_factor;  // 拐角降速比例因子
 } RT_CHAN;
 
@@ -125,8 +134,11 @@ typedef struct
     double max_dynamic_lag;             // 轴动态最大跟随误差
     double pos_tol;                     // 轴定位允差
     unsigned int home_way;              // 回参考点方式
-    double ref_range;                   // 轴回零参考点范围偏差
-    double home_crds;                   // 参考点坐标值  
+    double ref_range;                   // 参考点范围偏差
+    double home_crds;                   // 参考点坐标值 
+    double second_home_crds;            // 第二参考点坐标值
+    double third_home_crds;             // 第三参考点坐标值
+    double forth_home_crds;             // 第四参考点坐标值
     double plmt;                        // 正软极限
     double nlmt;                        // 负软极限
     double plmt2;                       // 第二级正软极限
@@ -164,6 +176,7 @@ typedef struct
     double straightness2_comp_val;      // 当前位置第二组直线度误差补偿值 (单位:mm)
     double total_comp_cal;              // 当前位置总误差补偿值 (单位:mm)
     AXIS_STATUS status;
+    REF_STATUS ref_status;
 } RT_AXIS;
 
 typedef struct{

@@ -379,6 +379,10 @@ static GNC_RES parser_handle_gcode(pmc_data* motion_data, NcItpState *itp_state,
     plan_block.line_number = *line_no;
     // 暂停时间
     plan_block.pause_time = motion_data->pause_time;
+    // 回参考点
+    plan_block.ref_number = (REF_TYPE)motion_data->ref_point_number;
+    plan_block.ref_axis = motion_data->ref_axis_flag;
+    // 回断点
     plan_block.is_breakpoint = false;
     // 加入队列
     if(queue_is_full(parser_queue)){

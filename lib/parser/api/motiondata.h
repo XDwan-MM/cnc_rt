@@ -16,7 +16,7 @@ typedef enum pmc_mode_t
     PMC_MODE_TOOL_CHANGE,   //换刀
     PMC_MODE_ARRIVE_CHECK,  //到位检测
     PMC_MODE_STOPSKIP,      //跳转
-    PMC_MODE_NULL,          // 空包
+    PMC_MODE_NULL,          //空包
 }pmc_mode;
 
 typedef enum pmc_interp_t
