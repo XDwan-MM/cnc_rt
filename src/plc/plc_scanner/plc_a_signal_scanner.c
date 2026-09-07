@@ -1,4 +1,4 @@
-#include "pmc_a_input_scanner.h"
+#include "plc_a_signal_scanner.h"
 #include "alarmapi.h"
 #include "global.h"
 #include "regapi.h" /**< 寄存器访问 API */
@@ -19,7 +19,7 @@ static bool is_first_scan = true;
  * ========================================================================== */
 
 /** @brief 从寄存器系统同步数据到本地结构体 */
-static void pmc_a_input_fetch_snapshot(char *local_snap);
+static void plc_a_input_fetch_snapshot(char *local_snap);
 
 /* ==========================================================================
  * 2. 外部函数定义 (Public Definitions)
@@ -29,12 +29,12 @@ static void pmc_a_input_fetch_snapshot(char *local_snap);
  * @brief 周期性扫描任务
  * 建议 1ms 周期调用。
  */
-void pmc_a_input_scan_cycle(void)
+void plc_a_signal_scan_cycle(void)
 {
     char current_a_status[A_BYTE_COUNT]; // 本次抓取的实时数据
 
     // 1. 同步最新硬件/共享内存数据到数组
-    pmc_a_input_fetch_snapshot(current_a_status);
+    plc_a_input_fetch_snapshot(current_a_status);
 
     // 2. 遍历处理所有字节
     for (int i = 0; i < A_BYTE_COUNT; i++)
@@ -132,7 +132,7 @@ void pmc_a_input_scan_cycle(void)
  * @param local_a_snap 指向存储 A 变量快照的数组 (例如 static unsigned char
  * last_a_status[A_BYTE_COUNT])
  */
-static void pmc_a_input_fetch_snapshot(char *local_a_snap)
+static void plc_a_input_fetch_snapshot(char *local_a_snap)
 {
     if (local_a_snap == NULL)
         return;

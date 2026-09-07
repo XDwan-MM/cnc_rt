@@ -1,4 +1,4 @@
-#include "pmc_g_input_scanner.h"
+#include "plc_g_signal_scanner.h"
 #include "global.h"
 #include "regapi.h"       /**< 寄存器访问 API */
 #include "signal_utils.h" /**< 边沿检测宏定义 */
@@ -14,9 +14,7 @@
  * 3. 以后若想增加 G19 或 G32，只需在此数组末尾添加数字 19, 32 即可，无需改动获取数据的函数。
  */
 static const int SCAN_G_REGS[] = {
-    4,  5,  6,  7,  8,  12, 14, 19,  29,  30,  32,  33,  43,  44,  45,
-    46, 54, 55, 56, 61, 62, 70, 100, 102, 108, 124, 130, 132, 134, /* 已有信号的地址 */
-                                                                   /* <--- 您想新增的信号地址 */
+    4, 5, 6, 7, 8, 12, 14, 19, 29, 30, 32, 33, 43, 44, 45, 46, 54, 55, 56, 61, 62, 70, 100, 101, 102, 103, 107, 108, 109, 118, 120, 124, 130, 132, 134, 341, 342, 343, 344, /* 已有及外部减速信号地址 */
 };
 
 /** 计算注册表中元素的个数，用于驱动循环扫描 */
@@ -32,10 +30,16 @@ static bool is_first_scan = true;
  * ========================================================================== */
 
 /** @brief 从寄存器系统同步数据到本地结构体 */
-static void pmc_input_fetch_snapshot(G_INPUT_MAP *local_snap);
+static void plc_input_fetch_snapshot(G_INPUT_MAP *local_snap);
 
-/** @brief 将解析出的逻辑打包为 PMC_EVENT 并入队 */
-static void pmc_dispatch_event(PMC_EVENT_ID id, int p1, int p2);
+/** @brief 将解析出的逻辑打包为 PLC_EVENT 并入队 */
+static void plc_dispatch_event(PLC_EVENT_ID id, int p1, int p2, int p3, int p4);
+
+/** @brief 扫描外部减速 G 信号 */
+static void process_external_deceleration(const G_INPUT_MAP *curr_g);
+
+/** @brief 扫描一个外部减速功能正负方向的 G 信号 */
+static void process_external_deceleration_function(const G_INPUT_MAP *curr_g, int function, int positive_reg, int negative_reg);
 
 /**
  * @brief 模式解析逻辑实现
@@ -51,7 +55,7 @@ static void process_mode_selection(char g43);
  * @brief 周期性扫描任务
  * 建议 1ms 周期调用。内部完成：拉取寄存器 -> 逻辑判断 -> 推送队列
  */
-void pmc_g_input_scan_cycle(void)
+void plc_g_signal_scan_cycle(void)
 {
     if (event_queue == NULL)
         return;
@@ -59,9 +63,12 @@ void pmc_g_input_scan_cycle(void)
     G_INPUT_MAP curr_g;
     memset(&curr_g, 0, sizeof(G_INPUT_MAP)); /* 初始化清零，防止脏数据 */
     /* step1. 抓取寄存器快照 */
-    pmc_input_fetch_snapshot(&curr_g);
+    plc_input_fetch_snapshot(&curr_g);
 
     /* step2. G信号检测 */
+
+    /* 外部减速信号检测：G 位为0时，对应逻辑轴方向减速生效 */
+    process_external_deceleration(&curr_g);
 
     /* G8.4紧急停止检测 G08.4 = 0急停拍下，G08.4 = 1急停拉起 */
     // 急停按下检测 （状态检测）
@@ -81,7 +88,7 @@ void pmc_g_input_scan_cycle(void)
         // 系统急停输入信号
         rt_set_sys_state(SYS_ESTOP_INPUT, false);
         // 自动触发复位事件（推送复位事件）
-        pmc_dispatch_event(EV_MSG_RESET, 1, 0);
+        plc_dispatch_event(PLC_EV_MSG_RESET, 1, 0, 0, 0);
     }
     /* G19.7 快速按键信号检测，0->1 上升沿有效，1->0 下降沿失效 */
     if (SIGNAL_RISING(curr_g.g_regs[19], last_g.g_regs[19], 7))
@@ -113,20 +120,20 @@ void pmc_g_input_scan_cycle(void)
         // 正向按键检测
         if (SIGNAL_RISING(curr_g.g_regs[100], last_g.g_regs[100], i))
         {
-            pmc_dispatch_event(EV_MSG_FEEDAXIS_KEY, i, 1);
+            plc_dispatch_event(PLC_EV_MSG_FEEDAXIS_KEY, i, 1, 0, 0);
         }
         else if (SIGNAL_FALLING(curr_g.g_regs[100], last_g.g_regs[100], i))
         {
-            pmc_dispatch_event(EV_MSG_FEEDAXIS_KEY, i, -1);
+            plc_dispatch_event(PLC_EV_MSG_FEEDAXIS_KEY, i, -1, 0, 0);
         }
         // 负向按键检测
         if (SIGNAL_RISING(curr_g.g_regs[102], last_g.g_regs[102], i))
         {
-            pmc_dispatch_event(EV_MSG_FEEDAXIS_KEY, i, 2);
+            plc_dispatch_event(PLC_EV_MSG_FEEDAXIS_KEY, i, 2, 0, 0);
         }
         if (SIGNAL_FALLING(curr_g.g_regs[102], last_g.g_regs[102], i))
         {
-            pmc_dispatch_event(EV_MSG_FEEDAXIS_KEY, i, -2);
+            plc_dispatch_event(PLC_EV_MSG_FEEDAXIS_KEY, i, -2, 0, 0);
         }
     }
 
@@ -160,8 +167,8 @@ void pmc_g_input_scan_cycle(void)
              */
             feed_override = (int)inverted_val;
         }
-        /* p1=0 代表进给倍率类型 (EV_MSG_OVERRIDE) */
-        pmc_dispatch_event(EV_MSG_OVERRIDE, 0, feed_override);
+        /* p1=0 代表进给倍率类型 (PLC_EV_MSG_OVERRIDE) */
+        plc_dispatch_event(PLC_EV_MSG_OVERRIDE, 0, feed_override, 0, 0);
     }
     // 快速进给倍率检测G14
     if (is_first_scan || ((curr_g.g_regs[14] & 0x03) != (last_g.g_regs[14] & 0x03)))
@@ -172,13 +179,13 @@ void pmc_g_input_scan_cycle(void)
         // G14.1 = 0, G14.0 = 1；50%   (curr_g.G0014 & 0x03) == 1
         // G14.1 = 1, G14.0 = 0；25%   (curr_g.G0014 & 0x03) == 2
         // G14.1 = 1, G14.0 = 1；0%    (curr_g.G0014 & 0x03) == 3  NOTE：暂定20260313
-        pmc_dispatch_event(EV_MSG_OVERRIDE, 1, rapid_lut[curr_g.g_regs[14] & 0x03]);
+        plc_dispatch_event(PLC_EV_MSG_OVERRIDE, 1, rapid_lut[curr_g.g_regs[14] & 0x03], 0, 0);
     }
     // 主轴倍率检测G30
     if (is_first_scan || SIGNAL_BYTE_CHANGED(curr_g.g_regs[30], last_g.g_regs[30]))
     {
         /* p1=2 代表主轴倍率类型 */
-        pmc_dispatch_event(EV_MSG_OVERRIDE, 2, (int)curr_g.g_regs[30]);
+        plc_dispatch_event(PLC_EV_MSG_OVERRIDE, 2, (int)curr_g.g_regs[30], 0, 0);
     }
 
     /* 自动运行控制 (G7.2 启动, G8.5 中止, G8.7 复位) */
@@ -187,20 +194,20 @@ void pmc_g_input_scan_cycle(void)
     {
         LOG(LOG_LEVEL_INFO, "扫描到循环启动G7.2发生了上升沿");
         // G7.2 产生上升沿，发送自动运行事件
-        pmc_dispatch_event(EV_MSG_AUTO_RUN, 1, 0);
+        plc_dispatch_event(PLC_EV_MSG_AUTO_RUN, 1, 0, 0, 0);
     }
     // 暂停检测 (G8.5 下降沿，发送暂停事件)
     if (SIGNAL_FALLING(curr_g.g_regs[8], last_g.g_regs[8], 5))
     {
         LOG(LOG_LEVEL_INFO, "扫描到暂停G8.5发生了下降沿");
-        pmc_dispatch_event(EV_MSG_AUTO_RUN, 0, 0);
+        plc_dispatch_event(PLC_EV_MSG_AUTO_RUN, 0, 0, 0, 0);
     }
 
     /* 外部复位M02M30 (G8.7 复位 上升沿触发) */
     if (SIGNAL_RISING(curr_g.g_regs[8], last_g.g_regs[8], 7))
     {
         LOG(LOG_LEVEL_INFO, "扫描到外部复位G8.7发生了上升沿");
-        pmc_dispatch_event(EV_MSG_RESET, 1, 1);
+        plc_dispatch_event(PLC_EV_MSG_RESET, 1, 1, 0, 0);
     }
 
     /* 主轴正反信号检测 (G70.4 主轴反转, G70.5 主轴正转, G29.6 主轴停止信号) */
@@ -208,37 +215,37 @@ void pmc_g_input_scan_cycle(void)
     {
         LOG(LOG_LEVEL_INFO, "扫描到主轴反转G70.4发生了上升沿");
         // 产生主轴反转事件 入队
-        pmc_dispatch_event(EV_MSG_SPINDLE, -1, 0);
+        plc_dispatch_event(PLC_EV_MSG_SPINDLE, -1, 0, 0, 0);
     }
     if (SIGNAL_RISING(curr_g.g_regs[70], last_g.g_regs[70], 5))
     {
         LOG(LOG_LEVEL_INFO, "扫描到主轴正转G70.5发生了上升沿");
         // 产生主轴正转事件 入队
-        pmc_dispatch_event(EV_MSG_SPINDLE, 1, 0);
+        plc_dispatch_event(PLC_EV_MSG_SPINDLE, 1, 0, 0, 0);
     }
     if (SIGNAL_FALLING(curr_g.g_regs[29], last_g.g_regs[29], 6))
     {
         LOG(LOG_LEVEL_INFO, "扫描到主轴停止G29.6发生了下降沿");
         // 产生主轴停止事件 入队
-        pmc_dispatch_event(EV_MSG_SPINDLE, 0, 0);
+        plc_dispatch_event(PLC_EV_MSG_SPINDLE, 0, 0, 0, 0);
     }
     /* 主轴定向 G70.6 */
     if (SIGNAL_RISING(curr_g.g_regs[70], last_g.g_regs[70], 6))
     {
         LOG(LOG_LEVEL_INFO, "扫描到G70.6 发生上升沿");
-        pmc_dispatch_event(EV_MSG_SPD_ORI, 0, 0);
+        plc_dispatch_event(PLC_EV_MSG_SPD_ORI, 0, 0, 0, 0);
     }
 
     /* 可选程序段跳过 G44.0 */
     if (SIGNAL_RISING(curr_g.g_regs[44], last_g.g_regs[44], 0))
     {
         LOG(LOG_LEVEL_INFO, "扫描到G44.0 发生上升沿");
-        pmc_dispatch_event(EV_MSG_ENANLE, BLOCK_SKIP, 1);
+        plc_dispatch_event(PLC_EV_MSG_ENANLE, BLOCK_SKIP, 1, 0, 0);
     }
     if (SIGNAL_FALLING(curr_g.g_regs[44], last_g.g_regs[44], 0))
     {
         LOG(LOG_LEVEL_INFO, "扫描到G44.0 发生下降沿");
-        pmc_dispatch_event(EV_MSG_ENANLE, BLOCK_SKIP, 0);
+        plc_dispatch_event(PLC_EV_MSG_ENANLE, BLOCK_SKIP, 0, 0, 0);
     }
     /* 跳段 G45发生变化 */
     if (SIGNAL_BYTE_CHANGED(curr_g.g_regs[45], last_g.g_regs[45]))
@@ -248,12 +255,12 @@ void pmc_g_input_scan_cycle(void)
             if (SIGNAL_RISING(curr_g.g_regs[45], last_g.g_regs[45], i))
             {
                 LOG(LOG_LEVEL_INFO, "扫描到G45.%d 发生上升沿", i);
-                pmc_dispatch_event(EV_MSG_ENANLE, BLOCK_SKIP + i + 1, 1);
+                plc_dispatch_event(PLC_EV_MSG_ENANLE, BLOCK_SKIP + i + 1, 1, 0, 0);
             }
             if (SIGNAL_FALLING(curr_g.g_regs[45], last_g.g_regs[45], i))
             {
                 LOG(LOG_LEVEL_INFO, "扫描到G45.%d 发生下降沿", i);
-                pmc_dispatch_event(EV_MSG_ENANLE, BLOCK_SKIP + i + 1, 0);
+                plc_dispatch_event(PLC_EV_MSG_ENANLE, BLOCK_SKIP + i + 1, 0, 0, 0);
             }
         }
     }
@@ -275,148 +282,151 @@ void pmc_g_input_scan_cycle(void)
     if (SIGNAL_RISING(curr_g.g_regs[6], last_g.g_regs[6], 0))
     {
         LOG(LOG_LEVEL_INFO, "扫描到G6.0 发生上升沿");
-        pmc_dispatch_event(EV_MSG_ENANLE, PROG_RESTAR, 1);
+        plc_dispatch_event(PLC_EV_MSG_ENANLE, PROG_RESTAR, 1, 0, 0);
     }
     if (SIGNAL_FALLING(curr_g.g_regs[6], last_g.g_regs[6], 0))
     {
         LOG(LOG_LEVEL_INFO, "扫描到G6.0 发生下降沿");
-        pmc_dispatch_event(EV_MSG_ENANLE, PROG_RESTAR, 0);
+        plc_dispatch_event(PLC_EV_MSG_ENANLE, PROG_RESTAR, 0, 0, 0);
     }
 
     /* 空运行 G46.7 */
     if (SIGNAL_RISING(curr_g.g_regs[46], last_g.g_regs[46], 7))
     {
         LOG(LOG_LEVEL_INFO, "扫描到G46.7 发生上升沿");
-        pmc_dispatch_event(EV_MSG_ENANLE, DRY_RUN, 1);
+        plc_dispatch_event(PLC_EV_MSG_ENANLE, DRY_RUN, 1, 0, 0);
     }
     if (SIGNAL_FALLING(curr_g.g_regs[46], last_g.g_regs[46], 7))
     {
         LOG(LOG_LEVEL_INFO, "扫描到G46.7 发生下降沿");
-        pmc_dispatch_event(EV_MSG_ENANLE, DRY_RUN, 0);
+        plc_dispatch_event(PLC_EV_MSG_ENANLE, DRY_RUN, 0, 0, 0);
     }
 
     /* 单程序段 G46.1 */
     if (SIGNAL_RISING(curr_g.g_regs[46], last_g.g_regs[46], 1))
     {
         LOG(LOG_LEVEL_INFO, "扫描到G46.1 发生上升沿");
-        pmc_dispatch_event(EV_MSG_ENANLE, SINGLE_BLOCK, 1);
+        plc_dispatch_event(PLC_EV_MSG_ENANLE, SINGLE_BLOCK, 1, 0, 0);
     }
     if (SIGNAL_FALLING(curr_g.g_regs[46], last_g.g_regs[46], 1))
     {
         LOG(LOG_LEVEL_INFO, "扫描到G46.1 发生下降沿");
-        pmc_dispatch_event(EV_MSG_ENANLE, SINGLE_BLOCK, 0);
+        plc_dispatch_event(PLC_EV_MSG_ENANLE, SINGLE_BLOCK, 0, 0, 0);
     }
 
     /* 辅助功能锁住 G5.6 */
     if (SIGNAL_RISING(curr_g.g_regs[5], last_g.g_regs[5], 6))
     {
         LOG(LOG_LEVEL_INFO, "扫描到G5.6 发生上升沿");
-        pmc_dispatch_event(EV_MSG_ENANLE, MSBT_LOCK, 1);
+        plc_dispatch_event(PLC_EV_MSG_ENANLE, MSBT_LOCK, 1, 0, 0);
     }
     if (SIGNAL_FALLING(curr_g.g_regs[5], last_g.g_regs[5], 6))
     {
         LOG(LOG_LEVEL_INFO, "扫描到G5.6 发生下降沿");
-        pmc_dispatch_event(EV_MSG_ENANLE, MSBT_LOCK, 0);
+        plc_dispatch_event(PLC_EV_MSG_ENANLE, MSBT_LOCK, 0, 0, 0);
     }
 
     /* 机床锁住 G4.1 */
     if (SIGNAL_RISING(curr_g.g_regs[4], last_g.g_regs[4], 1))
     {
         LOG(LOG_LEVEL_INFO, "扫描到G4.1 发生上升沿");
-        pmc_dispatch_event(EV_MSG_ENANLE, MAC_LOCK, 1);
+        plc_dispatch_event(PLC_EV_MSG_ENANLE, MAC_LOCK, 1, 0, 0);
     }
     if (SIGNAL_FALLING(curr_g.g_regs[4], last_g.g_regs[4], 1))
     {
         LOG(LOG_LEVEL_INFO, "扫描到G4.1 发生下降沿");
-        pmc_dispatch_event(EV_MSG_ENANLE, MAC_LOCK, 0);
+        plc_dispatch_event(PLC_EV_MSG_ENANLE, MAC_LOCK, 0, 0, 0);
     }
 
     /* 起动锁停 G7.1 1有效*/
     if (SIGNAL_RISING(curr_g.g_regs[7], last_g.g_regs[7], 1))
     {
         LOG(LOG_LEVEL_INFO, "扫描到G7.1 发生上升沿");
-        pmc_dispatch_event(EV_MSG_ENANLE, STLK, 1);
+        plc_dispatch_event(PLC_EV_MSG_ENANLE, STLK, 1, 0, 0);
     }
     if (SIGNAL_FALLING(curr_g.g_regs[7], last_g.g_regs[7], 1))
     {
         LOG(LOG_LEVEL_INFO, "扫描到G7.1 发生下降沿");
-        pmc_dispatch_event(EV_MSG_ENANLE, STLK, 0);
+        plc_dispatch_event(PLC_EV_MSG_ENANLE, STLK, 0, 0, 0);
     }
 
     /* 所有互锁 G8.0 0有效*/
     if (SIGNAL_RISING(curr_g.g_regs[8], last_g.g_regs[8], 0))
     {
         LOG(LOG_LEVEL_INFO, "扫描到G8.0 发生上升沿");
-        pmc_dispatch_event(EV_MSG_ENANLE, IT, 0);
+        plc_dispatch_event(PLC_EV_MSG_ENANLE, IT, 0, 0, 0);
     }
     if (SIGNAL_FALLING(curr_g.g_regs[8], last_g.g_regs[8], 0))
     {
         LOG(LOG_LEVEL_INFO, "扫描到G8.0 发生下降沿");
-        pmc_dispatch_event(EV_MSG_ENANLE, IT, 1);
+        plc_dispatch_event(PLC_EV_MSG_ENANLE, IT, 1, 0, 0);
     }
 
     /* 切削程序段开始互锁 G8.1 0有效*/
     if (SIGNAL_RISING(curr_g.g_regs[8], last_g.g_regs[8], 1))
     {
         LOG(LOG_LEVEL_INFO, "扫描到G8.1 发生上升沿");
-        pmc_dispatch_event(EV_MSG_ENANLE, CSL, 0);
+        plc_dispatch_event(PLC_EV_MSG_ENANLE, CSL, 0, 0, 0);
     }
     if (SIGNAL_FALLING(curr_g.g_regs[8], last_g.g_regs[8], 1))
     {
         LOG(LOG_LEVEL_INFO, "扫描到G8.1 发生下降沿");
-        pmc_dispatch_event(EV_MSG_ENANLE, CSL, 1);
+        plc_dispatch_event(PLC_EV_MSG_ENANLE, CSL, 1, 0, 0);
     }
 
     /* 程序段开始互锁 G8.3 0有效*/
     if (SIGNAL_RISING(curr_g.g_regs[8], last_g.g_regs[8], 3))
     {
         LOG(LOG_LEVEL_INFO, "扫描到G8.3 发生上升沿");
-        pmc_dispatch_event(EV_MSG_ENANLE, BSL, 0);
+        plc_dispatch_event(PLC_EV_MSG_ENANLE, BSL, 0, 0, 0);
     }
     if (SIGNAL_FALLING(curr_g.g_regs[8], last_g.g_regs[8], 3))
     {
         LOG(LOG_LEVEL_INFO, "扫描到G8.3 发生下降沿");
-        pmc_dispatch_event(EV_MSG_ENANLE, BSL, 1);
+        plc_dispatch_event(PLC_EV_MSG_ENANLE, BSL, 1, 0, 0);
     }
 
     /* 各轴互锁 G130.0-130.4 0有效*/
-    for(int i = 0; i < 5; i++){
+    for (int i = 0; i < 5; i++)
+    {
         if (SIGNAL_RISING(curr_g.g_regs[130], last_g.g_regs[130], i))
         {
             LOG(LOG_LEVEL_INFO, "扫描到G130.%d 发生上升沿", i);
-            pmc_dispatch_event(EV_MSG_ENANLE, IT1 + i, 0);
+            plc_dispatch_event(PLC_EV_MSG_ENANLE, IT1 + i, 0, 0, 0);
         }
         if (SIGNAL_FALLING(curr_g.g_regs[130], last_g.g_regs[130], i))
         {
             LOG(LOG_LEVEL_INFO, "扫描到G130.%d 发生下降沿", i);
-            pmc_dispatch_event(EV_MSG_ENANLE, IT1 + i, 1);
+            plc_dispatch_event(PLC_EV_MSG_ENANLE, IT1 + i, 1, 0, 0);
         }
     }
-    
+
     /* 不同轴向互锁 G132.0-132.4 1有效*/
-    for(int i = 0; i < 5; i++){
+    for (int i = 0; i < 5; i++)
+    {
         if (SIGNAL_RISING(curr_g.g_regs[132], last_g.g_regs[132], i))
         {
             LOG(LOG_LEVEL_INFO, "扫描到G132.%d 发生上升沿", i);
-            pmc_dispatch_event(EV_MSG_ENANLE, PMIT1 + i, 1);
+            plc_dispatch_event(PLC_EV_MSG_ENANLE, PMIT1 + i, 1, 0, 0);
         }
         if (SIGNAL_FALLING(curr_g.g_regs[132], last_g.g_regs[132], i))
         {
             LOG(LOG_LEVEL_INFO, "扫描到G132.%d 发生下降沿", i);
-            pmc_dispatch_event(EV_MSG_ENANLE, PMIT1 + i, 0);
+            plc_dispatch_event(PLC_EV_MSG_ENANLE, PMIT1 + i, 0, 0, 0);
         }
     }
     /* 不同轴向互锁 G134.0-134.4 1有效*/
-    for(int i = 0; i < 5; i++){
+    for (int i = 0; i < 5; i++)
+    {
         if (SIGNAL_RISING(curr_g.g_regs[134], last_g.g_regs[134], i))
         {
             LOG(LOG_LEVEL_INFO, "扫描到G134.%d 发生上升沿", i);
-            pmc_dispatch_event(EV_MSG_ENANLE, NMIT1 + i, 1);
+            plc_dispatch_event(PLC_EV_MSG_ENANLE, NMIT1 + i, 1, 0, 0);
         }
         if (SIGNAL_FALLING(curr_g.g_regs[134], last_g.g_regs[134], i))
         {
             LOG(LOG_LEVEL_INFO, "扫描到G134.%d 发生下降沿", i);
-            pmc_dispatch_event(EV_MSG_ENANLE, NMIT1 + i, 0);
+            plc_dispatch_event(PLC_EV_MSG_ENANLE, NMIT1 + i, 0, 0, 0);
         }
     }
 
@@ -473,12 +483,12 @@ void pmc_g_input_scan_cycle(void)
             if (SIGNAL_RISING(curr_g.g_regs[108], last_g.g_regs[108], i))
             {
                 LOG(LOG_LEVEL_INFO, "扫描到G108.%d 发生上升沿", i);
-                pmc_dispatch_event(EV_MSG_ENANLE, MAC_LOCK + i + 1, 1);
+                plc_dispatch_event(PLC_EV_MSG_ENANLE, MAC_LOCK + i + 1, 1, 0, 0);
             }
             if (SIGNAL_FALLING(curr_g.g_regs[108], last_g.g_regs[108], i))
             {
                 LOG(LOG_LEVEL_INFO, "扫描到G108.%d 发生下降沿", i);
-                pmc_dispatch_event(EV_MSG_ENANLE, MAC_LOCK + i + 1, 0);
+                plc_dispatch_event(PLC_EV_MSG_ENANLE, MAC_LOCK + i + 1, 0, 0, 0);
             }
         }
     }
@@ -514,7 +524,7 @@ void pmc_g_input_scan_cycle(void)
 /** @brief 从寄存器系统同步数据到本地结构体
  * 遍历注册表，集中抓取数据，数据安全且无遗漏。
  */
-static void pmc_input_fetch_snapshot(G_INPUT_MAP *local_snap)
+static void plc_input_fetch_snapshot(G_INPUT_MAP *local_snap)
 {
     /* 遍历注册表中的每一个索引 */
     for (int i = 0; i < SCAN_G_REGS_COUNT; i++)
@@ -527,22 +537,22 @@ static void pmc_input_fetch_snapshot(G_INPUT_MAP *local_snap)
     }
 }
 
-/** @brief 将解析出的逻辑打包为 PMC_EVENT 并入队 */
-static void pmc_dispatch_event(PMC_EVENT_ID id, int p1, int p2)
+/** @brief 将解析出的逻辑打包为 PLC_EVENT 并入队 */
+static void plc_dispatch_event(PLC_EVENT_ID id, int p1, int p2, int p3, int p4)
 {
-    if (id == EV_MSG_NONE)
+    if (id == PLC_EV_MSG_NONE)
         return;
-    PMC_EVENT event;
+    PLC_EVENT event;
     switch (id)
     {
-    case EV_MSG_MODE:
+    case PLC_EV_MSG_MODE:
     {
         event.id = id;
         event.mode_payload.mode = p1; // 目标模式
         // LOG(LOG_LEVEL_INFO, "扫描到模式切换 %d", id);
         break;
     }
-    case EV_MSG_FEEDAXIS_KEY:
+    case PLC_EV_MSG_FEEDAXIS_KEY:
     {
         event.id = id;
         event.feedaxis_key_payload.axis_num = p1;
@@ -550,14 +560,14 @@ static void pmc_dispatch_event(PMC_EVENT_ID id, int p1, int p2)
         // LOG(LOG_LEVEL_INFO, "扫描到进给轴按键切换: %d, axis: %d, action: %d", event.id, p1, p2);
         break;
     }
-    case EV_MSG_SPINDLE:
+    case PLC_EV_MSG_SPINDLE:
     {
         event.id = id;
         event.spindle_payload.direction = p1;
         // LOG(LOG_LEVEL_INFO, "扫描到主轴状态切换 sp:%d, direction: %d", event.id, p1);
         break;
     }
-    case EV_MSG_OVERRIDE:
+    case PLC_EV_MSG_OVERRIDE:
     {
         event.id = id;
         event.override_payload.override_type = p1;
@@ -565,14 +575,14 @@ static void pmc_dispatch_event(PMC_EVENT_ID id, int p1, int p2)
         // LOG(LOG_LEVEL_INFO, "扫描到倍率切换 type: %d, override_type: %d, val: %d", event.id, p1, p2);
         break;
     }
-    case EV_MSG_AUTO_RUN:
+    case PLC_EV_MSG_AUTO_RUN:
     {
         event.id = id;
         event.run_payload.run_state = p1;
         // LOG(LOG_LEVEL_INFO, "扫描到运行状态切换 run:%d, state: %d", event.id, p1);
         break;
     }
-    case EV_MSG_RESET:
+    case PLC_EV_MSG_RESET:
     {
         event.id = id;
         event.reset_payload.reset_state = p1;
@@ -580,23 +590,102 @@ static void pmc_dispatch_event(PMC_EVENT_ID id, int p1, int p2)
         // LOG(LOG_LEVEL_INFO, "扫描到复位: %d, reset_state: %d", event.id, p1);
         break;
     }
-    case EV_MSG_ENANLE:
+    case PLC_EV_MSG_ENANLE:
         event.id = id;
         event.enable_payload.enable_key = p1;
         event.enable_payload.enable_state = p2;
         // LOG(LOG_LEVEL_INFO, "扫描到使能: %d, enable_state: %d", p1, p2);
         break;
-    case EV_MSG_SPD_ORI:
+    case PLC_EV_MSG_SPD_ORI:
         event.id = id;
         event.spd_ori_payload.p1 = p1;
         event.spd_ori_payload.p2 = p2;
         // LOG(LOG_LEVEL_INFO, "扫描到主轴定向: %d", event.id);
         break;
+    case PLC_EV_MSG_EXTERNAL_DECEL:
+        event.id = id;
+        event.external_decel_payload.function = p1;
+        event.external_decel_payload.axis_num = p2;
+        event.external_decel_payload.direction = p3;
+        event.external_decel_payload.active = p4;
+        break;
     default:
         break;
     }
-    /* 推送 PMC_EVENT 到线程安全的队列 */
+    /* 推送 PLC_EVENT 到线程安全的队列 */
     event_queue_push(event_queue, &event);
+}
+
+/** @brief 扫描外部减速 G 信号 */
+static void process_external_deceleration(const G_INPUT_MAP *curr_g)
+{
+    /* 功能1：正向 G118，负向 G120 */
+    process_external_deceleration_function(curr_g, PLC_EXTERNAL_DECEL_FUNCTION_1, 118, 120);
+
+    /* 功能2：正向 G101，负向 G103 */
+    process_external_deceleration_function(curr_g, PLC_EXTERNAL_DECEL_FUNCTION_2, 101, 103);
+
+    /* 功能3：正向 G107，负向 G109 */
+    process_external_deceleration_function(curr_g, PLC_EXTERNAL_DECEL_FUNCTION_3, 107, 109);
+
+    /* 功能4：正向 G341，负向 G342 */
+    process_external_deceleration_function(curr_g, PLC_EXTERNAL_DECEL_FUNCTION_4, 341, 342);
+
+    /* 功能5：正向 G343，负向 G344 */
+    process_external_deceleration_function(curr_g, PLC_EXTERNAL_DECEL_FUNCTION_5, 343, 344);
+}
+
+/** @brief 扫描一个外部减速功能正负方向的 G 信号 */
+static void process_external_deceleration_function(const G_INPUT_MAP *curr_g, int function, int positive_reg, int negative_reg)
+{
+    for (int axis = 0; axis < PLC_EXTERNAL_DECEL_AXIS_COUNT; axis++)
+    {
+        // 首次扫描
+        if (is_first_scan)
+        {
+            int positive_active = 0;
+            int negative_active = 0;
+
+            positive_active = !GET_BIT(curr_g->g_regs[positive_reg], axis);
+            if (positive_active)
+            {
+                plc_dispatch_event(PLC_EV_MSG_EXTERNAL_DECEL, function, axis, 1, 1);
+            }
+
+            negative_active = !GET_BIT(curr_g->g_regs[negative_reg], axis);
+            if (negative_active)
+            {
+                plc_dispatch_event(PLC_EV_MSG_EXTERNAL_DECEL, function, axis, -1, 1);
+            }
+        }
+        else
+        {
+            // 正向减速G信号扫描
+            if (SIGNAL_FALLING(curr_g->g_regs[positive_reg], last_g.g_regs[positive_reg], axis))
+            {
+                LOG(LOG_LEVEL_INFO, "扫描到G%d.%d 发生下降沿", positive_reg, axis);
+                // 正向减速信号生效
+                plc_dispatch_event(PLC_EV_MSG_EXTERNAL_DECEL, function, axis, 1, 1);
+            }
+            else if (SIGNAL_RISING(curr_g->g_regs[positive_reg], last_g.g_regs[positive_reg], axis))
+            {
+                LOG(LOG_LEVEL_INFO, "扫描到G%d.%d 发生上升沿", positive_reg, axis);
+                plc_dispatch_event(PLC_EV_MSG_EXTERNAL_DECEL, function, axis, 1, 0);
+            }
+            // 负向减速G信号扫描
+            if (SIGNAL_FALLING(curr_g->g_regs[negative_reg], last_g.g_regs[negative_reg], axis))
+            {
+                LOG(LOG_LEVEL_INFO, "扫描到G%d.%d 发生下降沿", negative_reg, axis);
+                // 负向减速信号生效
+                plc_dispatch_event(PLC_EV_MSG_EXTERNAL_DECEL, function, axis, -1, 1);
+            }
+            else if (SIGNAL_RISING(curr_g->g_regs[negative_reg], last_g.g_regs[negative_reg], axis))
+            {
+                LOG(LOG_LEVEL_INFO, "扫描到G%d.%d 发生上升沿", negative_reg, axis);
+                plc_dispatch_event(PLC_EV_MSG_EXTERNAL_DECEL, function, axis, -1, 0);
+            }
+        }
+    }
 }
 
 /**
@@ -646,6 +735,6 @@ static void process_mode_selection(char g43)
     /* 如果解析出有效模式，则发送事件 */
     if (target_mode != CNC_MODE_INVALID)
     {
-        pmc_dispatch_event(EV_MSG_MODE, (int)target_mode, 0);
+        plc_dispatch_event(PLC_EV_MSG_MODE, (int)target_mode, 0, 0, 0);
     }
 }

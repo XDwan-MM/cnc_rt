@@ -1,50 +1,47 @@
-#ifndef __JOG_H__
-#define __JOG_H__
+/**
+ * @file        jog.h
+ * @brief       JOG模式控制主模块
+ * @date        2026/09/04
+ * @author      伍臣发
+ * @copyright   珠海格力电器股份有限公司装备动力技术研究院一所
+ */
+
+#ifndef JOG_H
+#define JOG_H
 
 #include <stdbool.h>
-#include "jog_planner.h"
-#include "pardata.h"
 
-/* JOG方向定义 */
-#define JOG_DIR_NONE      (0)
-#define JOG_DIR_POSITIVE  (1)
-#define JOG_DIR_NEGATIVE  (-1)
+/*
+ * 公共 JOG 常量。
+ * 状态机、按键锁存、停止原因和规划器均为 jog.c 私有实现，头文件不暴露。
+ */
+#define JOG_DIR_NONE (0)
+#define JOG_DIR_POSITIVE (1)
+#define JOG_DIR_NEGATIVE (-1)
 
 /* 运行控制常量 */
-#define JOG_CYCLE_TIME   (0.001)   /* 伺服周期 1ms */
-#define SPEED_THRESHOLD  (1.0e-5)  /* 停止速度判断阈值 */
-#define SYS_AXES_NUM_JOG (3)       /* 轴数 */
+#define JOG_SPEED_THRESHOLD (1.0e-5) /* 停止速度判断阈值 */
+#define JOG_AXIS_COUNT (3)           /* JOG支持的轴数 */
 
-/* 减速刹车系数，默认为1 （减小系数，就可以超过限位；增大系数走到限位前停止） */
-#define BRAKE_FACTOR (0.9999)
+/* 软限位刹车距离系数，增大该值会更早停止。 */
+#define JOG_BRAKE_FACTOR (0.9999)
 
 #ifdef __cplusplus
-extern "C" {
+extern "C"
+{
 #endif
 
-/* JOG 状态机定义 */
-typedef enum {
-    JOG_STATE_IDLE = 0,    /* 静态同步：规划器跟随当前实际位置 */
-    JOG_STATE_RUNNING,     /* 运动执行：响应按键和倍率 */
-    JOG_STATE_STOPPING,    /* 减速停止：线性减速至零 */
-} JOG_STATE;
+/* 1ms 周期调用的主任务函数。 */
+extern void handle_jog_cmd(void);
 
-typedef struct {
-    JOG_STATE state;
-    int direction;
-} JOG_AXIS_CTRL;
+/* 清除 JOG 运动请求并停止规划器；外部减速 PLC 电平会保留在 AxisStatus。 */
+extern void jog_handle_estop(void);
 
-/* 全局规划器实例，供系统其他模块读取指令位置/速度 */
-extern jog_planner_t jog_tp[SYS_AXES_NUM_JOG];
-
-/* 1ms 周期调用的主任务函数 */
-extern void handle_jog_cmd();
-
-/* 处理急停、复位、切模式等异常情况 */
-extern void jog_handle_estop();
+/* 提供给模式切换逻辑的只读轴速度，非法轴号返回 0。 */
+extern double jog_get_axis_velocity(int axis);
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif /* __JOG_H__ */
+#endif /* JOG_H */

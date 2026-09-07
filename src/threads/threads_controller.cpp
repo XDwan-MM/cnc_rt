@@ -11,9 +11,10 @@
 #include "plctask.h"
 #include "ladtracesampler.h"
 #include "servosamplesampler.h"
-#include "pmc_a_input_scanner.h"
-#include "pmc_g_input_scanner.h"
-#include "pmc_output_handler.h"
+#include "plc_a_signal_scanner.h"
+#include "plc_g_signal_scanner.h"
+#include "plc_x_signal_scanner.h"
+#include "plc_f_signal_handler.h"
 #include "master.h"
 #include <hmisysapi.h>
 #include <stdio.h>
@@ -104,8 +105,8 @@ void* soft_plc_thread_func(void*) {
         }
         #endif
         
-        pmc_g_input_scan_cycle();
-        pmc_a_input_scan_cycle();
+        plc_g_signal_scan_cycle();
+        plc_a_signal_scan_cycle();
 
         #ifndef DEBUG_MODE_ENABLED
         long long end_time = get_ns();
@@ -128,9 +129,10 @@ void* motion_controller_thread_func(void*) {
         start = get_ns();
         Hal_Driver_Update_All(true, false);
         hmi_events_scan();
+        // plc_x_signal_scan_cycle();
         task_mq_proc();
         emcmotTrajPlan();
-        pmc_output_feedback();
+        plc_f_signal_handler_cycle();
         ServoSampleSampler::instance().execute();
         Hal_Driver_Update_All(false, true);
         end = get_ns();

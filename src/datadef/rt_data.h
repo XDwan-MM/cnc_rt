@@ -62,12 +62,15 @@ typedef struct
     bool is_moving;         // 是否在运动  1运动　0静止
     bool direction;         // 运动方向　　１正向  0负向
     bool is_init;
-    bool is_error;          // 驱动器是否报警 １是　0否
-    bool is_decel_done;     // 报警减速是否完成
-    bool is_fwd_limit;      // 手动正方向限制
-    bool is_rev_limit;      // 手动负方向限制
+    bool is_error;      // 驱动器是否报警 1是 0否
+    bool is_decel_done; // 限位触发后减速是否完成 
+    bool is_fwd_limit;  // 手动正方向限制
+    bool is_rev_limit;  // 手动负方向限制
     bool plc_is_disable;
-    bool is_disable;        // 轴是否被屏蔽
+    bool is_disable;   // 轴是否被屏蔽
+    bool is_lag_error; // 是否跟随误差报警 1是 0否
+    // 外部减速状态：[0~4]功能号，[0]正向减速状态寄存，[1]负向减速状态寄存
+    bool external_decel_active[SYS_EXTERNAL_DECEL_FUNCTION_COUNT][SYS_EXTERNAL_DECEL_DIRECTION_COUNT];
 } AxisStatus;
 
 typedef struct{
@@ -83,13 +86,24 @@ typedef struct
     double cmd_vel;         // 通道指令合成速度 
     double cmd_acc;         // 通道指令合成加速度 
     double cmd_jk;          // 通道指令合成加加速度
+    double dryrun_spd;      // 空运行速度
+    double max_tang_acc;    // 最大向心加速度
+    int vplan_mode;         // 速度规划模式
+    int lookahead_num;      // 速度规划前瞻段数
+    double path_tolerance;  // 轨迹轮廓允差
+    // 重启生效
+    bool ex_dec_enable;     // 是否开启外部减速功能
     // 复位生效
-    int corner_dec_factor;      // 拐角降速比例因子
-    double dryrun_spd;          // 空运行速度
-    double max_tang_acc;        // 最大向心加速度
-    int vplan_mode;             // 速度规划模式
-    int lookahead_num;          // 速度规划前瞻段数
-    double path_tolerance;      // 轨迹轮廓允差
+    bool ex_dec2_enable;    // 是否开启外部减速功能2
+    bool ex_dec3_enable;    // 是否开启外部减速功能3
+    bool ex_dec4_enable;    // 是否开启外部减速功能4
+    bool ex_dec5_enable;    // 是否开启外部减速功能5
+    double cut_ex_dec1_vel; // 外部减速1对切削进给的减速速度
+    double cut_ex_dec2_vel; // 外部减速2对切削进给的减速速度
+    double cut_ex_dec3_vel; // 外部减速3对切削进给的减速速度
+    double cut_ex_dec4_vel; // 外部减速4对切削进给的减速速度
+    double cut_ex_dec5_vel; // 外部减速5对切削进给的减速速度
+    int corner_dec_factor;  // 拐角降速比例因子
 } RT_CHAN;
 
 // 目前仅轨迹线程使用
@@ -107,8 +121,8 @@ typedef struct
     double mpg_spd;                     // 手摇进给速度  
     double corner_vel_diff;             // 拐角的容许速度差
     double corner_acc_diff;             // 拐角的容许加速度差        
-    double max_static_ferror;           // 轴静态最大跟随误差
-    double max_dynamic_ferror;          // 轴动态最大跟随误差
+    double max_static_lag;              // 轴静态最大跟随误差
+    double max_dynamic_lag;             // 轴动态最大跟随误差
     double pos_tol;                     // 轴定位允差
     unsigned int home_way;              // 回参考点方式
     double ref_range;                   // 轴回零参考点范围偏差
@@ -118,6 +132,13 @@ typedef struct
     double plmt2;                       // 第二级正软极限
     double nlmt2;                       // 第二级负软极限
     double spdl_max_speed;              // 主轴最大转速(r/min)
+    bool ex_dec_enable_pos_cut;         // 外部减速信号对正向切削进给是否生效
+    bool ex_dec_enable_neg_cut;         // 外部减速信号对负向切削进给是否生效
+    double rpd_ex_dec1_vel;             // 外部减速1对快速进给的减速速度
+    double rpd_ex_dec2_vel;             // 外部减速2对快速进给的减速速度
+    double rpd_ex_dec3_vel;             // 外部减速3对快速进给的减速速度
+    double rpd_ex_dec4_vel;             // 外部减速4对快速进给的减速速度
+    double rpd_ex_dec5_vel;             // 外部减速5对快速进给的减速速度
     // 重启生效
     int pm_munit;                       // 电子齿轮比分子
     int pm_pulse;                       // 电子齿轮比分母
@@ -187,4 +208,5 @@ void rt_set_zero_vel_params();
 #ifdef __cplusplus
 }
 #endif
+
 #endif /* RT_DATA_H */

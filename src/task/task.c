@@ -3,23 +3,29 @@
 #include "global.h"
 #include "hmi_scanner.h"
 #include "regapi.h"
-#include "spl_control.h"
 #include "servosampleevents.h"
+#include "spl_control.h"
 #include <alarmapi.h>
 #include <hmisysapi.h>
 #include <stdlib.h>
 #include "reset.h"
 
-static PMC_EVENT event_data;
-static GNC_RES task_handle_pmc_event(PMC_EVENT *event_data);
-static void task_handle_mode_event(PMC_EVENT *event_data);
-static void task_handle_feed_event(PMC_EVENT *event_data);
-static void task_handle_spl_event(PMC_EVENT *event_data);
-static void task_handle_overrate_event(PMC_EVENT *event_data);
-static void task_handle_auto_event(PMC_EVENT *event_data);
-static void task_handle_enable_event(PMC_EVENT *event_data);
-static void task_handle_reset_event(PMC_EVENT *event_data);
-static void task_handle_hmi_event(PMC_EVENT *event_data);
+static PLC_EVENT event_data;
+
+/* 内部函数声明 */
+static GNC_RES task_handle_plc_event(PLC_EVENT *event_data);
+static void task_handle_mode_event(PLC_EVENT *event_data);
+static void task_handle_feed_event(PLC_EVENT *event_data);
+static void task_handle_spl_event(PLC_EVENT *event_data);
+static void task_handle_overrate_event(PLC_EVENT *event_data);
+static void task_handle_auto_event(PLC_EVENT *event_data);
+static void task_handle_enable_event(PLC_EVENT *event_data);
+static void task_handle_reset_event(PLC_EVENT *event_data);
+static void task_handle_hmi_event(PLC_EVENT *event_data);
+static void task_handle_external_decel_event(PLC_EVENT *event_data);
+static bool task_external_decel_enabled(int function);
+
+/* 外部函数定义 */
 
 // 任务消息队列初始化
 GNC_RES task_mq_init()
@@ -44,65 +50,84 @@ GNC_RES task_mq_proc()
         return GNC_DATA_EMPTY;
     }
     // 处理事件
-    task_handle_pmc_event(&event_data);
+    task_handle_plc_event(&event_data);
     return GNC_OPERATOR_SUCCESS;
 }
 
-static GNC_RES task_handle_pmc_event(PMC_EVENT *event_data)
+/* 内部函数定义 */
+
+static GNC_RES task_handle_plc_event(PLC_EVENT *event_data)
 {
     if (!event_data || !rt_data)
         return GNC_DATA_NULL;
 
     switch (event_data->id)
     {
-    case EV_MSG_NONE:
+    case PLC_EV_MSG_NONE:
     {
         rt_data->nc_event = SYS_EVENT_NONE;
         break;
     }
-    case EV_MSG_MODE:
+    case PLC_EV_MSG_MODE:
     {
         task_handle_mode_event(event_data);
         break;
     }
-    case EV_MSG_FEEDAXIS_KEY:
+    case PLC_EV_MSG_FEEDAXIS_KEY:
     {
         task_handle_feed_event(event_data);
         break;
     }
-    case EV_MSG_SPINDLE:
+    case PLC_EV_MSG_SPINDLE:
     {
         task_handle_spl_event(event_data);
         break;
     }
-    case EV_MSG_OVERRIDE:
+    case PLC_EV_MSG_OVERRIDE:
     {
         task_handle_overrate_event(event_data);
         break;
     }
-    case EV_MSG_AUTO_RUN:
+    case PLC_EV_MSG_AUTO_RUN:
     {
         task_handle_auto_event(event_data);
         break;
     }
-    case EV_MSG_ENANLE:
+    case PLC_EV_MSG_ENANLE:
     {
         task_handle_enable_event(event_data);
         break;
     }
-    case EV_MSG_HMI:
+    case PLC_EV_MSG_HMI:
     {
         task_handle_hmi_event(event_data);
         break;
     }
-    case EV_MSG_RESET:
+    case PLC_EV_MSG_RESET:
     {
         task_handle_reset_event(event_data);
         break;
     }
-    case EV_MSG_SPD_ORI:
+    case PLC_EV_MSG_SPD_ORI:
     {
         LOG(LOG_LEVEL_INFO, "处理主轴定向事件");
+        break;
+    }
+    case PLC_EV_MSG_EXTERNAL_DECEL:
+    {
+        if (task_external_decel_enabled(event_data->external_decel_payload.function))
+        {
+            LOG(LOG_LEVEL_INFO,
+                "处理PLC外部减速事件: 功能号=%d, 轴号=%d, 方向=%s(%d), 状态=%s(%d)",
+                event_data->external_decel_payload.function,
+                event_data->external_decel_payload.axis_num,
+                event_data->external_decel_payload.direction > 0 ? "正向" :
+                    (event_data->external_decel_payload.direction < 0 ? "负向" : "未知"),
+                event_data->external_decel_payload.direction,
+                event_data->external_decel_payload.active != 0 ? "生效" : "解除",
+                event_data->external_decel_payload.active);
+        }
+        task_handle_external_decel_event(event_data);
         break;
     }
     default:
@@ -111,7 +136,7 @@ static GNC_RES task_handle_pmc_event(PMC_EVENT *event_data)
     return GNC_OPERATOR_SUCCESS;
 }
 
-static void task_handle_mode_event(PMC_EVENT *event_data)
+static void task_handle_mode_event(PLC_EVENT *event_data)
 {
     LOG(LOG_LEVEL_INFO, "处理模式切换事件 %d", rt_data->target_mode);
     switch (event_data->mode_payload.mode)
@@ -143,13 +168,9 @@ static void task_handle_mode_event(PMC_EVENT *event_data)
     }
 }
 
-static void task_handle_feed_event(PMC_EVENT *event_data)
+static void task_handle_feed_event(PLC_EVENT *event_data)
 {
-    LOG(LOG_LEVEL_INFO,
-        "处理进给轴按键事件 轴选键%d 动作%d 当前模式%d",
-        event_data->feedaxis_key_payload.axis_num,
-        event_data->feedaxis_key_payload.direction,
-        rt_data->current_mode);
+    LOG(LOG_LEVEL_INFO, "处理进给轴按键事件 轴选键%d 动作%d 当前模式%d", event_data->feedaxis_key_payload.axis_num, event_data->feedaxis_key_payload.direction, rt_data->current_mode);
     int axis = event_data->feedaxis_key_payload.axis_num;       // 0:X, 1:Y, 2:Z
     int direction = event_data->feedaxis_key_payload.direction; // 1:正按, -1:正释放, 2:负按，-2:负释放
 
@@ -235,7 +256,7 @@ static void task_handle_feed_event(PMC_EVENT *event_data)
     }
 }
 
-static void task_handle_spl_event(PMC_EVENT *event_data)
+static void task_handle_spl_event(PLC_EVENT *event_data)
 {
     LOG(LOG_LEVEL_INFO, "处理主轴事件 动作%d", event_data->spindle_payload.direction);
     if (event_data->spindle_payload.direction == 1)
@@ -258,7 +279,7 @@ static void task_handle_spl_event(PMC_EVENT *event_data)
     }
 }
 
-static void task_handle_overrate_event(PMC_EVENT *event_data)
+static void task_handle_overrate_event(PLC_EVENT *event_data)
 {
     // 1.进给倍率
     if (event_data->override_payload.override_type == 0)
@@ -301,7 +322,7 @@ static void task_handle_overrate_event(PMC_EVENT *event_data)
     }
 }
 
-static void task_handle_auto_event(PMC_EVENT *event_data)
+static void task_handle_auto_event(PLC_EVENT *event_data)
 {
     // check：复位在F1.1置高，实时不响应启动事件
     if (nc_reset->is_resetting && event_data->run_payload.run_state == 1)
@@ -335,7 +356,7 @@ static void task_handle_auto_event(PMC_EVENT *event_data)
     }
 }
 
-static void task_handle_enable_event(PMC_EVENT *event_data)
+static void task_handle_enable_event(PLC_EVENT *event_data)
 {
     switch (event_data->enable_payload.enable_key)
     {
@@ -636,7 +657,7 @@ static void task_handle_enable_event(PMC_EVENT *event_data)
     }
 }
 
-static void task_handle_reset_event(PMC_EVENT *event_data)
+static void task_handle_reset_event(PLC_EVENT *event_data)
 {
     if (event_data->reset_payload.reset_state == 1)
     {
@@ -653,7 +674,7 @@ static void task_handle_reset_event(PMC_EVENT *event_data)
     }
 }
 
-static void task_handle_hmi_event(PMC_EVENT *event_data)
+static void task_handle_hmi_event(PLC_EVENT *event_data)
 {
     switch (event_data->hmi_payload.press_key)
     {
@@ -668,5 +689,66 @@ static void task_handle_hmi_event(PMC_EVENT *event_data)
         break;
     default:
         break;
+    }
+}
+
+static void task_handle_external_decel_event(PLC_EVENT *event_data)
+{
+    int axis;
+    int function;
+    int direction;
+    int direction_index;
+    bool active;
+    AxisStatus *axis_status;
+
+    if (event_data == NULL || rt_data == NULL)
+        return;
+
+    axis = event_data->external_decel_payload.axis_num;
+    function = event_data->external_decel_payload.function;
+    direction = event_data->external_decel_payload.direction;
+    active = (event_data->external_decel_payload.active != 0);
+
+    if (axis < 0 || axis >= SYS_AXES_NUM)
+        return;
+    if (function < 1 || function > SYS_EXTERNAL_DECEL_FUNCTION_COUNT)
+        return;
+    if (direction != 1 && direction != -1)
+        return;
+
+    direction_index = (direction > 0) ? 0 : 1;
+    axis_status = &rt_data->axis_data[axis].axis_status;
+    axis_status->external_decel_active[function - 1][direction_index] = active;
+
+    if (direction > 0)
+    {
+        rt_data->nc_event = active ? SYS_EVENT_EXTERNAL_DECEL_POS_ON : SYS_EVENT_EXTERNAL_DECEL_POS_OFF;
+    }
+    else
+    {
+        rt_data->nc_event = active ? SYS_EVENT_EXTERNAL_DECEL_NEG_ON : SYS_EVENT_EXTERNAL_DECEL_NEG_OFF;
+    }
+}
+
+static bool task_external_decel_enabled(int function)
+{
+    if (rt_data == NULL || !rt_data->chan_data[0].ex_dec_enable)
+        return false;
+
+    /* 功能 1 使用总开关，功能 2~5 还需检查各自的独立开关。 */
+    switch (function)
+    {
+    case PLC_EXTERNAL_DECEL_FUNCTION_1:
+        return true;
+    case PLC_EXTERNAL_DECEL_FUNCTION_2:
+        return rt_data->chan_data[0].ex_dec2_enable;
+    case PLC_EXTERNAL_DECEL_FUNCTION_3:
+        return rt_data->chan_data[0].ex_dec3_enable;
+    case PLC_EXTERNAL_DECEL_FUNCTION_4:
+        return rt_data->chan_data[0].ex_dec4_enable;
+    case PLC_EXTERNAL_DECEL_FUNCTION_5:
+        return rt_data->chan_data[0].ex_dec5_enable;
+    default:
+        return false;
     }
 }

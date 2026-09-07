@@ -24,6 +24,8 @@ extern "C" {
 #define CHECK_RES(res) \
     if (!res) break;
 
+#define SYS_EXTERNAL_DECEL_FUNCTION_COUNT 5
+#define SYS_EXTERNAL_DECEL_DIRECTION_COUNT 2
 
 // 定义数据类型
 typedef int int32_t;
@@ -208,6 +210,10 @@ typedef enum {
 
     SYS_EVENT_COMP_PARAM_CHANGED,   /* 误差补偿参数变更（需 sync + on_params_synced） */
     SYS_EVENT_COMP_TABLE_CHANGED,   /* 数据表参数变更（需重建表 + on_params_synced） */
+    SYS_EVENT_EXTERNAL_DECEL_POS_ON,   /* 外部减速正向生效 */
+    SYS_EVENT_EXTERNAL_DECEL_POS_OFF,  /* 外部减速正向解除 */
+    SYS_EVENT_EXTERNAL_DECEL_NEG_ON,   /* 外部减速负向生效 */
+    SYS_EVENT_EXTERNAL_DECEL_NEG_OFF,  /* 外部减速负向解除 */
 } SYS_EVENT;
 
 double POS_Distance(POS* p1, POS* p2);

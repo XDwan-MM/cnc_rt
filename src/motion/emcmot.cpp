@@ -181,8 +181,9 @@ static void set_operating_mode()
         break;
     case MODE_JOG:
         // 当前点动速度为零,才能切模式成功
-        if (fabs(jog_tp[AXIS_X].curr_vel) < SPEED_THRESHOLD && fabs(jog_tp[AXIS_Y].curr_vel) < SPEED_THRESHOLD &&
-            fabs(jog_tp[AXIS_Z].curr_vel) < SPEED_THRESHOLD)
+        if (fabs(jog_get_axis_velocity(AXIS_X)) < JOG_SPEED_THRESHOLD &&
+            fabs(jog_get_axis_velocity(AXIS_Y)) < JOG_SPEED_THRESHOLD &&
+            fabs(jog_get_axis_velocity(AXIS_Z)) < JOG_SPEED_THRESHOLD)
         {
             rt_data->current_mode = rt_data->target_mode;
             rt_data->sys_state[SYS_IS_SWITCHING_MODE] = false;
@@ -349,6 +350,8 @@ static void output_to_hal()
     Hal_Driver_Set_Target_Pos(&y_axis_driver, y_cmd_pulse_pos);
     z_cmd_pulse_pos = position_to_pulses(&rt_data->axis_data[AXIS_Z], rt_data->axis_data[AXIS_Z].motor_cmd_pos);
     Hal_Driver_Set_Target_Pos(&z_axis_driver, z_cmd_pulse_pos);
+    // 编码器位置打印
+    // printf("Z_PULSE_cmd%d Z_PULSE_act%d\n",z_cmd_pulse_pos, z_act_pulse_pos);
 }
 
 static void compute_error_comp()
@@ -382,21 +385,17 @@ static void compute_error_comp()
         // 反向间隙补偿值计算(计算出来的补偿值 单位为:mm)
         backlash_comp_val[i] = calcul_backlash_comp_val(&par_comp_lib[i], &backlash_comp_state[i], mac_cmd_pos, is_rapid);
         // 第一组直线度误差补偿值计算
-        straightness1_comp_val[i] = 0.0;
-        // straightness1_comp_val[i] = calcul_straightness1_comp_val(&par_comp_lib[i],
-        //                                                           &straightness1_comp_state[i],
-        //                                                           i,
-        //                                                           all_axis_pos,
-        //                                                           &straightness1_comp_table[i]);
-
+        straightness1_comp_val[i] = calcul_straightness1_comp_val(&par_comp_lib[i],
+                                                                  &straightness1_comp_state[i],
+                                                                  i,
+                                                                  all_axis_pos,
+                                                                  &straightness1_comp_table[i]);
         // 第二组直线度误差补偿值计算
-        straightness2_comp_val[i] = 0.0;
-        // straightness2_comp_val[i] = calcul_straightness2_comp_val(&par_comp_lib[i],
-        //                                                           &straightness2_comp_state[i],
-        //                                                           i,
-        //                                                           all_axis_pos,
-        //                                                           &straightness2_comp_table[i]);
-
+        straightness2_comp_val[i] = calcul_straightness2_comp_val(&par_comp_lib[i],
+                                                                  &straightness2_comp_state[i],
+                                                                  i,
+                                                                  all_axis_pos,
+                                                                  &straightness2_comp_table[i]);
         // 补偿值同步到全局误差补偿变量中
         rt_data->axis_data[i].pitch_comp_val = pitch_comp_val[i];
         rt_data->axis_data[i].backlash_comp_val = backlash_comp_val[i];
@@ -413,6 +412,14 @@ static void compute_error_comp()
         // 反馈位置（去除补偿）
         rt_data->axis_data[i].fb_pos_no_comp = rt_data->axis_data[i].motor_act_pos - rt_data->axis_data[i].total_comp_cal;
     }
+    // 直线度补偿值
+    // printf("straightness %f %f %.10f %.10f mac_x%f motor_cmd%f\n",
+    //        all_axis_pos[1],
+    //        all_axis_pos[2],
+    //        rt_data->axis_data[AXIS_X].straightness1_comp_val,
+    //        rt_data->axis_data[AXIS_X].straightness2_comp_val,
+    //        rt_data->axis_data[AXIS_X].mac_cmd_pos,
+    //        rt_data->axis_data[AXIS_X].motor_cmd_pos);
     // 螺补
     // printf("mac_cmd_pos%f pitch_comp_val%f motor_cmd_pos%f \n",
     //        rt_data->axis_data[AXIS_X].mac_cmd_pos,

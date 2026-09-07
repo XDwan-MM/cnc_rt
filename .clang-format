@@ -3,12 +3,14 @@
 BasedOnStyle: LLVM
 
 # 限制单行最大字符数（超过此长度时，就会触发函数参数换行。可根据喜好调整为 100 或 120）
-ColumnLimit: 130
+ColumnLimit: 300
 
 # 缩进宽度（根据你的习惯，通常为 4 或 2）
 IndentWidth: 4
 TabWidth: 4
 UseTab: Never
+# 统一连续代码行的行尾注释起始列
+AlignTrailingComments: true
 IndentCaseLabels: false
 # extern "C" 块内的声明不额外缩进
 IndentExternBlock: NoIndent
