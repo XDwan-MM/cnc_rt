@@ -247,7 +247,7 @@ static bool jog_is_global_fatal_alarm(void)
     {
         AxisStatus *status;
 
-        status = &rt_data->axis_data[i].axis_status;
+        status = &rt_data->axis_data[i].status;
         /* 伺服错误和跟随误差需要所有 JOG 轴停止，并由 RESET 解锁。 */
         if (status->is_error || status->is_lag_error)
             return true;
@@ -281,9 +281,9 @@ static bool jog_is_hard_limit_active(int axis, jog_direction_t direction)
     if (axis < 0 || axis >= JOG_AXIS_COUNT)
         return false;
     if (direction == JOG_DIRECTION_POSITIVE)
-        return rt_data->axis_data[axis].axis_status.is_fwd_limit;
+        return rt_data->axis_data[axis].status.is_fwd_limit;
     if (direction == JOG_DIRECTION_NEGATIVE)
-        return rt_data->axis_data[axis].axis_status.is_rev_limit;
+        return rt_data->axis_data[axis].status.is_rev_limit;
     return false;
 }
 
@@ -484,7 +484,7 @@ static double jog_get_external_decel_velocity(int axis, const jog_axis_t *jog_ax
     limit = HUGE_VAL;
     for (int function = 0; function < SYS_EXTERNAL_DECEL_FUNCTION_COUNT; function++)
     {
-        if (!rt_data->axis_data[axis].axis_status.external_decel_active[function][direction_index] || !function_enabled[function])
+        if (!rt_data->axis_data[axis].status.external_decel_active[function][direction_index] || !function_enabled[function])
             continue;
 
         if (!isfinite(configured_velocity[function]) || configured_velocity[function] < 0.0)
@@ -593,9 +593,9 @@ static void jog_update_outputs(void)
         feed_velocity_squared += axis_velocity * axis_velocity;
 
         /* 只有限位触发导致的停止才置减速完成标志。 */
-        if (fabs(axis_velocity) < JOG_SPEED_THRESHOLD && (rt_data->axis_data[i].axis_status.is_fwd_limit || rt_data->axis_data[i].axis_status.is_rev_limit))
+        if (fabs(axis_velocity) < JOG_SPEED_THRESHOLD && (rt_data->axis_data[i].status.is_fwd_limit || rt_data->axis_data[i].status.is_rev_limit))
         {
-            rt_data->axis_data[i].axis_status.is_decel_done = 1;
+            rt_data->axis_data[i].status.is_decel_done = 1;
         }
 
         if (jog_context.axis[i].state != JOG_AXIS_STATE_IDLE)

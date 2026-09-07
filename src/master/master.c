@@ -147,10 +147,10 @@ void Master_Run()
                     }
                 }
             }
-            if (((statis[0] & 0x0f) != 0x08 || rt_data->axis_data[3].axis_status.is_disable)
-                && ((statis[1] & 0x0f) != 0x08 || rt_data->axis_data[0].axis_status.is_disable)
-                && ((statis[2] & 0x0f) != 0x08 || rt_data->axis_data[1].axis_status.is_disable)
-                && ((statis[3] & 0x0f) != 0x08 || rt_data->axis_data[2].axis_status.is_disable))
+            if (((statis[0] & 0x0f) != 0x08 || rt_data->axis_data[3].status.is_disable)
+                && ((statis[1] & 0x0f) != 0x08 || rt_data->axis_data[0].status.is_disable)
+                && ((statis[2] & 0x0f) != 0x08 || rt_data->axis_data[1].status.is_disable)
+                && ((statis[3] & 0x0f) != 0x08 || rt_data->axis_data[2].status.is_disable))
             {
                 reset_sem = false;
             }
@@ -228,34 +228,34 @@ void Master_Run()
             CHECK_FUNC(GM_TxPdoEntry_Read(g_device_data[i + 2].slave.error_code, &error_code[i], 2)); // 获取状态字
             if (i == 0)
             {
-                if (error_code[0] != 0 && !rt_data->axis_data[3].axis_status.is_disable)
+                if (error_code[0] != 0 && !rt_data->axis_data[3].status.is_disable)
                 {
-                    rt_data->axis_data[3].axis_status.is_error = 1;
+                    rt_data->axis_data[3].status.is_error = 1;
                     int res = setAlarm(ALARM_AX, ALARM_ERROR, 33);
                     if (res != -8)
                     LOG(LOG_LEVEL_ERR, "%s 轴驱动器报错", drv_names[i]);
                 }
                 else
                 {
-                    rt_data->axis_data[3].axis_status.is_error = 0;
+                    rt_data->axis_data[3].status.is_error = 0;
                 }
             }
             else
             {
-                if (error_code[i] != 0 && !rt_data->axis_data[i-1].axis_status.is_disable)
+                if (error_code[i] != 0 && !rt_data->axis_data[i-1].status.is_disable)
                 {
-                    rt_data->axis_data[i-1].axis_status.is_error = 1;
+                    rt_data->axis_data[i-1].status.is_error = 1;
                     int res = setAlarm(ALARM_AX, ALARM_ERROR, 29 + i);
                     if (res != -8)
                     LOG(LOG_LEVEL_ERR, "%s 轴驱动器报错", drv_names[i]);
                 }
                 else
                 {
-                    rt_data->axis_data[i-1].axis_status.is_error = 0;
+                    rt_data->axis_data[i-1].status.is_error = 0;
                 }
             }
 
-            if (rt_data->axis_data[i].axis_status.is_disable)
+            if (rt_data->axis_data[i].status.is_disable)
             {
                 if(i == 3)
                 {
@@ -290,7 +290,7 @@ void Check_Driver_Error()
     {
         for (int i = 0; i < 4; i++)
         {
-            if (rt_data->axis_data[i].axis_status.is_error)
+            if (rt_data->axis_data[i].status.is_error)
             {
                 if(i = 3)
                 {

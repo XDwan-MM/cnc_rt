@@ -74,8 +74,8 @@ void Handlewheels_Motion(simple_tp_t_handwheel *tp)
         return;
     }
 
-    if((delta > 0 && rt_data->axis_data[tp->axis].axis_status.is_fwd_limit) || 
-        (delta < 0 && rt_data->axis_data[tp->axis].axis_status.is_rev_limit))
+    if((delta > 0 && rt_data->axis_data[tp->axis].status.is_fwd_limit) || 
+        (delta < 0 && rt_data->axis_data[tp->axis].status.is_rev_limit))
     {
         return;
     }
@@ -116,7 +116,7 @@ void Simple_Tp_Update(simple_tp_t_handwheel *tp)
     if (pos_err > tiny_dp)
     {
         vel_req = -max_dv + sqrt(2.0 * tp->max_acc * pos_err + max_dv * max_dv);
-        // rt_data->axis_data[tp->axis].axis_status.is_decel_done = 0;
+        // rt_data->axis_data[tp->axis].status.is_decel_done = 0;
 
     } 
     else if (pos_err < -tiny_dp)
@@ -125,9 +125,9 @@ void Simple_Tp_Update(simple_tp_t_handwheel *tp)
     } 
     else
     {
-        if(rt_data->axis_data[tp->axis].axis_status.is_fwd_limit || rt_data->axis_data[tp->axis].axis_status.is_rev_limit)
+        if(rt_data->axis_data[tp->axis].status.is_fwd_limit || rt_data->axis_data[tp->axis].status.is_rev_limit)
         {
-            rt_data->axis_data[tp->axis].axis_status.is_decel_done = 1;
+            rt_data->axis_data[tp->axis].status.is_decel_done = 1;
         }
         vel_req = 0.0;
     }

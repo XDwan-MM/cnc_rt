@@ -267,7 +267,7 @@ void shm_var_update(){
     for (int i = 0; i < SYS_AXES_NUM; i++)
     {
         // 绝对坐标 = 工件指令位置
-        if (!rt_data->axis_data[i].axis_status.is_disable)
+        if (!rt_data->axis_data[i].status.is_disable)
         {
             getVarChanValue(0, VAR_CHAN_MODAL, 14, &crds_type_var, 0);
             getCrdsValue(CRDS_TYPE_G5X + crds_type_var.value.i - 1, i, &crds_oft);

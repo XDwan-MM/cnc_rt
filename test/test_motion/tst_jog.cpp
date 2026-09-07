@@ -163,7 +163,7 @@ TEST_F(TestJog, InvalidExternalDecelerationEventsAreIgnored)
 
 TEST_F(TestJog, HardwareLimitBlocksOnlyMatchingDirection)
 {
-    rt_data->axis_data[AXIS_X].axis_status.is_fwd_limit = true;
+    rt_data->axis_data[AXIS_X].status.is_fwd_limit = true;
 
     cycle(SYS_EVENT_X_POS_PRESS);
     run_cycles(30);
@@ -198,14 +198,14 @@ TEST_F(TestJog, FatalAlarmRequiresResetAndModeSwitchRequestsDeceleration)
     ASSERT_GT(velocity_before_stop, 0.0);
 
     rt_data->sys_state[SYS_IS_ALARMING] = true;
-    rt_data->axis_data[AXIS_X].axis_status.is_error = true;
+    rt_data->axis_data[AXIS_X].status.is_error = true;
     cycle();
     EXPECT_LT(jog_get_axis_velocity(AXIS_X), velocity_before_stop);
     run_cycles(120);
     EXPECT_NEAR(jog_get_axis_velocity(AXIS_X), 0.0, 1.0e-9);
 
     rt_data->sys_state[SYS_IS_ALARMING] = false;
-    rt_data->axis_data[AXIS_X].axis_status.is_error = false;
+    rt_data->axis_data[AXIS_X].status.is_error = false;
     cycle(SYS_EVENT_X_POS_PRESS);
     run_cycles(60);
     EXPECT_NEAR(jog_get_axis_velocity(AXIS_X), 0.0, 1.0e-9);
@@ -230,12 +230,12 @@ TEST_F(TestJog, ModeEntryCannotBypassFatalAlarmReset)
     ASSERT_GT(jog_get_axis_velocity(AXIS_X), 0.0);
 
     rt_data->sys_state[SYS_IS_ALARMING] = true;
-    rt_data->axis_data[AXIS_X].axis_status.is_error = true;
+    rt_data->axis_data[AXIS_X].status.is_error = true;
     cycle();
     run_cycles(120);
 
     rt_data->sys_state[SYS_IS_ALARMING] = false;
-    rt_data->axis_data[AXIS_X].axis_status.is_error = false;
+    rt_data->axis_data[AXIS_X].status.is_error = false;
     rt_data->sys_state[SYS_IS_SWITCHING_MODE] = true;
     cycle(SYS_EVENT_X_POS_PRESS);
     rt_data->sys_state[SYS_IS_SWITCHING_MODE] = false;

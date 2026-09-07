@@ -500,12 +500,12 @@ void plc_g_signal_scan_cycle(void)
             if (SIGNAL_RISING(curr_g.g_regs[124], last_g.g_regs[124], i))
             {
                 LOG(LOG_LEVEL_INFO, "扫描到轴屏蔽G124.%d发生上升沿 %d轴被屏蔽", i, i);
-                rt_data->axis_data[i].axis_status.plc_is_disable = 1;
+                rt_data->axis_data[i].status.plc_is_disable = 1;
             }
             if (SIGNAL_FALLING(curr_g.g_regs[124], last_g.g_regs[124], i))
             {
                 LOG(LOG_LEVEL_INFO, "扫描到轴屏蔽G124.%d发生下降沿 %d轴解除屏蔽", i, i);
-                rt_data->axis_data[i].axis_status.plc_is_disable = 0;
+                rt_data->axis_data[i].status.plc_is_disable = 0;
             }
         }
     }

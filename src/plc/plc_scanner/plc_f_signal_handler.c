@@ -286,7 +286,7 @@ static void plc_output_axis_status()
 {
     for (int i = 0; i < 3; i++)
     {
-        if (rt_data->axis_data[i].axis_status.direction)
+        if (rt_data->axis_data[i].status.direction)
         {
             clearRegBit(REG_F, 106, i);
         }
@@ -294,7 +294,7 @@ static void plc_output_axis_status()
         {
             setRegBit(REG_F, 106, i);
         }
-        if (rt_data->axis_data[i].axis_status.is_moving)
+        if (rt_data->axis_data[i].status.is_moving)
         {
             setRegBit(REG_F, 102, i);
         }
@@ -305,7 +305,7 @@ static void plc_output_axis_status()
     }
     for (int i = 0; i < 5; ++i)
     {
-        if (rt_data->axis_data[i].axis_status.is_disable)
+        if (rt_data->axis_data[i].status.is_disable)
         {
             setRegBit(REG_F, 110, i);
         }
@@ -314,8 +314,8 @@ static void plc_output_axis_status()
             clearRegBit(REG_F, 110, i);
         }
     }
-    if (rt_data->axis_data[0].axis_status.is_error || rt_data->axis_data[1].axis_status.is_error ||
-        rt_data->axis_data[2].axis_status.is_error || rt_data->axis_data[3].axis_status.is_error)
+    if (rt_data->axis_data[0].status.is_error || rt_data->axis_data[1].status.is_error ||
+        rt_data->axis_data[2].status.is_error || rt_data->axis_data[3].status.is_error)
     {
         clearRegBit(REG_F, 0, 6);
     }
@@ -323,7 +323,7 @@ static void plc_output_axis_status()
     {
         setRegBit(REG_F, 0, 6);
     }
-    if (rt_data->axis_data[3].axis_status.is_error)
+    if (rt_data->axis_data[3].status.is_error)
     {
         setRegBit(REG_F, 45, 0);
     }

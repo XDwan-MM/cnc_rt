@@ -34,7 +34,7 @@ void check_ferror_fault(void)
     for (int i = 0; i < SYS_AXES_NUM; i++)
     {
         // 控制轴拆卸或者机床锁住不进行检查
-        if (rt_data->sys_state[SYS_IS_MAC_LOCK_READY] || rt_data->axis_data[i].axis_status.is_disable)
+        if (rt_data->sys_state[SYS_IS_MAC_LOCK_READY] || rt_data->axis_data[i].status.is_disable)
         {
             continue;
         }
@@ -49,7 +49,7 @@ void check_ferror_fault(void)
 
         if (ferror_ctrl->error_flag)
         {
-            rt_data->axis_data[i].axis_status.is_lag_error = true;
+            rt_data->axis_data[i].status.is_lag_error = true;
             report_axis_ferror(i, ferror_ctrl, vel_cmd, pos_cmd, pos_fb);
         }
     }
@@ -61,7 +61,7 @@ void reset_ferror_control(void)
     {
         ferror_control[i].error_flag = false;
         ferror_control[i].is_moving = false;
-        rt_data->axis_data[i].axis_status.is_lag_error = false;
+        rt_data->axis_data[i].status.is_lag_error = false;
     }
 }
 

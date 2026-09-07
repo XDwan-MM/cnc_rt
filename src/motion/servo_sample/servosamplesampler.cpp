@@ -380,10 +380,10 @@ bool ServoSampleSampler::machineReady(const CncServoSampleConfig& config) const
     }
     if (!isCompositeConfig(config)) {
         return config.axis < SYS_AXES_NUM &&
-               !rt_data->axis_data[config.axis].axis_status.is_disable;
+               !rt_data->axis_data[config.axis].status.is_disable;
     }
     for (uint32_t axis = 0; axis < kCompositeAxisCount; ++axis) {
-        if (axis >= SYS_AXES_NUM || rt_data->axis_data[axis].axis_status.is_disable) {
+        if (axis >= SYS_AXES_NUM || rt_data->axis_data[axis].status.is_disable) {
             return false;
         }
     }

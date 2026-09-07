@@ -466,7 +466,7 @@ static void calcul_mac_cmd_pos()
     for (int i = 0; i < SYS_AXES_NUM; i++)
     {
         // 机床锁住或者轴拆卸，不下发位置
-        if (!rt_data->sys_state[SYS_IS_MAC_LOCK_READY] && !rt_data->axis_data[i].axis_status.is_disable)
+        if (!rt_data->sys_state[SYS_IS_MAC_LOCK_READY] && !rt_data->axis_data[i].status.is_disable)
         {
             rt_data->axis_data[i].mac_cmd_pos += (rt_data->axis_data[i].wcs_cmd_pos_cur - rt_data->axis_data[i].wcs_cmd_pos_pre);
         }

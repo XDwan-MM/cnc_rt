@@ -163,7 +163,7 @@ typedef struct
     double straightness1_comp_val;      // 当前位置第一组直线度误差补偿值 (单位:mm)
     double straightness2_comp_val;      // 当前位置第二组直线度误差补偿值 (单位:mm)
     double total_comp_cal;              // 当前位置总误差补偿值 (单位:mm)
-    AxisStatus axis_status;
+    AxisStatus status;
 } RT_AXIS;
 
 typedef struct{

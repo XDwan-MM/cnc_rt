@@ -273,7 +273,7 @@ TEST_F(TestServoSample, CompositeSignalsRejectPositionLoopAndMixedChannels)
 TEST_F(TestServoSample, CompositeSafetyChecksAllThreeAxesAndCanRetry)
 {
     registerConfig(compositeConfig());
-    rt_data->axis_data[1].axis_status.is_disable = true;
+    rt_data->axis_data[1].status.is_disable = true;
 
     uint32_t command = 0;
     ASSERT_TRUE(cncServoSampleRequestStart(&command));
@@ -281,7 +281,7 @@ TEST_F(TestServoSample, CompositeSafetyChecksAllThreeAxesAndCanRetry)
     EXPECT_EQ(status().state, CNC_SERVO_STATE_ERROR);
     EXPECT_EQ(status().errorCode, CNC_SERVO_ERROR_NOT_READY);
 
-    rt_data->axis_data[1].axis_status.is_disable = false;
+    rt_data->axis_data[1].status.is_disable = false;
     setProgramRunning(true);
     ASSERT_TRUE(cncServoSampleRequestStart(&command));
     ServoSampleSampler::instance().execute();
