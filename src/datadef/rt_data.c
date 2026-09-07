@@ -229,7 +229,7 @@ static void rt_reboot_chan_data()
     for (int i = 0; i < SYS_CHAN_NUM; i++)
     {
         // 外部减速功能暂时手动赋值
-        rt_data->chan_data[i].ex_dec_enable = true; // 是否开启外部减速功能
+        rt_data->chan_data[i].ex_dec_enable = false; // 是否开启外部减速功能
     }
 }
 
