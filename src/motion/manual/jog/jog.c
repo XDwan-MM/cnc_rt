@@ -152,7 +152,7 @@ void handle_jog_cmd(void)
  */
 void jog_handle_estop(void)
 {
-    /* 急停直接清空所有运动状态；PLC 外部减速电平保存在 AxisStatus 中。 */
+    /* 急停直接清空所有运动状态；PLC 外部减速电平保存在 AXIS_STATUS 中。 */
     for (int i = 0; i < JOG_AXIS_COUNT; i++)
         jog_reset_axis(&jog_context.axis[i], 0.0, false);
 
@@ -245,7 +245,7 @@ static bool jog_is_global_fatal_alarm(void)
     has_limit_alarm = false;
     for (int i = 0; i < JOG_AXIS_COUNT; i++)
     {
-        AxisStatus *status;
+        AXIS_STATUS *status;
 
         status = &rt_data->axis_data[i].status;
         /* 伺服错误和跟随误差需要所有 JOG 轴停止，并由 RESET 解锁。 */

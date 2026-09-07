@@ -699,7 +699,7 @@ static void task_handle_external_decel_event(PLC_EVENT *event_data)
     int direction;
     int direction_index;
     bool active;
-    AxisStatus *status;
+    AXIS_STATUS *status;
 
     if (event_data == NULL || rt_data == NULL)
         return;

@@ -71,7 +71,7 @@ typedef struct
     bool is_lag_error; // 是否跟随误差报警 1是 0否
     // 外部减速状态：[0~4]功能号，[0]正向减速状态寄存，[1]负向减速状态寄存
     bool external_decel_active[SYS_EXTERNAL_DECEL_FUNCTION_COUNT][SYS_EXTERNAL_DECEL_DIRECTION_COUNT];
-} AxisStatus;
+} AXIS_STATUS;
 
 typedef struct{
     double cycle;           // 插补周期
@@ -163,7 +163,7 @@ typedef struct
     double straightness1_comp_val;      // 当前位置第一组直线度误差补偿值 (单位:mm)
     double straightness2_comp_val;      // 当前位置第二组直线度误差补偿值 (单位:mm)
     double total_comp_cal;              // 当前位置总误差补偿值 (单位:mm)
-    AxisStatus status;
+    AXIS_STATUS status;
 } RT_AXIS;
 
 typedef struct{
