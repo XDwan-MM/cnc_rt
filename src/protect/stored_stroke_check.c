@@ -251,11 +251,11 @@ void Axis_Status_Update()
         //该轴已处于屏蔽状态
         if (rt_data->axis_data[var].axis_status.is_disable)
         {
-            setVarAxisInt(var, VAR_AXIS_DISABLE, 1, 0);
+            setVarAxisInt(var, VAR_AXIS_IS_DISABLE, 1, 0);
         }
         else
         {
-            setVarAxisInt(var, VAR_AXIS_DISABLE, 0, 0);
+            setVarAxisInt(var, VAR_AXIS_IS_DISABLE, 0, 0);
         }
     }
 }

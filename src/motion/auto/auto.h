@@ -46,14 +46,15 @@ typedef enum{
     DO_CHOP_CMD,       // 插补指令
     DO_DWELL_CMD,      // 等待指令 G04
     DO_MSTB_CMD,       // MST指令
-    DO_HOME_CMD,       // 回参考点 G27 G28 G29
-    DO_TAP_CMD,        // 攻丝指令 G84
+    DO_HOME_CMD,       // 回参考点 G27 G28 G29 G30
+    DO_TAP_CMD,        // 攻丝指令 G73 G84
 }CMD_TYPE;
 
 typedef enum{
     NONE_EVENT = 0,
     SINGLE_BLOCK_ENABLE,
     MAC_LOCK_ENABLE,
+    ALL_AXIS_LOCK_ENABLE,
     DRY_RUN_ENABLE,
     BLOCK_SKIP_ENABLE,
     FEED_OVERRIDE_CHANGE,
@@ -110,7 +111,7 @@ typedef struct{
     CMD_TYPE exec_cmd;
     RUNNING_STAGE running_stage;
     RUNNING_STAGE target_stage;
-    TRIGGER_EVENT trigger_event;
+    TRIGGER_EVENT trigger_event;          
     // 执行指令
     POS_CMD_DATA pos_cmd_data;
     DWELL_CMD_DATA dwell_cmd_data;

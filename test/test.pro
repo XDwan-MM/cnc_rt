@@ -53,7 +53,6 @@ LIBS += -L "/usr/local/lib/" -lethercat
 INCLUDEPATH += /opt/GreeMaster/include/libGREEMASTER/
 
 HEADERS += \
-    ../src/alarm/alarm.h \
     ../src/common/debug_mode.h \
     ../src/compensation/comp_data.h \
     ../src/datadef/datatype.h \
@@ -63,8 +62,10 @@ HEADERS += \
     ../src/datadef/rt_data.h \
     ../src/datadef/plan_queue.h \
     ../src/datadef/rt_data.h \
+    ../src/datadef/record_queue.h \
     ../src/hal/hal_driver.h \
     ../src/hal/hal_io.h \
+    ../src/hal/egear_ratio.h \
     ../src/master/master_sim.h \
     ../src/master/master.h \
     ../src/motion/auto/auto.h \
@@ -74,16 +75,18 @@ HEADERS += \
     ../src/motion/auto/pathplan/parser.h \
     ../src/motion/auto/pathplan/pathplan.h \
     ../src/motion/spindle/spl_control.h \
-    ../src/hal/egear_ratio.h \
     ../src/motion/emcmot.h \
     ../src/motion/manual/handwheel.h \
     ../src/motion/manual/homing.h \
     ../src/motion/manual/jog/jog.h \
     ../src/motion/manual/jog/jog_planner.h \
-    ../src/motion/protect/ferror_control.h \
-    ../src/motion/protect/stored_stroke_check.h \
     ../src/motion/servo_sample/servosamplesampler.h \
     ../src/motion/servo_sample/servosampleevents.h \
+    ../src/motion/rerun/rerun.h \
+    ../src/protect/alarm.h \
+    ../src/protect/ferror_control.h \
+    ../src/protect/stored_stroke_check.h \
+    ../src/protect/reset.h \
     ../src/plc/lad_trace/ladtracesampler.h \
     ../src/plc/plc_scanner/plc_a_signal_scanner.h \
     ../src/plc/plc_scanner/plc_g_signal_scanner.h \
@@ -106,15 +109,16 @@ HEADERS += \
     
 
 SOURCES += \
-    ../src/alarm/alarm.c \
     ../src/compensation/comp_data.c \
     ../src/datadef/datatype.c \
     ../src/datadef/event_queue.c \
     ../src/datadef/global.c \
     ../src/datadef/plan_queue.c \
     ../src/datadef/rt_data.c \
+    ../src/datadef/record_queue.c \
     ../src/hal/hal_driver.c \
     ../src/hal/hal_io.c \
+    ../src/hal/egear_ratio.c \
     ../src/master/master_sim.c \
     ../src/master/master.c \
     ../src/motion/auto/auto.c \
@@ -124,15 +128,17 @@ SOURCES += \
     ../src/motion/auto/pathplan/parser.cpp \
     ../src/motion/auto/pathplan/pathplan.c \
     ../src/motion/spindle/spl_control.c \
-    ../src/hal/egear_ratio.c \
     ../src/motion/emcmot.cpp \
     ../src/motion/manual/handwheel.c \
     ../src/motion/manual/homing.c \
     ../src/motion/manual/jog/jog.c \
     ../src/motion/manual/jog/jog_planner.c \
-    ../src/motion/protect/ferror_control.c \
-    ../src/motion/protect/stored_stroke_check.c \
     ../src/motion/servo_sample/servosamplesampler.cpp \
+    ../src/motion/rerun/rerun.c \
+    ../src/protect/alarm.c \
+    ../src/protect/ferror_control.c \
+    ../src/protect/stored_stroke_check.c \
+    ../src/protect/reset.c \
     ../src/plc/lad_trace/ladtracesampler.cpp \
     ../src/plc/plc_scanner/plc_a_signal_scanner.c \
     ../src/plc/plc_scanner/plc_g_signal_scanner.c \
@@ -152,7 +158,6 @@ SOURCES += \
     
 
 INCLUDEPATH += \
-    ../src/alarm \
     ../src/common \
     ../src/compensation \
     ../src/datadef \
@@ -166,8 +171,9 @@ INCLUDEPATH += \
     ../src/motion/manual/jog \
     ../src/motion/spindle \
     ../src/motion/manual \
-    ../src/motion/protect \
     ../src/motion/servo_sample \
+    ../src/motion/rerun \
+    ../src/protect \
     ../src/plc/lad_trace \
     ../src/plc \
     ../src/plc/plc_scanner \

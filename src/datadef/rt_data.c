@@ -1,8 +1,9 @@
 #include "rt_data.h"
 #include "global.h"
+#include "rerun.h"
 #include <hmisysapi.h>
+#include "alarmapi.h"
 
-const char* reset_trigger_name[] = {"紧急停止信号ESP", "外部复位信号ERS", "复位&倒带信号RRW", "按下MDI的RESET键"};
 extern RT_DATA* rt_data;
 static void rt_reset_ncu_data();
 static void rt_reset_chan_data();
@@ -10,6 +11,8 @@ static void rt_reset_axis_data();
 static void rt_reboot_ncu_data();
 static void rt_reboot_chan_data();
 static void rt_reboot_axis_data();
+static void rt_upate_reset_valid_data();
+static void rt_update_reboot_valid_data();
 
 GNC_RES rt_data_init(void)
 {
@@ -18,7 +21,7 @@ GNC_RES rt_data_init(void)
     rt_data->target_mode = MODE_EDIT;
     rt_data->current_mode = MODE_EDIT;
     rt_data->nc_event = SYS_EVENT_NONE;
-    rt_data->parser_error.parser_error_no = -1;
+    rt_data->path_data.parser_error_no = -1;
     pthread_mutex_init(&rt_data->mutex, NULL);
     rt_update_reboot_valid_data();
     return GNC_OPERATOR_SUCCESS;
@@ -28,27 +31,28 @@ GNC_RES rt_data_reset(void){
     if(rt_data == NULL) return GNC_DATA_NULL;
     pthread_mutex_lock(&rt_data->mutex);
     rt_upate_reset_valid_data();
+    setVarChanInt(0, VAR_CHAN_IS_PROGEND, 1, 0);
     pthread_mutex_unlock(&rt_data->mutex);
     return GNC_OPERATOR_SUCCESS;
 }
 
 void rt_set_parser_state(int error_no, int error_line){
     pthread_mutex_lock(&rt_data->mutex);
-    rt_data->parser_error.parser_error_no = error_no;
-    rt_data->parser_error.parser_error_line = error_line;
+    rt_data->path_data.parser_error_no = error_no;
+    rt_data->path_data.parser_error_line = error_line;
     pthread_mutex_unlock(&rt_data->mutex);
 }
 
 int rt_get_parser_error_no(){
     pthread_mutex_lock(&rt_data->mutex);
-    int value = rt_data->parser_error.parser_error_no;
+    int value = rt_data->path_data.parser_error_no;
     pthread_mutex_unlock(&rt_data->mutex);
     return value;
 }
 
 int rt_get_parser_error_line(){
     pthread_mutex_lock(&rt_data->mutex);
-    int value = rt_data->parser_error.parser_error_line;
+    int value = rt_data->path_data.parser_error_line;
     pthread_mutex_unlock(&rt_data->mutex);
     return value;
 }
@@ -91,57 +95,8 @@ bool rt_get_chan_state(int chan_index, ChanStateIndex state){
     return value;
 }
 
-/// @brief 触发F1.1的信号来源
-/// @param reset_trigger 
-void nc_set_resetting(RESET_TRIGGER reset_trigger){
-    rt_data->nc_reset.reset_trigger = reset_trigger;
-    rt_data->nc_reset.is_resetting = 1;
-    LOG(LOG_LEVEL_DEBUG, "复位中F1.1信号来源：%s", reset_trigger_name[reset_trigger]);
-    switch (rt_data->nc_reset.reset_trigger)
-    {
-    // 基于MDI的复位确认信号
-    case HMI_RESET:
-        rt_data->nc_reset.is_mdi_reset = 1;
-        rt_data->nc_reset.mdi_reset_tic = 0;
-        break;
-    default:
-        break;
-    }
-}
-
-/// @brief 完成F1.1的判断
-void nc_set_resetted(){
-    if(rt_data->sys_state[SYS_IS_ALARMING] || rt_data->sys_state[SYS_IS_ESTOP_ACTIVE]) return;
-    switch (rt_data->current_mode) {
-        case MODE_MDI: // MDI
-        case MODE_MEM: // 记忆
-        case MODE_DNC:
-            if(rt_data->nc_reset.is_resetting && cycle_tp->exec_state == EXEC_IDLE && IsEqualTo(spindle.actual_vel, 0)){
-                rt_data->nc_reset.is_resetted = 1;
-                rt_upate_reset_valid_data();
-            }
-            break;
-        case MODE_HOMING: // 回零
-            if(rt_data->nc_reset.is_resetting && !var_chan[0][VAR_CHAN_IS_HOMING].value.i && IsEqualTo(spindle.actual_vel, 0)){
-                rt_data->nc_reset.is_resetted = 1;
-                rt_upate_reset_valid_data();
-            }
-            break;
-        case MODE_JOG: // 点动
-        case MODE_MPG: // 手轮
-        case MODE_IDLE: // 空闲状态
-        case MODE_EDIT: // 编辑
-        default: // error
-            if(rt_data->nc_reset.is_resetting && IsEqualTo(spindle.actual_vel, 0)){
-                rt_data->nc_reset.is_resetted = 1;
-                rt_upate_reset_valid_data();
-            }
-            break;
-    }
-}
-
 /// @brief 重启时生效的par数据，同步更新到实时数据
-void rt_update_reboot_valid_data(){
+static void rt_update_reboot_valid_data(){
     rt_reboot_ncu_data();
     rt_reboot_chan_data();
     rt_reboot_axis_data();
@@ -150,11 +105,11 @@ void rt_update_reboot_valid_data(){
 }
 
 /// @brief 复位时生效的par数据，同步更新到实时数据
-void rt_upate_reset_valid_data(){
+static void rt_upate_reset_valid_data(){
     rt_reset_ncu_data();
     rt_reset_chan_data();
     rt_reset_axis_data();
-    auto_set_zero_vel_params();
+    rt_set_zero_vel_params();
     LOG(LOG_LEVEL_INFO, "复位参数生效");
 }
 
@@ -170,6 +125,7 @@ static void rt_reset_chan_data()
         rt_data->chan_data[i].max_tang_acc = par_chan[i][PAR_CH_MAX_ECEN_ACC].value.val_real;                  // 最大向心加速度
         rt_data->chan_data[i].lookahead_num = par_chan[i][PAR_CH_LOOKAHEAD_NUM].value.val_uint;                // 速度规划前瞻段数
         rt_data->chan_data[i].path_tolerance = par_chan[i][PAR_CH_PATH_TOLERANCE].value.val_real;              // 轨迹轮廓允差
+        rt_data->chan_data[i].corner_dec_factor = par_chan[i][PAR_CH_CONER_DEC_FACTOR].value.val_real;         // 拐角降速比例因子 ("def": "100", "min": "1", "max": "200")
         // 外部减速功能暂时手动赋值
         rt_data->chan_data[i].ex_dec2_enable = false;
         rt_data->chan_data[i].ex_dec3_enable = false;
@@ -243,7 +199,7 @@ static void rt_reboot_axis_data()
     }
 }
 
-void auto_set_zero_vel_params(){
+void rt_set_zero_vel_params(){
     for (int i = 0; i < SYS_CHAN_NUM; i++)
     {
         rt_data->chan_data[i].cmd_vel = 0;

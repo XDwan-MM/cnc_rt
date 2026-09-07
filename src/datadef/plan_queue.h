@@ -72,6 +72,7 @@ typedef struct
     POS end_pos;        // 终点位置
     VECTOR start_vec;   // 起始矢量
     VECTOR end_vec;     // 终点矢量
+    bool is_breakpoint; // 是否为回断点程序段
 }PLAN_BLOCK;
 
 // 循环队列

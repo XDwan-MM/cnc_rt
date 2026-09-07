@@ -8,6 +8,7 @@
 #include <alarmapi.h>
 #include <hmisysapi.h>
 #include <stdlib.h>
+#include "reset.h"
 
 static PLC_EVENT event_data;
 
@@ -323,13 +324,15 @@ static void task_handle_overrate_event(PLC_EVENT *event_data)
 
 static void task_handle_auto_event(PLC_EVENT *event_data)
 {
-    // check：复位在F1.1置高，实时不响应启动和暂停事件
-    if (rt_data->nc_reset.is_resetting)
+    // check：复位在F1.1置高，实时不响应启动事件
+    if (nc_reset->is_resetting && event_data->run_payload.run_state == 1)
     {
-        if (event_data->run_payload.run_state == 1)
-            LOG(LOG_LEVEL_WARN, "复位中...循环启动无效");
-        if (event_data->run_payload.run_state == 0)
-            LOG(LOG_LEVEL_WARN, "复位中...进给保持无效");
+        LOG(LOG_LEVEL_WARN, "复位中，循环启动无效");
+        return;
+    }
+    // 如果程序再启动时，实时不响应启动事件
+    if(rt_data->sys_state[SYS_IS_PROG_RESTAR] && event_data->run_payload.run_state == 1) {
+        LOG(LOG_LEVEL_INFO, "程序再启动中，循环启动无效");
         return;
     }
     if (event_data->run_payload.run_state == 1)
@@ -357,6 +360,18 @@ static void task_handle_enable_event(PLC_EVENT *event_data)
 {
     switch (event_data->enable_payload.enable_key)
     {
+    case PROG_RESTAR:
+        if (event_data->enable_payload.enable_state)
+        {
+            rt_data->nc_event = SYS_EVENT_PROGRAM_RESTART_ON;
+            LOG(LOG_LEVEL_INFO, "处理程序再启动开启事件");
+        }
+        else
+        {
+            rt_data->nc_event = SYS_EVENT_PROGRAM_RESTART_OFF;
+            LOG(LOG_LEVEL_INFO, "处理程序再启动关闭事件");
+        }
+        break;
     case BLOCK_SKIP:
         if (event_data->enable_payload.enable_state)
         {
@@ -391,6 +406,234 @@ static void task_handle_enable_event(PLC_EVENT *event_data)
         {
             rt_data->nc_event = SYS_EVENT_MAC_LOCK_OFF;
             LOG(LOG_LEVEL_INFO, "处理机床锁住关闭事件");
+        }
+        break;
+    case IT:
+        if (event_data->enable_payload.enable_state)
+        {
+            rt_data->nc_event = SYS_EVENT_IT_ON;
+            LOG(LOG_LEVEL_INFO, "处理所有轴互锁开启事件");
+        }
+        else
+        {
+            rt_data->nc_event = SYS_EVENT_IT_OFF;
+            LOG(LOG_LEVEL_INFO, "处理所有轴互锁关闭事件");
+        }
+        break;
+    case STLK:
+        if (event_data->enable_payload.enable_state)
+        {
+            rt_data->nc_event = SYS_EVENT_STLK_ON;
+            LOG(LOG_LEVEL_INFO, "处理起动锁停开启事件");
+        }
+        else
+        {
+            rt_data->nc_event = SYS_EVENT_STLK_OFF;
+            LOG(LOG_LEVEL_INFO, "处理起动锁停关闭事件");
+        }
+        break;
+    case BSL:
+        if (event_data->enable_payload.enable_state)
+        {
+            rt_data->nc_event = SYS_EVENT_BSL_ON;
+            LOG(LOG_LEVEL_INFO, "处理程序段开始互锁开启事件");
+        }
+        else
+        {
+            rt_data->nc_event = SYS_EVENT_BSL_OFF;
+            LOG(LOG_LEVEL_INFO, "处理程序段开始互锁关闭事件");
+        }
+        break;
+    case CSL:
+        if (event_data->enable_payload.enable_state)
+        {
+            rt_data->nc_event = SYS_EVENT_CSL_ON;
+            LOG(LOG_LEVEL_INFO, "处理切削程序段开始互锁开启事件");
+        }
+        else
+        {
+            rt_data->nc_event = SYS_EVENT_CSL_OFF;
+            LOG(LOG_LEVEL_INFO, "处理切削程序段开始互锁关闭事件");
+        }
+        break;
+    case IT1:
+        if (event_data->enable_payload.enable_state)
+        {
+            rt_data->nc_event = SYS_EVENT_IT1_ON;
+            LOG(LOG_LEVEL_INFO, "处理轴1互锁开启事件");
+        }
+        else
+        {
+            rt_data->nc_event = SYS_EVENT_IT1_OFF;
+            LOG(LOG_LEVEL_INFO, "处理轴1互锁关闭事件");
+        }
+        break;
+    case IT2:
+        if (event_data->enable_payload.enable_state)
+        {
+            rt_data->nc_event = SYS_EVENT_IT2_ON;
+            LOG(LOG_LEVEL_INFO, "处理轴2互锁开启事件");
+        }
+        else
+        {
+            rt_data->nc_event = SYS_EVENT_IT2_OFF;
+            LOG(LOG_LEVEL_INFO, "处理轴2互锁关闭事件");
+        }
+        break;
+    case IT3:
+        if (event_data->enable_payload.enable_state)
+        {
+            rt_data->nc_event = SYS_EVENT_IT3_ON;
+            LOG(LOG_LEVEL_INFO, "处理轴3互锁开启事件");
+        }
+        else
+        {
+            rt_data->nc_event = SYS_EVENT_IT3_OFF;
+            LOG(LOG_LEVEL_INFO, "处理轴3互锁关闭事件");
+        }
+        break;
+    case IT4:
+        if (event_data->enable_payload.enable_state)
+        {
+            rt_data->nc_event = SYS_EVENT_IT4_ON;
+            LOG(LOG_LEVEL_INFO, "处理轴4互锁开启事件");
+        }
+        else
+        {
+            rt_data->nc_event = SYS_EVENT_IT4_OFF;
+            LOG(LOG_LEVEL_INFO, "处理轴4互锁关闭事件");
+        }
+        break;
+    case IT5:
+        if (event_data->enable_payload.enable_state)
+        {
+            rt_data->nc_event = SYS_EVENT_IT5_ON;
+            LOG(LOG_LEVEL_INFO, "处理轴5互锁开启事件");
+        }
+        else
+        {
+            rt_data->nc_event = SYS_EVENT_IT5_OFF;
+            LOG(LOG_LEVEL_INFO, "处理轴5互锁关闭事件");
+        }
+        break;
+    case PMIT1:
+        if (event_data->enable_payload.enable_state)
+        {
+            rt_data->nc_event = SYS_EVENT_PMIT1_ON;
+            LOG(LOG_LEVEL_INFO, "处理轴1正向互锁开启事件");
+        }
+        else
+        {
+            rt_data->nc_event = SYS_EVENT_PMIT1_OFF;
+            LOG(LOG_LEVEL_INFO, "处理轴1正向互锁关闭事件");
+        }
+        break;
+    case PMIT2:
+        if (event_data->enable_payload.enable_state)
+        {
+            rt_data->nc_event = SYS_EVENT_PMIT2_ON;
+            LOG(LOG_LEVEL_INFO, "处理轴2正向互锁开启事件");
+        }
+        else
+        {
+            rt_data->nc_event = SYS_EVENT_PMIT2_OFF;
+            LOG(LOG_LEVEL_INFO, "处理轴2正向互锁关闭事件");
+        }
+        break;
+    case PMIT3:
+        if (event_data->enable_payload.enable_state)
+        {
+            rt_data->nc_event = SYS_EVENT_PMIT3_ON;
+            LOG(LOG_LEVEL_INFO, "处理轴3正向互锁开启事件");
+        }
+        else
+        {
+            rt_data->nc_event = SYS_EVENT_PMIT1_OFF;
+            LOG(LOG_LEVEL_INFO, "处理轴3正向互锁关闭事件");
+        }
+        break;
+    case PMIT4:
+        if (event_data->enable_payload.enable_state)
+        {
+            rt_data->nc_event = SYS_EVENT_PMIT4_ON;
+            LOG(LOG_LEVEL_INFO, "处理轴4正向互锁开启事件");
+        }
+        else
+        {
+            rt_data->nc_event = SYS_EVENT_PMIT4_OFF;
+            LOG(LOG_LEVEL_INFO, "处理轴4正向互锁关闭事件");
+        }
+        break;
+    case PMIT5:
+        if (event_data->enable_payload.enable_state)
+        {
+            rt_data->nc_event = SYS_EVENT_PMIT5_ON;
+            LOG(LOG_LEVEL_INFO, "处理轴5正向互锁开启事件");
+        }
+        else
+        {
+            rt_data->nc_event = SYS_EVENT_PMIT5_OFF;
+            LOG(LOG_LEVEL_INFO, "处理轴5正向互锁关闭事件");
+        }
+        break;
+    case NMIT1:
+        if (event_data->enable_payload.enable_state)
+        {
+            rt_data->nc_event = SYS_EVENT_NMIT1_ON;
+            LOG(LOG_LEVEL_INFO, "处理轴1负向互锁开启事件");
+        }
+        else
+        {
+            rt_data->nc_event = SYS_EVENT_NMIT1_OFF;
+            LOG(LOG_LEVEL_INFO, "处理轴1负向互锁关闭事件");
+        }
+        break;
+    case NMIT2:
+        if (event_data->enable_payload.enable_state)
+        {
+            rt_data->nc_event = SYS_EVENT_NMIT2_ON;
+            LOG(LOG_LEVEL_INFO, "处理轴2负向互锁开启事件");
+        }
+        else
+        {
+            rt_data->nc_event = SYS_EVENT_NMIT2_OFF;
+            LOG(LOG_LEVEL_INFO, "处理轴2负向互锁关闭事件");
+        }
+        break;
+    case NMIT3:
+        if (event_data->enable_payload.enable_state)
+        {
+            rt_data->nc_event = SYS_EVENT_NMIT3_ON;
+            LOG(LOG_LEVEL_INFO, "处理轴3负向互锁开启事件");
+        }
+        else
+        {
+            rt_data->nc_event = SYS_EVENT_NMIT3_OFF;
+            LOG(LOG_LEVEL_INFO, "处理轴3负向互锁关闭事件");
+        }
+        break;
+    case NMIT4:
+        if (event_data->enable_payload.enable_state)
+        {
+            rt_data->nc_event = SYS_EVENT_NMIT4_ON;
+            LOG(LOG_LEVEL_INFO, "处理轴4负向互锁开启事件");
+        }
+        else
+        {
+            rt_data->nc_event = SYS_EVENT_NMIT4_OFF;
+            LOG(LOG_LEVEL_INFO, "处理轴4负向互锁关闭事件");
+        }
+        break;
+    case NMIT5:
+        if (event_data->enable_payload.enable_state)
+        {
+            rt_data->nc_event = SYS_EVENT_NMIT5_ON;
+            LOG(LOG_LEVEL_INFO, "处理轴5负向互锁开启事件");
+        }
+        else
+        {
+            rt_data->nc_event = SYS_EVENT_NMIT5_OFF;
+            LOG(LOG_LEVEL_INFO, "处理轴5负向互锁关闭事件");
         }
         break;
     case MSBT_LOCK:

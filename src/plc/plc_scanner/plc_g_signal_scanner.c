@@ -278,6 +278,18 @@ void plc_g_signal_scan_cycle(void)
     spl_data.plc_speed = par_axis[AXIS_SP][PAR_SPDL_MAX_SPEED].value.val_real * result / 4095;
     spl_data.speed_mode = GET_BIT(curr_g.g_regs[33], 7);
 
+    /* 程序再启动 G6.0 */
+    if (SIGNAL_RISING(curr_g.g_regs[6], last_g.g_regs[6], 0))
+    {
+        LOG(LOG_LEVEL_INFO, "扫描到G6.0 发生上升沿");
+        plc_dispatch_event(PLC_EV_MSG_ENANLE, PROG_RESTAR, 1, 0, 0);
+    }
+    if (SIGNAL_FALLING(curr_g.g_regs[6], last_g.g_regs[6], 0))
+    {
+        LOG(LOG_LEVEL_INFO, "扫描到G6.0 发生下降沿");
+        plc_dispatch_event(PLC_EV_MSG_ENANLE, PROG_RESTAR, 0, 0, 0);
+    }
+
     /* 空运行 G46.7 */
     if (SIGNAL_RISING(curr_g.g_regs[46], last_g.g_regs[46], 7))
     {
@@ -325,6 +337,99 @@ void plc_g_signal_scan_cycle(void)
         LOG(LOG_LEVEL_INFO, "扫描到G4.1 发生下降沿");
         plc_dispatch_event(PLC_EV_MSG_ENANLE, MAC_LOCK, 0, 0, 0);
     }
+
+    /* 起动锁停 G7.1 1有效*/
+    if (SIGNAL_RISING(curr_g.g_regs[7], last_g.g_regs[7], 1))
+    {
+        LOG(LOG_LEVEL_INFO, "扫描到G7.1 发生上升沿");
+        plc_dispatch_event(PLC_EV_MSG_ENANLE, STLK, 1, 0, 0);
+    }
+    if (SIGNAL_FALLING(curr_g.g_regs[7], last_g.g_regs[7], 1))
+    {
+        LOG(LOG_LEVEL_INFO, "扫描到G7.1 发生下降沿");
+        plc_dispatch_event(PLC_EV_MSG_ENANLE, STLK, 0, 0, 0);
+    }
+
+    /* 所有互锁 G8.0 0有效*/
+    if (SIGNAL_RISING(curr_g.g_regs[8], last_g.g_regs[8], 0))
+    {
+        LOG(LOG_LEVEL_INFO, "扫描到G8.0 发生上升沿");
+        plc_dispatch_event(PLC_EV_MSG_ENANLE, IT, 0, 0, 0);
+    }
+    if (SIGNAL_FALLING(curr_g.g_regs[8], last_g.g_regs[8], 0))
+    {
+        LOG(LOG_LEVEL_INFO, "扫描到G8.0 发生下降沿");
+        plc_dispatch_event(PLC_EV_MSG_ENANLE, IT, 1, 0, 0);
+    }
+
+    /* 切削程序段开始互锁 G8.1 0有效*/
+    if (SIGNAL_RISING(curr_g.g_regs[8], last_g.g_regs[8], 1))
+    {
+        LOG(LOG_LEVEL_INFO, "扫描到G8.1 发生上升沿");
+        plc_dispatch_event(PLC_EV_MSG_ENANLE, CSL, 0, 0, 0);
+    }
+    if (SIGNAL_FALLING(curr_g.g_regs[8], last_g.g_regs[8], 1))
+    {
+        LOG(LOG_LEVEL_INFO, "扫描到G8.1 发生下降沿");
+        plc_dispatch_event(PLC_EV_MSG_ENANLE, CSL, 1, 0, 0);
+    }
+
+    /* 程序段开始互锁 G8.3 0有效*/
+    if (SIGNAL_RISING(curr_g.g_regs[8], last_g.g_regs[8], 3))
+    {
+        LOG(LOG_LEVEL_INFO, "扫描到G8.3 发生上升沿");
+        plc_dispatch_event(PLC_EV_MSG_ENANLE, BSL, 0, 0, 0);
+    }
+    if (SIGNAL_FALLING(curr_g.g_regs[8], last_g.g_regs[8], 3))
+    {
+        LOG(LOG_LEVEL_INFO, "扫描到G8.3 发生下降沿");
+        plc_dispatch_event(PLC_EV_MSG_ENANLE, BSL, 1, 0, 0);
+    }
+
+    /* 各轴互锁 G130.0-130.4 0有效*/
+    for (int i = 0; i < 5; i++)
+    {
+        if (SIGNAL_RISING(curr_g.g_regs[130], last_g.g_regs[130], i))
+        {
+            LOG(LOG_LEVEL_INFO, "扫描到G130.%d 发生上升沿", i);
+            plc_dispatch_event(PLC_EV_MSG_ENANLE, IT1 + i, 0, 0, 0);
+        }
+        if (SIGNAL_FALLING(curr_g.g_regs[130], last_g.g_regs[130], i))
+        {
+            LOG(LOG_LEVEL_INFO, "扫描到G130.%d 发生下降沿", i);
+            plc_dispatch_event(PLC_EV_MSG_ENANLE, IT1 + i, 1, 0, 0);
+        }
+    }
+
+    /* 不同轴向互锁 G132.0-132.4 1有效*/
+    for (int i = 0; i < 5; i++)
+    {
+        if (SIGNAL_RISING(curr_g.g_regs[132], last_g.g_regs[132], i))
+        {
+            LOG(LOG_LEVEL_INFO, "扫描到G132.%d 发生上升沿", i);
+            plc_dispatch_event(PLC_EV_MSG_ENANLE, PMIT1 + i, 1, 0, 0);
+        }
+        if (SIGNAL_FALLING(curr_g.g_regs[132], last_g.g_regs[132], i))
+        {
+            LOG(LOG_LEVEL_INFO, "扫描到G132.%d 发生下降沿", i);
+            plc_dispatch_event(PLC_EV_MSG_ENANLE, PMIT1 + i, 0, 0, 0);
+        }
+    }
+    /* 不同轴向互锁 G134.0-134.4 1有效*/
+    for (int i = 0; i < 5; i++)
+    {
+        if (SIGNAL_RISING(curr_g.g_regs[134], last_g.g_regs[134], i))
+        {
+            LOG(LOG_LEVEL_INFO, "扫描到G134.%d 发生上升沿", i);
+            plc_dispatch_event(PLC_EV_MSG_ENANLE, NMIT1 + i, 1, 0, 0);
+        }
+        if (SIGNAL_FALLING(curr_g.g_regs[134], last_g.g_regs[134], i))
+        {
+            LOG(LOG_LEVEL_INFO, "扫描到G134.%d 发生下降沿", i);
+            plc_dispatch_event(PLC_EV_MSG_ENANLE, NMIT1 + i, 0, 0, 0);
+        }
+    }
+
     /* G54 用户宏程序输入指令*/
     if (SIGNAL_BYTE_CHANGED(curr_g.g_regs[54], last_g.g_regs[54]))
     {

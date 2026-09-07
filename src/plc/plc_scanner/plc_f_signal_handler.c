@@ -5,6 +5,8 @@
 #include "regdata.h"
 #include "spl_control.h"
 #include <hmisysapi.h>
+#include "alarmapi.h"
+#include "reset.h"
 
 static void plc_output_alarm();
 static void plc_output_mode();
@@ -12,8 +14,8 @@ static void plc_output_home();
 static void plc_output_auto();
 static void plc_output_reset();
 static void plc_output_axis_status();
-static void plc_outpus_spl_vel_status();
-static void plc_outpus_spl_vel();
+static void plc_output_spl_vel_status();
+static void plc_output_spl_vel();
 
 void plc_f_signal_handler_cycle()
 {
@@ -23,8 +25,8 @@ void plc_f_signal_handler_cycle()
     plc_output_home();
     plc_output_reset();
     plc_output_axis_status();
-    plc_outpus_spl_vel_status();
-    plc_outpus_spl_vel();
+    plc_output_spl_vel_status();
+    plc_output_spl_vel();
 }
 
 static void plc_output_alarm()
@@ -48,23 +50,22 @@ static void plc_output_alarm()
 static void plc_output_auto()
 {
     // OP：运行中信号
-    if (var_chan[0][VAR_CHAN_IS_RUNNING].value.i)
+    if (var_chan[0][VAR_CHAN_CYCLE].value.i || var_chan[0][VAR_CHAN_HOLD].value.i)
         setRegBit(REG_F, 0, 7);
     else
         clearRegBit(REG_F, 0, 7);
     // STL：启动中
-    if (cycle_tp->exec_state == EXEC_RUNNING)
+    if (var_chan[0][VAR_CHAN_CYCLE].value.i)
         setRegBit(REG_F, 0, 5);
     else
         clearRegBit(REG_F, 0, 5);
     // SPL：休止中
-    if (cycle_tp->exec_state == EXEC_PAUSING)
+    if (var_chan[0][VAR_CHAN_HOLD].value.i)
         setRegBit(REG_F, 0, 4);
     else
         clearRegBit(REG_F, 0, 4);
     // 切削进给中
-    if (cycle_tp->exec_state == EXEC_RUNNING && cycle_tp->plan_block->mode == PMC_MODE_CHOP)
-    {
+    if(var_chan[0][VAR_CHAN_CYCLE].value.i && cycle_tp->plan_block->mode == PMC_MODE_CHOP){
         setRegBit(REG_F, 2, 6);
     }
     else
@@ -98,6 +99,11 @@ static void plc_output_auto()
         setRegBit(REG_F, 4, 3);
     else
         clearRegBit(REG_F, 4, 3);
+    // 程序再启动
+    if(rt_data->sys_state[SYS_IS_PROG_RESTAR])
+        setRegBit(REG_F, 2, 4);
+    else
+        clearRegBit(REG_F, 2, 4);
 }
 
 // 各轴返回零点完成、参考点建立
@@ -119,14 +125,13 @@ static void plc_output_home()
 
 static void plc_output_reset()
 {
-    if (rt_data->nc_reset.is_resetting)
+    if (nc_reset->is_resetting)
     {
-        switch (rt_data->nc_reset.reset_trigger)
+        switch (nc_reset->reset_trigger)
         {
         // 基于MDI的复位确认信号
         case HMI_RESET:
-            if (rt_data->nc_reset.is_mdi_reset)
-            {
+            if(nc_reset->is_mdi_reset) {
                 setRegBit(REG_F, 6, 1);
                 setVarChanInt(0, VAR_CHAN_IS_RESETTING, 1, 0);
             }
@@ -135,16 +140,12 @@ static void plc_output_reset()
                 clearRegBit(REG_F, 6, 1);
                 setVarChanInt(0, VAR_CHAN_IS_RESETTING, 0, 0);
             }
-            if (rt_data->sys_state[SYS_ESTOP_INPUT])
-            {
-                if (rt_data->nc_reset.mdi_reset_tic < 24)
-                {
-                    rt_data->nc_reset.mdi_reset_tic++;
-                }
-                else
-                {
-                    rt_data->nc_reset.is_mdi_reset = 0;
-                }
+            if(rt_data->sys_state[SYS_ESTOP_INPUT]){
+                if(nc_reset->mdi_reset_tic < 24){
+                    nc_reset->mdi_reset_tic++;
+                }else{
+                    nc_reset->is_mdi_reset = 0;
+                } 
             }
             break;
         default:
@@ -153,27 +154,27 @@ static void plc_output_reset()
         // 复位中信号
         setRegBit(REG_F, 1, 1);
     }
-    if (rt_data->nc_reset.is_resetted)
+    if (nc_reset->is_resetted)
     {
-        rt_data->nc_reset.is_resetting = 0;
-        rt_data->nc_reset.is_resetted = 0;
-        rt_data->nc_reset.is_reset_delaying = 1;
+        nc_reset->is_resetting = 0;
+        nc_reset->is_resetted = 0;
+        nc_reset->is_reset_delaying = 1;
     }
     // 复位减速后延时
-    if (rt_data->nc_reset.is_reset_delaying)
+    if (nc_reset->is_reset_delaying)
     {
-        if (rt_data->nc_reset.reset_tic < par_mac[PAR_MAC_HARD_RESET_DELAY].value.val_int)
+        if (nc_reset->reset_tic < par_mac[PAR_MAC_HARD_RESET_DELAY].value.val_int)
         {
-            rt_data->nc_reset.reset_tic++;
-            // LOG(LOG_LEVEL_DEBUG, "复位减速后延时 %d", rt_data->nc_reset.reset_tic);
+            nc_reset->reset_tic++;
+            // LOG(LOG_LEVEL_DEBUG, "复位减速后延时 %d", nc_reset->reset_tic);
         }
         else
         {
             clearRegBit(REG_F, 1, 1);
             clearRegBit(REG_F, 6, 1);
             setVarChanInt(0, VAR_CHAN_IS_RESETTING, 0, 0);
-            rt_data->nc_reset.is_reset_delaying = false;
-            rt_data->nc_reset.reset_tic = 0;
+            nc_reset->is_reset_delaying = false;
+            nc_reset->reset_tic = 0;
             LOG(LOG_LEVEL_DEBUG, "完成复位");
         }
     }
@@ -331,7 +332,7 @@ static void plc_output_axis_status()
         clearRegBit(REG_F, 45, 0);
     }
 }
-static void plc_outpus_spl_vel_status()
+static void plc_output_spl_vel_status()
 {
     if (spl_data.spl_vel_state == SPINDLE_VEL_ARRIVED)
     {
@@ -341,15 +342,15 @@ static void plc_outpus_spl_vel_status()
     {
         clearRegBit(REG_F, 45, 3);
     }
-    //    if(spl_data.spl_vel_state == SPINDLE_VEL_ZERO)
-    //    {
-    //        setRegBit(REG_F, 45, 1);
-    //    }
-    //    else
-    //    {
-    //        clearRegBit(REG_F, 45, 1);
-    //    }
-    if (spindle.actual_vel < 5)
+//    if(spl_data.spl_vel_state == SPINDLE_VEL_ZERO)
+//    {
+//        setRegBit(REG_F, 45, 1);
+//    }
+//    else
+//    {
+//        clearRegBit(REG_F, 45, 1);
+//    }
+    if(abs(spindle.actual_vel) < 5)
     {
         setRegBit(REG_F, 45, 1);
         spl_data.spl_vel_state = SPINDLE_VEL_ZERO;
@@ -359,7 +360,8 @@ static void plc_outpus_spl_vel_status()
         clearRegBit(REG_F, 45, 1);
     }
 }
-static void plc_outpus_spl_vel()
+
+static void plc_output_spl_vel()
 {
     uint8_t bytes[4];
     uint32_t vel = (uint32_t)spl_data.mcp_target_speed;

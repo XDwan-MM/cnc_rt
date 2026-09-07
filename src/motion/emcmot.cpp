@@ -16,6 +16,8 @@
 #include "pathplan.h"
 #include "pitch_comp.h"
 #include "rt_data.h"
+#include "rerun.h"
+#include "reset.h"
 #include "rt_sem.h"
 #include "spl_control.h"
 #include "stored_stroke_check.h"
@@ -30,6 +32,7 @@ static void axis_write_out();
 static void check_for_fault();
 static void set_operating_mode();
 static void spindle_control();
+static void handle_nc_event();
 static void get_cmd_pos();
 static void update_status();
 static void output_to_hal();
@@ -113,6 +116,8 @@ static void chan_do_period()
         check_ferror_fault();
         // 判断运动模式
         set_operating_mode();
+        // 处理系统事件
+        handle_nc_event();
         // 主轴控制
         spindle_control();
         // 根据运动模式计算运动位置
@@ -169,10 +174,10 @@ static void set_operating_mode()
     case MODE_IDLE:
         rt_data->current_mode = rt_data->target_mode;
         break;
-    case MODE_EDIT:
     case MODE_MPG:
         rt_data->current_mode = rt_data->target_mode;
         LOG(LOG_LEVEL_INFO, "系统模式切换为 %s", mode_names[rt_data->current_mode]);
+        rerun_update_when_swithing();
         break;
     case MODE_JOG:
         // 当前点动速度为零,才能切模式成功
@@ -183,6 +188,7 @@ static void set_operating_mode()
             rt_data->current_mode = rt_data->target_mode;
             rt_data->sys_state[SYS_IS_SWITCHING_MODE] = false;
             LOG(LOG_LEVEL_INFO, "系统模式切换为 %s", mode_names[rt_data->current_mode]);
+            rerun_update_when_swithing();
         }
         break;
     case MODE_HOMING:
@@ -191,17 +197,23 @@ static void set_operating_mode()
             rt_data->current_mode = rt_data->target_mode;
             rt_data->sys_state[SYS_IS_SWITCHING_MODE] = false;
             LOG(LOG_LEVEL_INFO, "系统模式切换为 %s", mode_names[rt_data->current_mode]);
+            rerun_update_when_swithing();
         }
         break;
     case MODE_MDI:
     case MODE_MEM:
     case MODE_DNC:
-        if (!var_chan[0][VAR_CHAN_IS_RUNNING].value.i)
+        if (cycle_tp->exec_state == EXEC_IDLE)
         {
             rt_data->current_mode = rt_data->target_mode;
             rt_data->sys_state[SYS_IS_SWITCHING_MODE] = false;
             LOG(LOG_LEVEL_INFO, "系统模式切换为 %s", mode_names[rt_data->current_mode]);
+            rerun_update_when_swithing();
         }
+        break;
+    case MODE_EDIT:
+        rt_data->current_mode = rt_data->target_mode;
+        LOG(LOG_LEVEL_INFO, "系统模式切换为 %s", mode_names[rt_data->current_mode]);
         break;
     default:
         break;
@@ -226,8 +238,6 @@ static void spindle_control()
 // 不同加工模式的运动控制
 static void get_cmd_pos()
 {
-    // todo：临时，机械锁住第一阶段，不支持手动模式
-    manual_unset_sys_state();
     switch (rt_data->current_mode)
     {
     case MODE_EDIT: // 编辑
@@ -494,22 +504,16 @@ static void reset_clean_warning()
     }
 }
 
-static void manual_unset_sys_state()
-{
-    if (rt_data->current_mode == MODE_MDI || rt_data->current_mode == MODE_MEM || rt_data->current_mode == MODE_DNC)
-        return;
-    // todo：手动模式暂不支持机械锁住
-    if (rt_data->sys_state[SYS_IS_MAC_LOCK_READY])
-        rt_data->sys_state[SYS_IS_MAC_LOCK_READY] = false;
-    if (rt_data->sys_state[SYS_IS_MAC_LOCK_ON])
-        rt_data->sys_state[SYS_IS_MAC_LOCK_ON] = false;
+/// @brief 所有模式下都统一处理的事件
+static void handle_nc_event(){
+    manual_unset_sys_state();
     switch (rt_data->nc_event)
     {
-    case SYS_EVENT_MAC_LOCK_ON:
-    case SYS_EVENT_MAC_LOCK_OFF:
-        LOG(LOG_LEVEL_WARN, "手动模式暂不支持机械锁住");
-        rt_data->sys_state[SYS_IS_MAC_LOCK_READY] = false;
-        rt_data->sys_state[SYS_IS_MAC_LOCK_ON] = false;
+    case SYS_EVENT_PROGRAM_RESTART_ON:
+        rt_set_sys_state(SYS_IS_PROG_RESTAR, true);
+        break;
+    case SYS_EVENT_PROGRAM_RESTART_OFF:
+        rt_set_sys_state(SYS_IS_PROG_RESTAR, false);
         break;
     case SYS_EVENT_BLOCK_SKIP_ON:
         rt_set_sys_state(SYS_IS_BLOCK_SKIP, true);
@@ -520,6 +524,19 @@ static void manual_unset_sys_state()
     default:
         break;
     }
+}
+
+static void manual_unset_sys_state()
+{
+    if (rt_data->current_mode == MODE_MDI || rt_data->current_mode == MODE_MEM || rt_data->current_mode == MODE_DNC)
+        return;
+    // todo：手动模式暂不支持机械锁住和所有轴互锁
+    if (rt_data->sys_state[SYS_IS_MAC_LOCK_READY])
+        rt_data->sys_state[SYS_IS_MAC_LOCK_READY] = false;
+    if (rt_data->sys_state[SYS_IS_MAC_LOCK_ON])
+        rt_data->sys_state[SYS_IS_MAC_LOCK_ON] = false;
+    if (rt_data->sys_state[SYS_IS_IT_LOCK])
+        rt_data->sys_state[SYS_IS_IT_LOCK] = false;
 }
 
 static void rebuild_axis_positions_from_feedback()

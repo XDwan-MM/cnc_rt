@@ -296,6 +296,7 @@ static GNC_RES parser_handle_null(NcItpState *itp_state, int *line_no){
     plan_block.mode = pmc_mode::PMC_MODE_NULL;
     // 行号
     plan_block.line_number = *line_no;
+    plan_block.is_breakpoint = false;
     // 加入队列
     if(queue_is_full(parser_queue)){
         return GNC_DATA_FULL;
@@ -362,7 +363,7 @@ static GNC_RES parser_handle_gcode(pmc_data* motion_data, NcItpState *itp_state,
             return GNC_PARSER_OVER;
     }
     // 进给速度
-    plan_block.feed_vel = motion_data->feed.value;
+    plan_block.feed_vel = motion_data->feed.value / TIME_MINUS_2_S;
     // 位置
     plan_block.end_pos.x = motion_data->position.x;
     plan_block.end_pos.y = motion_data->position.y;
@@ -375,6 +376,7 @@ static GNC_RES parser_handle_gcode(pmc_data* motion_data, NcItpState *itp_state,
     plan_block.line_number = *line_no;
     // 暂停时间
     plan_block.pause_time = motion_data->pause_time;
+    plan_block.is_breakpoint = false;
     // 加入队列
     if(queue_is_full(parser_queue)){
         return GNC_DATA_FULL;
@@ -417,6 +419,7 @@ static GNC_RES parser_handle_mcode(pmc_data* motion_data, NcItpState *itp_state,
     plan_block.mst_data.sub_program = motion_data->sub_program;
     // 预留
     plan_block.mst_data.size = 1;
+    plan_block.is_breakpoint = false;
     if (queue_is_full(parser_queue))
     {
         return GNC_DATA_FULL;

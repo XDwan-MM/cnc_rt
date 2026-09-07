@@ -20,6 +20,7 @@
 #include <QFile>
 #include <QTextStream>
 #include "sysapi.h"
+#include <alarmapi.h>
 
 static char version[64];
 static int sys_start_rt = 0;
@@ -109,6 +110,7 @@ int main() {
     if (Master_Start() < 0) {
         RT_LOG(ERROR, "EtherCAT主站启动失败，请检查ENI文件是否正确");
         LOG(LOG_LEVEL_ERR, "EtherCAT主站启动失败，请检查ENI文件是否正确");
+        // setAlarm(ALARM_SY, ALARM_ERROR, 6);
         return -1; // 直接退出，不再启动线程
     }
     RT_LOG(INFO, "启动EtherCAT主站");

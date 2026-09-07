@@ -92,7 +92,7 @@ double vp_cal_decel_vel(VELPLAN_TYPE velplan_type, double vs, double amax, doubl
 /// @param radius_error 基于圆弧插补的容许误差
 /// @param circular_min_vel 基于圆弧插补的下限速度
 /// @return 
-void vp_cal_bid_lookahead(VELPLAN_TYPE velplan_type, PLAN_QUEUE* plan_queue, double cycle_time, double x_corner_vel_thr, double y_corner_vel_thr, double z_corner_vel_thr);
+void vp_cal_bid_lookahead(VELPLAN_TYPE velplan_type, PLAN_QUEUE* plan_queue, double cycle_time, double corner_dec_factor, double x_corner_vel_thr, double y_corner_vel_thr, double z_corner_vel_thr);
 
 /// @brief 圆弧曲线的加速度进行的速度控制
 /// @param cur_block 
