@@ -330,22 +330,19 @@ static GNC_RES parser_handle_gcode(pmc_data* motion_data, NcItpState *itp_state,
             plan_block.circular_data.center_pos.x = motion_data->circle_center.x_coc;
             plan_block.circular_data.center_pos.y = motion_data->circle_center.y_coc;
             plan_block.circular_data.center_pos.z = motion_data->circle_center.z_coc;
-            // 平面
-            plan_block.circular_data.plane = (PLANE)(motion_data->plane);
             break;
         case PMC_G03:
             plan_block.type = CIRCLE_CCW;
             plan_block.circular_data.center_pos.x = motion_data->circle_center.x_coc;
             plan_block.circular_data.center_pos.y = motion_data->circle_center.y_coc;
             plan_block.circular_data.center_pos.z = motion_data->circle_center.z_coc;
-            plan_block.circular_data.plane = (PLANE)(motion_data->plane);
             break;
         case PMC_G02_5:
             plan_block.type = HELIX_CW;
+            
             plan_block.circular_data.center_pos.x = motion_data->circle_center.x_coc;
             plan_block.circular_data.center_pos.y = motion_data->circle_center.y_coc;
             plan_block.circular_data.center_pos.z = motion_data->circle_center.z_coc;
-            plan_block.circular_data.plane = (PLANE)(motion_data->plane);
             plan_block.helical_data.screw_number = motion_data->screw_number;
             plan_block.helical_data.screw_offset = motion_data->screw_offset;
             break;
@@ -354,15 +351,27 @@ static GNC_RES parser_handle_gcode(pmc_data* motion_data, NcItpState *itp_state,
             plan_block.circular_data.center_pos.x = motion_data->circle_center.x_coc;
             plan_block.circular_data.center_pos.y = motion_data->circle_center.y_coc;
             plan_block.circular_data.center_pos.z = motion_data->circle_center.z_coc;
-            plan_block.circular_data.plane = (PLANE)(motion_data->plane);
             plan_block.helical_data.screw_number = motion_data->screw_number;
             plan_block.helical_data.screw_offset = motion_data->screw_offset;
+            // LOG(LOG_LEVEL_DEBUG, "no %d speed %f reverse %f", *line_no, motion_data->spindle.speed, motion_data->spindle.reverse); 
             break;
         case PMC_G33_1: // 攻丝循环
             plan_block.type = RIGID_TAP;
+            plan_block.rigid_data.screw_number = motion_data->screw_number;
+            plan_block.rigid_data.screw_offset = motion_data->screw_offset;
+            plan_block.rigid_data.speed = motion_data->spindle.speed;
+            plan_block.rigid_data.reverse = motion_data->spindle.reverse;
+            plan_block.rigid_data.screw_offset = motion_data->feed.value / motion_data->spindle.speed;
+            // LOG(LOG_LEVEL_DEBUG, "no %d speed %d reverse %d screw_offset %f", *line_no, motion_data->spindle.speed, motion_data->spindle.reverse, motion_data->screw_offset);
             break;
         case PMC_G33_2: // 攻丝回退
             plan_block.type = TAP_RETURN;
+            plan_block.rigid_data.screw_number = motion_data->screw_number;
+            plan_block.rigid_data.screw_offset = motion_data->screw_offset;
+            plan_block.rigid_data.speed = motion_data->spindle.speed;
+            plan_block.rigid_data.reverse = motion_data->spindle.reverse;
+            plan_block.rigid_data.screw_offset = motion_data->feed.value / motion_data->spindle.speed;
+            // LOG(LOG_LEVEL_DEBUG, "no %d speed %d reverse %d screw_offset %f", *line_no, motion_data->spindle.speed, motion_data->spindle.reverse, motion_data->screw_offset);
             break;
         default:
             // 未支持的插补类型
@@ -394,6 +403,8 @@ static GNC_RES parser_handle_gcode(pmc_data* motion_data, NcItpState *itp_state,
     // 回参考点
     plan_block.ref_number = (REF_TYPE)motion_data->ref_point_number;
     plan_block.ref_axis = motion_data->ref_axis_flag;
+    // 选择平面
+    plan_block.plane = (PLANE)(motion_data->plane);
     // 回断点
     plan_block.is_breakpoint = false;
     // 加入队列
@@ -404,7 +415,7 @@ static GNC_RES parser_handle_gcode(pmc_data* motion_data, NcItpState *itp_state,
     // if(plan_block.type == CIRCLE_CW || plan_block.type == CIRCLE_CCW ){
     //     LOG(LOG_LEVEL_DEBUG, "center pos %f %f %f no %d", plan_block.circular_data.center_pos.x, plan_block.circular_data.center_pos.y, plan_block.circular_data.center_pos.z, plan_block.line_number);  
     // }
-    // LOG(LOG_LEVEL_DEBUG, " no %d mode %d type:%d end pos %f %f %f", plan_block.line_number, plan_block.mode, plan_block.type, motion_data->position.x, motion_data->position.y, motion_data->position.z);
+    // LOG(LOG_LEVEL_DEBUG, "no %d end pos %f %f %f mode %d type:%d", plan_block.line_number, motion_data->position.x, motion_data->position.y, motion_data->position.z, plan_block.mode, plan_block.type);
     // ======= 测试 ===========
     queue_push(parser_queue, &plan_block);
     if(plan_block.mode == pmc_mode::PMC_MODE_STOPSKIP) return GNC_PARSER_WAIT;
