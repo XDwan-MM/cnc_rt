@@ -6,6 +6,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "stored_stroke_check.h"
+#include "rt_data.h"
 
 static void homing_set_state();
 static void homing_is_all_homed();
@@ -240,7 +241,7 @@ static double abs_homing_tp_pinc(AXIS_TYPE axis_type){
                     homing_tp[axis_type].homing_state = ABS_EXEC_IDLE;
                     homing_tp[axis_type].is_ref_on = false;
                     // 判断是否在允差范围内到达零点
-                    setVarAxisInt(axis_type, VAR_AXIS_IS_HOMEF, 1, 0);
+                    set_ref_state(FIRST_REF, axis_type);
                     reset_pos_at_home(axis_type);
                     LOG(LOG_LEVEL_INFO, "轴%d完成回零", axis_type);
                     break;
@@ -472,4 +473,94 @@ static GNC_RES abs_declining_tp_init(AXIS_TYPE axis_type, double target_vel){
     res = vp_cal_vel_profile(T_SHAPE, homing_tp[axis_type].homing_block, homing_tp[axis_type].homing_profile, ncu_cycle); 
     // if(res != VP_CAL_SUCCESS) LOG(LOG_LEVEL_ERR, "vp cal vel profile fail");
     return res;
+}
+
+/// @brief 设置回参考点完成信号
+/// @param ref_type 回第几参考点
+void set_ref_state(REF_TYPE ref_type, AXIS_TYPE axis_type){
+    switch (ref_type)
+    {
+    case FIRST_REF:
+        rt_data->axis_data[axis_type].ref_status.ref_on = 1;
+        rt_data->axis_data[axis_type].ref_status.ref_setup = 1;
+        break;
+    case SECOND_REF:
+        rt_data->axis_data[axis_type].ref_status.second_ref_on = 1;
+        break;
+    case THIRD_REF:
+        rt_data->axis_data[axis_type].ref_status.third_ref_on = 1;
+        break;
+    case FORTH_REF:
+        rt_data->axis_data[axis_type].ref_status.forth_ref_on = 1;
+        break;
+    default:
+        break;
+    }
+}
+
+void auto_set_ref_state(REF_TYPE ref_type, int axis_type){
+    switch (axis_type)
+    {
+    case PMC_REF_AXIS_X:
+        set_ref_state(ref_type, AXIS_X);
+        break;
+    case PMC_REF_AXIS_Y:
+        set_ref_state(ref_type, AXIS_Y);
+        break;  
+    case PMC_REF_AXIS_Z:
+        set_ref_state(ref_type, AXIS_Z);
+        break;
+    case PMC_REF_AXIS_X + PMC_REF_AXIS_Y:
+        set_ref_state(ref_type, AXIS_X);
+        set_ref_state(ref_type, AXIS_Y);
+        break;
+    case PMC_REF_AXIS_X + PMC_REF_AXIS_Z:
+        set_ref_state(ref_type, AXIS_X);
+        set_ref_state(ref_type, AXIS_Z);
+        break;
+    case PMC_REF_AXIS_Y + PMC_REF_AXIS_Z:
+        set_ref_state(ref_type, AXIS_Y);
+        set_ref_state(ref_type, AXIS_Z);
+        break;
+    case PMC_REF_AXIS_X + PMC_REF_AXIS_Y + PMC_REF_AXIS_Z:
+        set_ref_state(ref_type, AXIS_X);
+        set_ref_state(ref_type, AXIS_Y);
+        set_ref_state(ref_type, AXIS_Z);
+        break;
+    default:
+        for (int i = 0; i < SYS_AXES_NUM; i++) {
+            set_ref_state(cycle_tp->plan_block->ref_number, i);
+        }
+        break;
+    }
+}
+
+/// @brief 从参考点移动，成为0
+void update_ref_state(){
+    for (int i = 0; i < SYS_AXES_NUM; i++)
+    {
+        if(IsGreaterThan(fabs(rt_data->axis_data[i].home_crds - rt_data->axis_data[i].mac_cmd_pos), rt_data->axis_data[i].ref_range)){
+            rt_data->axis_data[i].ref_status.ref_on = 0;
+        }
+        if(IsGreaterThan(fabs(rt_data->axis_data[i].second_home_crds - rt_data->axis_data[i].mac_cmd_pos), rt_data->axis_data[i].ref_range)){
+            rt_data->axis_data[i].ref_status.second_ref_on = 0;
+        }
+        if(IsGreaterThan(fabs(rt_data->axis_data[i].third_home_crds - rt_data->axis_data[i].mac_cmd_pos), rt_data->axis_data[i].ref_range)){
+            rt_data->axis_data[i].ref_status.third_ref_on = 0;
+        }
+        if(IsGreaterThan(fabs(rt_data->axis_data[i].forth_home_crds - rt_data->axis_data[i].mac_cmd_pos), rt_data->axis_data[i].ref_range)){
+            rt_data->axis_data[i].ref_status.forth_ref_on = 0;
+        }
+    }
+}
+
+/// @brief 紧急停止中、伺服报警时，成为0
+void reset_ref_state(){
+    for (int i = 0; i < SYS_AXES_NUM; i++)
+    {
+        rt_data->axis_data[i].ref_status.ref_on = 0;
+        rt_data->axis_data[i].ref_status.second_ref_on = 0;
+        rt_data->axis_data[i].ref_status.third_ref_on = 0;
+        rt_data->axis_data[i].ref_status.forth_ref_on = 0;
+    }
 }

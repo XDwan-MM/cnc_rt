@@ -307,10 +307,6 @@ void shm_var_update(){
         setVarAxisDouble(i, VAR_AXIS_ACT_VEL_EX, rt_data->axis_data[i].act_vel, 0); 
         // 指令轴速度
         setVarAxisDouble(i, VAR_AXIS_CMD_VEL_EX, rt_data->axis_data[i].cmd_vel, 0);
-        // 判断各轴零点
-        if(fabs(rt_data->axis_data[i].home_crds - rt_data->axis_data[i].mac_cmd_pos) > rt_data->axis_data[i].ref_range){
-            setVarAxisInt(i, VAR_AXIS_IS_HOMEF, 0, 0);
-        }
         // 轴状态显示：机械锁住、互锁、移动中
         if(rt_data->sys_state[SYS_IS_MAC_LOCK_READY]) setVarAxisInt(i, VAR_AXIS_IS_MAC_LOCK, 1, 0);
         else setVarAxisInt(i, VAR_AXIS_IS_MAC_LOCK, 0, 0);

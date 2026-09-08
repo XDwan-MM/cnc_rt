@@ -64,6 +64,14 @@ typedef struct pmc_pos_t
     double c;
 }pmc_pos;
 
+//回参考点轴标志位
+#define PMC_REF_AXIS_X 0x01
+#define PMC_REF_AXIS_Y 0x02
+#define PMC_REF_AXIS_Z 0x04
+#define PMC_REF_AXIS_A 0x08
+#define PMC_REF_AXIS_B 0x10
+#define PMC_REF_AXIS_C 0x20
+
 typedef struct pmc_circle_center_t
 {
     double x_coc;    //圆心centre of circle
@@ -147,6 +155,8 @@ typedef struct pmc_data_t
 
     int endSpeedMode;           //终点速度模式 0：默认 1：转角平滑测试
     int passWay;                // 通道 0 1 2 3
+    int ref_point_number;       //返回参考点号 G28→1，G30(P2~P4)→2~4，其他包为0
+    int ref_axis_flag;          //回参考点轴标志 bit0=X,bit1=Y,bit2=Z,bit3=A,bit4=B,bit5=C，其他包为0
 }pmc_data;
 
 #ifdef __cplusplus

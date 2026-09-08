@@ -67,24 +67,27 @@ GNC_RES parser_init(NC_MODE nc_mode)
     // 是否跳过注释段
     ItpSetBlockSkipEnable(rt_get_sys_state(SYS_IS_BLOCK_SKIP));
     // 刀偏
-    double toollens[TOOL_COUNT];
-    double toolRads[TOOL_COUNT];
+    int tool_count = TOOL_COUNT + 1;
+    double toollens[tool_count];
+    double toolRads[tool_count];
+    toollens[0] = 0.0;
+    toolRads[0] = 0.0;
     for (int i = 0; i < TOOL_COUNT; ++i)
     {
         double glen1 = 0.0;
         double wlen1 = 0.0;
         int ret = SHM_ToolGetToolPara(i, GTOOL_LEN1, &glen1, 0);
         ret = SHM_ToolGetToolPara(i, WTOOL_LEN1, &wlen1, 0);
-        toollens[i] = glen1 - wlen1;
+        toollens[i + 1] = glen1 - wlen1;
 
         double grad1 = 0.0;
         double wrad1 = 0.0;
         ret = SHM_ToolGetToolPara(i, GTOOL_RAD1, &grad1, 0);
         ret = SHM_ToolGetToolPara(i, WTOOL_RAD1, &wrad1, 0);
-        toolRads[i] = grad1 - wrad1;
+        toolRads[i + 1] = grad1 - wrad1;
     }
-    ItpSetToolLens(toollens, TOOL_COUNT);
-    ItpSetToolRads(toolRads, TOOL_COUNT);
+    ItpSetToolLens(toollens, tool_count);
+    ItpSetToolRads(toolRads, tool_count);
     // 刀偏参数
     ItpParam_temp itpParam;
     itpParam.cnv = par_ncu[PAR_NCU_PARSER_CNV].value.val_int;
@@ -376,6 +379,10 @@ static GNC_RES parser_handle_gcode(pmc_data* motion_data, NcItpState *itp_state,
     plan_block.line_number = *line_no;
     // 暂停时间
     plan_block.pause_time = motion_data->pause_time;
+    // 回参考点
+    plan_block.ref_number = (REF_TYPE)motion_data->ref_point_number;
+    plan_block.ref_axis = motion_data->ref_axis_flag;
+    // 回断点
     plan_block.is_breakpoint = false;
     // 加入队列
     if(queue_is_full(parser_queue)){

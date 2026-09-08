@@ -125,7 +125,7 @@ static void rt_reset_chan_data()
         rt_data->chan_data[i].max_tang_acc = par_chan[i][PAR_CH_MAX_ECEN_ACC].value.val_real;                  // 最大向心加速度
         rt_data->chan_data[i].lookahead_num = par_chan[i][PAR_CH_LOOKAHEAD_NUM].value.val_uint;                // 速度规划前瞻段数
         rt_data->chan_data[i].path_tolerance = par_chan[i][PAR_CH_PATH_TOLERANCE].value.val_real;              // 轨迹轮廓允差
-        rt_data->chan_data[i].corner_dec_factor = par_chan[i][PAR_CH_CONER_DEC_FACTOR].value.val_real;         // 拐角降速比例因子 ("def": "100", "min": "1", "max": "200")
+        rt_data->chan_data[i].corner_dec_factor = par_chan[i][PAR_CH_CONER_DEC_FACTOR].value.val_int;          // 拐角降速比例因子 ("def": "100", "min": "1", "max": "200")
         // 外部减速功能暂时手动赋值
         rt_data->chan_data[i].ex_dec2_enable = false;
         rt_data->chan_data[i].ex_dec3_enable = false;
@@ -160,6 +160,9 @@ static void rt_reset_axis_data()
         rt_data->axis_data[i].home_way = par_axis[i][PAR_AX_HOME_WAY].value.val_uint;                                    // 回参考点方式 (HMI unit: mm)
         rt_data->axis_data[i].ref_range = par_axis[i][PAR_AX_REF_RANGE].value.val_real;                                  // 轴回零参考点范围偏差 (HMI unit: mm)
         rt_data->axis_data[i].home_crds = par_axis[i][PAR_AX_HOME_CRDS].value.val_real;                                  // 参考点坐标值 (HMI unit: mm)
+        rt_data->axis_data[i].second_home_crds = par_axis[i][PAR_AX_HOME_CRDS2].value.val_real;                          // 第二参考点坐标值 (HMI unit: mm)
+        rt_data->axis_data[i].third_home_crds = par_axis[i][PAR_AX_HOME_CRDS3].value.val_real;                           // 第三参考点坐标值 (HMI unit: mm)
+        rt_data->axis_data[i].forth_home_crds = par_axis[i][PAR_AX_HOME_CRDS4].value.val_real;                           // 第四参考点坐标值 (HMI unit: mm)
         rt_data->axis_data[i].plmt = par_axis[i][PAR_AX_PLMT].value.val_real;                                            // 轴正软极限
         rt_data->axis_data[i].nlmt = par_axis[i][PAR_AX_NLMT].value.val_real;                                            // 轴负软极限
         rt_data->axis_data[i].plmt2 = par_axis[i][PAR_AX_PLMT2].value.val_real;                                          // 轴第二级正软极限

@@ -26,6 +26,14 @@ typedef enum{
     COUNTERCLOCK, // 逆时针
 }CIRCLE_DIR;
 
+typedef enum{
+    NONE_REF = 0,
+    FIRST_REF,      // 回参考点
+    SECOND_REF,     // 回第二参考点
+    THIRD_REF,      // 回第三参考点
+    FORTH_REF,      // 回第四参考点
+}REF_TYPE;
+
 typedef struct{
     POS center_pos;     // 圆心位置
     double radius;      // 半径
@@ -57,6 +65,8 @@ typedef struct
     NcItpState state;   // 模态
     int line_number;    // 运行行号
     int pause_time;     // 暂停时间
+    REF_TYPE ref_number;// 回参考点
+    int ref_axis;       // 回参考点轴号
     MST_DATA mst_data;
     CIRCULAR_DATA circular_data;
     HELIX_DATA helical_data;

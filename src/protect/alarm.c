@@ -19,6 +19,8 @@ void handle_estop_cmd()
         setVarChanInt(0, VAR_CHAN_IS_ESTOP, 1, 0);
         // 1.急停信号ESP
         nc_set_resetting(ESTOP_RESET);
+        // 清除回参考点信号
+        reset_ref_state();
         // 重置各个模式
         auto_handle_estop();
         homing_handle_estop();
