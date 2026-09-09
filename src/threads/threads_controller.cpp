@@ -47,6 +47,10 @@ thread_config_t path_plan_config = {.core_id = 2, .policy = SCHED_RR, .priority 
 // 线程首末时间
 static long long start = 0;
 static long long end = 0;
+static int rt_overtime_count = 0;
+static int plc_overtime_count = 0;
+
+#define OVERTIME_THR 10
 
 // 获取单调时间（纳秒）
 static inline long long get_ns() {
@@ -111,9 +115,12 @@ void* soft_plc_thread_func(void*) {
         #ifndef DEBUG_MODE_ENABLED
         long long end_time = get_ns();
         if(end_time - start_time > 1e6 * 0.9 ) {
-            setAlarm(ALARM_PC, ALARM_ERROR, 1);
-            LOG(LOG_LEVEL_ERR, "PLC线程耗时 %10f ms", (end_time - start_time) / 1e6);
-        }
+            plc_overtime_count ++;
+            if(IsGreaterThan(plc_overtime_count, OVERTIME_THR)){
+                int res = setAlarm(ALARM_PC, ALARM_ERROR, 1);
+                if(res != -8) LOG(LOG_LEVEL_ERR, "PLC线程耗时 %10f ms", (end_time - start_time) / 1e6);
+            }
+        }else plc_overtime_count = 0;
         #endif
     }
     return NULL;
@@ -138,9 +145,12 @@ void* motion_controller_thread_func(void*) {
         end = get_ns();
         #ifndef DEBUG_MODE_ENABLED
         if(IsGreaterThan((end - start) / 1e6, 0.9)){
-            int res = setAlarm(ALARM_SY, ALARM_ERROR, 1);
-            if(res != -8) LOG(LOG_LEVEL_ERR, "实时超时 %10f", (end - start) / 1e6);
-        }
+            rt_overtime_count ++;
+            if(IsGreaterThan(rt_overtime_count, OVERTIME_THR)){
+                int res = setAlarm(ALARM_SY, ALARM_ERROR, 1);
+                if(res != -8) LOG(LOG_LEVEL_ERR, "运控线程超时 %10f", (end - start) / 1e6);
+            } 
+        }else rt_overtime_count = 0;
         #endif
         sem_post(&moton_sem_exec_done);
     }
@@ -163,14 +173,7 @@ void* path_plan_thread_func(void*) {
     return NULL;
 }
 
-// 任务控制器线程的具体实现
-// void* task_controller_thread_func(void*) {
-//     while (!thread_exit_flag) {
-//         // todo：修改此处写法    
-//     }
-//     return NULL;
-// }
-
+// PDO线程的具体实现
 void* pdo_thread_func(void*) {
     #ifdef DEBUG_MODE_ENABLED
         Master_Run_Simulated();  // 调试模式使用模拟主站
@@ -179,3 +182,11 @@ void* pdo_thread_func(void*) {
     #endif
     return NULL;
 }
+
+// 任务控制器线程的具体实现
+// void* task_controller_thread_func(void*) {
+//     while (!thread_exit_flag) {
+//         // todo：修改此处写法    
+//     }
+//     return NULL;
+// }
