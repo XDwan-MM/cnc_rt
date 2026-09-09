@@ -25,8 +25,8 @@ typedef enum {
 // 驱动器工作模式枚举
 typedef enum {
     DRV_MODE_DISABLED = 0,
-    DRV_MODE_CSP,    // 周期性同步位置模式
-    DRV_MODE_CSV,    // 周期性同步速度模式
+    DRV_MODE_CSP,    // 周期性同步位置模式 0x08
+    DRV_MODE_CSV,    // 周期性同步速度模式 0x09
     DRV_MODE_CST,    // 周期性同步转矩模式
     DRV_MODE_PP,     // 轮廓位置模式（脉冲方向）
     // ... 其他模式
@@ -34,12 +34,12 @@ typedef enum {
 
 // 驱动器状态枚举
 typedef enum {
-    DRV_STATE_NOT_READY = 0,
-    DRV_STATE_SWITCHED_ON_DISABLE,
+    DRV_STATE_NOT_READY = 0,          // 未就绪
+    DRV_STATE_SWITCHED_ON_DISABLE,    // 
     DRV_STATE_READY_TO_SWITCHED_ON,
     DRV_STATE_SWITCHED_ON,
-    DRV_STATE_OPERATION_ENABLED,
-    DRV_STATE_FAULT,
+    DRV_STATE_OPERATION_ENABLED,      // 上使能 0F
+    DRV_STATE_FAULT,                  // 错误（6041状态字低8位为08）
     // ... 其他状态
 } drv_state_t;
 
@@ -50,8 +50,8 @@ typedef struct {
     uint16_t        axis_id;
     bool            initialized;
     // --- 核心状态数据 (从驱动器读取) ---
-    drv_state_t     state;          // 状态字
-    drv_mode_t      mode;           // 模式字
+    drv_state_t     state;          // 状态字（6041）
+    drv_mode_t      mode;           // 模式字（6060）
 
     int32_t         actual_pos;     // 实际位置
     int32_t         actual_vel;     // 实际速度
