@@ -209,6 +209,8 @@ typedef enum {
     SYS_EVENT_PROGRAM_RESTART_OFF,
     SYS_EVENT_BLOCK_SKIP_ON,
     SYS_EVENT_BLOCK_SKIP_OFF,
+    SYS_EVENT_STOP_SKIP_ON,
+    SYS_EVENT_STOP_SKIP_OFF,
 
     SYS_EVENT_COMP_PARAM_CHANGED,   /* 误差补偿参数变更（需 sync + on_params_synced） */
     SYS_EVENT_COMP_TABLE_CHANGED,   /* 数据表参数变更（需重建表 + on_params_synced） */

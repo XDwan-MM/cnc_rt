@@ -267,15 +267,16 @@ static GNC_RES parser_handle_recieve(pmc_data* motion_data, NcItpState *itp_stat
     if (motion_data) {
         // 模式
         switch(motion_data->mode){
-            case PMC_MODE_EXACT_STOP: // 精准停模式
-            case PMC_MODE_CHOP: // 切削模式
-            case PMC_MODE_ARRIVE_CHECK: // 到位检测
-            case PMC_MODE_TAP: // 攻丝模式
-            case PMC_MODE_PAUSE: // 暂停模式
-            case PMC_MODE_TAP_RETURE: // 攻丝回退
+            case PMC_MODE_EXACT_STOP:       // 精准停模式
+            case PMC_MODE_CHOP:             // 切削模式
+            case PMC_MODE_ARRIVE_CHECK:     // 到位检测
+            case PMC_MODE_TAP:              // 攻丝模式
+            case PMC_MODE_PAUSE:            // 暂停模式
+            case PMC_MODE_TAP_RETURE:       // 攻丝回退
+            case PMC_MODE_STOPSKIP:         // 跳转
                 res = parser_handle_gcode(motion_data, itp_state, line_no);
                 break; 
-            case PMC_MODE_M_CMD: // M指令
+            case PMC_MODE_M_CMD:            // M指令
                 res = parser_handle_mcode(motion_data, itp_state, line_no);
                 break;
             // 更新：其他模式
@@ -291,7 +292,6 @@ static GNC_RES parser_handle_recieve(pmc_data* motion_data, NcItpState *itp_stat
 }
 
 static GNC_RES parser_handle_null(NcItpState *itp_state, int *line_no){
-
     PLAN_BLOCK plan_block;
     // 模态
     plan_block.state = *itp_state;
@@ -300,6 +300,7 @@ static GNC_RES parser_handle_null(NcItpState *itp_state, int *line_no){
     // 行号
     plan_block.line_number = *line_no;
     plan_block.is_breakpoint = false;
+    LOG(LOG_LEVEL_DEBUG, "空包: no %d mode %d type %d", plan_block.line_number, plan_block.mode, plan_block.type);
     // 加入队列
     if(queue_is_full(parser_queue)){
         return GNC_DATA_FULL;
@@ -365,6 +366,13 @@ static GNC_RES parser_handle_gcode(pmc_data* motion_data, NcItpState *itp_state,
             LOG(LOG_LEVEL_DEBUG, "不支持该插补类型: %d", motion_data->interp);
             return GNC_PARSER_OVER;
     }
+    switch(motion_data->mode){
+        case PMC_MODE_STOPSKIP:
+            plan_block.type = PROBE;
+            break;
+        default:
+            break;
+    }
     // 进给速度
     plan_block.feed_vel = motion_data->feed.value / TIME_MINUS_2_S;
     // 位置
@@ -392,7 +400,7 @@ static GNC_RES parser_handle_gcode(pmc_data* motion_data, NcItpState *itp_state,
     // if(plan_block.type == CIRCLE_CW || plan_block.type == CIRCLE_CCW ){
     //     LOG(LOG_LEVEL_DEBUG, "center pos %f %f %f no %d", plan_block.circular_data.center_pos.x, plan_block.circular_data.center_pos.y, plan_block.circular_data.center_pos.z, plan_block.line_number);  
     // }
-    // LOG(LOG_LEVEL_DEBUG, "end pos %f %f %f mode %d type:%d no %d", motion_data->position.x, motion_data->position.y, motion_data->position.z, plan_block.mode, plan_block.type, plan_block.line_number);
+    LOG(LOG_LEVEL_DEBUG, " no %d mode %d type:%d end pos %f %f %f", plan_block.line_number, plan_block.mode, plan_block.type, motion_data->position.x, motion_data->position.y, motion_data->position.z);
     // ======= 测试 ===========
     queue_push(parser_queue, &plan_block);
     return GNC_OPERATOR_SUCCESS;
@@ -508,3 +516,12 @@ int t_macroVarSetValue(int no, double mac)
     
     return macroVarSetValue(no, mac, 0);
 }
+
+/*
+1、G31
+
+G90 G54 G40 G00 X1 Y1 Z1
+G31 G90 X3.0 F100
+Y100
+
+*/

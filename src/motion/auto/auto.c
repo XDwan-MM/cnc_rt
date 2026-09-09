@@ -8,6 +8,8 @@
 #include <alarmapi.h>
 #include "stored_stroke_check.h"
 #include "trace_publisher.h"
+#include "ncitpmacrodef.h"
+#include "macrovarapi.h"
 
 static void auto_check_error_line();
 static void auto_update_state();
@@ -82,6 +84,7 @@ static void auto_update_state(){
             case DO_CHOP_CMD:
             case DO_DWELL_CMD:
             case DO_HOME_CMD:
+            case DO_SKIP_CMD:
             case DO_MSTB_CMD:
             case DO_NULL_CMD:
                 cycle_tp->exec_state = EXEC_PAUSING;
@@ -134,6 +137,7 @@ static void auto_update_state(){
             case DO_CHOP_CMD:
             case DO_HOME_CMD:
             case DO_TAP_CMD:
+            case DO_SKIP_CMD:
                 cycle_tp->exec_state = EXEC_RESET;
                 break;
             case DO_DWELL_CMD:
@@ -217,7 +221,18 @@ static void auto_check_event(){
         switch (cycle_tp->exec_state)
         {
         case EXEC_RUNNING:
-            cycle_tp->running_stage = BLOCK_BREAKPOINT;
+            switch(cycle_tp->exec_cmd){
+            case DO_CHOP_CMD:
+            case DO_HOME_CMD:
+            case DO_TAP_CMD:
+                cycle_tp->running_stage = BLOCK_BREAKPOINT;
+                break;
+            case DO_SKIP_CMD:   // 跳转不受空运行影响
+            case DO_DWELL_CMD:
+            case DO_MSTB_CMD:
+            default:
+                break;
+            }
         case EXEC_PAUSING:
         case EXEC_RESET:
         case EXEC_IDLE:
@@ -231,7 +246,18 @@ static void auto_check_event(){
         switch (cycle_tp->exec_state)
         {
         case EXEC_RUNNING:
-            cycle_tp->running_stage = BLOCK_BREAKPOINT;
+            switch(cycle_tp->exec_cmd){
+            case DO_CHOP_CMD:
+            case DO_HOME_CMD:
+            case DO_TAP_CMD:
+                cycle_tp->running_stage = BLOCK_BREAKPOINT;
+                break;
+            case DO_SKIP_CMD:
+            case DO_DWELL_CMD:
+            case DO_MSTB_CMD:
+            default:
+                break;
+            }
         case EXEC_PAUSING:
         case EXEC_RESET:
         case EXEC_IDLE:
@@ -372,6 +398,30 @@ static void auto_check_event(){
         cycle_tp->trigger_event = NONE_EVENT;
         rt_set_sys_state(SYS_IS_BLOCK_SKIP, false);
         break;
+    case SYS_EVENT_STOP_SKIP_ON:
+        LOG(LOG_LEVEL_INFO, "自动模式处理跳转信号");
+        rt_set_sys_state(SYS_IS_STOP_SKIP, true);
+        switch (cycle_tp->exec_state)
+        {
+        case EXEC_RUNNING:
+            switch(cycle_tp->exec_cmd){
+            case DO_SKIP_CMD:
+                cycle_tp->running_stage = BLOCK_BREAKPOINT;
+                break;
+            default:
+                break;
+            }
+            break;
+        case EXEC_PAUSING:
+        case EXEC_RESET:
+        case EXEC_IDLE:
+            break;
+        }
+        break;
+    case SYS_EVENT_STOP_SKIP_OFF:
+        LOG(LOG_LEVEL_INFO, "自动模式处理跳转信号");
+        rt_set_sys_state(SYS_IS_STOP_SKIP, false);
+        break;
     case SYS_EVENT_FEED_OVERRIDE:
         LOG(LOG_LEVEL_INFO, "自动模式处理进给倍率切换");
         switch (cycle_tp->exec_state)
@@ -382,7 +432,8 @@ static void auto_check_event(){
             case DO_HOME_CMD:
                 cycle_tp->running_stage = BLOCK_BREAKPOINT;
                 break;
-            case DO_TAP_CMD: // 攻丝模式不受倍率影响
+            case DO_TAP_CMD:  // 攻丝模式不受倍率影响
+            case DO_SKIP_CMD: // 跳转不受倍率影响
             case DO_DWELL_CMD:
             case DO_MSTB_CMD:
             default:
@@ -500,6 +551,7 @@ static void auto_execute_cmd(){
     case DO_MOVE_CMD:
     case DO_CHOP_CMD:
     case DO_TAP_CMD:
+    case DO_SKIP_CMD:
         auto_execute_pos_cmd();
         break;
     case DO_DWELL_CMD:
@@ -540,6 +592,40 @@ static void auto_update_stage(){
                 break;
             case BLOCK_PAUSED:
             case PROGRAM_WAIT:
+                if (rt_data->sys_state[SYS_IS_MAC_LOCK_ON]) rt_data->sys_state[SYS_IS_MAC_LOCK_READY] = true;
+                else rt_data->sys_state[SYS_IS_MAC_LOCK_READY] = false;
+                break;
+            default:
+                break;
+            }
+        }
+        break;
+    case DO_SKIP_CMD:
+        if(auto_pos_cmd_is_finished()) {
+            cycle_tp->running_stage = cycle_tp->target_stage;
+            switch (cycle_tp->target_stage)
+            {
+            case BLOCK_STOP_2_END:
+                queue_pop(plan_queue);
+                rt_set_sys_state(SYS_IS_STOP_SKIP, false);
+                // 更新宏变量轴地址
+                LOG(LOG_LEVEL_DEBUG, "探针到位 %f %f %f", rt_data->axis_data[AXIS_X].motor_cmd_pos, rt_data->axis_data[AXIS_Y].motor_cmd_pos, rt_data->axis_data[AXIS_Z].motor_cmd_pos);
+                cycle_tp->exec_cmd = DO_NULL_CMD;
+                cycle_tp->target_stage = PROGRAM_WAIT;
+                if (rt_data->sys_state[SYS_IS_SINGLE_BLOCK]) {
+                    cycle_tp->exec_state = EXEC_PAUSING;
+                }
+                if (rt_data->sys_state[SYS_IS_MAC_LOCK_ON]) rt_data->sys_state[SYS_IS_MAC_LOCK_READY] = true;
+                else rt_data->sys_state[SYS_IS_MAC_LOCK_READY] = false;
+                break;
+            case BLOCK_PAUSED:
+            case PROGRAM_WAIT:
+                if(rt_data->sys_state[SYS_IS_STOP_SKIP]){
+                    queue_pop(plan_queue);
+                    rt_set_sys_state(SYS_IS_STOP_SKIP, false);
+                    // 更新宏变量轴地址
+                    LOG(LOG_LEVEL_DEBUG, "获取到外部跳转信号后减速停止 %f %f %f", rt_data->axis_data[AXIS_X].motor_cmd_pos, rt_data->axis_data[AXIS_Y].motor_cmd_pos, rt_data->axis_data[AXIS_Z].motor_cmd_pos);
+                }
                 if (rt_data->sys_state[SYS_IS_MAC_LOCK_ON]) rt_data->sys_state[SYS_IS_MAC_LOCK_READY] = true;
                 else rt_data->sys_state[SYS_IS_MAC_LOCK_READY] = false;
                 break;
@@ -664,6 +750,7 @@ static void auto_get_next_cmd(){
     case PMC_MODE_ARRIVE_CHECK:
     case PMC_MODE_TAP:
     case PMC_MODE_TAP_RETURE:
+    case PMC_MODE_STOPSKIP:
         auto_get_pos_cmd();
         break;
     case PMC_MODE_PAUSE:
@@ -705,6 +792,7 @@ static void auto_update_cur_cmd(){
     case PMC_MODE_ARRIVE_CHECK:
     case PMC_MODE_TAP:
     case PMC_MODE_TAP_RETURE:
+    case PMC_MODE_STOPSKIP:
         auto_update_pos_cmd();
         break;
     case PMC_MODE_PAUSE:

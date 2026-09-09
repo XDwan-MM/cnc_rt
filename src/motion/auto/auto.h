@@ -48,6 +48,7 @@ typedef enum{
     DO_MSTB_CMD,       // MST指令
     DO_HOME_CMD,       // 回参考点 G27 G28 G29 G30
     DO_TAP_CMD,        // 攻丝指令 G73 G84
+    DO_SKIP_CMD,       // 跳转指令 G31
 }CMD_TYPE;
 
 typedef enum{
