@@ -30,6 +30,7 @@ do { \
 } \
 } while (0)
 
+// 全局变量定义
 int master_error_code = 0;
 bool reset_sem = 0;
 static char* drv_names[] = {"主","X","Y","Z"};
