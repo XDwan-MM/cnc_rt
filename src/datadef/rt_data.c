@@ -120,22 +120,21 @@ static void rt_reset_chan_data()
 {
     for (int i = 0; i < SYS_CHAN_NUM; i++)
     {
-        rt_data->chan_data[i].dryrun_spd = CONV_MM_MIN_TO_MM_S(par_chan[i][PAR_CH_DRYRUN_SPD].value.val_real); // 空运行进给速度 (HMI unit: mm/min | 实时 单位：mm/s)
-        rt_data->chan_data[i].vplan_mode = par_chan[i][PAR_CH_VPLAN_MODE].value.val_uint;                      // 速度规划模式 0:T_SHAPE
-        rt_data->chan_data[i].max_tang_acc = par_chan[i][PAR_CH_MAX_ECEN_ACC].value.val_real;                  // 最大向心加速度
-        rt_data->chan_data[i].lookahead_num = par_chan[i][PAR_CH_LOOKAHEAD_NUM].value.val_uint;                // 速度规划前瞻段数
-        rt_data->chan_data[i].path_tolerance = par_chan[i][PAR_CH_PATH_TOLERANCE].value.val_real;              // 轨迹轮廓允差
-        rt_data->chan_data[i].corner_dec_factor = par_chan[i][PAR_CH_CONER_DEC_FACTOR].value.val_int;          // 拐角降速比例因子 ("def": "100", "min": "1", "max": "200")
-        // 外部减速功能暂时手动赋值
-        rt_data->chan_data[i].ex_dec2_enable = false;
-        rt_data->chan_data[i].ex_dec3_enable = false;
-        rt_data->chan_data[i].ex_dec4_enable = false;
-        rt_data->chan_data[i].ex_dec5_enable = false;
-        rt_data->chan_data[i].cut_ex_dec1_vel = 500.0;
-        rt_data->chan_data[i].cut_ex_dec2_vel = 400.0;
-        rt_data->chan_data[i].cut_ex_dec3_vel = 300.0;
-        rt_data->chan_data[i].cut_ex_dec4_vel = 200.0;
-        rt_data->chan_data[i].cut_ex_dec5_vel = 100.0;
+        rt_data->chan_data[i].dryrun_spd = CONV_MM_MIN_TO_MM_S(par_chan[i][PAR_CH_DRYRUN_SPD].value.val_real);           // 空运行进给速度 (HMI unit: mm/min | 实时 单位：mm/s)
+        rt_data->chan_data[i].vplan_mode = par_chan[i][PAR_CH_VPLAN_MODE].value.val_uint;                                // 速度规划模式 0:T_SHAPE
+        rt_data->chan_data[i].max_tang_acc = par_chan[i][PAR_CH_MAX_ECEN_ACC].value.val_real;                            // 最大向心加速度
+        rt_data->chan_data[i].lookahead_num = par_chan[i][PAR_CH_LOOKAHEAD_NUM].value.val_uint;                          // 速度规划前瞻段数
+        rt_data->chan_data[i].path_tolerance = par_chan[i][PAR_CH_PATH_TOLERANCE].value.val_real;                        // 轨迹轮廓允差
+        rt_data->chan_data[i].corner_dec_factor = par_chan[i][PAR_CH_CONER_DEC_FACTOR].value.val_int;                    // 拐角降速比例因子 ("def": "100", "min": "1", "max": "200")
+        rt_data->chan_data[i].ex_dec2_enable = par_chan[i][PAR_CH_EX_DEC2_ENABLE].value.val_bool;                        // 是否开启外部减速功能2
+        rt_data->chan_data[i].ex_dec3_enable = par_chan[i][PAR_CH_EX_DEC3_ENABLE].value.val_bool;                        // 是否开启外部减速功能3
+        rt_data->chan_data[i].ex_dec4_enable = par_chan[i][PAR_CH_EX_DEC4_ENABLE].value.val_bool;                        // 是否开启外部减速功能4
+        rt_data->chan_data[i].ex_dec5_enable = par_chan[i][PAR_CH_EX_DEC5_ENABLE].value.val_bool;                        // 是否开启外部减速功能5
+        rt_data->chan_data[i].cut_ex_dec1_vel = CONV_MM_MIN_TO_MM_S(par_chan[i][PAR_CH_CUT_EX_DEC1_VEL].value.val_real); // 外部减速1对切削进给的减速速度(mm/min)
+        rt_data->chan_data[i].cut_ex_dec2_vel = CONV_MM_MIN_TO_MM_S(par_chan[i][PAR_CH_CUT_EX_DEC2_VEL].value.val_real); // 外部减速2对切削进给的减速速度(mm/min)
+        rt_data->chan_data[i].cut_ex_dec3_vel = CONV_MM_MIN_TO_MM_S(par_chan[i][PAR_CH_CUT_EX_DEC3_VEL].value.val_real); // 外部减速3对切削进给的减速速度(mm/min)
+        rt_data->chan_data[i].cut_ex_dec4_vel = CONV_MM_MIN_TO_MM_S(par_chan[i][PAR_CH_CUT_EX_DEC4_VEL].value.val_real); // 外部减速4对切削进给的减速速度(mm/min)
+        rt_data->chan_data[i].cut_ex_dec5_vel = CONV_MM_MIN_TO_MM_S(par_chan[i][PAR_CH_CUT_EX_DEC5_VEL].value.val_real); // 外部减速5对切削进给的减速速度(mm/min)
     }
 }
 
@@ -168,14 +167,13 @@ static void rt_reset_axis_data()
         rt_data->axis_data[i].plmt2 = par_axis[i][PAR_AX_PLMT2].value.val_real;                                          // 轴第二级正软极限
         rt_data->axis_data[i].nlmt2 = par_axis[i][PAR_AX_NLMT2].value.val_real;                                          // 轴第二级负软极限
         rt_data->axis_data[i].spdl_max_speed = par_axis[i][PAR_SPDL_MAX_SPEED].value.val_real;                           // 主轴最大转速 (HMI unit: r/min)
-        // 外部减速功能暂时手动赋值
-        rt_data->axis_data[i].ex_dec_enable_pos_cut = true;                                                              // 外部减速信号对正向切削进给是否生效
-        rt_data->axis_data[i].ex_dec_enable_neg_cut = true;                                                              // 外部减速信号对负向切削进给是否生效
-        rt_data->axis_data[i].rpd_ex_dec1_vel = 10.0;                                                                    // 快移外部减速1的减速速度
-        rt_data->axis_data[i].rpd_ex_dec2_vel = 9.0;                                                                     // 快移外部减速2的减速速度
-        rt_data->axis_data[i].rpd_ex_dec3_vel = 8.0;                                                                     // 快移外部减速3的减速速度
-        rt_data->axis_data[i].rpd_ex_dec4_vel = 7.0;                                                                     // 快移外部减速4的减速速度
-        rt_data->axis_data[i].rpd_ex_dec5_vel = 6.0;                                                                     // 快移外部减速5的减速速度
+        rt_data->axis_data[i].ex_dec_enable_pos_cut = par_axis[i][PAR_AX_EX_DEC_ENABLE_POS_CUT].value.val_bool;          // 外部减速信号对正向切削进给是否生效
+        rt_data->axis_data[i].ex_dec_enable_neg_cut = par_axis[i][PAR_AX_EX_DEC_ENABLE_NEG_CUT].value.val_bool;          // 外部减速信号对负向切削进给是否生效
+        rt_data->axis_data[i].rpd_ex_dec1_vel = CONV_MM_MIN_TO_MM_S(par_axis[i][PAR_AX_RPD_EX_DEC1_VEL].value.val_real); // 快移外部减速1的减速速度(mm/min)
+        rt_data->axis_data[i].rpd_ex_dec2_vel = CONV_MM_MIN_TO_MM_S(par_axis[i][PAR_AX_RPD_EX_DEC2_VEL].value.val_real); // 快移外部减速2的减速速度(mm/min)
+        rt_data->axis_data[i].rpd_ex_dec3_vel = CONV_MM_MIN_TO_MM_S(par_axis[i][PAR_AX_RPD_EX_DEC3_VEL].value.val_real); // 快移外部减速3的减速速度(mm/min)
+        rt_data->axis_data[i].rpd_ex_dec4_vel = CONV_MM_MIN_TO_MM_S(par_axis[i][PAR_AX_RPD_EX_DEC4_VEL].value.val_real); // 快移外部减速4的减速速度(mm/min)
+        rt_data->axis_data[i].rpd_ex_dec5_vel = CONV_MM_MIN_TO_MM_S(par_axis[i][PAR_AX_RPD_EX_DEC5_VEL].value.val_real); // 快移外部减速5的减速速度(mm/min)
     }
 }
 
@@ -187,8 +185,7 @@ static void rt_reboot_chan_data()
 {
     for (int i = 0; i < SYS_CHAN_NUM; i++)
     {
-        // 外部减速功能暂时手动赋值
-        rt_data->chan_data[i].ex_dec_enable = false; // 是否开启外部减速功能
+        rt_data->chan_data[i].ex_dec_enable = par_chan[i][PAR_CH_EX_DEC_ENABLE].value.val_bool; // 是否开启外部减速功能
     }
 }
 

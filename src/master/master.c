@@ -30,6 +30,7 @@ do { \
 } \
 } while (0)
 
+// 全局变量定义
 int master_error_code = 0;
 bool reset_sem = 0;
 static char* drv_names[] = {"主","X","Y","Z"};
@@ -131,6 +132,7 @@ void Master_Run()
                 CHECK_FUNC(GM_TxPdoEntry_Read(g_device_data[i + 2].slave.statusWord, &statis[i] , 2));// 获取状态字
                 if((statis[i] & 0x0f) == 0x08)
                 {
+                    // 清除错误
                     CHECK_FUNC(GM_RxPdoEntry_Write(g_device_data[i + 2].slave.Control_word, 0x80));
                 }
                 else if(dri_manager.drivers[i]->state == DRV_STATE_FAULT && (statis[i] & 0x0f) != 0x08)
