@@ -211,11 +211,14 @@ mr_summary:
     - *tag-change
     - tar -cf cnc_plc_$SUM_B.tar bin config lib .git version.sh run.sh
     - curl -uly_35b717:AP38qFMP2jfnFYm5gav4KV2EyXV -T cnc_plc_$SUM_B.tar "http://10.2.30.32:8081/artifactory/hmi_cnc/${CI_COMMIT_REF_NAME}/"
-  only:
-    - triggers 
+  rules:
+    # 若为CNC仓库触发则屏蔽
+    - if: '$TRIGGER_TYPE != "CNC" && $CI_PIPELINE_SOURCE == "trigger"'
+      when: on_success
+    - when: never
 
 一级仓库触发生成固件:
-  stage: deploy
+  stage: build
   tags:
     - hmi_v3
   script:
@@ -245,5 +248,11 @@ mr_summary:
     - *generate-tag
     - tar -cf cnc_rt_$Version.$tag.tar bin config lib .git version.sh run.sh
     - curl -uly_35b717:AP38qFMP2jfnFYm5gav4KV2EyXV -T cnc_rt_$Version.$tag.tar "http://10.2.30.32:8081/artifactory/hmi_cnc/${CI_COMMIT_REF_NAME}/"
-  only:
-    - triggers
+    # 5.传递本次编译固件版本信息，用于一级仓库定位
+    - echo "cnc_rt_${Version}.${tag}.tar" > rt.txt
+    - curl -uly_35b717:AP38qFMP2jfnFYm5gav4KV2EyXV -T rt.txt "http://10.2.30.32:8081/artifactory/source/ly/tag_bash/cnc/"
+  rules:
+    # 仅一级仓库CNC可远程触发
+    - if: '$TRIGGER_TYPE == "CNC" && $CI_PIPELINE_SOURCE == "trigger"'
+      when: on_success
+    - when: never
