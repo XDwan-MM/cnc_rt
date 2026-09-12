@@ -7,7 +7,7 @@
 #include <hmisysapi.h>
 #include "alarmapi.h"
 #include "reset.h"
-#include "homing.h"
+#include "ref.h"
 
 static void plc_output_alarm();
 static void plc_output_mode();

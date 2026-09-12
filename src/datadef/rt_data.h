@@ -217,6 +217,7 @@ bool rt_get_sys_state(SysStateIndex state);
 void rt_set_chan_state(int chan_index, ChanStateIndex state, bool value);
 bool rt_get_chan_state(int chan_index, ChanStateIndex state);
 void rt_set_zero_vel_params();
+void rt_set_axis_zero_vel_params(AXIS_TYPE axis_type);
 
 #ifdef __cplusplus
 }

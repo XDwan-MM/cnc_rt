@@ -70,7 +70,7 @@ PLAN_QUEUE *parser_queue;       // 译码队列
 PLAN_QUEUE *pretreat_queue;     // 预处理队列
 PLAN_QUEUE *plan_queue;         // 插补队列
 COORD_TP *cycle_tp;             // 循环轨迹规划
-HOMING_TP *homing_tp;           // 回零轨迹规划
+REF_TP *ref_tp;                 // 回零轨迹规划
 
 // 读写共享内存锁（路径规划读时加锁）
 pthread_mutex_t shm_mutex;
@@ -136,7 +136,7 @@ static GNC_RES shm_par_init(){
 
 static GNC_RES tp_init(){
     GNC_RES res = GNC_OPERATOR_SUCCESS;
-    res = homing_tp_init();
+    res = ref_tp_init();
     if(res != GNC_OPERATOR_SUCCESS) return res;
     res = cycle_tp_init();
     if(res != GNC_OPERATOR_SUCCESS) return res;
@@ -155,7 +155,7 @@ static GNC_RES tp_init(){
 }
 
 GNC_RES tp_reset(){
-    homing_tp_reset();
+    ref_tp_reset();
     cycle_tp_reset();
     queue_reset(parser_queue);
     queue_reset(pretreat_queue);
@@ -189,7 +189,7 @@ GNC_RES rt_global_init(){
         rt_global_delete();
         return res;
     }
-    reset_data_init();
+    res = reset_data_init();
     if(res != GNC_OPERATOR_SUCCESS){
         rt_global_delete();
         return res;
@@ -224,7 +224,7 @@ GNC_RES rt_global_delete(){
         plan_queue = NULL;
     }
     cycle_tp_delete();
-    homing_tp_delete();
+    ref_tp_delete();
     if(rt_data != NULL){
         pthread_mutex_destroy(&rt_data->mutex);
         free(rt_data);
