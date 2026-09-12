@@ -304,7 +304,7 @@ static GNC_RES parser_handle_null(NcItpState *itp_state, int *line_no){
     // 行号
     plan_block.line_number = *line_no;
     plan_block.is_breakpoint = false;
-    LOG(LOG_LEVEL_DEBUG, "空包: no %d mode %d type %d", plan_block.line_number, plan_block.mode, plan_block.type);
+    // LOG(LOG_LEVEL_DEBUG, "空包: no %d mode %d type %d", plan_block.line_number, plan_block.mode, plan_block.type);
     // 加入队列
     if(queue_is_full(parser_queue)){
         return GNC_DATA_FULL;
@@ -404,7 +404,7 @@ static GNC_RES parser_handle_gcode(pmc_data* motion_data, NcItpState *itp_state,
     // if(plan_block.type == CIRCLE_CW || plan_block.type == CIRCLE_CCW ){
     //     LOG(LOG_LEVEL_DEBUG, "center pos %f %f %f no %d", plan_block.circular_data.center_pos.x, plan_block.circular_data.center_pos.y, plan_block.circular_data.center_pos.z, plan_block.line_number);  
     // }
-    LOG(LOG_LEVEL_DEBUG, " no %d mode %d type:%d end pos %f %f %f", plan_block.line_number, plan_block.mode, plan_block.type, motion_data->position.x, motion_data->position.y, motion_data->position.z);
+    // LOG(LOG_LEVEL_DEBUG, " no %d mode %d type:%d end pos %f %f %f", plan_block.line_number, plan_block.mode, plan_block.type, motion_data->position.x, motion_data->position.y, motion_data->position.z);
     // ======= 测试 ===========
     queue_push(parser_queue, &plan_block);
     if(plan_block.mode == pmc_mode::PMC_MODE_STOPSKIP) return GNC_PARSER_WAIT;
