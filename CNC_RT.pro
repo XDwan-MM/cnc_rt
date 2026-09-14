@@ -110,6 +110,7 @@ HEADERS += \
     src/hal/hal_io.h \
     src/hal/egear_ratio.h \
     src/motion/auto/auto.h \
+    src/motion/auto/trace_publisher.h \
     src/motion/auto/trajplan/auto_gcode.h \
     src/motion/auto/trajplan/auto_mst.h \
     src/motion/auto/interp/interpolation.h \
@@ -160,6 +161,7 @@ SOURCES += \
     src/hal/hal_io.c \
     src/hal/egear_ratio.c \
     src/motion/auto/auto.c \
+    src/motion/auto/trace_publisher.c \
     src/motion/auto/trajplan/auto_gcode.c \
     src/motion/auto/trajplan/auto_mst.c \
     src/motion/auto/interp/interpolation.c \

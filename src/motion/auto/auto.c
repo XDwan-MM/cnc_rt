@@ -7,6 +7,7 @@
 #include <hmisysapi.h> 
 #include <alarmapi.h>
 #include "stored_stroke_check.h"
+#include "trace_publisher.h"
 
 static void auto_check_error_line();
 static void auto_update_state();
@@ -24,6 +25,7 @@ static void auto_handle_alarm();
 static void auto_update_var();
 static bool auto_is_program_end();
 static bool auto_check_program_end();
+static void auto_pop_current_block();
 
 void handle_auto_cmd(){
     // 更新状态
@@ -34,6 +36,7 @@ void handle_auto_cmd(){
     auto_update_cmd();
     // 执行指令
     auto_execute_cmd();
+    trace_publisher_publish_current(0);
     // 更新阶段
     auto_update_stage();
     // 检查程序结束
@@ -523,10 +526,10 @@ static void auto_update_stage(){
             switch (cycle_tp->target_stage)
             {
             case BLOCK_ARRIVE_2_END:
-                queue_pop(plan_queue);
+                auto_pop_current_block();
                 break;
             case BLOCK_STOP_2_END:
-                queue_pop(plan_queue);
+                auto_pop_current_block();
                 cycle_tp->exec_cmd = DO_NULL_CMD;
                 cycle_tp->target_stage = PROGRAM_WAIT;
                 if (rt_data->sys_state[SYS_IS_SINGLE_BLOCK]) {
@@ -553,10 +556,10 @@ static void auto_update_stage(){
             switch (cycle_tp->target_stage)
             {
             case BLOCK_ARRIVE_2_END:
-                queue_pop(plan_queue);
+                auto_pop_current_block();
                 break;
             case BLOCK_STOP_2_END:
-                queue_pop(plan_queue);
+                auto_pop_current_block();
                 cycle_tp->exec_cmd = DO_NULL_CMD;
                 cycle_tp->target_stage = PROGRAM_WAIT;
                 if (rt_data->sys_state[SYS_IS_SINGLE_BLOCK]) {
@@ -576,10 +579,10 @@ static void auto_update_stage(){
             switch (cycle_tp->target_stage)
             {
             case BLOCK_ARRIVE_2_END:
-                queue_pop(plan_queue);
+                auto_pop_current_block();
                 break;
             case BLOCK_STOP_2_END:
-                queue_pop(plan_queue);
+                auto_pop_current_block();
                 cycle_tp->exec_cmd = DO_NULL_CMD;
                 cycle_tp->target_stage = PROGRAM_WAIT;
                 if (rt_data->sys_state[SYS_IS_SINGLE_BLOCK]) {
@@ -599,7 +602,7 @@ static void auto_update_stage(){
         switch (cycle_tp->target_stage)
         {
         case BLOCK_STOP_2_END:
-            queue_pop(plan_queue);
+            auto_pop_current_block();
             cycle_tp->exec_cmd = DO_NULL_CMD;
             cycle_tp->target_stage = PROGRAM_WAIT;
             if (rt_data->sys_state[SYS_IS_SINGLE_BLOCK]) {
@@ -649,6 +652,7 @@ static void auto_get_next_cmd(){
     if(queue_is_empty(plan_queue)){ 
         cycle_tp->exec_cmd = DO_NULL_CMD;
         cycle_tp->target_stage = PROGRAM_WAIT;
+        trace_publisher_reset(0);
         return;
     };
     cycle_tp->plan_block = queue_peak(plan_queue);
@@ -674,6 +678,11 @@ static void auto_get_next_cmd(){
     default:
         cycle_tp->exec_cmd = DO_NULL_CMD;
     }
+    trace_publisher_activate(0,
+                             cycle_tp->plan_block,
+                             cycle_tp->exec_cmd == DO_MOVE_CMD ||
+                             cycle_tp->exec_cmd == DO_CHOP_CMD ||
+                             cycle_tp->exec_cmd == DO_TAP_CMD);
     auto_update_var();
     rerun_data_store(cycle_tp->plan_block);
 }
@@ -722,6 +731,7 @@ static void auto_start_run(){
     queue_reset(parser_queue);
     cycle_tp_reset();
     rt_set_zero_vel_params();
+    trace_publisher_begin_program(0);
     setVarChanInt(0, VAR_CHAN_IS_RUNNING, 1, 0);
     setVarChanInt(0, VAR_CHAN_IS_MOVING, 1, 0);
     setVarChanInt(0, VAR_CHAN_IS_PROGEND, 0, 0);
@@ -758,6 +768,7 @@ static void auto_reset_run(){
     queue_reset(pretreat_queue);
     queue_reset(parser_queue);
     cycle_tp_reset();
+    trace_publisher_reset(0);
     rt_set_chan_state(0, CHAN_IS_PARSER_RESET, true);
     rt_set_chan_state(0, CHAN_IS_PARSER_RERUN, false);
     rt_set_chan_state(0, CHAN_IS_PARSERING, false);
@@ -793,6 +804,12 @@ static void auto_update_var(){
     default:
         break;
     }
+}
+
+static void auto_pop_current_block()
+{
+    trace_publisher_complete(0);
+    queue_pop(plan_queue);
 }
 
 static GNC_RES cycle_tp_pos_cmd_data_init(POS_CMD_DATA* pos_cmd_data){
