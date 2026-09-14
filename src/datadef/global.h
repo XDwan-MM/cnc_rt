@@ -77,7 +77,7 @@ extern int update_pos_flag;                    // 理论位置读取驱动器位
 extern int rc;
 extern PdoWarn PdoWarnInfo; //pdo警告信息结构体
 extern int slavernum;
-extern uint16_t* statis;
+extern uint16_t* status;
 extern uint32_t* pos;
 extern uint32_t* pos_cmd;
 extern uint16_t* error_code;

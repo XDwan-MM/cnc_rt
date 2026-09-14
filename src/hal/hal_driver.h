@@ -1,18 +1,19 @@
 #ifndef HAL_DRIVER_H
 #define HAL_DRIVER_H
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 #include <stdint.h>
 #include <stdbool.h>
-#include <GreeMasterAPI.h>
 
 // 常量定义
 #define MAX_DRIVERS 5
 
-// 返回值定义
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+#include <GreeMasterAPI.h>
+
+// 返回值定义（驱动器返回错误码枚举）
 typedef enum {
     HAL_DRIVER_SUCCESS = 0,
     HAL_DRIVER_ERR_INVALID_PARAM, //传递给函数的参数无效或不合法
@@ -27,7 +28,7 @@ typedef enum {
     DRV_MODE_DISABLED = 0,
     DRV_MODE_CSP,    // 周期性同步位置模式 0x08
     DRV_MODE_CSV,    // 周期性同步速度模式 0x09
-    DRV_MODE_CST,    // 周期性同步转矩模式
+    DRV_MODE_CST,    // 周期性同步转矩模式 0x0A
     DRV_MODE_PP,     // 轮廓位置模式（脉冲方向）
     // ... 其他模式
 } drv_mode_t;
@@ -39,7 +40,7 @@ typedef enum {
     DRV_STATE_READY_TO_SWITCHED_ON,
     DRV_STATE_SWITCHED_ON,
     DRV_STATE_OPERATION_ENABLED,      // 上使能 0F
-    DRV_STATE_FAULT,                  // 错误（6041状态字低8位为08）
+    DRV_STATE_FAULT,                  // 错误（6041状态字低8位为08：表示驱动器有错误）
     // ... 其他状态
 } drv_state_t;
 

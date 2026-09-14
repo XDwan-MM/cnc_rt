@@ -76,6 +76,7 @@ void plc_g_signal_scan_cycle(void)
     {
         // 急停按键拍下
         rt_set_sys_state(SYS_ESTOP_INPUT, true);
+        // 本周期急停8.4为0，上周期急停8.4为1，急停拍下
         if (is_first_scan || GET_BIT(last_g.g_regs[8], 4))
         {
             LOG(LOG_LEVEL_INFO, "扫描到急停G8.4信号为0, 急停拍下");

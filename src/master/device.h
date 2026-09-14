@@ -172,7 +172,7 @@ typedef struct {
 }io_addr;
 
 typedef struct {
-    unsigned short statis;
+    unsigned short status;
     unsigned short control;
     int tar_pos;
     int actrul_pos;

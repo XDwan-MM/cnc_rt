@@ -21,7 +21,6 @@ hal_driver_t x_axis_driver;
 hal_driver_t y_axis_driver;
 hal_driver_t z_axis_driver;
 
-
 // 初始化驱动器管理器
 hal_retcode_t Hal_Driver_Manager_Init(void)
 {
@@ -34,7 +33,7 @@ hal_retcode_t Hal_Driver_Manager_Init(void)
     return HAL_DRIVER_SUCCESS;
 }
 // 注册驱动器到管理器
-hal_retcode_t Hal_Driver_Register(hal_driver_t* drv)
+hal_retcode_t Hal_Driver_Register(hal_driver_t *drv)
 {
     if (!dri_manager.initialized || drv == NULL)
     {
@@ -62,53 +61,46 @@ hal_retcode_t Hal_Driver_Register(hal_driver_t* drv)
 }
 
 // 获取已注册的驱动器数量
-uint8_t Hal_Driver_Get_Count(void)
-{
-    return dri_manager.count;
-}
+uint8_t Hal_Driver_Get_Count(void) { return dri_manager.count; }
 
-// 初始化驱动器
+// 初始化所有驱动器
 hal_retcode_t Hal_Driver_Array_Init(void)
 {
-    for (int i = 0; i < MAX_DRIVERS; i++)
+    hal_driver_t* drivers[] = {&spindle, &x_axis_driver, &y_axis_driver, &z_axis_driver};
+    const bool physical[] = {physical_sp, physical_x, physical_y, physical_z};
+    const uint16_t axis_ids[] = {id_sp, id_x, id_y, id_z};
+    const size_t driver_count = sizeof(drivers) / sizeof(drivers[0]);
+
+    if (!dri_manager.initialized)
     {
-        if(physical_sp)
-        {
-            Hal_Driver_Register(&spindle);
-            spindle.axis_id = id_sp;//xml对应值
-            spindle.initialized = true;
-            spindle.state = DRV_STATE_NOT_READY;
-            spindle.mode = DRV_MODE_DISABLED;
-        }
-        if(physical_x)
-        {
-            Hal_Driver_Register(&x_axis_driver);
-            x_axis_driver.axis_id = id_x;//xml对应值
-            x_axis_driver.initialized = true;
-            x_axis_driver.state = DRV_STATE_NOT_READY;
-            x_axis_driver.mode = DRV_MODE_DISABLED;
-        }
-        if(physical_y)
-        {
-            Hal_Driver_Register(&y_axis_driver);
-            y_axis_driver.axis_id = id_y;//xml对应值
-            y_axis_driver.initialized = true;
-            y_axis_driver.state = DRV_STATE_NOT_READY;
-            y_axis_driver.mode = DRV_MODE_DISABLED;
-        }
-        if(physical_z)
-        {
-            Hal_Driver_Register(&z_axis_driver);
-            z_axis_driver.axis_id = id_z;//xml对应值
-            z_axis_driver.initialized = true;
-            z_axis_driver.state = DRV_STATE_NOT_READY;
-            z_axis_driver.mode = DRV_MODE_DISABLED;
-        }
+        return HAL_DRIVER_ERR_INVALID_PARAM;
     }
+
+    for (size_t i = 0; i < driver_count; i++)
+    {
+        hal_retcode_t result;
+
+        if (!physical[i])
+        {
+            continue;
+        }
+
+        result = Hal_Driver_Register(drivers[i]);
+        if (result != HAL_DRIVER_SUCCESS)
+        {
+            return result;
+        }
+
+        drivers[i]->axis_id = axis_ids[i];
+        drivers[i]->initialized = true;
+        drivers[i]->state = DRV_STATE_NOT_READY;
+        drivers[i]->mode = DRV_MODE_DISABLED;
+    }
+
     return HAL_DRIVER_SUCCESS;
 }
 
-hal_retcode_t Hal_Driver_Set_Target_Pos(hal_driver_t* drv, int32_t target_pos)
+hal_retcode_t Hal_Driver_Set_Target_Pos(hal_driver_t *drv, int32_t target_pos)
 {
     if (drv == NULL)
     {
@@ -118,7 +110,7 @@ hal_retcode_t Hal_Driver_Set_Target_Pos(hal_driver_t* drv, int32_t target_pos)
     return HAL_DRIVER_SUCCESS;
 }
 
-hal_retcode_t Hal_Driver_Get_Actual_Pos(hal_driver_t* drv, int32_t* actual_pos)
+hal_retcode_t Hal_Driver_Get_Actual_Pos(hal_driver_t *drv, int32_t *actual_pos)
 {
     if (drv == NULL || actual_pos == NULL)
     {
@@ -127,7 +119,7 @@ hal_retcode_t Hal_Driver_Get_Actual_Pos(hal_driver_t* drv, int32_t* actual_pos)
     *actual_pos = drv->actual_pos;
     return HAL_DRIVER_SUCCESS;
 }
-hal_retcode_t Hal_Driver_Set_Target_Vel(hal_driver_t* drv, int32_t target_vel)
+hal_retcode_t Hal_Driver_Set_Target_Vel(hal_driver_t *drv, int32_t target_vel)
 {
     if (drv == NULL)
     {
@@ -137,7 +129,7 @@ hal_retcode_t Hal_Driver_Set_Target_Vel(hal_driver_t* drv, int32_t target_vel)
     return HAL_DRIVER_SUCCESS;
 }
 
-hal_retcode_t Hal_Driver_Get_Actual_Vel(hal_driver_t* drv, int32_t* actual_vel)
+hal_retcode_t Hal_Driver_Get_Actual_Vel(hal_driver_t *drv, int32_t *actual_vel)
 {
     if (drv == NULL || actual_vel == NULL)
     {
@@ -146,7 +138,7 @@ hal_retcode_t Hal_Driver_Get_Actual_Vel(hal_driver_t* drv, int32_t* actual_vel)
     *actual_vel = drv->actual_vel;
     return HAL_DRIVER_SUCCESS;
 }
-hal_retcode_t Hal_Driver_Set_Target_Tor(hal_driver_t* drv, int16_t target_torque)
+hal_retcode_t Hal_Driver_Set_Target_Tor(hal_driver_t *drv, int16_t target_torque)
 {
     if (drv == NULL)
     {
@@ -156,7 +148,7 @@ hal_retcode_t Hal_Driver_Set_Target_Tor(hal_driver_t* drv, int16_t target_torque
     return HAL_DRIVER_SUCCESS;
 }
 
-hal_retcode_t Hal_Driver_Get_Actual_Tor(hal_driver_t* drv, int16_t* actual_torque)
+hal_retcode_t Hal_Driver_Get_Actual_Tor(hal_driver_t *drv, int16_t *actual_torque)
 {
     if (drv == NULL || actual_torque == NULL)
     {
@@ -165,16 +157,16 @@ hal_retcode_t Hal_Driver_Get_Actual_Tor(hal_driver_t* drv, int16_t* actual_torqu
     *actual_torque = drv->actual_torque;
     return HAL_DRIVER_SUCCESS;
 }
-bool Hal_Driver_Is_Initialized(hal_driver_t* drv)
+bool Hal_Driver_Is_Initialized(hal_driver_t *drv)
 {
-    if(drv ==NULL)
+    if (drv == NULL)
     {
         return false;
     }
     return drv->initialized;
 }
 
-hal_retcode_t Hal_Driver_Update(hal_driver_t* drv, bool read, bool write)
+hal_retcode_t Hal_Driver_Update(hal_driver_t *drv, bool read, bool write)
 {
     if (drv == NULL)
         return HAL_DRIVER_ERR_INVALID_PARAM;
@@ -208,7 +200,7 @@ hal_retcode_t Hal_Driver_Update_All(bool read, bool write)
     hal_retcode_t result = HAL_DRIVER_SUCCESS;
     for (int i = 0; i < dri_manager.count; i++)
     {
-        hal_driver_t* drv = dri_manager.drivers[i];
+        hal_driver_t *drv = dri_manager.drivers[i];
         if (drv != NULL)
         {
             result = Hal_Driver_Update(drv, read, write);
@@ -220,5 +212,3 @@ hal_retcode_t Hal_Driver_Update_All(bool read, bool write)
     }
     return result;
 }
-
-
