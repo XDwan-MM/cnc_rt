@@ -526,9 +526,11 @@ void ServoSampleSampler::sampleOne()
 
     CncServoSampleFrame frame{};
     const double cmdPos = rt_data->axis_data[_config.axis].mac_cmd_pos;
-    const double actPos = rt_data->axis_data[_config.axis].fb_pos_no_comp;
-    const double cmdVel = var_axis[_config.axis][VAR_AXIS_CMD_VEL].value.f * 60.0;
+    const double actPos = rt_data->axis_data[_config.axis].motor_act_pos;
+    const double cmdVel = var_axis[_config.axis][VAR_AXIS_CMD_VEL_EX].value.f * 60.0;
+    const double actVel = var_axis[_config.axis][VAR_AXIS_ACT_VEL_EX].value.f * 60.0;
     const double cmdCompositeVel = var_chan[0][VAR_CHAN_CMD_FEEDRATE].value.f;
+
     const double followErrUm = (cmdPos - actPos) * 1000.0;
     for (uint32_t i = 0; i < CNC_SERVO_SAMPLE_CHANNEL_COUNT; ++i) {
         if (!_config.channels[i].enabled) continue;
@@ -537,15 +539,16 @@ void ServoSampleSampler::sampleOne()
         const uint32_t axis = isExternalMotionConfig(_config)
             ? _config.channels[i].axis : _config.axis;
         const double channelCmdPos = rt_data->axis_data[axis].mac_cmd_pos;
-        const double channelActPos = rt_data->axis_data[axis].fb_pos_no_comp;
-        const double channelCmdVel = var_axis[axis][VAR_AXIS_CMD_VEL].value.f * 60.0;
+        const double channelActPos = rt_data->axis_data[axis].motor_act_pos;
+        const double channelCmdVel = var_axis[axis][VAR_AXIS_CMD_VEL_EX].value.f * 60.0;
+        const double channelActVel = var_axis[axis][VAR_AXIS_ACT_VEL_EX].value.f * 60.0;
         const double channelFollowErrUm = (channelCmdPos - channelActPos) * 1000.0;
         switch (_config.channels[i].signalId) {
         case CNC_SERVO_SIGNAL_CMD_POS: frame.values[i] = channelCmdPos; break;
         case CNC_SERVO_SIGNAL_ACT_POS: frame.values[i] = channelActPos; break;
         case CNC_SERVO_SIGNAL_FOLLOW_ERR: frame.values[i] = channelFollowErrUm; break;
         case CNC_SERVO_SIGNAL_CMD_VEL: frame.values[i] = channelCmdVel; break;
-        case CNC_SERVO_SIGNAL_ACT_VEL: frame.values[i] = _actualVelocityMmPerMin; break;
+        case CNC_SERVO_SIGNAL_ACT_VEL: frame.values[i] = channelActVel; break;
         case CNC_SERVO_SIGNAL_CMD_COMPOSITE_VEL: frame.values[i] = cmdCompositeVel; break;
         case CNC_SERVO_SIGNAL_ACT_COMPOSITE_VEL:
             frame.values[i] = _actualCompositeVelocityMmPerMin;
