@@ -15,7 +15,7 @@
 #include "interpolation.h"
 #include "stored_stroke_check.h"
 #include <alarmapi.h>
-#include "homing.h"
+#include "ref.h"
 
 static void auto_cal_target_vel();
 static void auto_look_ahead();

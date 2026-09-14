@@ -9,7 +9,7 @@
 #include "global.h"
 #include "handwheel.h"
 #include "hmisysapi.h"
-#include "homing.h"
+#include "ref.h"
 #include "jog.h"
 #include "master.h"
 #include "parser.h"
@@ -128,11 +128,7 @@ static void chan_do_period()
 // 运动同步控制
 static void smx_do_period()
 {
-    // 刚性攻丝同步（进给 = 转速 × 螺距：F = S × Pitch）
-    // 主轴位置 Z = Pitch × (θ/360°)
-    // double z_vel = spl_data.current_angle * cycle_tp->plan_block->screw_data.screw_offset;
-    // rt_data->axis_data[AXIS_Z].wcs_cmd_pos_cur += z_vel * (double)par_ncu[PAR_NCU_CYCLE].value.val_uint /
-    // TIME_US_2_S;
+    // 刚性攻丝同步
 
     // 主轴同步
 
@@ -192,7 +188,7 @@ static void set_operating_mode()
         }
         break;
     case MODE_HOMING:
-        if (!var_chan[0][VAR_CHAN_IS_HOMING].value.i)
+        if (ref_tp[0].ref_state == REF_ABS_EXEC_IDLE && ref_tp[1].ref_state == REF_ABS_EXEC_IDLE && ref_tp[2].ref_state == REF_ABS_EXEC_IDLE)
         {
             rt_data->current_mode = rt_data->target_mode;
             rt_data->sys_state[SYS_IS_SWITCHING_MODE] = false;
@@ -249,7 +245,7 @@ static void get_cmd_pos()
         handle_auto_cmd();
         break;
     case MODE_HOMING: // 回零
-        handle_homing_cmd();
+        handle_ref_cmd();
         break;
     case MODE_JOG: // 点动
         handle_jog_cmd();
