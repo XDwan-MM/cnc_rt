@@ -527,8 +527,8 @@ void ServoSampleSampler::sampleOne()
     CncServoSampleFrame frame{};
     const double cmdPos = rt_data->axis_data[_config.axis].mac_cmd_pos;
     const double actPos = rt_data->axis_data[_config.axis].motor_act_pos;
-    const double cmdVel = var_axis[_config.axis][VAR_AXIS_CMD_VEL_EX].value.f * 60.0;
-    const double actVel = var_axis[_config.axis][VAR_AXIS_ACT_VEL_EX].value.f * 60.0;
+    const double cmdVel = var_axis[_config.axis][VAR_AXIS_CMD_VEL_EX].value.f;
+    const double actVel = var_axis[_config.axis][VAR_AXIS_ACT_VEL_EX].value.f;
     const double cmdCompositeVel = var_chan[0][VAR_CHAN_CMD_FEEDRATE].value.f;
 
     const double followErrUm = (cmdPos - actPos) * 1000.0;
@@ -540,8 +540,8 @@ void ServoSampleSampler::sampleOne()
             ? _config.channels[i].axis : _config.axis;
         const double channelCmdPos = rt_data->axis_data[axis].mac_cmd_pos;
         const double channelActPos = rt_data->axis_data[axis].motor_act_pos;
-        const double channelCmdVel = var_axis[axis][VAR_AXIS_CMD_VEL_EX].value.f * 60.0;
-        const double channelActVel = var_axis[axis][VAR_AXIS_ACT_VEL_EX].value.f * 60.0;
+        const double channelCmdVel = var_axis[axis][VAR_AXIS_CMD_VEL_EX].value.f;
+        const double channelActVel = var_axis[axis][VAR_AXIS_ACT_VEL_EX].value.f;
         const double channelFollowErrUm = (channelCmdPos - channelActPos) * 1000.0;
         switch (_config.channels[i].signalId) {
         case CNC_SERVO_SIGNAL_CMD_POS: frame.values[i] = channelCmdPos; break;
