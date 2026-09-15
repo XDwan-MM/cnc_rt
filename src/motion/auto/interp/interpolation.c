@@ -18,6 +18,7 @@ POS auto_cal_interp_pos(POS current_pos, double accum_distance){
         case LINE:
         case RIGID_TAP:
         case TAP_RETURN:
+        case PROBE:
             interp_pos = interpolate_line(current_block, accum_distance);
             break;
         case CIRCLE_CCW:
