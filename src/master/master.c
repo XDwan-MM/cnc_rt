@@ -353,6 +353,16 @@ void spindle_driver_set_position_mode()
     CHECK_FUNC(GM_RxPdoEntry_Write(g_device_data[DEV_ID_SPINDLE_DRIVER].slave.Modes_of_operation, 0x08));
 }
 
+// switch spindle mode
+void spindle_driver_switch_pos_mode()
+{
+    // 1 下使能
+    spindle_driver_servo_off();
+    // 2 切模式
+    spindle_driver_set_position_mode();
+    // 
+}
+
 static void Master_Receive(){
     slavernum = Hal_Driver_Get_Count();
     status = (uint16_t*)malloc(slavernum * sizeof(uint16_t));
