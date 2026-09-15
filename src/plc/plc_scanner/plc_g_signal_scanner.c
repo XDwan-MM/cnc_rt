@@ -509,6 +509,17 @@ void plc_g_signal_scan_cycle(void)
             }
         }
     }
+    /*跳过信号 G6.6 */
+    if (SIGNAL_RISING(curr_g.g_regs[6], last_g.g_regs[6], 6))
+    {
+        LOG(LOG_LEVEL_INFO, "扫描到G6.6 发生上升沿");
+        plc_dispatch_event(PLC_EV_MSG_ENANLE, STOP_SKIP, 1, 0, 0);
+    }
+    if (SIGNAL_FALLING(curr_g.g_regs[6], last_g.g_regs[6], 6))
+    {
+        LOG(LOG_LEVEL_INFO, "扫描到G6.6 发生下降沿");
+        plc_dispatch_event(PLC_EV_MSG_ENANLE, STOP_SKIP, 0, 0, 0);
+    }
 
     /*step3 更新快照供下一周期使用 */
     last_g = curr_g;
