@@ -652,6 +652,18 @@ static void task_handle_enable_event(PLC_EVENT *event_data)
             LOG(LOG_LEVEL_INFO, "处理单段关闭事件");
         }
         break;
+    case STOP_SKIP:
+        if (event_data->enable_payload.enable_state)
+        {
+            rt_data->nc_event = SYS_EVENT_STOP_SKIP_ON;
+            LOG(LOG_LEVEL_INFO, "处理跳转信号开启事件");
+        }
+        else
+        {
+            rt_data->nc_event = SYS_EVENT_STOP_SKIP_OFF;
+            LOG(LOG_LEVEL_INFO, "处理跳转信号关闭事件");
+        }
+        break;
     default:
         break;
     }
