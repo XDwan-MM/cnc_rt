@@ -54,6 +54,7 @@ typedef enum
     CHAN_IS_PARSERING,          // 解释器是否运行中 is_parsering
     CHAN_IS_PARSER_RERUN,       // 译码器是否运行中 is_parser_running
     CHAN_IS_FIRST_RUN,          // 是否为第一次运行 is_first_run
+    CHAN_IS_MOTION_SYNC,        // 等待运动完成同步握手
 } ChanStateIndex;
 
 typedef struct

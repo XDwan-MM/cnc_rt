@@ -609,6 +609,12 @@ static void auto_update_stage(){
                 queue_pop(plan_queue);
                 rt_set_sys_state(SYS_IS_STOP_SKIP, false);
                 // 更新宏变量轴地址
+                ItpSetOriginMacPos(rt_data->axis_data[AXIS_X].motor_cmd_pos,
+                                rt_data->axis_data[AXIS_Y].motor_cmd_pos,
+                                rt_data->axis_data[AXIS_Z].motor_cmd_pos,
+                                0);
+
+                rt_set_chan_state(0, CHAN_IS_MOTION_SYNC, true);
                 LOG(LOG_LEVEL_DEBUG, "探针到位 %f %f %f", rt_data->axis_data[AXIS_X].motor_cmd_pos, rt_data->axis_data[AXIS_Y].motor_cmd_pos, rt_data->axis_data[AXIS_Z].motor_cmd_pos);
                 cycle_tp->exec_cmd = DO_NULL_CMD;
                 cycle_tp->target_stage = PROGRAM_WAIT;
@@ -624,6 +630,11 @@ static void auto_update_stage(){
                     queue_pop(plan_queue);
                     rt_set_sys_state(SYS_IS_STOP_SKIP, false);
                     // 更新宏变量轴地址
+                     ItpSetOriginMacPos(rt_data->axis_data[AXIS_X].motor_cmd_pos,
+                                rt_data->axis_data[AXIS_Y].motor_cmd_pos,
+                                rt_data->axis_data[AXIS_Z].motor_cmd_pos,
+                                0);
+                    rt_set_chan_state(0, CHAN_IS_MOTION_SYNC, true);
                     LOG(LOG_LEVEL_DEBUG, "获取到外部跳转信号后减速停止 %f %f %f", rt_data->axis_data[AXIS_X].motor_cmd_pos, rt_data->axis_data[AXIS_Y].motor_cmd_pos, rt_data->axis_data[AXIS_Z].motor_cmd_pos);
                 }
                 if (rt_data->sys_state[SYS_IS_MAC_LOCK_ON]) rt_data->sys_state[SYS_IS_MAC_LOCK_READY] = true;
@@ -860,6 +871,7 @@ static void auto_reset_run(){
     rt_set_chan_state(0, CHAN_IS_PARSER_RESET, true);
     rt_set_chan_state(0, CHAN_IS_PARSER_RERUN, false);
     rt_set_chan_state(0, CHAN_IS_PARSERING, false);
+    rt_set_chan_state(0, CHAN_IS_MOTION_SYNC, false);
     setVarChanInt(0, VAR_CHAN_IS_RUNNING, 0, 0);
     setVarChanInt(0, VAR_CHAN_IS_MOVING, 0, 0);
     setVarChanInt(0, VAR_CHAN_IS_PROGEND, 1, 0);

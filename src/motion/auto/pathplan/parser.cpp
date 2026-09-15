@@ -212,6 +212,11 @@ GNC_RES parser_reading(){
             CHECK_RES(parser_check_res(res));
         }
     }
+    if (res == GNC_PARSER_WAIT)
+    {
+        ItpNextLine();
+        return res;
+    }
     if (ItpIsOver())
     {
         // LOG(LOG_LEVEL_WARN, "译码结束");
@@ -239,8 +244,7 @@ static bool parser_check_res(GNC_RES res){
             return false;
         case GNC_CAL_SUCCESS:
         case GNC_OPERATOR_SUCCESS:
-            if(parser_data->parser_state == PARSER_WAITING_FOR_BUF || 
-                parser_data->parser_state == PARSER_WAITING_FOR_MOTION)
+            if(parser_data->parser_state == PARSER_WAITING_FOR_BUF)
             {
                 parser_data->parser_state = PARSER_READING;
             }
@@ -403,6 +407,8 @@ static GNC_RES parser_handle_gcode(pmc_data* motion_data, NcItpState *itp_state,
     LOG(LOG_LEVEL_DEBUG, " no %d mode %d type:%d end pos %f %f %f", plan_block.line_number, plan_block.mode, plan_block.type, motion_data->position.x, motion_data->position.y, motion_data->position.z);
     // ======= 测试 ===========
     queue_push(parser_queue, &plan_block);
+    if(plan_block.mode == pmc_mode::PMC_MODE_STOPSKIP) return GNC_PARSER_WAIT;
+
     return GNC_OPERATOR_SUCCESS;
 }
 
@@ -456,16 +462,30 @@ GNC_RES parser_waiting_for_buf(){
     return res;
 }
 
+
 GNC_RES parser_waiting_for_motion() {
-    GNC_RES res = GNC_CAL_SUCCESS;
-    int start_index = parser_data->interp_list_index;
+    if(!rt_get_chan_state(0, CHAN_IS_MOTION_SYNC)) return GNC_CAL_SUCCESS;
+
+    int start_index = parser_data->interp_list_index+1;
     for(int i = start_index; i < parser_data->itp_datas.count; i++){
         pmc_data motion_data = parser_data->itp_datas.datas[i];
+        GNC_RES res = parser_handle_recieve(&motion_data, &parser_data->itp_state, &parser_data->itp_line_no);
+        if(res == GNC_PARSER_WAIT)
+        {
+            parser_data->interp_list_index = i;
+            rt_set_chan_state(0, CHAN_IS_MOTION_SYNC, false);
+            return GNC_CAL_SUCCESS;
+        }
+        if(!parser_check_res(res)) return GNC_CAL_SUCCESS;
         parser_data->interp_list_index = i;
-        res = parser_handle_recieve(&motion_data, &parser_data->itp_state, &parser_data->itp_line_no);
-        CHECK_RES(parser_check_res(res));
     }
-    return res;
+    rt_set_chan_state(0, CHAN_IS_MOTION_SYNC, false);
+    if(ItpIsOver())
+    {
+        return GNC_PARSER_OVER;
+    }
+    parser_data->parser_state = PARSER_READING;
+    return GNC_CAL_SUCCESS;
 }
 
 GNC_RES parser_waiting_to_end() {
@@ -488,6 +508,7 @@ void parser_reset(){
     ItpReset();
     parser_data->parser_state = PARSER_IDLE;
     rt_set_chan_state(0, CHAN_IS_PARSERING, false);
+    rt_set_chan_state(0, CHAN_IS_MOTION_SYNC, false);
     rt_set_chan_state(0, CHAN_IS_PARSER_RERUN, false);
 }
 
