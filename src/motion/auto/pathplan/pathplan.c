@@ -150,13 +150,13 @@ static void block_cal_pos(PLAN_BLOCK* parser_block, PLAN_BLOCK* current_block, P
         case HELIX_CCW:
             current_block->circular_data.dir = COUNTERCLOCK;
             POS_COPY(&current_block->circular_data.center_pos, &parser_block->circular_data.center_pos);
-            current_block->circular_data.plane = parser_block->circular_data.plane;
+            current_block->plane = parser_block->plane;
             break;
         case CIRCLE_CW:
         case HELIX_CW:
             current_block->circular_data.dir = CLOCK;
             POS_COPY(&current_block->circular_data.center_pos, &parser_block->circular_data.center_pos);
-            current_block->circular_data.plane = parser_block->circular_data.plane;
+            current_block->plane = parser_block->plane;
             break;
         default:
             break;
@@ -171,7 +171,7 @@ static void block_cal_pos(PLAN_BLOCK* parser_block, PLAN_BLOCK* current_block, P
         case HELIX_CW:
             POS helix_circle_pos = {0};
             POS_COPY(&helix_circle_pos, &current_block->end_pos);
-            switch (current_block->circular_data.plane)
+            switch (current_block->plane)
             {
             case PLANE_XY:
                 helix_circle_pos.z = current_block->circular_data.center_pos.z;
@@ -262,7 +262,7 @@ static void block_cal_circle_vector(PLAN_BLOCK* current_block){
     VECTOR rs = VECTOR_Unit(&current_block->circular_data.center_pos, &current_block->start_pos);
     VECTOR re = VECTOR_Unit(&current_block->circular_data.center_pos, &current_block->end_pos);
 
-    switch(current_block->circular_data.plane){
+    switch(current_block->plane){
         case PLANE_XY:
             switch(current_block->type){
             case CIRCLE_CW:
@@ -336,7 +336,7 @@ static double block_cal_circle_length(PLAN_BLOCK* current_block){
     VECTOR rs = POS_VECTOR(&current_block->circular_data.center_pos, &current_block->start_pos);
     VECTOR re = POS_VECTOR(&current_block->circular_data.center_pos, &current_block->end_pos);
     // 计算切失
-    switch(current_block->circular_data.plane){
+    switch(current_block->plane){
         case PLANE_XY:
             current_block->circular_data.statr_rad = atan2(rs.y, rs.x);
             current_block->circular_data.end_rad = atan2(re.y, re.x);

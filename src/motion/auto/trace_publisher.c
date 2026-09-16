@@ -97,7 +97,7 @@ void trace_publisher_activate(int channel, const PLAN_BLOCK *block, int isMotion
     active->type = trace_type(block->type);
     active->lineNumber = block->line_number;
     active->toolNumber = var_chan[channel][VAR_CHAN_TOOL_USE].value.i;
-    active->plane = block->circular_data.plane;
+    active->plane = block->plane;
     active->direction = block->circular_data.dir;
     copy_pos(active->startPos, &block->start_pos);
     copy_pos(active->endPos, &block->end_pos);

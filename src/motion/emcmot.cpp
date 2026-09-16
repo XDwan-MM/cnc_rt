@@ -129,7 +129,7 @@ static void chan_do_period()
 static void smx_do_period()
 {
     // 刚性攻丝同步
-
+    
     // 主轴同步
 
     // 重叠控制

@@ -70,7 +70,7 @@ static POS interpolate_circle(POS current_pos, PLAN_BLOCK* current_block, double
             break;
     }
     POS interp_pos;
-    switch(current_block->circular_data.plane){
+    switch(current_block->plane){
         case PLANE_XY:
             interp_pos.x = current_block->circular_data.center_pos.x + current_block->circular_data.radius * cos(angle_interp);
             interp_pos.y = current_block->circular_data.center_pos.y + current_block->circular_data.radius * sin(angle_interp);
@@ -109,7 +109,7 @@ static POS interpolate_helix(POS current_pos, PLAN_BLOCK* current_block, double 
             break;
     }
     POS interp_pos;
-    switch(current_block->circular_data.plane){
+    switch(current_block->plane){
         case PLANE_XY:
             interp_pos.x = current_block->circular_data.center_pos.x + current_block->circular_data.radius * cos(angle_interp);
             interp_pos.y = current_block->circular_data.center_pos.y + current_block->circular_data.radius * sin(angle_interp);
@@ -132,3 +132,24 @@ static POS interpolate_helix(POS current_pos, PLAN_BLOCK* current_block, double 
     return interp_pos;
 }
 
+// 刚性攻丝同步（进给 = 转速 × 螺距：F = S × Pitch）
+// 主轴位置 Z = Pitch × (θ/360°)
+void rigid_cal_spindle_pos(PLAN_BLOCK* current_block, double accum_distance){
+    // 进给值插补位置
+    POS interp_pos;
+    switch(current_block->plane){
+        case PLANE_XY:
+            interp_pos.z =  current_block->start_pos.z + accum_distance;
+            break;
+        case PLANE_XZ:
+            interp_pos.y =  current_block->start_pos.y + accum_distance;
+            break;
+        case PLANE_YZ:
+            interp_pos.x =  current_block->start_pos.x + accum_distance;
+            break;
+    }
+    // 主轴旋转角度
+    double spl_pos = accum_distance / current_block->rigid_data.screw_offset;
+    double spl_angle = spl_pos * 360;
+    if(current_block->rigid_data.reverse) spl_angle = - spl_angle;
+}

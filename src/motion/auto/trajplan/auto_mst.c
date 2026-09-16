@@ -146,6 +146,10 @@ static void auto_deal_mstb(){
             setRegValue8(REG_F, 10, 0x13); 
             spl_data.spl_event = SPINDLE_EVENT_ORIENT;
             break;
+        case M29: // 刚性攻丝
+            spl_data.spl_event = SPINDLE_EVENT_ORIENT;
+            // 回参考点
+            break;
         default:
             // 判断M代码大小
             if(cycle_tp->plan_block->mst_data.m_code > 300){
