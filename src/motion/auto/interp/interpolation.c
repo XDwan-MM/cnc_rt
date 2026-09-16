@@ -5,6 +5,7 @@ static POS interpolate_line(PLAN_BLOCK* current_block, double accum_distance);
 static POS interpolate_rapid(PLAN_BLOCK* current_block, double accum_distance);
 static POS interpolate_circle(POS current_pos, PLAN_BLOCK* current_block, double accum_distance);
 static POS interpolate_helix(POS current_pos, PLAN_BLOCK* current_block, double accum_distance);
+static POS interpolate_tap(PLAN_BLOCK* current_block, double accum_distance);
 
 POS auto_cal_interp_pos(POS current_pos, double accum_distance){
     if(accum_distance <= 0) return current_pos;
@@ -15,9 +16,7 @@ POS auto_cal_interp_pos(POS current_pos, double accum_distance){
         case RAPID:
             interp_pos = interpolate_rapid(current_block, accum_distance);
             break;
-        case LINE:
-        case RIGID_TAP:
-        case TAP_RETURN:
+        case LINE: 
         case PROBE:
             interp_pos = interpolate_line(current_block, accum_distance);
             break;
@@ -28,6 +27,10 @@ POS auto_cal_interp_pos(POS current_pos, double accum_distance){
         case HELIX_CW:
         case HELIX_CCW:
             interp_pos = interpolate_helix(current_pos, current_block, accum_distance);
+            break;
+        case RIGID_TAP:
+        case TAP_RETURN:
+            interp_pos = interpolate_tap(current_block, accum_distance);
             break;
         case UNKNOWN:
         default:
@@ -134,7 +137,7 @@ static POS interpolate_helix(POS current_pos, PLAN_BLOCK* current_block, double 
 
 // 刚性攻丝同步（进给 = 转速 × 螺距：F = S × Pitch）
 // 主轴位置 Z = Pitch × (θ/360°)
-void rigid_cal_spindle_pos(PLAN_BLOCK* current_block, double accum_distance){
+static POS interpolate_tap(PLAN_BLOCK* current_block, double accum_distance){
     // 进给值插补位置
     POS interp_pos;
     switch(current_block->plane){
@@ -152,4 +155,5 @@ void rigid_cal_spindle_pos(PLAN_BLOCK* current_block, double accum_distance){
     double spl_pos = accum_distance / current_block->rigid_data.screw_offset;
     double spl_angle = spl_pos * 360;
     if(current_block->rigid_data.reverse) spl_angle = - spl_angle;
+    return interp_pos;
 }
