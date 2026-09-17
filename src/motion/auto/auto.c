@@ -28,6 +28,8 @@ static void auto_update_var();
 static bool auto_is_program_end();
 static bool auto_check_program_end();
 static void auto_pop_current_block();
+static void auto_set_stop_skip_macro();
+static void auro_reset_stop_skip();
 
 void handle_auto_cmd(){
     // 更新状态
@@ -606,15 +608,8 @@ static void auto_update_stage(){
             switch (cycle_tp->target_stage)
             {
             case BLOCK_STOP_2_END:
-                queue_pop(plan_queue);
-                rt_set_sys_state(SYS_IS_STOP_SKIP, false);
-                // 更新宏变量轴地址
-                ItpSetOriginMacPos(rt_data->axis_data[AXIS_X].motor_cmd_pos,
-                                rt_data->axis_data[AXIS_Y].motor_cmd_pos,
-                                rt_data->axis_data[AXIS_Z].motor_cmd_pos,
-                                0);
-                rt_set_chan_state(0, CHAN_IS_MOTION_SYNC, true);
-                LOG(LOG_LEVEL_DEBUG, "探针到位 %f %f %f", rt_data->axis_data[AXIS_X].motor_cmd_pos, rt_data->axis_data[AXIS_Y].motor_cmd_pos, rt_data->axis_data[AXIS_Z].motor_cmd_pos);
+                auto_pop_current_block();
+                auro_reset_stop_skip();
                 cycle_tp->exec_cmd = DO_NULL_CMD;
                 cycle_tp->target_stage = PROGRAM_WAIT;
                 if (rt_data->sys_state[SYS_IS_SINGLE_BLOCK]) {
@@ -625,17 +620,7 @@ static void auto_update_stage(){
                 break;
             case BLOCK_PAUSED:
             case PROGRAM_WAIT:
-                if(rt_data->sys_state[SYS_IS_STOP_SKIP]){
-                    queue_pop(plan_queue);
-                    rt_set_sys_state(SYS_IS_STOP_SKIP, false);
-                    // 更新宏变量轴地址
-                    ItpSetOriginMacPos(rt_data->axis_data[AXIS_X].motor_cmd_pos,
-                                rt_data->axis_data[AXIS_Y].motor_cmd_pos,
-                                rt_data->axis_data[AXIS_Z].motor_cmd_pos,
-                                0);
-                    rt_set_chan_state(0, CHAN_IS_MOTION_SYNC, true);
-                    LOG(LOG_LEVEL_DEBUG, "获取到外部跳转信号后减速停止 %f %f %f", rt_data->axis_data[AXIS_X].motor_cmd_pos, rt_data->axis_data[AXIS_Y].motor_cmd_pos, rt_data->axis_data[AXIS_Z].motor_cmd_pos);
-                }
+                auto_set_stop_skip_macro();
                 if (rt_data->sys_state[SYS_IS_MAC_LOCK_ON]) rt_data->sys_state[SYS_IS_MAC_LOCK_READY] = true;
                 else rt_data->sys_state[SYS_IS_MAC_LOCK_READY] = false;
                 break;
@@ -699,6 +684,7 @@ static void auto_update_stage(){
         {
         case BLOCK_STOP_2_END:
             auto_pop_current_block();
+            auro_reset_stop_skip();
             cycle_tp->exec_cmd = DO_NULL_CMD;
             cycle_tp->target_stage = PROGRAM_WAIT;
             if (rt_data->sys_state[SYS_IS_SINGLE_BLOCK]) {
@@ -909,6 +895,31 @@ static void auto_pop_current_block()
 {
     trace_publisher_complete(0);
     queue_pop(plan_queue);
+}
+
+static void auro_reset_stop_skip(){
+    rt_set_sys_state(SYS_IS_STOP_SKIP, false);
+    // 更新宏变量轴地址
+    ItpSetOriginMacPos(rt_data->axis_data[AXIS_X].motor_cmd_pos,
+                rt_data->axis_data[AXIS_Y].motor_cmd_pos,
+                rt_data->axis_data[AXIS_Z].motor_cmd_pos,
+                0);
+    rt_set_chan_state(0, CHAN_IS_MOTION_SYNC, true);
+    LOG(LOG_LEVEL_DEBUG, "探针到位 %f %f %f", rt_data->axis_data[AXIS_X].motor_cmd_pos, rt_data->axis_data[AXIS_Y].motor_cmd_pos, rt_data->axis_data[AXIS_Z].motor_cmd_pos);
+}
+
+static void auto_set_stop_skip_macro(){
+    if(rt_data->sys_state[SYS_IS_STOP_SKIP]){
+        auto_pop_current_block();
+        rt_set_sys_state(SYS_IS_STOP_SKIP, false);
+        // 更新宏变量轴地址
+        ItpSetOriginMacPos(rt_data->axis_data[AXIS_X].motor_cmd_pos,
+                    rt_data->axis_data[AXIS_Y].motor_cmd_pos,
+                    rt_data->axis_data[AXIS_Z].motor_cmd_pos,
+                    0);
+        rt_set_chan_state(0, CHAN_IS_MOTION_SYNC, true);
+        LOG(LOG_LEVEL_DEBUG, "获取到外部跳转信号后减速停止 %f %f %f", rt_data->axis_data[AXIS_X].motor_cmd_pos, rt_data->axis_data[AXIS_Y].motor_cmd_pos, rt_data->axis_data[AXIS_Z].motor_cmd_pos);
+    }
 }
 
 static GNC_RES cycle_tp_pos_cmd_data_init(POS_CMD_DATA* pos_cmd_data){
