@@ -24,41 +24,47 @@ typedef enum {
 } hal_retcode_t;
 
 // 驱动器工作模式枚举
-typedef enum {
-    DRV_MODE_DISABLED = 0,
-    DRV_MODE_CSP,    // 周期性同步位置模式 0x08
-    DRV_MODE_CSV,    // 周期性同步速度模式 0x09
-    DRV_MODE_CST,    // 周期性同步转矩模式 0x0A
-    DRV_MODE_PP,     // 轮廓位置模式（脉冲方向）
+typedef enum
+{
+    DRV_MODE_NONE = 0, // 未知模式
+    DRV_MODE_CSP,      // 周期性同步位置模式 往 6060 发0x08
+    DRV_MODE_CSV,      // 周期性同步速度模式 往 6060 发0x09
+    DRV_MODE_CST,      // 周期性同步转矩模式 往 6060 发0x0A
+    DRV_MODE_PP,       // 轮廓位置模式      往 6060 发0x01
+    DRV_MODE_PV,       // 轮廓速度模式      往 6060 发0x03
+    DRV_MODE_PT,       // 轮廓扭矩模式      往 6060 发0x04
+    DRV_MODE_HOMING,   // 回零模式          往 6060 发0x06
     // ... 其他模式
 } drv_mode_t;
 
 // 驱动器状态枚举
 typedef enum {
-    DRV_STATE_NOT_READY = 0,          // 未就绪
-    DRV_STATE_SWITCHED_ON_DISABLE,    // 
-    DRV_STATE_READY_TO_SWITCHED_ON,
-    DRV_STATE_SWITCHED_ON,
-    DRV_STATE_OPERATION_ENABLED,      // 上使能 0F
-    DRV_STATE_FAULT,                  // 错误（6041状态字低8位为08：表示驱动器有错误）
+    DRV_STATE_INIT = 0,
+    DRV_STATE_NOT_READY_TO_SWITCH_ON, // 驱动器未准备好(驱动器正在初始化过程中)
+    DRV_STATE_SWITCHED_ON_DISABLE,    // 驱动器初始化完成 驱动器参数可配置
+    DRV_STATE_READY_TO_SWITCHED_ON,   // 驱动器已经准备好，驱动器可以设置参数，可以上主电，准备进入switch on状态
+    DRV_STATE_SWITCHED_ON,            // 驱动器已经准备好，主电已上，等待驱动器打开使能
+    DRV_STATE_OPERATION_ENABLED,      // 驱动器已使能，正常运行，驱动器设置的参数有效
+    DRV_STATE_FAULT,                  // 驱动器故障状态，驱动显示故障码，可通过控制字6040 = 0x0080复位。（6041状态字的bit3为高：表示驱动器有错误）
     // ... 其他状态
 } drv_state_t;
 
 // 抽象驱动器数据结构体
 typedef struct {
     // --- 标识信息 ---
-    char            drv_name[32];   // 驱动器名称
-    uint16_t        axis_id;
-    bool            initialized;
-    // --- 核心状态数据 (从驱动器读取) ---
-    drv_state_t     state;          // 状态字（6041）
-    drv_mode_t      mode;           // 模式字（6060）
+    char            drv_name[32];   // 抽象驱动器名称
+    uint16_t        axis_id;        // 抽象驱动器编号
+    bool            initialized;    // 抽象驱动器是否初始化
+    // --- 核心状态数据 (从实际驱动器读取) ---
+    drv_state_t     state;          // 状态
+    drv_mode_t      act_mode;       // 当前模式
+    drv_mode_t      req_mode;       // 请求模式
 
     int32_t         actual_pos;     // 实际位置
     int32_t         actual_vel;     // 实际速度
     int16_t         actual_torque;  // 实际转矩
 
-    // --- 核心控制数据 (写入驱动器) ---
+    // --- 核心控制数据 (写入实际驱动器) ---
     int32_t         target_pos;     // 目标位置
     int32_t         target_vel;     // 目标速度
     int16_t         target_torque;  // 目标转矩
@@ -103,11 +109,11 @@ hal_retcode_t Hal_Driver_Get_Actual_Tor(hal_driver_t* drv, int16_t* actual_tor);
 
 // 周期性数据交换函数
 hal_retcode_t Hal_Driver_Update(hal_driver_t* drv, bool read, bool write);
+hal_retcode_t Hal_Driver_Update_All(bool read, bool write);
 
 // 驱动器管理器函数
 hal_retcode_t Hal_Driver_Manager_Init(void);
 hal_retcode_t Hal_Driver_Array_Init(void);
-hal_retcode_t Hal_Driver_Update_All(bool read, bool write);
 hal_retcode_t Hal_Driver_Register(hal_driver_t* drv);
 
 

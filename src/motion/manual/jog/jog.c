@@ -3,6 +3,8 @@
 #include "jog_planner.h"
 #include <math.h>
 #include <string.h>
+#include "master.h"
+#include "device.h"
 
 /*
  * JOG 的公共入口只有周期处理、急停和速度查询；外部减速状态保存在 AxisStatus。
@@ -107,6 +109,9 @@ static void jog_update_outputs(void);
  */
 void handle_jog_cmd(void)
 {
+    // test
+    // CHECK_FUNC(GM_RxPdoEntry_Write(g_device_data[2].slave.Control_word, 0x0000));
+
     bool global_fatal;
     bool reset_requested;
     bool switching_mode;

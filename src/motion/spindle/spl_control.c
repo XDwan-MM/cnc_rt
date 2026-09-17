@@ -1,9 +1,9 @@
-#include <parapi.h>
+#include "spl_control.h"
 #include "cnc_math.h"
 #include "rt_data.h"
-#include "spl_control.h"
-#include <hmisysapi.h>
 #include <alarmapi.h>
+#include <hmisysapi.h>
+#include <parapi.h>
 
 SPINDLE_DATA spl_data;
 
@@ -19,36 +19,36 @@ static double diff;
 static double target_speed;
 static int8_t orient;
 
-void spindle_set_state(){
+void spindle_set_state()
+{
     // 如果急停或按下复位
-    if(rt_data->sys_state[SYS_IS_ESTOP_ACTIVE] || rt_data->nc_event == SYS_EVENT_HMI_RESET || rt_data->sys_state[SYS_IS_ALARMING] )
+    if (rt_data->sys_state[SYS_IS_ESTOP_ACTIVE] || rt_data->nc_event == SYS_EVENT_HMI_RESET ||
+        rt_data->sys_state[SYS_IS_ALARMING] || spl_data.spl_event == SPINDLE_EVENT_STOP)
     {
-        spl_data.spl_event = SPINDLE_EVENT_STOP;
-        spl_data.emot_speed = 0;
-    }
-    
 
-    // 根据主轴事件设置主轴状态（事件：面板按键和M代码）
+        spl_data.spl_event = SPINDLE_EVENT_STOP;
+    }
+
+    // 根据主轴事件设置主轴状态（事件来源：面板按键和M代码）
     switch (spl_data.spl_event)
     {
     case SPINDLE_EVENT_STOP:
+        spl_data.emot_speed = 0;
         spl_data.spl_state = SPINDLE_STOP;
         break;
     case SPINDLE_EVENT_CW:
-        if(is_spd_vel(&spl_data))
+        if (is_spd_vel(&spl_data))
         {
             spl_data.spl_state = SPINDLE_CW;
-            spindle.mode = DRV_MODE_CSV;
+            spindle.act_mode = DRV_MODE_CSV;
         }
         break;
     case SPINDLE_EVENT_CCW:
-        if(is_spd_vel(&spl_data))
+        if (is_spd_vel(&spl_data))
         {
             spl_data.spl_state = SPINDLE_CCW;
-            spindle.mode = DRV_MODE_CSV;
+            spindle.act_mode = DRV_MODE_CSV;
         }
-        break;
-    case SPINDLE_EVENT_ORIENT:
         break;
     case SPINDLE_EVENT_NONE:
     default:
@@ -57,7 +57,8 @@ void spindle_set_state(){
     spl_data.spl_event = SPINDLE_EVENT_NONE;
 }
 
-void spindle_cal_speed(){
+void spindle_cal_speed()
+{
     sys_max_speed = rt_data->axis_data[AXIS_SP].spdl_max_speed;
     para_acc = rt_data->axis_data[AXIS_SP].max_feed_acc;
     diff = para_acc * 0.001;
@@ -72,39 +73,41 @@ void spindle_cal_speed(){
     case SPINDLE_CCW:
         Spindle_Ccw(&spl_data);
         break;
+    case SPINDLE_ORIENT:
+        spl_data.current_speed = 0;
+        break;
     default:
         break;
     }
+    // printf("vel: %d \n",(int32_t)spl_data.current_speed);
     Hal_Driver_Set_Target_Vel(&spindle, (int32_t)spl_data.current_speed);
 }
 
-bool spindle_is_stopped(){
-    return spl_data.spl_state == SPINDLE_STOP;
-}
+bool spindle_is_stopped() { return spl_data.spl_state == SPINDLE_STOP; }
 
-bool spindle_is_rotating(){
-    return spindle_is_stopped() ? false : true;
-}
+bool spindle_is_rotating() { return spindle_is_stopped() ? false : true; }
+
 static void Spindle_Stop(SPINDLE_DATA *spl_data)
 {
-    if(spl_data->current_speed < 0)
+    if (spl_data->current_speed < 0)
     {
         Spindle_Cw(spl_data);
     }
-    else if(spl_data->current_speed > 0)
+    else if (spl_data->current_speed > 0)
     {
         Spindle_Ccw(spl_data);
     }
-    if(spl_data->spl_vel_state == SPINDLE_VEL_ZERO)
+    if (spl_data->spl_vel_state == SPINDLE_VEL_ZERO)
     {
-        spindle.mode = DRV_MODE_DISABLED;
+        spindle.act_mode = DRV_MODE_NONE;
         spindle_mcode_feedback();
     }
 }
+
 // 主轴正转，输入参数d_speed 主轴转速 unit 转/分钟
 static void Spindle_Cw(SPINDLE_DATA *spl_data)
 {
-    if(spl_data->speed_mode)
+    if (spl_data->speed_mode)
     {
         target_speed = spl_data->plc_speed;
     }
@@ -112,7 +115,7 @@ static void Spindle_Cw(SPINDLE_DATA *spl_data)
     {
         target_speed = fmin(sys_max_speed, spl_data->emot_speed * var_chan[0][VAR_CHAN_SPDL_OVERRIDE].value.f / 100);
     }
-    if(spl_data->current_speed < target_speed)
+    if (spl_data->current_speed < target_speed)
     {
         orient = 1;
     }
@@ -120,7 +123,7 @@ static void Spindle_Cw(SPINDLE_DATA *spl_data)
     {
         orient = -1;
     }
-    if(fabs(spl_data->current_speed + orient * diff - target_speed)  > 10)
+    if (fabs(spl_data->current_speed + orient * diff - target_speed) > 10)
     {
         spl_data->current_speed = spl_data->current_speed + orient * diff;
         spl_data->spl_vel_state = SPINDLE_VEL_RAMP;
@@ -136,15 +139,15 @@ static void Spindle_Cw(SPINDLE_DATA *spl_data)
 // 主轴反转
 static void Spindle_Ccw(SPINDLE_DATA *spl_data)
 {
-    if(spl_data->speed_mode)
+    if (spl_data->speed_mode)
     {
         target_speed = -1 * spl_data->plc_speed;
     }
     else
     {
-        target_speed = fmax(- sys_max_speed, spl_data->emot_speed * var_chan[0][VAR_CHAN_SPDL_OVERRIDE].value.f / 100);
+        target_speed = fmax(-sys_max_speed, spl_data->emot_speed * var_chan[0][VAR_CHAN_SPDL_OVERRIDE].value.f / 100);
     }
-    if(spl_data->current_speed > target_speed)
+    if (spl_data->current_speed > target_speed)
     {
         orient = -1;
     }
@@ -152,7 +155,7 @@ static void Spindle_Ccw(SPINDLE_DATA *spl_data)
     {
         orient = 1;
     }
-    if(fabs(spl_data->current_speed + orient * diff - target_speed)  > 10)
+    if (fabs(spl_data->current_speed + orient * diff - target_speed) > 10)
     {
         spl_data->current_speed = spl_data->current_speed + orient * diff;
         spl_data->spl_vel_state = SPINDLE_VEL_RAMP;
@@ -165,9 +168,11 @@ static void Spindle_Ccw(SPINDLE_DATA *spl_data)
     }
 }
 
-static void spindle_mcode_feedback(){
+static void spindle_mcode_feedback()
+{
     // 只在完成M指令后执行一次
-    if(!spl_data.mcode_feedback){
+    if (!spl_data.mcode_feedback)
+    {
         spl_data.mcode_feedback = true;
         LOG(LOG_LEVEL_DEBUG, "主轴速度到达 %f", spl_data.current_speed);
     }
@@ -175,11 +180,13 @@ static void spindle_mcode_feedback(){
 
 static bool is_spd_vel(SPINDLE_DATA *spl_data)
 {
-    if(!spl_data->mcp_target_speed)
+    if (!spl_data->mcp_target_speed)
     {
         int res = setAlarm(ALARM_AX, ALARM_ERROR, 20);
-        if(res == -8) return false;
+        if (res == -8)
+            return false;
         LOG(LOG_LEVEL_ERR, "主轴速度值缺省");
+        return false;
     }
     return true;
 }

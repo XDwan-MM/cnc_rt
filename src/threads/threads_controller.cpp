@@ -134,6 +134,7 @@ void* motion_controller_thread_func(void*) {
         if (thread_exit_flag) break;
         // printf("motion_controller_thread_func");
         start = get_ns();
+        // 读驱动器实际位置 实际速度
         Hal_Driver_Update_All(true, false);
         hmi_events_scan();
         // plc_x_signal_scan_cycle();
@@ -141,6 +142,7 @@ void* motion_controller_thread_func(void*) {
         emcmotTrajPlan();
         plc_f_signal_handler_cycle();
         ServoSampleSampler::instance().execute();
+        // 往驱动器写指令位置 指令速度
         Hal_Driver_Update_All(false, true);
         end = get_ns();
         #ifndef DEBUG_MODE_ENABLED

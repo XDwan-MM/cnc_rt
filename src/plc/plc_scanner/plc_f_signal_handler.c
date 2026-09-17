@@ -326,6 +326,7 @@ static void plc_output_axis_status()
     {
         setRegBit(REG_F, 0, 6);
     }
+    //　主轴报警信号F45.0
     if (rt_data->axis_data[3].status.is_error)
     {
         setRegBit(REG_F, 45, 0);
@@ -338,6 +339,7 @@ static void plc_output_axis_status()
 
 static void plc_output_spl_vel_status()
 {
+    //　主轴速度到达信号F45.3
     if (spl_data.spl_vel_state == SPINDLE_VEL_ARRIVED)
     {
         setRegBit(REG_F, 45, 3);
@@ -346,14 +348,7 @@ static void plc_output_spl_vel_status()
     {
         clearRegBit(REG_F, 45, 3);
     }
-//    if(spl_data.spl_vel_state == SPINDLE_VEL_ZERO)
-//    {
-//        setRegBit(REG_F, 45, 1);
-//    }
-//    else
-//    {
-//        clearRegBit(REG_F, 45, 1);
-//    }
+    //　主轴零速信号F45.1
     if(abs(spindle.actual_vel) < 5)
     {
         setRegBit(REG_F, 45, 1);
@@ -363,6 +358,8 @@ static void plc_output_spl_vel_status()
     {
         clearRegBit(REG_F, 45, 1);
     }
+    // 主轴定向信号 F45.7  定向完成F45.7置高　未完成置低
+    // todo
 }
 
 static void plc_output_spl_vel()

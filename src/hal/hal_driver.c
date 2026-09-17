@@ -4,6 +4,20 @@
 #include <stddef.h>
 #include <stdio.h>
 
+/**
+ * @brief 总线中 从站的设备编号枚举
+ */
+typedef enum {
+    DEV_ID_CONTROL_PANEL  = 0,  // 0: 控制面板设备
+    DEV_ID_IO_MODULE      = 1,  // 1: IO模块设备
+    DEV_ID_SPINDLE_DRIVER = 2,  // 2: 主轴驱动器设备
+    DEV_ID_X_AXIS_DRIVER  = 3,  // 3: X轴驱动器设备
+    DEV_ID_Y_AXIS_DRIVER  = 4,  // 4: Y轴驱动器设备
+    DEV_ID_Z_AXIS_DRIVER  = 5,  // 5: Z轴驱动器设备
+
+    DEV_ID_COUNT                // 6: 设备总数（用于数组大小定义及越界检查）
+} DeviceId_e;
+
 // 全局变量定义
 static bool physical_sp = true;
 static bool physical_x = true;
@@ -45,7 +59,7 @@ hal_retcode_t Hal_Driver_Register(hal_driver_t *drv)
         return HAL_DRIVER_ERR_MAX_NUMB_OVER;
     }
 
-    // 检查是否已注册
+    // 检查是否新进来的驱动器是否已注册到管理器中
     for (int i = 0; i < dri_manager.count; i++)
     {
         if (dri_manager.drivers[i] == drv)
@@ -93,8 +107,9 @@ hal_retcode_t Hal_Driver_Array_Init(void)
 
         drivers[i]->axis_id = axis_ids[i];
         drivers[i]->initialized = true;
-        drivers[i]->state = DRV_STATE_NOT_READY;
-        drivers[i]->mode = DRV_MODE_DISABLED;
+        drivers[i]->state = DRV_STATE_NOT_READY_TO_SWITCH_ON;
+        drivers[i]->act_mode = DRV_MODE_NONE;
+        drivers[i]->req_mode = DRV_MODE_NONE;
     }
 
     return HAL_DRIVER_SUCCESS;
@@ -157,6 +172,7 @@ hal_retcode_t Hal_Driver_Get_Actual_Tor(hal_driver_t *drv, int16_t *actual_torqu
     *actual_torque = drv->actual_torque;
     return HAL_DRIVER_SUCCESS;
 }
+
 bool Hal_Driver_Is_Initialized(hal_driver_t *drv)
 {
     if (drv == NULL)
@@ -166,6 +182,7 @@ bool Hal_Driver_Is_Initialized(hal_driver_t *drv)
     return drv->initialized;
 }
 
+// 更新单个驱动器
 hal_retcode_t Hal_Driver_Update(hal_driver_t *drv, bool read, bool write)
 {
     if (drv == NULL)

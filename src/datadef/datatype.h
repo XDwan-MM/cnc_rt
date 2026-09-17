@@ -73,7 +73,9 @@ typedef enum result {
 typedef enum {
     SPINDLE_STOP = 0,
     SPINDLE_CW,
-    SPINDLE_CCW
+    SPINDLE_CCW,
+    SPINDLE_ORIENT,
+    SPINDLE_RELEASE_ORIENT
 } SpindleState;
 
 typedef enum {

@@ -111,6 +111,7 @@ static GNC_RES task_handle_plc_event(PLC_EVENT *event_data)
     case PLC_EV_MSG_SPD_ORI:
     {
         LOG(LOG_LEVEL_INFO, "处理主轴定向事件");
+        spl_data.spl_event = SPINDLE_EVENT_ORIENT;
         break;
     }
     case PLC_EV_MSG_EXTERNAL_DECEL:

@@ -224,7 +224,8 @@ static void set_operating_mode()
 static void spindle_control()
 {
     spindle_set_state();
-    if (spindle.mode != DRV_MODE_DISABLED)
+    if ((spindle.act_mode != DRV_MODE_NONE) && 
+        (spindle.state == DRV_STATE_OPERATION_ENABLED))
     {
         spindle_cal_speed();
     }

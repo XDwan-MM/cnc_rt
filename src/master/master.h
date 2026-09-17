@@ -20,20 +20,6 @@ void Check_Driver_Error();
 // 关闭主站
 int Master_Close();
 
-void driver_set_speed_mode();
-void driver_set_pos_mode();
-void driver_set_state_on();
-void driver_set_state_off();
-
-// 主轴驱动器上使能
-extern void spindle_driver_servo_on();
-// 主轴驱动器下使能
-extern void spindle_driver_servo_off();
-// 主轴驱动器设置速度模式
-extern void spindle_driver_set_speed_mode();
-// 主轴驱动器设置位置模式
-extern void spindle_driver_set_position_mode();
-
 #ifdef __cplusplus
 }
 #endif

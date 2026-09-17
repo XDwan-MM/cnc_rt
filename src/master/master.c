@@ -8,6 +8,7 @@
 #include <unistd.h>
 #include "log.h"
 #include "device.h"
+#include "spl_control.h"
 
 #ifdef __DeveloperMode__
 #define debug printf
@@ -30,7 +31,18 @@ do { \
 } \
 } while (0)
 
-// 分析理解：slave 代表轴设备，还有其他设备 面板 IO模组
+// 分析理解：master表示主站(代表CNC控制器) slave表示从站(代表轴设备-驱动器)，还有其他设备 面板 IO模组
+// 输出给驱动器
+// 6040 控制字 16位
+// 6060 操作模式 8位
+// 607A 目标位置 32位
+
+// 驱动器返回给CNC
+// 6041 状态字 16位
+// 6061 当前驱动器的模式 8位
+// 6064 实际位置 32位
+// 606C 实际速度 32位
+
 /**
  * @brief 设备编号枚举
  */
@@ -47,7 +59,7 @@ typedef enum {
 
 // 全局变量定义
 int master_error_code = 0;
-bool reset_sem = 0;
+bool reset_sem = false;
 static char* drv_names[] = {"主","X","Y","Z"};
 
 static void Master_Receive();
@@ -107,7 +119,7 @@ void Master_Run()
         // 等待运控计算完成信号
         sem_wait(&moton_sem_exec_done);
         op_flag = 1;
-        //复位清除驱动器报警
+        // 复位清除驱动器报警
         if(reset_sem)
         {
             for (int i = 0; i < 4; i++)
@@ -120,8 +132,8 @@ void Master_Run()
                 }
                 else if(dri_manager.drivers[i]->state == DRV_STATE_FAULT && (status[i] & 0x0f) != 0x08)
                 {
-                    dri_manager.drivers[i]->state = DRV_STATE_NOT_READY;
-                    dri_manager.drivers[i]->mode = DRV_MODE_DISABLED;
+                    dri_manager.drivers[i]->state = DRV_STATE_NOT_READY_TO_SWITCH_ON;
+                    dri_manager.drivers[i]->act_mode = DRV_MODE_NONE;
                     if(i = 0)
                     {
                         delAlarm(ALARM_AX, ALARM_ERROR, 33);
@@ -140,74 +152,127 @@ void Master_Run()
                 reset_sem = false;
             }
         }
-        // 进给轴驱动器上使能
+
+        // 进给轴驱动器设置成CSP模式 并上使能（理解：设置模式放在使能流程之前）
+        // 驱动器对应控制字下发顺序：0x0006 >>> 0x0007 >>> 0x000f
         for (int i = 1; i < 4; i++)
         {
-            CHECK_FUNC(GM_TxPdoEntry_Read(g_device_data[i + 2].slave.statusWord, &status[i] , 2));// 获取状态字
+            // 每个周期都在读控制字
+            CHECK_FUNC(GM_TxPdoEntry_Read(g_device_data[i + 2].slave.statusWord, &status[i] , 2));// 获取状态字信息
             CHECK_FUNC(GM_TxPdoEntry_Read(g_device_data[i + 2].slave.act_pos, &pos[i], 4));
             // 根据状态字设置控制字
-            if((status[i] & 0x4f) == 0x40)
+            if((status[i] & 0x004f) == 0x0040) 
             {
-                CHECK_FUNC(GM_RxPdoEntry_Write(g_device_data[i + 2].slave.Modes_of_operation, 0x08)); // 设置操作模式
-                CHECK_FUNC(GM_RxPdoEntry_Write(g_device_data[i + 2].slave.Control_word, 0x06));
                 dri_manager.drivers[i]->state = DRV_STATE_SWITCHED_ON_DISABLE;
+                CHECK_FUNC(GM_RxPdoEntry_Write(g_device_data[i + 2].slave.Modes_of_operation, 0x08)); // 设置操作模式, 08 设置位置模式 操作模式8位
+                // 写控制字0x0006
+                CHECK_FUNC(GM_RxPdoEntry_Write(g_device_data[i + 2].slave.Control_word, 0x0006));
             }
-            else if((status[i] & 0x6f) == 0x21)
+            else if((status[i] & 0x006f) == 0x0021)
             {
-                CHECK_FUNC(GM_RxPdoEntry_Write(g_device_data[i + 2].slave.Control_word, 0x07));
+                // 写控制字0x0007
+                CHECK_FUNC(GM_RxPdoEntry_Write(g_device_data[i + 2].slave.Control_word, 0x0007));
                 CHECK_FUNC(GM_RxPdoEntry_Write(g_device_data[i + 2].slave.target_pos, pos[i]));
                 pos_cmd[i] = pos[i];
                 dri_manager.drivers[i]->state = DRV_STATE_READY_TO_SWITCHED_ON;
             }
-            else if((status[i] & 0x6f) == 0x23)
+            else if((status[i] & 0x006f) == 0x0023)
             {
                 dri_manager.drivers[i]->state = DRV_STATE_SWITCHED_ON;
-                CHECK_FUNC(GM_RxPdoEntry_Write(g_device_data[i + 2].slave.Control_word, 0x0f));
+                // 写控制字0x000f
+                CHECK_FUNC(GM_RxPdoEntry_Write(g_device_data[i + 2].slave.Control_word, 0x000f));
             }
-            else if((status[i] & 0x27f) == 0x237)
+            else if((status[i] & 0x027f) == 0x0237)
             {
                 dri_manager.drivers[i]->state = DRV_STATE_OPERATION_ENABLED;
             }
         }
-        // 主轴驱动器上使能
+
+        // 主轴驱动器设置成CSV模式 并上使能（理解：设置模式放在使能流程之前 即DRV_STATE_SWITCHED_ON_DISABLE后一个状态）
         // 驱动器状态变化：Ready to Switch On >>> Switched On >>> Operation Enabled
         // 驱动器对应控制字下发顺序：0x06 >>> 0x07 >>> 0x0f
-        if(spindle.mode != DRV_MODE_DISABLED)
+        if(spindle.act_mode != DRV_MODE_NONE) // 实时启动时不会执行
         {
-            CHECK_FUNC(GM_TxPdoEntry_Read(g_device_data[2].slave.statusWord, &status[0] , 2));// 获取主轴驱动器状态字
+            // printf("************************************************************wcf\n");
+            // 如果抽象主轴驱动器不是　DRV_MODE_DISABLED，就一直读主轴驱动器状态字．
+            CHECK_FUNC(GM_TxPdoEntry_Read(g_device_data[DEV_ID_SPINDLE_DRIVER].slave.statusWord, &status[0] , 2));// 获取主轴驱动器状态字
             //根据状态字设置控制字
-            if(((status[0] & 0x4f) == 0x40))
+            if(((status[0] & 0x004f) == 0x0040))
             {
-                CHECK_FUNC(GM_RxPdoEntry_Write(g_device_data[2].slave.Control_word, 0x06)); // 主轴驱动器控制字写0x06
-                CHECK_FUNC(GM_TxPdoEntry_Read(g_device_data[2].slave.act_pos, &pos[0], 4)); // 读主轴驱动器实际位置
                 spindle.state = DRV_STATE_SWITCHED_ON_DISABLE;
+                // 写控制字0x0006
+                CHECK_FUNC(GM_RxPdoEntry_Write(g_device_data[DEV_ID_SPINDLE_DRIVER].slave.Control_word, 0x0006)); // 主轴驱动器控制字写0x0006
+                CHECK_FUNC(GM_TxPdoEntry_Read(g_device_data[DEV_ID_SPINDLE_DRIVER].slave.act_pos, &pos[0], 4)); // 读主轴驱动器实际位置
             }
-            else if((status[0] & 0x6f) == 0x21)
+            else if((status[0] & 0x006f) == 0x0021)
             {
-                if(spindle.mode == DRV_MODE_CSV)
-                {
-                    CHECK_FUNC(GM_RxPdoEntry_Write(g_device_data[2].slave.Modes_of_operation, 0x09));// 主轴驱动器模式控制字写0x09，是将主轴驱动器设置成速度模式。 位置模式 模式字要写0x08，速度模式 模式字要写0x09
-                    CHECK_FUNC(GM_RxPdoEntry_Write(g_device_data[2].slave.Control_word, 0x07));      // 主轴驱动器控制字写0x07
-                }
                 spindle.state = DRV_STATE_READY_TO_SWITCHED_ON;
+                if(spindle.act_mode == DRV_MODE_CSV)
+                {
+                    // 主轴驱动器模式控制6060写0x09，是将主轴驱动器设置成速度模式。 位置模式 模式控制6060要写0x08，速度模式 模式控制6060要写0x09
+                    CHECK_FUNC(GM_RxPdoEntry_Write(g_device_data[DEV_ID_SPINDLE_DRIVER].slave.Modes_of_operation, 0x09));
+                    // 写控制字0x0007
+                    CHECK_FUNC(GM_RxPdoEntry_Write(g_device_data[DEV_ID_SPINDLE_DRIVER].slave.Control_word, 0x0007));
+                }
             }
-            else if((status[0] & 0x6f) == 0x23)
+            else if((status[0] & 0x006f) == 0x0023)
             {
                 spindle.state = DRV_STATE_SWITCHED_ON;
-                CHECK_FUNC(GM_RxPdoEntry_Write(g_device_data[2].slave.Control_word, 0x0f));        // 主轴驱动器控制字写0x0f
+                // 写控制字0x000f
+                CHECK_FUNC(GM_RxPdoEntry_Write(g_device_data[DEV_ID_SPINDLE_DRIVER].slave.Control_word, 0x000f));
             }
-            else if((status[0] & 0x27f) == 0x237 && (spindle.state == DRV_STATE_SWITCHED_ON))
+            else if((status[0] & 0x027f) == 0x0237)
             {
                 spindle.state = DRV_STATE_OPERATION_ENABLED;
+                // 到这里已经上完使能
             }
         }
         else
         {
-            if(spindle.state != DRV_STATE_FAULT)
+            if(spindle.state != DRV_STATE_READY_TO_SWITCHED_ON)
             {
-                CHECK_FUNC(GM_RxPdoEntry_Write(g_device_data[2].slave.Control_word, 0x00));         // 主轴驱动器控制字写0x00，主轴驱动器下使能
+                spindle.state = DRV_STATE_NOT_READY_TO_SWITCH_ON;
+                CHECK_FUNC(GM_RxPdoEntry_Write(g_device_data[DEV_ID_SPINDLE_DRIVER].slave.Control_word, 0x00)); // 主轴驱动器控制字写0x00，主轴驱动器下使能
             }
         }
+
+        // wcf test
+        // 主轴驱动器设置成位置模式 并上使能
+        // {
+        //     CHECK_FUNC(GM_TxPdoEntry_Read(g_device_data[DEV_ID_SPINDLE_DRIVER].slave.statusWord, &status[0], 2));// 获取状态字 每个周期都在读这个控制字
+        //     CHECK_FUNC(GM_TxPdoEntry_Read(g_device_data[DEV_ID_SPINDLE_DRIVER].slave.act_pos, &pos[0], 4));
+        //     // 根据状态字设置控制字
+        //     if((status[0] & 0x4f) == 0x40)
+        //     {
+        //         CHECK_FUNC(GM_RxPdoEntry_Write(g_device_data[DEV_ID_SPINDLE_DRIVER].slave.Modes_of_operation, 0x08)); // 设置操作模式, 08 设置位置模式
+        //         CHECK_FUNC(GM_RxPdoEntry_Write(g_device_data[DEV_ID_SPINDLE_DRIVER].slave.Control_word, 0x06));
+        //         dri_manager.drivers[0]->state = DRV_STATE_SWITCHED_ON_DISABLE;
+        //     }
+        //     // 如果16位的状态字变成了下一阶段的结果，然后就发下一个控制字给驱动器，让驱动器的状态机继续变
+        //     else if((status[0] & 0x6f) == 0x21) 
+        //     {
+        //         CHECK_FUNC(GM_RxPdoEntry_Write(g_device_data[DEV_ID_SPINDLE_DRIVER].slave.Control_word, 0x07));
+        //         CHECK_FUNC(GM_RxPdoEntry_Write(g_device_data[DEV_ID_SPINDLE_DRIVER].slave.target_pos, pos[0]));
+        //         pos_cmd[0] = pos[0];
+        //         dri_manager.drivers[0]->state = DRV_STATE_READY_TO_SWITCHED_ON;
+        //     }
+        //     else if((status[0] & 0x6f) == 0x23)
+        //     {
+        //         dri_manager.drivers[0]->state = DRV_STATE_SWITCHED_ON;
+        //         CHECK_FUNC(GM_RxPdoEntry_Write(g_device_data[DEV_ID_SPINDLE_DRIVER].slave.Control_word, 0x0f));
+        //     }
+        //     else if((status[0] & 0x27f) == 0x237)
+        //     {
+        //         dri_manager.drivers[0]->state = DRV_STATE_OPERATION_ENABLED;
+        //     }
+        // }
+
+        // wcf test 
+        // uint32_t spindle_act_pos = 0;
+        // int32_t spindle_act_vel = 0;
+        // GM_TxPdoEntry_Read(g_device_data[DEV_ID_SPINDLE_DRIVER].slave.act_pos, &spindle_act_pos, 4);
+        // GM_TxPdoEntry_Read(g_device_data[DEV_ID_SPINDLE_DRIVER].slave.act_speed, &spindle_act_vel, 4);
+        // printf("spindle_pos%d spindle_act_vel%d \n", spindle_act_pos, spindle_act_vel);
 
         //读取驱动器警报
         for (int i = 0; i < 4; i++)
@@ -317,7 +382,7 @@ void spindle_driver_servo_on()
     }
     else if ((status_word & 0x6f) == 0x21)
     {
-        if (spindle.mode == DRV_MODE_CSV)
+        if (spindle.act_mode == DRV_MODE_CSV)
         {
             CHECK_FUNC(GM_RxPdoEntry_Write(g_device_data[DEV_ID_SPINDLE_DRIVER].slave.Modes_of_operation, 0x09));
         }
@@ -333,34 +398,6 @@ void spindle_driver_servo_on()
     {
         spindle.state = DRV_STATE_OPERATION_ENABLED;
     }
-}
-
-// 主轴驱动器下使能
-void spindle_driver_servo_off()
-{
-    CHECK_FUNC(GM_RxPdoEntry_Write(g_device_data[DEV_ID_SPINDLE_DRIVER].slave.Control_word, 0x00));
-}
-
-// 主轴驱动器设置速度模式
-void spindle_driver_set_speed_mode()
-{
-    CHECK_FUNC(GM_RxPdoEntry_Write(g_device_data[DEV_ID_SPINDLE_DRIVER].slave.Modes_of_operation, 0x09));
-}
-
-// 主轴驱动器设置位置模式
-void spindle_driver_set_position_mode()
-{
-    CHECK_FUNC(GM_RxPdoEntry_Write(g_device_data[DEV_ID_SPINDLE_DRIVER].slave.Modes_of_operation, 0x08));
-}
-
-// switch spindle mode
-void spindle_driver_switch_pos_mode()
-{
-    // 1 下使能
-    spindle_driver_servo_off();
-    // 2 切模式
-    spindle_driver_set_position_mode();
-    // 
 }
 
 static void Master_Receive(){
