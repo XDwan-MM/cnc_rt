@@ -65,6 +65,20 @@ typedef struct{
     int reverse;            // 0正 1反
 }RIGID_DATA;
 
+typedef struct 
+{
+    POS *origin_point;
+    POS *control_point;
+    double *w;
+    double *U;
+    int k;
+    int num;
+    double length;
+    //段信息
+    int startlineno;
+    int endlineno;
+}NURBS_DATA;
+
 typedef struct
 {
     INTERP_TYPE type;   // 插补类型
@@ -79,6 +93,7 @@ typedef struct
     CIRCULAR_DATA circular_data;
     HELIX_DATA helical_data;
     RIGID_DATA rigid_data;
+    NURBS_DATA nurbs_data;
     double length;      // 长度
     double angle_rad;   // 夹角
     double start_vel;   // 起始速度

@@ -1,1 +1,1 @@
-Version=1.24.7
+Version=1.24.8
