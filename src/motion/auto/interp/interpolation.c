@@ -142,18 +142,20 @@ static POS interpolate_tap(PLAN_BLOCK* current_block, double accum_distance){
     POS interp_pos;
     switch(current_block->plane){
         case PLANE_XY:
-            interp_pos.z =  current_block->start_pos.z + accum_distance;
+            interp_pos.z = current_block->start_pos.z + accum_distance;
             break;
         case PLANE_XZ:
-            interp_pos.y =  current_block->start_pos.y + accum_distance;
+            interp_pos.y = current_block->start_pos.y + accum_distance;
             break;
         case PLANE_YZ:
-            interp_pos.x =  current_block->start_pos.x + accum_distance;
+            interp_pos.x = current_block->start_pos.x + accum_distance;
             break;
     }
     // 主轴旋转角度
     double spl_pos = accum_distance / current_block->rigid_data.screw_offset;
     double spl_angle = spl_pos * 360;
     if(current_block->rigid_data.reverse) spl_angle = - spl_angle;
+    // 测试
+    rt_data->axis_data[AXIS_SP].wcs_cmd_pos_cur = spl_angle;
     return interp_pos;
 }
