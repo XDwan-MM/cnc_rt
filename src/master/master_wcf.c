@@ -1,8 +1,9 @@
 #include "master_wcf.h"
 
-#include "global.h"
 #include "main_demo.h"
 #include "rt_sem.h"
+
+#include "global.h"
 
 #include <alarmapi.h>
 #include <hmisysapi.h>

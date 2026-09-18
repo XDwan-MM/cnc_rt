@@ -63,11 +63,13 @@ HEADERS += \
     ../src/datadef/plan_queue.h \
     ../src/datadef/rt_data.h \
     ../src/datadef/record_queue.h \
-    ../src/hal/hal_driver.h \
+    ../src/hal/driver_hal.h \
+    ../src/hal/driver.h \
+    ../src/hal/ethercat_driver_hal.h \
     ../src/hal/hal_io.h \
     ../src/hal/egear_ratio.h \
     ../src/master/master_sim.h \
-    ../src/master/master.h \
+    ../src/master/master_wcf.h \
     ../src/motion/auto/auto.h \
     ../src/motion/auto/trajplan/auto_gcode.h \
     ../src/motion/auto/trajplan/auto_mst.h \
@@ -116,11 +118,13 @@ SOURCES += \
     ../src/datadef/plan_queue.c \
     ../src/datadef/rt_data.c \
     ../src/datadef/record_queue.c \
-    ../src/hal/hal_driver.c \
+    ../src/hal/driver_hal.c \
+    ../src/hal/driver.c \
+    ../src/hal/ethercat_driver_hal.c \
     ../src/hal/hal_io.c \
     ../src/hal/egear_ratio.c \
     ../src/master/master_sim.c \
-    ../src/master/master.c \
+    ../src/master/master_wcf.c \
     ../src/motion/auto/auto.c \
     ../src/motion/auto/trajplan/auto_gcode.c \
     ../src/motion/auto/trajplan/auto_mst.c \

@@ -73,6 +73,11 @@ hal_retcode_t Driver_Disable(hal_driver_t *drv);
  *=========================================================*/
 hal_retcode_t Driver_Fault_Reset(hal_driver_t *drv);
 
+/*=========================================================
+ * 所有驱动器故障复位
+ *=========================================================*/
+hal_retcode_t Driver_Fault_Reset_All(void);
+
 #ifdef __cplusplus
 }
 #endif

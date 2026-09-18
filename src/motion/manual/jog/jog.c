@@ -3,7 +3,7 @@
 #include "jog_planner.h"
 #include <math.h>
 #include <string.h>
-#include "master.h"
+#include "master_wcf.h"
 #include "device.h"
 
 /*

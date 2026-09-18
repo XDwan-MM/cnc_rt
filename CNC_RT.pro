@@ -92,7 +92,8 @@ debug_mode {
     HEADERS += src/master/cJSON.h
     HEADERS += src/master/device.h
     HEADERS += src/master/slave_list.h
-    SOURCES += src/master/master.c
+    HEADERS += src/master/master_wcf.h
+    SOURCES += src/master/master_wcf.c
 }
 
 HEADERS += \
@@ -106,7 +107,6 @@ HEADERS += \
     src/datadef/plan_queue.h \
     src/datadef/rt_data.h \
     src/datadef/record_queue.h \
-    src/hal/hal_driver.h \
     src/hal/hal_io.h \
     src/hal/egear_ratio.h \
     src/motion/auto/auto.h \
@@ -145,6 +145,10 @@ HEADERS += \
     src/threads/threads_controller.h \
     src/utils/math/cnc_math.h \
     src/utils/log/log.h \
+    src/master/master_wcf.h \
+    src/hal/driver_hal.h \
+    src/hal/driver.h \
+    src/hal/ethercat_driver_hal.h \
     
 
 SOURCES += \
@@ -156,7 +160,6 @@ SOURCES += \
     src/datadef/plan_queue.c \
     src/datadef/rt_data.c \
     src/datadef/record_queue.c \
-    src/hal/hal_driver.c \
     src/hal/hal_io.c \
     src/hal/egear_ratio.c \
     src/motion/auto/auto.c \
@@ -191,6 +194,9 @@ SOURCES += \
     src/threads/threads_controller.cpp \
     src/utils/math/cnc_math.c \
     src/utils/log/log.c \
+    src/hal/driver_hal.c \
+    src/hal/driver.c \
+    src/hal/ethercat_driver_hal.c \
 
 
 INCLUDEPATH += \

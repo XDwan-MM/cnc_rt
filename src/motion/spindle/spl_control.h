@@ -8,7 +8,7 @@ extern "C" {
 #include "math.h"
 #include <stdint.h>
 #include <stdbool.h>
-#include "hal_driver.h"
+#include "driver_hal.h"
 #include "global.h"
 
 // 主轴事件

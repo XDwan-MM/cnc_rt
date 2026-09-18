@@ -11,7 +11,7 @@
 #include "hmisysapi.h"
 #include "homing.h"
 #include "jog.h"
-#include "master.h"
+#include "master_wcf.h"
 #include "parser.h"
 #include "pathplan.h"
 #include "pitch_comp.h"

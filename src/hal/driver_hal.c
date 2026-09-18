@@ -1,4 +1,5 @@
 #include "driver_hal.h"
+#include "ethercat_driver_hal.h"
 #include "debug_mode.h"
 
 #include <stddef.h>

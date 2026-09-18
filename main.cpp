@@ -1,7 +1,7 @@
 #include <stdio.h>
 #include <cstdio>
 #include <cerrno>
-#include "hal_driver.h"
+#include "driver_hal.h"
 #include "hal_io.h"
 #include "main_demo.h"
 #include "shmapi.h"
@@ -15,7 +15,7 @@
 #include "parser.h"
 #include <hmisysapi.h>
 #include "stored_stroke_check.h"
-#include "master.h"
+#include "master_wcf.h"
 #include "log.h"
 #include <QFile>
 #include <QTextStream>

@@ -1,5 +1,5 @@
 #include "alarm.h"
-#include "master.h"
+#include "master_wcf.h"
 #include "rt_data.h"
 #include "reset.h"
 #include <alarmapi.h>

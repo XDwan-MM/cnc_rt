@@ -117,6 +117,36 @@ hal_retcode_t Driver_Fault_Reset(hal_driver_t *drv)
 }
 
 /*=========================================================
+ * 所有驱动器故障复位
+ *=========================================================*/
+hal_retcode_t Driver_Fault_Reset_All(void)
+{
+    if (!dri_manager.initialized)
+    {
+        return HAL_DRIVER_ERROR;
+    }
+
+    for (uint8_t i = 0; i < dri_manager.count; i++)
+    {
+        hal_driver_t *drv = dri_manager.drivers[i];
+        hal_retcode_t ret;
+
+        if (drv == NULL)
+        {
+            continue;
+        }
+
+        ret = Driver_Fault_Reset(drv);
+        if (ret != HAL_DRIVER_SUCCESS)
+        {
+            return ret;
+        }
+    }
+
+    return HAL_DRIVER_SUCCESS;
+}
+
+/*=========================================================
  * 单个驱动器周期状态机
  *=========================================================*/
 hal_retcode_t Driver_Cyclic_Process(hal_driver_t *drv)

@@ -1,7 +1,7 @@
 #include "master_sim.h"
 #include "debug_mode.h"
 #include "rt_sem.h"
-#include "hal_driver.h"
+#include "driver_hal.h"
 #include "hal_io.h"
 #include <stdio.h>
 #include <unistd.h>

@@ -19,7 +19,7 @@
 #include "auto.h"
 #include "homing.h"
 #include "trajectory.h"
-#include "hal_driver.h"
+#include "driver_hal.h"
 #include "hal_io.h"
 #include "jog.h"
 #include "ferror_control.h"
