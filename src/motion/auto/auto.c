@@ -898,14 +898,16 @@ static void auto_pop_current_block()
 }
 
 static void auro_reset_stop_skip(){
-    rt_set_sys_state(SYS_IS_STOP_SKIP, false);
-    // 更新宏变量轴地址
-    ItpSetOriginMacPos(rt_data->axis_data[AXIS_X].motor_cmd_pos,
-                rt_data->axis_data[AXIS_Y].motor_cmd_pos,
-                rt_data->axis_data[AXIS_Z].motor_cmd_pos,
-                0);
-    rt_set_chan_state(0, CHAN_IS_MOTION_SYNC, true);
-    LOG(LOG_LEVEL_DEBUG, "探针到位 %f %f %f", rt_data->axis_data[AXIS_X].motor_cmd_pos, rt_data->axis_data[AXIS_Y].motor_cmd_pos, rt_data->axis_data[AXIS_Z].motor_cmd_pos);
+    if(cycle_tp->plan_block->mode == PMC_MODE_STOPSKIP){
+        rt_set_sys_state(SYS_IS_STOP_SKIP, false);
+        // 更新宏变量轴地址
+        ItpSetOriginMacPos(rt_data->axis_data[AXIS_X].motor_cmd_pos,
+                    rt_data->axis_data[AXIS_Y].motor_cmd_pos,
+                    rt_data->axis_data[AXIS_Z].motor_cmd_pos,
+                    0);
+        rt_set_chan_state(0, CHAN_IS_MOTION_SYNC, true);
+        LOG(LOG_LEVEL_DEBUG, "探针到位 %f %f %f", rt_data->axis_data[AXIS_X].motor_cmd_pos, rt_data->axis_data[AXIS_Y].motor_cmd_pos, rt_data->axis_data[AXIS_Z].motor_cmd_pos);
+    }
 }
 
 static void auto_set_stop_skip_macro(){
