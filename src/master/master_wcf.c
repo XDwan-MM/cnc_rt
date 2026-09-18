@@ -130,6 +130,14 @@ int Master_Start(void)
         return ret;
     }
 
+    /*
+     * CSP进给轴上使能前先保持当前反馈位置，避免启动时把目标位置
+     * 当作零点而引起轴移动。正常运动周期随后会继续更新这些目标值。
+     */
+    Hal_Driver_Set_Target_Pos(&x_axis_driver, x_axis_driver.actual_pos);
+    Hal_Driver_Set_Target_Pos(&y_axis_driver, y_axis_driver.actual_pos);
+    Hal_Driver_Set_Target_Pos(&z_axis_driver, z_axis_driver.actual_pos);
+
     /* -----------------------------------------------------
      * 4. IO资源扫描
      * ----------------------------------------------------- */

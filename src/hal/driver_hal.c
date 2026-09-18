@@ -174,6 +174,8 @@ hal_retcode_t Hal_Driver_Array_Init(void)
 
         drv->state = DRV_STATE_NOT_READY_TO_SWITCH_ON;
 
+        drv->enable_requested = true;
+
         drv->act_mode = DRV_MODE_NONE;
 
         drv->req_mode = DRV_MODE_NONE;

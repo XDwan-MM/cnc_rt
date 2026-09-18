@@ -20,6 +20,8 @@ void Driver_Init(hal_driver_t *drv)
 
     drv->state = DRV_STATE_INIT;
 
+    drv->enable_requested = true;
+
     drv->act_mode = DRV_MODE_NONE;
 
     drv->req_mode = DRV_MODE_NONE;
@@ -218,6 +220,11 @@ hal_retcode_t Driver_Cyclic_Process(hal_driver_t *drv)
             }
         }
 
+        if (!drv->enable_requested)
+        {
+            return Ethercat_Driver_Write_Controlword(drv, DRV_CONTROL_DISABLE_VOLTAGE);
+        }
+
         return Ethercat_Driver_Write_Controlword(drv, DRV_CONTROL_SHUTDOWN);
     }
 
@@ -228,6 +235,11 @@ hal_retcode_t Driver_Cyclic_Process(hal_driver_t *drv)
     if (Driver_Is_State(drv->status_word, 0x006F, 0x0021))
     {
         drv->state = DRV_STATE_READY_TO_SWITCHED_ON;
+
+        if (!drv->enable_requested)
+        {
+            return Ethercat_Driver_Write_Controlword(drv, DRV_CONTROL_DISABLE_VOLTAGE);
+        }
 
         return Ethercat_Driver_Write_Controlword(drv, DRV_CONTROL_SWITCH_ON);
     }
@@ -240,6 +252,11 @@ hal_retcode_t Driver_Cyclic_Process(hal_driver_t *drv)
     {
         drv->state = DRV_STATE_SWITCHED_ON;
 
+        if (!drv->enable_requested)
+        {
+            return Ethercat_Driver_Write_Controlword(drv, DRV_CONTROL_DISABLE_VOLTAGE);
+        }
+
         return Ethercat_Driver_Write_Controlword(drv, DRV_CONTROL_ENABLE_OPERATION);
     }
 
@@ -250,6 +267,11 @@ hal_retcode_t Driver_Cyclic_Process(hal_driver_t *drv)
     if (Driver_Is_State(drv->status_word, 0x027F, 0x0237))
     {
         drv->state = DRV_STATE_OPERATION_ENABLED;
+
+        if (!drv->enable_requested)
+        {
+            return Ethercat_Driver_Write_Controlword(drv, DRV_CONTROL_DISABLE_VOLTAGE);
+        }
 
         /*
          * 这里直接使用Master本周期已经读取好的：
