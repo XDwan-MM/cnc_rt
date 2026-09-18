@@ -66,6 +66,8 @@ int Master_Start(void)
 {
     int ret;
 
+    op_flag = 0;
+
     /* -----------------------------------------------------
      * 初始化 Master 上下文
      * ----------------------------------------------------- */
@@ -201,6 +203,8 @@ int Master_Start(void)
 int Master_Close(void)
 {
     int ret;
+
+    op_flag = 0;
 
     if (!g_master.initialized)
     {
@@ -374,9 +378,9 @@ void Master_Wait_Sync(void)
      * 非实时测试模式
      */
 
-    post_rt_sem_all();
-
     op_flag = 1;
+
+    post_rt_sem_all();
 
     usleep(1000);
 
@@ -394,6 +398,8 @@ void Master_Wait_Sync(void)
 
     if (ret < 0)
     {
+        op_flag = 0;
+
         g_master.error_code = ret;
 
         LOG(LOG_LEVEL_ERR, "GM_Wait_Master_Sync失败，错误码 %d", ret);
@@ -415,6 +421,8 @@ void Master_Wait_Sync(void)
 
     if (ret < 0)
     {
+        op_flag = 0;
+
         return;
     }
 
@@ -469,6 +477,11 @@ void Master_Run(void)
 
         Master_Wait_Sync();
 
+        if (op_flag == 0)
+        {
+            continue;
+        }
+
         /* -------------------------------------------------
          * ③ 等待运动控制线程
          * ------------------------------------------------- */
@@ -482,8 +495,6 @@ void Master_Run(void)
 
             continue;
         }
-
-        op_flag = 1;
 
         /* -------------------------------------------------
          * ④ Fault Reset请求
@@ -549,6 +560,8 @@ void Master_Run(void)
 
         if (ret < 0)
         {
+            op_flag = 0;
+
             continue;
         }
 

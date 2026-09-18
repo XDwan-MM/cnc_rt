@@ -59,7 +59,7 @@ const char *mode_names[] = {"编辑", "AUTO", "MDI", "DNC", "手轮", "手动", 
 // 轨迹规划
 void emcmotTrajPlan()
 {
-    // todo：什么时候op_flag=0，为0应统一关闭线程，报错退出系统
+    // 主站未进入OP或当前周期通信失败时，跳过本周期运动计算。
     if (op_flag == 0)
     {
         return;
