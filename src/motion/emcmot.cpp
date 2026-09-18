@@ -52,8 +52,8 @@ void emcmot_test_rebuild_axis_positions_from_feedback()
 #endif
 
 // 绝对式电机编码器位置(指令，反馈)
-static int32_t x_cmd_pulse_pos, y_cmd_pulse_pos, z_cmd_pulse_pos;
-static int32_t x_act_pulse_pos, y_act_pulse_pos, z_act_pulse_pos;
+static int32_t x_cmd_pulse_pos, y_cmd_pulse_pos, z_cmd_pulse_pos, sp_cmd_pulse_pos;
+static int32_t x_act_pulse_pos, y_act_pulse_pos, z_act_pulse_pos, sp_act_pulse_pos;
 const char *mode_names[] = {"编辑", "AUTO", "MDI", "DNC", "手轮", "手动", "回零", "空闲"};
 
 // 轨迹规划
@@ -314,22 +314,30 @@ static void read_from_hal()
     rt_data->axis_data[AXIS_X].motor_act_pos = rt_data->axis_data[AXIS_X].motor_cmd_pos;
     rt_data->axis_data[AXIS_Y].motor_act_pos = rt_data->axis_data[AXIS_Y].motor_cmd_pos;
     rt_data->axis_data[AXIS_Z].motor_act_pos = rt_data->axis_data[AXIS_Z].motor_cmd_pos;
+    rt_data->axis_data[AXIS_SP].motor_act_pos = rt_data->axis_data[AXIS_SP].motor_cmd_pos;
 #else
+    // 计算进给轴位置
     Hal_Driver_Get_Actual_Pos(&x_axis_driver, &x_act_pulse_pos);
     rt_data->axis_data[AXIS_X].motor_act_pos = pulses_to_position(&rt_data->axis_data[AXIS_X], x_act_pulse_pos);
     Hal_Driver_Get_Actual_Pos(&y_axis_driver, &y_act_pulse_pos);
     rt_data->axis_data[AXIS_Y].motor_act_pos = pulses_to_position(&rt_data->axis_data[AXIS_Y], y_act_pulse_pos);
     Hal_Driver_Get_Actual_Pos(&z_axis_driver, &z_act_pulse_pos);
     rt_data->axis_data[AXIS_Z].motor_act_pos = pulses_to_position(&rt_data->axis_data[AXIS_Z], z_act_pulse_pos);
+    // todo：计算旋转轴角度
+    Hal_Driver_Get_Actual_Pos(&spindle, &sp_act_pulse_pos);
+    // rt_data->axis_data[AXIS_SP].motor_act_pos = pulses_to_position(&rt_data->axis_data[AXIS_SP], sp_act_pulse_pos);
 #endif
     // 电机脉冲
     rt_data->axis_data[AXIS_X].enc_cntr = x_act_pulse_pos;
     rt_data->axis_data[AXIS_Y].enc_cntr = y_act_pulse_pos;
     rt_data->axis_data[AXIS_Z].enc_cntr = z_act_pulse_pos;
+    rt_data->axis_data[AXIS_SP].enc_cntr = sp_cmd_pulse_pos;
     // 读取实际速度
     rt_data->axis_data[AXIS_X].act_vel = x_axis_driver.actual_vel;
     rt_data->axis_data[AXIS_Y].act_vel = y_axis_driver.actual_vel;
     rt_data->axis_data[AXIS_Z].act_vel = z_axis_driver.actual_vel;
+    rt_data->axis_data[AXIS_SP].act_vel = spindle.actual_vel;
+    // 进给值实际合成速度，不包含主轴
     rt_data->chan_data[0].act_vel = sqrt(pow(x_axis_driver.actual_vel, 2) + pow(y_axis_driver.actual_vel, 2) +
                                          pow(z_axis_driver.actual_vel, 2));
 
