@@ -114,6 +114,7 @@ typedef enum {
     RELATIVE_AXIS_HOMING,
 } HOMING_TYPE;
 
+// 插补类型
 typedef enum {
     UNKNOWN = 0,
     RAPID,          // 快速进给 G00
@@ -140,6 +141,7 @@ typedef enum {
     MODE_IDLE,       // 空闲
 } NC_MODE;
 
+// NC 事件
 typedef enum {
     SYS_EVENT_NONE = 0,
     SYS_EVENT_RERUN,
