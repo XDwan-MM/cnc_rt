@@ -11,10 +11,12 @@ extern "C"
 /*=========================================================
  * 读取反馈
  *=========================================================*/
-
-hal_retcode_t Ethercat_Driver_Read_Status(hal_driver_t *drv);
-
 hal_retcode_t Ethercat_Driver_Read_Feedback(hal_driver_t *drv);
+
+/*=========================================================
+ * 读取驱动器状态字
+ *=========================================================*/
+hal_retcode_t Ethercat_Driver_Read_Status(hal_driver_t *drv);
 
 /*=========================================================
  * 控制字 6040
@@ -32,7 +34,7 @@ hal_retcode_t Ethercat_Driver_Write_Mode(hal_driver_t *drv, drv_mode_t mode);
  * 实际模式 6061
  *=========================================================*/
 
-hal_retcode_t Ethercat_Driver_Read_Mode(hal_driver_t *drv);
+hal_retcode_t Ethercat_Driver_Read_Actual_Mode(hal_driver_t *drv);
 
 /*=========================================================
  * 目标位置 607A
@@ -50,7 +52,7 @@ hal_retcode_t Ethercat_Driver_Write_Target_Velocity(hal_driver_t *drv, int32_t v
  * 目标转矩
  *=========================================================*/
 
-hal_retcode_t Ethercat_Driver_Write_Target_Torque(hal_driver_t *drv, int16_t torque);
+// hal_retcode_t Ethercat_Driver_Write_Target_Torque(hal_driver_t *drv, int16_t torque);
 
 #ifdef __cplusplus
 }

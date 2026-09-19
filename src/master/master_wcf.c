@@ -38,6 +38,11 @@
 
 int master_error_code = 0;
 
+/*
+ * 驱动器故障复位请求标志：
+ * true  表示 Master_Run 需要发送 6040=0x0080；
+ * 待反馈确认 6041 Fault 位和 error_code 清零后恢复为 false。
+ */
 bool reset_sem = false;
 
 master_context_t g_master;
@@ -95,6 +100,23 @@ int Master_Start(void)
         return MASTER_ERR_INIT;
     }
 
+    /* ethercat_init() 完成后 g_device_data 才有效。 */
+    int result = 0;
+    result = Hal_Driver_Array_Init();
+    if (result != HAL_DRIVER_SUCCESS)
+    {
+        LOG(LOG_LEVEL_ERR, "驱动器数组初始化失败 %d", result);
+        g_master.state = MASTER_STATE_ERROR;
+        return MASTER_ERR_INIT;
+    }
+
+    /* 进给轴使用 CSP；主轴使用 CSV，但不上使能。 */
+    Driver_Request_Mode(&x_axis_driver, DRV_MODE_CSP);
+    Driver_Request_Mode(&y_axis_driver, DRV_MODE_CSP);
+    Driver_Request_Mode(&z_axis_driver, DRV_MODE_CSP);
+    Driver_Request_Mode(&spindle, DRV_MODE_CSV);
+    spindle.enable_requested = false;
+
     g_master.initialized = true;
 
     g_master.state = MASTER_STATE_STARTED;
@@ -130,13 +152,15 @@ int Master_Start(void)
         return ret;
     }
 
-    /*
-     * CSP进给轴上使能前先保持当前反馈位置，避免启动时把目标位置
-     * 当作零点而引起轴移动。正常运动周期随后会继续更新这些目标值。
-     */
+    /* 首次使能前锁定位置目标，避免 CSP 从默认值跳到当前位置。 */
     Hal_Driver_Set_Target_Pos(&x_axis_driver, x_axis_driver.actual_pos);
     Hal_Driver_Set_Target_Pos(&y_axis_driver, y_axis_driver.actual_pos);
     Hal_Driver_Set_Target_Pos(&z_axis_driver, z_axis_driver.actual_pos);
+    Hal_Driver_Set_Target_Vel(&spindle, 0);
+
+    /* 让 emcmot 首个周期用实际反馈重建指令位置，避免首次 JOG 产生位置跳变。 */
+    update_pos_flag = 0;
+
 
     /* -----------------------------------------------------
      * 4. IO资源扫描
@@ -321,7 +345,8 @@ int Master_Receive(void)
 
     if (ret != HAL_DRIVER_SUCCESS)
     {
-        LOG(LOG_LEVEL_ERR, "Hal_Driver_Update_All(read)失败，错误码 %d", ret);
+        printf("(ret != HAL_DRIVER_SUCCESS) err %d\n", ret);
+        LOG(LOG_LEVEL_ERR, "Hal_Driver_Update_All(true, false)失败，错误码 %d", ret);
 
         g_master.error_code = ret;
 
@@ -383,7 +408,7 @@ void Master_Wait_Sync(void)
 #ifndef MASTER_RUN_ON
 
     /*
-     * 非实时测试模式
+     * 非实时模式
      */
 
     op_flag = 1;
@@ -393,6 +418,9 @@ void Master_Wait_Sync(void)
     usleep(1000);
 
 #else
+    /*
+     * 实时模式
+     */
 
     int ret;
 
@@ -522,7 +550,48 @@ void Master_Run(void)
 
             if (ret == HAL_DRIVER_SUCCESS)
             {
-                reset_sem = false;
+                bool all_reset = true;
+
+                for (uint8_t i = 0; i < dri_manager.count; ++i)
+                {
+                    hal_driver_t *drv = dri_manager.drivers[i];
+
+                    if (drv == NULL)
+                    {
+                        continue;
+                    }
+
+                    /* status_word/error_code 来自本周期 Master_Receive() 的缓存。 */
+                    if ((drv->status_word & 0x0008U) != 0 || drv->error_code != 0)
+                    {
+                        all_reset = false;
+                        continue;
+                    }
+
+                    if (drv->state == DRV_STATE_FAULT)
+                    {
+                        drv->state = DRV_STATE_NOT_READY_TO_SWITCH_ON;
+                        drv->act_mode = DRV_MODE_NONE;
+                    }
+
+                    /* 与驱动器索引对应的轴报警也要解除。 */
+                    if (i == 0)
+                    {
+                        delAlarm(ALARM_AX, ALARM_ERROR, 33);
+                        rt_data->axis_data[3].status.is_error = false;
+                    }
+                    else if (i <= 3)
+                    {
+                        delAlarm(ALARM_AX, ALARM_ERROR, 29 + i);
+                        rt_data->axis_data[i - 1].status.is_error = false;
+                    }
+                }
+
+                /* 等待下一周期反馈确认后再结束复位流程。 */
+                if (all_reset)
+                {
+                    reset_sem = false;
+                }
             }
         }
 
@@ -554,11 +623,7 @@ void Master_Run(void)
          * ⑥ 检查驱动器报警
          * ------------------------------------------------- */
 
-#ifndef DEBUG_MODE_ENABLED
-
         Check_Driver_Error();
-
-#endif
 
         /* -------------------------------------------------
          * ⑦ 发送PDO
@@ -602,55 +667,19 @@ void Master_Reset(void)
 
 void Check_Driver_Error(void)
 {
-    int i;
-
-    /*
-     * Fault Reset期间暂不进行故障同步。
-     */
-
-    if (reset_sem)
+    /* error_code 已由 Master_Receive() 读取并缓存，这里同步到 rt_data。 */
+    for (int axis = 0; axis < 4; ++axis)
     {
-        return;
-    }
+        /* rt_data: X/Y/Z/主轴；Driver: 主轴/X/Y/Z。 */
+        const int driver_index = (axis == 3) ? 0 : axis + 1;
+        hal_driver_t *drv = dri_manager.drivers[driver_index];
+        const bool is_error = (drv != NULL && drv->error_code != 0);
 
-    /*
-     * rt_data轴编号：
-     *
-     * 0 = X
-     * 1 = Y
-     * 2 = Z
-     * 3 = 主轴
-     *
-     * Driver编号：
-     *
-     * 0 = 主轴
-     * 1 = X
-     * 2 = Y
-     * 3 = Z
-     */
+        rt_data->axis_data[axis].status.is_error = is_error;
 
-    for (i = 0; i < 4; i++)
-    {
-        if (rt_data->axis_data[i].status.is_error)
+        if (is_error)
         {
-            if (i == 3)
-            {
-                /* 主轴 */
-
-                if (dri_manager.drivers[0] != NULL)
-                {
-                    dri_manager.drivers[0]->state = DRV_STATE_FAULT;
-                }
-            }
-            else
-            {
-                /* X / Y / Z */
-
-                if (dri_manager.drivers[i + 1] != NULL)
-                {
-                    dri_manager.drivers[i + 1]->state = DRV_STATE_FAULT;
-                }
-            }
+            drv->state = DRV_STATE_FAULT;
         }
     }
 }

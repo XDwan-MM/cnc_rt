@@ -20,11 +20,13 @@ void Driver_Init(hal_driver_t *drv)
 
     drv->state = DRV_STATE_INIT;
 
-    drv->enable_requested = true;
+    // drv->enable_requested = true;
 
     drv->act_mode = DRV_MODE_NONE;
 
     drv->req_mode = DRV_MODE_NONE;
+
+    drv->enable_requested = true;
 
     drv->control_word = 0;
 
@@ -185,6 +187,22 @@ hal_retcode_t Driver_Cyclic_Process(hal_driver_t *drv)
         return HAL_DRIVER_SUCCESS;
     }
 
+    /* 允许设置工作模式，但禁止该驱动器进入使能状态。 */
+    if (!drv->enable_requested)
+    {
+        if (drv->req_mode != DRV_MODE_NONE)
+        {
+            hal_retcode_t ret = Ethercat_Driver_Write_Mode(drv, drv->req_mode);
+            if (ret != HAL_DRIVER_SUCCESS)
+            {
+                return ret;
+            }
+        }
+
+        drv->state = DRV_STATE_SWITCHED_ON_DISABLE;
+        return Ethercat_Driver_Write_Controlword(drv, DRV_CONTROL_DISABLE_VOLTAGE);
+    }
+
     /* -----------------------------------------------------
      * 2. Not Ready To Switch On
      * ----------------------------------------------------- */
@@ -204,6 +222,11 @@ hal_retcode_t Driver_Cyclic_Process(hal_driver_t *drv)
     {
         drv->state = DRV_STATE_SWITCHED_ON_DISABLE;
 
+        if (drv->req_mode == DRV_MODE_NONE)
+        {
+            return Ethercat_Driver_Write_Controlword(drv, DRV_CONTROL_DISABLE_VOLTAGE);
+        }
+
         /*
          * 此时可以设置工作模式。
          */
@@ -220,11 +243,6 @@ hal_retcode_t Driver_Cyclic_Process(hal_driver_t *drv)
             }
         }
 
-        if (!drv->enable_requested)
-        {
-            return Ethercat_Driver_Write_Controlword(drv, DRV_CONTROL_DISABLE_VOLTAGE);
-        }
-
         return Ethercat_Driver_Write_Controlword(drv, DRV_CONTROL_SHUTDOWN);
     }
 
@@ -236,7 +254,7 @@ hal_retcode_t Driver_Cyclic_Process(hal_driver_t *drv)
     {
         drv->state = DRV_STATE_READY_TO_SWITCHED_ON;
 
-        if (!drv->enable_requested)
+        if (drv->req_mode == DRV_MODE_NONE)
         {
             return Ethercat_Driver_Write_Controlword(drv, DRV_CONTROL_DISABLE_VOLTAGE);
         }
@@ -252,7 +270,7 @@ hal_retcode_t Driver_Cyclic_Process(hal_driver_t *drv)
     {
         drv->state = DRV_STATE_SWITCHED_ON;
 
-        if (!drv->enable_requested)
+        if (drv->req_mode == DRV_MODE_NONE)
         {
             return Ethercat_Driver_Write_Controlword(drv, DRV_CONTROL_DISABLE_VOLTAGE);
         }
@@ -268,7 +286,7 @@ hal_retcode_t Driver_Cyclic_Process(hal_driver_t *drv)
     {
         drv->state = DRV_STATE_OPERATION_ENABLED;
 
-        if (!drv->enable_requested)
+        if (drv->req_mode == DRV_MODE_NONE)
         {
             return Ethercat_Driver_Write_Controlword(drv, DRV_CONTROL_DISABLE_VOLTAGE);
         }
@@ -280,7 +298,7 @@ hal_retcode_t Driver_Cyclic_Process(hal_driver_t *drv)
          *
          * 不再调用：
          *
-         * Ethercat_Driver_Read_Mode()
+         * Ethercat_Driver_Read_Actual_Mode()
          */
 
         switch (drv->req_mode)
@@ -295,10 +313,9 @@ hal_retcode_t Driver_Cyclic_Process(hal_driver_t *drv)
 
         case DRV_MODE_CST:
 
-            return Ethercat_Driver_Write_Target_Torque(drv, drv->target_torque);
-
+            // return Ethercat_Driver_Write_Target_Torque(drv, drv->target_torque);
+            break;
         default:
-
             return HAL_DRIVER_SUCCESS;
         }
     }

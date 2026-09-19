@@ -91,14 +91,6 @@ int main() {
     // 初始化硬件抽象层
     Hal_Driver_Manager_Init();
     Hal_Driver_Array_Init();
-    // 实时启动时固定工作模式：进给轴使用 CSP，主轴使用 CSV。
-    // 进给轴的目标位置在主站首次接收反馈后锁定到当前位置，避免使能瞬间产生位置跳变。
-    Driver_Request_Mode(&x_axis_driver, DRV_MODE_CSP);
-    Driver_Request_Mode(&y_axis_driver, DRV_MODE_CSP);
-    Driver_Request_Mode(&z_axis_driver, DRV_MODE_CSP);
-    Driver_Request_Mode(&spindle, DRV_MODE_CSV);
-    // 主轴保持CSV模式但不上使能，驱动器不输出转矩，可手动拨动。
-    spindle.enable_requested = false;
     Hal_Io_Array_Init();
     RT_LOG(INFO, "初始化硬件抽象层成功");
     LOG(LOG_LEVEL_INFO, "初始化硬件抽象层成功");
@@ -118,6 +110,7 @@ int main() {
         // setAlarm(ALARM_SY, ALARM_ERROR, 6);
         return -1; // 直接退出，不再启动线程
     }
+    
     RT_LOG(INFO, "启动EtherCAT主站");
     LOG(LOG_LEVEL_INFO, "启动EtherCAT主站");
 #endif

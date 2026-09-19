@@ -8,6 +8,7 @@ hal_retcode_t Ethercat_Driver_Read_Feedback(hal_driver_t *drv)
 {
     if (drv == NULL)
     {
+        printf("drv == NULL\n");
         return HAL_DRIVER_ERR_INVALID_PARAM;
     }
 
@@ -17,37 +18,46 @@ hal_retcode_t Ethercat_Driver_Read_Feedback(hal_driver_t *drv)
      * 6041 Statusword
      * ----------------------------------------------------- */
 
-    ret = GM_TxPdoEntry_Read(drv->pdo.statusWord, &drv->status_word, sizeof(drv->status_word));
+    ret = GM_TxPdoEntry_Read(drv->pdo.statusWord, &(drv->status_word), sizeof(drv->status_word));
 
-    if (ret < 0)
+    if (ret < 0){
+        printf("ret = GM_TxPdoEntry_Read(drv->pdo.statusWord, &(drv->status_word), sizeof(drv->status_word));\n");
+        printf("drv->pdo.statusWord.index) %d\n", (drv->pdo.statusWord.index));
         return HAL_DRIVER_ERROR;
-
+    }
     /* -----------------------------------------------------
      * 6064 Position Actual Value
      * ----------------------------------------------------- */
 
     ret = GM_TxPdoEntry_Read(drv->pdo.act_pos, &drv->actual_pos, sizeof(drv->actual_pos));
 
-    if (ret < 0)
+    if (ret < 0){
+        printf("ret = GM_TxPdoEntry_Read(drv->pdo.act_pos, &drv->actual_pos, sizeof(drv->actual_pos));\n");
+        printf("drv->pdo.act_pos.index) %d\n", (drv->pdo.act_pos.index));
         return HAL_DRIVER_ERROR;
-
+    }
     /* -----------------------------------------------------
      * 606C Velocity Actual Value
      * ----------------------------------------------------- */
 
     ret = GM_TxPdoEntry_Read(drv->pdo.act_speed, &drv->actual_vel, sizeof(drv->actual_vel));
 
-    if (ret < 0)
+    if (ret < 0){
+        printf("ret = GM_TxPdoEntry_Read(drv->pdo.act_speed, &drv->actual_vel, sizeof(drv->actual_vel));\n");
+        printf("drv->pdo.act_speed.index) %d\n", (drv->pdo.act_speed.index));
         return HAL_DRIVER_ERROR;
-
+    }
     /* -----------------------------------------------------
      * Actual Torque
      * ----------------------------------------------------- */
 
-    ret = GM_TxPdoEntry_Read(drv->pdo.act_torque, &drv->actual_torque, sizeof(drv->actual_torque));
+    // ret = GM_TxPdoEntry_Read(drv->pdo.act_torque, &drv->actual_torque, sizeof(drv->actual_torque));
 
-    if (ret < 0)
-        return HAL_DRIVER_ERROR;
+    // if (ret < 0){
+    //     printf("ret = GM_TxPdoEntry_Read(drv->pdo.act_torque, &drv->actual_torque, sizeof(drv->actual_torque));\n");
+    //     printf("drv->pdo.act_torque.index) %d\n", (drv->pdo.act_torque.index));
+    //     return HAL_DRIVER_ERROR;
+    // }
 
     /* -----------------------------------------------------
      * Error Code
@@ -55,17 +65,20 @@ hal_retcode_t Ethercat_Driver_Read_Feedback(hal_driver_t *drv)
 
     ret = GM_TxPdoEntry_Read(drv->pdo.error_code, &drv->error_code, sizeof(drv->error_code));
 
-    if (ret < 0)
+    if (ret < 0){
+        printf("ret = GM_TxPdoEntry_Read(drv->pdo.error_code, &drv->error_code, sizeof(drv->error_code));\n");
+        printf("drv->pdo.error_code.index) %d\n", (drv->pdo.error_code.index));
         return HAL_DRIVER_ERROR;
-
+    }
     /* -----------------------------------------------------
      * 6061 Modes of Operation Display
      * ----------------------------------------------------- */
 
-    ret = Ethercat_Driver_Read_Mode(drv);
+    ret = Ethercat_Driver_Read_Actual_Mode(drv);
 
     if (ret != HAL_DRIVER_SUCCESS)
     {
+        printf("ret != HAL_DRIVER_SUCCESS 68\n");
         return ret;
     }
 
@@ -175,10 +188,11 @@ hal_retcode_t Ethercat_Driver_Write_Mode(hal_driver_t *drv, drv_mode_t mode)
 /*=========================================================
  * 读取实际模式 6061
  *=========================================================*/
-hal_retcode_t Ethercat_Driver_Read_Mode(hal_driver_t *drv)
+hal_retcode_t Ethercat_Driver_Read_Actual_Mode(hal_driver_t *drv)
 {
     if (drv == NULL)
     {
+        printf("mode drv == NULL\n");
         return HAL_DRIVER_ERR_INVALID_PARAM;
     }
 
@@ -188,6 +202,8 @@ hal_retcode_t Ethercat_Driver_Read_Mode(hal_driver_t *drv)
 
     if (ret < 0)
     {
+        printf("drv->pdo.act_mode.index) %d\n", (drv->pdo.act_mode.index));
+        printf("mode drv GM_TxPdoEntry_Read %d\n",ret);
         return HAL_DRIVER_ERROR;
     }
 
@@ -276,21 +292,21 @@ hal_retcode_t Ethercat_Driver_Write_Target_Velocity(hal_driver_t *drv, int32_t v
 /*=========================================================
  * 写目标转矩
  *=========================================================*/
-hal_retcode_t Ethercat_Driver_Write_Target_Torque(hal_driver_t *drv, int16_t torque)
-{
-    if (drv == NULL)
-    {
-        return HAL_DRIVER_ERR_INVALID_PARAM;
-    }
+// hal_retcode_t Ethercat_Driver_Write_Target_Torque(hal_driver_t *drv, int16_t torque)
+// {
+//     if (drv == NULL)
+//     {
+//         return HAL_DRIVER_ERR_INVALID_PARAM;
+//     }
 
-    int ret = GM_RxPdoEntry_Write(drv->pdo.target_torque, (uint32_t)(uint16_t)torque);
+//     int ret = GM_RxPdoEntry_Write(drv->pdo.target_torque, (uint32_t)(uint16_t)torque);
 
-    if (ret < 0)
-    {
-        return HAL_DRIVER_ERROR;
-    }
+//     if (ret < 0)
+//     {
+//         return HAL_DRIVER_ERROR;
+//     }
 
-    drv->target_torque = torque;
+//     drv->target_torque = torque;
 
-    return HAL_DRIVER_SUCCESS;
-}
+//     return HAL_DRIVER_SUCCESS;
+// }

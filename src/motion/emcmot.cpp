@@ -224,15 +224,15 @@ static void set_operating_mode()
 static void spindle_control()
 {
     spindle_set_state();
-    if (spindle.enable_requested && (spindle.act_mode != DRV_MODE_NONE) &&
+    if ((spindle.act_mode != DRV_MODE_NONE) &&
         (spindle.state == DRV_STATE_OPERATION_ENABLED))
     {
         spindle_cal_speed();
     }
-    else if (!spindle.enable_requested)
-    {
-        Hal_Driver_Set_Target_Vel(&spindle, 0);
-    }
+    // else if (!spindle.enable_requested)
+    // {
+    //     Hal_Driver_Set_Target_Vel(&spindle, 0);
+    // }
 #ifdef DEBUG_MODE_ENABLED
     setVarChanInt(0, VAR_CHAN_S_CODE, (int32_t)spl_data.current_speed, 0);
 #else
