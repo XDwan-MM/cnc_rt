@@ -323,5 +323,7 @@ void shm_var_update(){
         setVarChanDouble(i, VAR_CHAN_ACT_FEEDRATE, CONV_MM_S_TO_MM_MIN(rt_data->chan_data[i].act_vel), 0);
         // 指令速度
         setVarChanDouble(i, VAR_CHAN_CMD_FEEDRATE, CONV_MM_S_TO_MM_MIN(rt_data->chan_data[i].cmd_vel), 0);
+        // 刚性攻丝中
+        setVarChanInt(0, VAR_CHAN_IS_RIGID, rt_data->sys_state[SYS_IS_RIGID], 0);
     }
 }
