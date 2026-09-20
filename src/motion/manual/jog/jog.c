@@ -151,7 +151,7 @@ void handle_jog_cmd(void)
     event = rt_data->nc_event;
     switching_mode = rt_data->sys_state[SYS_IS_SWITCHING_MODE];
     is_rapid = rt_data->sys_state[SYS_IS_RAPID];
-    reset_requested = (event == SYS_EVENT_HMI_RESET);
+    reset_requested = (event == SYS_EVENT_HMI_RESET || reset_sem);
 
     /* 切换模式期间不接受新的 JOG 运动请求，等速度降为零后再离开。 */
     if (switching_mode)

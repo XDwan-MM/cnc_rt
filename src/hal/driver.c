@@ -123,11 +123,16 @@ hal_retcode_t Driver_Fault_Reset_All(void)
         {
             continue;
         }
-
-        ret = Driver_Fault_Reset(drv);
-        if (ret != HAL_DRIVER_SUCCESS)
+        if ((drv->status_word & 0x0008) == 0x0008)
         {
-            return ret;
+            // 执行清错
+            ret = Driver_Fault_Reset(drv);
+            // printf("%d驱动器执行了清错\n", drv->axis_id);
+            if (ret != HAL_DRIVER_SUCCESS)
+            {
+                printf("Driver_Fault_Reset_All Driver_Fault_Reset err %d驱动器清除报警失败\n", drv->axis_id);
+                return ret;
+            }
         }
     }
 
@@ -168,7 +173,7 @@ hal_retcode_t Driver_Cyclic_Process(hal_driver_t *drv)
     if ((drv->status_word & 0x0008) != 0)
     {
         drv->state = DRV_STATE_FAULT;
-        printf("单个驱动器更新Driver_Cyclic_Process 错误 驱动器错误状态位为高\n");
+        // printf("单个驱动器更新Driver_Cyclic_Process错误 %d驱动器错误状态位为高\n", drv->axis_id);
 
         return HAL_DRIVER_SUCCESS;
     }
@@ -340,7 +345,7 @@ hal_retcode_t Driver_Cyclic_Process_All(void)
 
         if (ret != HAL_DRIVER_SUCCESS)
         {
-            printf("单个驱动器更新Driver_Cyclic_Process 错误\n");
+            printf("Driver_Cyclic_Process_All 更新所有驱动器时 单个驱动器更新Driver_Cyclic_Process 错误\n");
             return ret;
         }
     }

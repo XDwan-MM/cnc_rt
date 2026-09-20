@@ -112,6 +112,7 @@ hal_retcode_t Ethercat_Driver_Write_Controlword(hal_driver_t *drv, uint16_t cont
 {
     if (drv == NULL)
     {
+        printf("Ethercat_Driver_Write_Controlword if (drv == NULL) err\n");
         return HAL_DRIVER_ERR_INVALID_PARAM;
     }
 
@@ -119,6 +120,7 @@ hal_retcode_t Ethercat_Driver_Write_Controlword(hal_driver_t *drv, uint16_t cont
 
     if (ret < 0)
     {
+        printf("Ethercat_Driver_Write_Controlword GM_RxPdoEntry_Write(drv->pdo.Control_word, (uint32_t)control_word); err\n");
         return HAL_DRIVER_ERROR;
     }
 
@@ -134,6 +136,7 @@ hal_retcode_t Ethercat_Driver_Write_Mode(hal_driver_t *drv, drv_mode_t mode)
 {
     if (drv == NULL)
     {
+        printf("Ethercat_Driver_Write_Mode if (drv == NULL) err\n");
         return HAL_DRIVER_ERR_INVALID_PARAM;
     }
 

@@ -71,8 +71,9 @@ void handle_alarm_cmd()
         event_queue_reset(event_queue);
         // 更新cmd_pos位置
         update_pos_flag = 0;
-        // 清除驱动器报警
+        
 #ifndef DEBUG_MODE_ENABLED
+        // 清除驱动器报警
         Master_Reset();
 #endif
         // 复位生效参数

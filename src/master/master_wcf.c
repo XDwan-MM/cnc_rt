@@ -550,19 +550,25 @@ void Master_Run(void)
 
             if (ret == HAL_DRIVER_SUCCESS)
             {
+                // printf("所有驱动器控制字都写了0x0080\n");
                 bool all_reset = true;
 
                 for (uint8_t i = 0; i < dri_manager.count; ++i)
                 {
                     hal_driver_t *drv = dri_manager.drivers[i];
+                    bool fault_active;
+                    bool error_active;
 
                     if (drv == NULL)
                     {
                         continue;
                     }
 
-                    /* status_word 来自本周期 Master_Receive() 的缓存。 */
-                    if ((drv->status_word & 0x0008U) != 0)
+                    /* status_word/error_code 来自本周期 Master_Receive() 的缓存。 */
+                    fault_active = ((drv->status_word & 0x0008U) != 0);
+                    error_active = (drv->error_code != 0);
+
+                    if (fault_active || error_active)
                     {
                         all_reset = false;
                         continue;
@@ -572,6 +578,17 @@ void Master_Run(void)
                     {
                         drv->state = DRV_STATE_NOT_READY_TO_SWITCH_ON;
                         drv->act_mode = DRV_MODE_NONE;
+                    }
+
+                    if (i == 0)
+                    {
+                        rt_data->axis_data[3].status.is_error = false;
+                        delAlarm(ALARM_AX, ALARM_ERROR, 33);
+                    }
+                    else if (i <= 3)
+                    {
+                        rt_data->axis_data[i - 1].status.is_error = false;
+                        delAlarm(ALARM_AX, ALARM_ERROR, 29 + i);
                     }
 
                 }
@@ -656,6 +673,12 @@ void Master_Reset(void)
 
 void Check_Driver_Error(void)
 {
+    /* Fault Reset 尚未完成时，不能用旧反馈再次建立报警状态。 */
+    if (reset_sem)
+    {
+        return;
+    }
+
     /* error_code/status_word 已由 Master_Receive() 读取并缓存。 */
     for (int axis = 0; axis < 4; ++axis)
     {
