@@ -20,8 +20,6 @@ void Driver_Init(hal_driver_t *drv)
 
     drv->state = DRV_STATE_INIT;
 
-    // drv->enable_requested = true;
-
     drv->act_mode = DRV_MODE_NONE;
 
     drv->req_mode = DRV_MODE_NONE;
@@ -157,6 +155,7 @@ hal_retcode_t Driver_Cyclic_Process(hal_driver_t *drv)
 {
     if (drv == NULL || !drv->initialized)
     {
+        printf("单个驱动器更新Driver_Cyclic_Process 错误 drv->initialized未初始化\n");
         return HAL_DRIVER_ERR_INVALID_PARAM;
     }
 
@@ -183,6 +182,7 @@ hal_retcode_t Driver_Cyclic_Process(hal_driver_t *drv)
     if ((drv->status_word & 0x0008) != 0)
     {
         drv->state = DRV_STATE_FAULT;
+        printf("单个驱动器更新Driver_Cyclic_Process 错误 驱动器错误状态位为高\n");
 
         return HAL_DRIVER_SUCCESS;
     }
@@ -330,6 +330,7 @@ hal_retcode_t Driver_Cyclic_Process_All(void)
 {
     if (!dri_manager.initialized)
     {
+        printf("Driver_Cyclic_Process_All 驱动器管理器未初始化\n");
         return HAL_DRIVER_ERROR;
     }
 
@@ -346,6 +347,7 @@ hal_retcode_t Driver_Cyclic_Process_All(void)
 
         if (ret != HAL_DRIVER_SUCCESS)
         {
+            printf("单个驱动器更新Driver_Cyclic_Process 错误\n");
             return ret;
         }
     }

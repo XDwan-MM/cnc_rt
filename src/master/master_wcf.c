@@ -115,7 +115,7 @@ int Master_Start(void)
     Driver_Request_Mode(&y_axis_driver, DRV_MODE_CSP);
     Driver_Request_Mode(&z_axis_driver, DRV_MODE_CSP);
     Driver_Request_Mode(&spindle, DRV_MODE_CSV);
-    spindle.enable_requested = false;
+    // spindle.enable_requested = false;
 
     g_master.initialized = true;
 

@@ -5,6 +5,8 @@
 #include <string.h>
 #include "master_wcf.h"
 #include "device.h"
+#include "ethercat_driver_hal.h"
+#include "driver.h"
 
 /*
  * JOG 的公共入口只有周期处理、急停和速度查询；外部减速状态保存在 AxisStatus。
@@ -109,9 +111,27 @@ static void jog_update_outputs(void);
  */
 void handle_jog_cmd(void)
 {
-    // test
-    // CHECK_FUNC(GM_RxPdoEntry_Write(g_device_data[2].slave.Control_word, 0x0000));
+    // // test mode switch
+    // Hal_Driver_Update(&spindle, true, false);
+    // Ethercat_Driver_Read_Actual_Mode(&spindle);
+    // if(spindle.act_mode != DRV_MODE_CSP)
+    // {
+    //     printf("请求切换CSP模式 主轴驱动器当前实际模式 %d\n", spindle.act_mode);
+    //     // 下使能
+    //     Ethercat_Driver_Write_Controlword(&spindle, DRV_CONTROL_DISABLE_OPERATION);
+    //     // 设置成CSP模式
+    //     Ethercat_Driver_Write_Mode(&spindle, DRV_MODE_CSP);
+    //     // 上使能
+    //     Ethercat_Driver_Write_Controlword(&spindle, DRV_CONTROL_ENABLE_OPERATION);
 
+    // }
+    // if(spindle.act_mode == DRV_MODE_CSP)
+    // {
+    //     printf("主轴驱动器当前实际模式 %d\n", spindle.act_mode);
+    //     // 下使能
+    //     Ethercat_Driver_Write_Controlword(&spindle, DRV_CONTROL_DISABLE_OPERATION);
+    // }
+    
     bool global_fatal;
     bool reset_requested;
     bool switching_mode;

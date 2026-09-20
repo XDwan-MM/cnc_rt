@@ -170,6 +170,7 @@ hal_retcode_t Ethercat_Driver_Write_Mode(hal_driver_t *drv, drv_mode_t mode)
         break;
 
     default:
+        printf("驱动器写模式失败 模式传入参数有误\n");
         return HAL_DRIVER_ERR_INVALID_PARAM;
     }
 
@@ -177,6 +178,7 @@ hal_retcode_t Ethercat_Driver_Write_Mode(hal_driver_t *drv, drv_mode_t mode)
 
     if (ret < 0)
     {
+        printf("驱动器写模式失败\n");
         return HAL_DRIVER_ERROR;
     }
 
