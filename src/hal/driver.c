@@ -56,6 +56,24 @@ hal_retcode_t Driver_Request_Mode(hal_driver_t *drv, drv_mode_t mode)
 }
 
 /*=========================================================
+ * 安全切换工作模式
+ *=========================================================*/
+hal_retcode_t Driver_Switch_Mode(hal_driver_t *drv, drv_mode_t mode)
+{
+    hal_retcode_t ret;
+
+    if (drv == NULL || mode == DRV_MODE_NONE)
+    {
+        return HAL_DRIVER_ERR_INVALID_PARAM;
+    }
+
+    /* 模式只能在未使能状态写入，先请求下使能。 */
+    drv->target_state = DRV_TARGET_READY_TO_SWITCH_ON;
+    ret = Driver_Request_Mode(drv, mode);
+    return ret;
+}
+
+/*=========================================================
  * 请求使能
  *
  * 当前版本：

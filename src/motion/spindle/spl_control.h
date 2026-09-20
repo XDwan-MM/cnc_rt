@@ -5,52 +5,77 @@
 extern "C" {
 #endif
 
-#include "math.h"
-#include <stdint.h>
 #include <stdbool.h>
+#include <stdint.h>
+#include "spl_vel_planner.h"
+#include "spl_pos_planner.h"
 #include "driver_hal.h"
 #include "global.h"
 
-// 主轴事件
+/** 主轴控制事件。 */
 typedef enum
 {
     SPINDLE_EVENT_NONE = 0,
-    SPINDLE_EVENT_STOP,          // 主轴停止
-    SPINDLE_EVENT_CW,            // 主轴正转
-    SPINDLE_EVENT_CCW,           // 主轴反转
-    SPINDLE_EVENT_ORIENT,        // 主轴定向
-    SPINDLE_EVENT_RELEASE_ORIENT // 主轴定向解除
-} SpindleEvent;
+    SPINDLE_EVENT_STOP,           /**< 主轴停止。 */
+    SPINDLE_EVENT_CW,             /**< 主轴正转。 */
+    SPINDLE_EVENT_CCW,            /**< 主轴反转。 */
+    SPINDLE_EVENT_ORIENT,         /**< 主轴定向。 */
+    SPINDLE_EVENT_RELEASE_ORIENT  /**< 解除主轴定向。 */
+} spindle_event_t;
 
-// 主轴速度状态
-typedef enum{
-    SPINDLE_VEL_ZERO = 0,   // 主轴速度为零
-    SPINDLE_VEL_RAMP,       // 主轴速度正在变化
-    SPINDLE_VEL_ARRIVED     // 主轴速度到达
-}SpindleVelState;
+/** 主轴速度规划状态。 */
+typedef enum
+{
+    SPINDLE_VEL_ZERO = 0,  /**< 当前速度为零。 */
+    SPINDLE_VEL_RAMP,      /**< 当前速度正在变化。 */
+    SPINDLE_VEL_ARRIVED    /**< 当前速度已到达目标。 */
+} spindle_velocity_state_t;
 
+/** 主轴定向流程状态。 */
+typedef enum
+{
+    SPINDLE_ORIENT_IDLE = 0,
+    SPINDLE_ORIENT_STOPPING,       /**< CSV 减速并等待主轴停止。 */
+    SPINDLE_ORIENT_SWITCHING_MODE, /**< 已下使能，等待切换到 CSP。 */
+    SPINDLE_ORIENT_POSITIONING     /**< CSP 已使能，正在定位。 */
+} spindle_orient_state_t;
+
+/**
+ * 主轴控制数据。
+ *
+ * 速度单位统一为转/分钟。目标速度由 CNC 或 PLC 提供，
+ * 规划器的 current_vel 由速度规划器计算后输出给驱动器。
+ */
 typedef struct
 {
-    SpindleState spl_state;              // 主轴状态
-    SpindleVelState spl_vel_state;       // 主轴速度状态
-    SpindleEvent spl_event;              // 主轴事件
-    double current_speed;                // 主轴速度
-    double emot_speed;                   // CNC设置速度
-    double plc_speed;                    // PLC设置速度
-    double mcp_target_speed;             // 面板按键目标速度
-    bool mcode_feedback;                 // 是否完成M指令反馈
-    bool speed_mode;                     // 1:PLC  0:CNC
+    /* 状态与事件。 */
+    SpindleState spl_state;
+    spindle_velocity_state_t spl_vel_state;
+    spindle_event_t spl_event;
+
+    /* 速度输入。 */
+    double command_speed;        /**< CNC 或 M 代码指令速度。 */
+    double plc_speed;            /**< PLC 指令速度。 */
+    bool speed_mode;             /**< true 使用 PLC 速度，false 使用 CNC 速度。 */
+
+    /* 速度规划状态。 */
+    spl_vel_planner_t vel_planner;
+    spl_pos_planner_t pos_planner; /**< CSP 定向位置规划器。 */
+
+    /* M 代码握手状态。 */
+    bool mcode_feedback;         /**< 是否已经完成当前 M 代码反馈。 */
+    spindle_orient_state_t orient_state;
 } SPINDLE_DATA;
 
 extern SPINDLE_DATA spl_data;
-void spindle_set_state();
-void spindle_cal_speed();
-bool spindle_is_stopped();
-bool spindle_is_rotating();
+void spindle_set_state(void);
+void spindle_cal_speed(void);
+bool spindle_is_stopped(void);
+bool spindle_is_rotating(void);
 
 #ifdef __cplusplus
 }
 #endif
 
 
-#endif // SPINDLE_H
+#endif /* SPL_CONTROL_H */

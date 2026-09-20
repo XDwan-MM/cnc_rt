@@ -8,6 +8,7 @@
 #include "alarmapi.h"
 #include "reset.h"
 #include "homing.h"
+#include <math.h>
 
 static void plc_output_alarm();
 static void plc_output_mode();
@@ -365,7 +366,18 @@ static void plc_output_spl_vel_status()
 static void plc_output_spl_vel()
 {
     uint8_t bytes[4];
-    uint32_t vel = (uint32_t)spl_data.mcp_target_speed;
+    double command_speed;
+    uint32_t vel;
+
+    if (spl_data.speed_mode)
+    {
+        command_speed = spl_data.plc_speed;
+    }
+    else
+    {
+        command_speed = spl_data.command_speed;
+    }
+    vel = (uint32_t)fabs(command_speed);
 
     bytes[0] = (uint8_t)(vel & 0xff);
     bytes[1] = (uint8_t)((vel >> 8) & 0xff);

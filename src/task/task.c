@@ -264,19 +264,17 @@ static void task_handle_spl_event(PLC_EVENT *event_data)
     {
         // LOG(LOG_LEVEL_INFO, "处理主轴正转事件");
         spl_data.spl_event = SPINDLE_EVENT_CW;
-        spl_data.emot_speed = spl_data.mcp_target_speed;
     }
     if (event_data->spindle_payload.direction == -1)
     {
         // LOG(LOG_LEVEL_INFO, "处理主轴反转事件");
         spl_data.spl_event = SPINDLE_EVENT_CCW;
-        spl_data.emot_speed = -1.0 * spl_data.mcp_target_speed;
     }
     if (event_data->spindle_payload.direction == 0)
     {
         // LOG(LOG_LEVEL_INFO, "处理主轴停止事件");
         spl_data.spl_event = SPINDLE_EVENT_STOP;
-        spl_data.emot_speed = 0;
+        spl_data.command_speed = 0;
     }
 }
 

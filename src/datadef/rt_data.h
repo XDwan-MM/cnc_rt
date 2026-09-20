@@ -151,6 +151,7 @@ typedef struct
     double rpd_ex_dec3_vel;             // 外部减速3对快速进给的减速速度
     double rpd_ex_dec4_vel;             // 外部减速4对快速进给的减速速度
     double rpd_ex_dec5_vel;             // 外部减速5对快速进给的减速速度
+    double spl_orient_pos;             // 主轴定向位置（驱动器位置单位，发送前四舍五入为整数）
     // 重启生效
     int pm_munit;                       // 电子齿轮比分子
     int pm_pulse;                       // 电子齿轮比分母

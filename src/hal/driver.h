@@ -58,6 +58,15 @@ hal_retcode_t Driver_Cyclic_Process_All(void);
  *=========================================================*/
 hal_retcode_t Driver_Request_Mode(hal_driver_t *drv, drv_mode_t mode);
 
+/**
+ * 安全切换驱动器工作模式。
+ *
+ * 接口只提交请求：驱动器会先回到 Ready To Switch On（下使能），
+ * 再在允许写入 6060 的状态下切换模式。调用者应在确认模式切换完成
+ * 后再调用 Driver_Enable()。
+ */
+hal_retcode_t Driver_Switch_Mode(hal_driver_t *drv, drv_mode_t mode);
+
 /*=========================================================
  * 请求驱动器使能
  *=========================================================*/

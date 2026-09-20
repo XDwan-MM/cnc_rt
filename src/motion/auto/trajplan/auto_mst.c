@@ -123,13 +123,13 @@ static void auto_deal_mstb(){
             break;
         case M03: // 主轴正转
             setRegValue8(REG_F, 10, 0x03); 
-            spl_data.mcp_target_speed =cycle_tp->plan_block->mst_data.spindle.speed;
+            spl_data.command_speed = cycle_tp->plan_block->mst_data.spindle.speed;
             spl_data.mcode_feedback = false;
             auto_set_scode_signal(i);
             break;
         case M04: // 主轴反转
             setRegValue8(REG_F, 10, 0x04); 
-            spl_data.mcp_target_speed = cycle_tp->plan_block->mst_data.spindle.speed;
+            spl_data.command_speed = cycle_tp->plan_block->mst_data.spindle.speed;
             spl_data.mcode_feedback = false;
             auto_set_scode_signal(i);
             break;

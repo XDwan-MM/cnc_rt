@@ -116,6 +116,8 @@ HEADERS += \
     src/motion/auto/pathplan/parser.h \
     src/motion/auto/pathplan/pathplan.h \
     src/motion/spindle/spl_control.h \
+    src/motion/spindle/spl_vel_planner.h \
+    src/motion/spindle/spl_pos_planner.h \
     src/motion/emcmot.h \
     src/motion/manual/handwheel.h \
     src/motion/manual/homing.h \
@@ -169,6 +171,8 @@ SOURCES += \
     src/motion/auto/pathplan/parser.cpp \
     src/motion/auto/pathplan/pathplan.c \
     src/motion/spindle/spl_control.c \
+    src/motion/spindle/spl_vel_planner.c \
+    src/motion/spindle/spl_pos_planner.c \
     src/motion/emcmot.cpp \
     src/motion/manual/handwheel.c \
     src/motion/manual/homing.c \

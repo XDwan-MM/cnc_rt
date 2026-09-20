@@ -4,6 +4,7 @@
 #include "backlash_comp.h"
 #include "comp_data.h"
 #include "debug_mode.h"
+#include "driver.h"
 #include "egear_ratio.h"
 #include "ferror_control.h"
 #include "global.h"
@@ -223,18 +224,38 @@ static void set_operating_mode()
 // 主轴控制
 static void spindle_control()
 {
+    static drv_state_t last_driver_state = DRV_STATE_INIT;
+    static drv_mode_t last_driver_mode = DRV_MODE_NONE;
+
     spindle_set_state();
-    if ((spindle.act_mode != DRV_MODE_NONE) &&
-        (spindle.state == DRV_STATE_OPERATION_ENABLED))
+    if (spindle.state != last_driver_state || spindle.act_mode != last_driver_mode)
+    {
+        LOG(LOG_LEVEL_INFO, "主轴驱动器状态变化 state=%d mode=%d target=%d actual=%d",
+            spindle.state, spindle.act_mode, spindle.target_vel, spindle.actual_vel);
+        last_driver_state = spindle.state;
+        last_driver_mode = spindle.act_mode;
+    }
+    if (spl_data.orient_state != SPINDLE_ORIENT_IDLE)
+    {
+        /* 定向流程需要在驱动器下使能后继续运行状态机。 */
+        spindle_cal_speed();
+    }
+    else if ((spindle.act_mode != DRV_MODE_NONE) &&
+             (spindle.state == DRV_STATE_OPERATION_ENABLED))
     {
         spindle_cal_speed();
     }
-    // else if (!spindle.enable_requested)
-    // {
-    //     Hal_Driver_Set_Target_Vel(&spindle, 0);
-    // }
+    else if (spl_data.spl_state == SPINDLE_STOP &&
+             spindle.act_mode != DRV_MODE_NONE)
+    {
+        /* 驱动器尚未进入运行使能时直接撤销模式和使能请求。 */
+        Hal_Driver_Set_Target_Vel(&spindle, 0);
+        spindle.act_mode = DRV_MODE_NONE;
+        Driver_Disable(&spindle);
+        LOG(LOG_LEVEL_INFO, "主轴停止，驱动器请求下使能 state=%d", spindle.state);
+    }
 #ifdef DEBUG_MODE_ENABLED
-    setVarChanInt(0, VAR_CHAN_S_CODE, (int32_t)spl_data.current_speed, 0);
+    setVarChanInt(0, VAR_CHAN_S_CODE, (int32_t)spl_data.planner.current_vel, 0);
 #else
     setVarChanInt(0, VAR_CHAN_S_CODE, spindle.actual_vel, 0);
 #endif
