@@ -1,4 +1,5 @@
 #include "spl_control.h"
+#include "driver.h"
 #include "cnc_math.h"
 #include "rt_data.h"
 #include <alarmapi.h>
@@ -41,6 +42,7 @@ void spindle_set_state()
         {
             spl_data.spl_state = SPINDLE_CW;
             spindle.act_mode = DRV_MODE_CSV;
+            Driver_Enable(&spindle);
         }
         break;
     case SPINDLE_EVENT_CCW:
@@ -48,6 +50,7 @@ void spindle_set_state()
         {
             spl_data.spl_state = SPINDLE_CCW;
             spindle.act_mode = DRV_MODE_CSV;
+            Driver_Enable(&spindle);
         }
         break;
     case SPINDLE_EVENT_NONE:
@@ -100,6 +103,7 @@ static void Spindle_Stop(SPINDLE_DATA *spl_data)
     if (spl_data->spl_vel_state == SPINDLE_VEL_ZERO)
     {
         spindle.act_mode = DRV_MODE_NONE;
+        Driver_Disable(&spindle);
         spindle_mcode_feedback();
     }
 }
