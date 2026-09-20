@@ -681,10 +681,10 @@ static void auto_update_stage(){
             {
             case BLOCK_STOP_2_END:
                 auto_pop_current_block();
+                tapreturn_update(cycle_tp->plan_block);
                 switch (cycle_tp->plan_block->type)
                 {
                 case TAP_RETURN:
-                    tapreturn_update(cycle_tp->plan_block);
                     rt_data->sys_state[SYS_IS_RIGID_RETURN_FINISH] = 1;
                     rt_data->sys_state[SYS_IS_RIGID] = 0;
                     break;
@@ -700,10 +700,10 @@ static void auto_update_stage(){
                 else rt_data->sys_state[SYS_IS_MAC_LOCK_READY] = false;
                 break;
             case BLOCK_PAUSED:
+                tapreturn_update(cycle_tp->plan_block);
                 switch (cycle_tp->plan_block->type)
                 {
                 case TAP_RETURN:
-                    tapreturn_update(cycle_tp->plan_block);
                     rt_data->sys_state[SYS_IS_RIGID_RETURN_FINISH] = 1;
                     rt_data->sys_state[SYS_IS_RIGID] = 0;
                     break;
