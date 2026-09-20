@@ -561,8 +561,8 @@ void Master_Run(void)
                         continue;
                     }
 
-                    /* status_word/error_code 来自本周期 Master_Receive() 的缓存。 */
-                    if ((drv->status_word & 0x0008U) != 0 || drv->error_code != 0)
+                    /* status_word 来自本周期 Master_Receive() 的缓存。 */
+                    if ((drv->status_word & 0x0008U) != 0)
                     {
                         all_reset = false;
                         continue;
@@ -574,17 +574,6 @@ void Master_Run(void)
                         drv->act_mode = DRV_MODE_NONE;
                     }
 
-                    /* 与驱动器索引对应的轴报警也要解除。 */
-                    if (i == 0)
-                    {
-                        delAlarm(ALARM_AX, ALARM_ERROR, 33);
-                        rt_data->axis_data[3].status.is_error = false;
-                    }
-                    else if (i <= 3)
-                    {
-                        delAlarm(ALARM_AX, ALARM_ERROR, 29 + i);
-                        rt_data->axis_data[i - 1].status.is_error = false;
-                    }
                 }
 
                 /* 等待下一周期反馈确认后再结束复位流程。 */
@@ -667,19 +656,52 @@ void Master_Reset(void)
 
 void Check_Driver_Error(void)
 {
-    /* error_code 已由 Master_Receive() 读取并缓存，这里同步到 rt_data。 */
+    /* error_code/status_word 已由 Master_Receive() 读取并缓存。 */
     for (int axis = 0; axis < 4; ++axis)
     {
         /* rt_data: X/Y/Z/主轴；Driver: 主轴/X/Y/Z。 */
         const int driver_index = (axis == 3) ? 0 : axis + 1;
         hal_driver_t *drv = dri_manager.drivers[driver_index];
-        const bool is_error = (drv != NULL && drv->error_code != 0);
+        bool is_error;
+        bool has_fault;
+        bool is_disabled;
+        int alarm_no;
+
+        if (drv == NULL)
+        {
+            continue;
+        }
+
+        is_error = (drv->error_code != 0);
+        has_fault = ((drv->status_word & 0x0008U) != 0);
+        is_disabled = rt_data->axis_data[axis].status.is_disable;
+        alarm_no = (axis == 3) ? 33 : 29 + axis + 1;
 
         rt_data->axis_data[axis].status.is_error = is_error;
 
-        if (is_error)
+        if (is_error || has_fault)
         {
             drv->state = DRV_STATE_FAULT;
+
+            if (is_error && !is_disabled)
+            {
+                int ret = setAlarm(ALARM_AX, ALARM_ERROR, alarm_no);
+
+                if (ret != -8)
+                {
+                    LOG(LOG_LEVEL_ERR, "%s轴驱动器报错，错误码 %u", drv_names[driver_index], drv->error_code);
+                }
+            }
+        }
+        else
+        {
+            if (!has_fault && drv->state == DRV_STATE_FAULT)
+            {
+                drv->state = DRV_STATE_NOT_READY_TO_SWITCH_ON;
+                drv->act_mode = DRV_MODE_NONE;
+            }
+
+            delAlarm(ALARM_AX, ALARM_ERROR, alarm_no);
         }
     }
 }
