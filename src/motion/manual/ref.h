@@ -73,6 +73,7 @@ void set_ref_state(REF_TYPE ref_type, AXIS_TYPE axis_type);
 void update_ref_state();
 void reset_ref_state();
 void auto_set_ref_state(REF_TYPE ref_type, int axis_type);
+bool check_ref_arrive(REF_TYPE ref_type, int axis_type);
 
 #ifdef __cplusplus
 }

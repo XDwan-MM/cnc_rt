@@ -30,6 +30,7 @@ static void ref_tp_reset_ref_data(AXIS_TYPE axis_type);
 static void ref_tp_cal_ref_block(AXIS_TYPE axis_type);
 static void ref_tp_axis_reset(AXIS_TYPE axis_type);
 static void ref_tp_axis_pause(AXIS_TYPE axis_type);
+static bool check_axis_ref_arrive(AXIS_TYPE axis_type);
 
 void handle_ref_cmd(){
     ref_handle_alarm();
@@ -636,6 +637,7 @@ void set_ref_state(REF_TYPE ref_type, AXIS_TYPE axis_type){
     default:
         break;
     }
+    LOG(LOG_LEVEL_INFO, "%d轴回第%d参考点完成", axis_type, ref_type);
 }
 
 void auto_set_ref_state(REF_TYPE ref_type, int axis_type){
@@ -674,6 +676,66 @@ void auto_set_ref_state(REF_TYPE ref_type, int axis_type){
         break;
     }
 }
+
+static bool check_axis_ref_arrive(AXIS_TYPE axis_type){
+    int res = 0;
+    bool is_arrived = true;
+    if((fabs(rt_data->axis_data[axis_type].mac_cmd_pos - rt_data->axis_data[axis_type].home_crds)) > rt_data->axis_data[axis_type].pos_tol) {
+        is_arrived = false;
+        res = setAlarm(ALARM_AX, ALARM_ERROR, 123 + axis_type);
+        if (res != -8) LOG(LOG_LEVEL_ERR, "%d轴回零检测错误", axis_type);
+    }
+    return is_arrived;
+}
+
+bool check_ref_arrive(REF_TYPE ref_type, int axis_type){
+    bool is_arrived = true;
+    switch (ref_type)
+    {
+    case FIRST_REF:
+        switch (axis_type)
+        {
+        case PMC_REF_AXIS_X:
+            if(!check_axis_ref_arrive(AXIS_X)) return false;
+            break;
+        case PMC_REF_AXIS_Y:
+            if(!check_axis_ref_arrive(AXIS_Y)) return false;
+            break;  
+        case PMC_REF_AXIS_Z:
+            if(!check_axis_ref_arrive(AXIS_Z)) return false;
+            break;
+        case PMC_REF_AXIS_X + PMC_REF_AXIS_Y:
+            is_arrived = check_axis_ref_arrive(AXIS_X);
+            is_arrived = check_axis_ref_arrive(AXIS_Y);
+            if(!is_arrived) return false;
+            break;
+        case PMC_REF_AXIS_X + PMC_REF_AXIS_Z:
+            is_arrived = check_axis_ref_arrive(AXIS_X);
+            is_arrived = check_axis_ref_arrive(AXIS_Z);
+            if(!is_arrived) return false;
+            break;
+        case PMC_REF_AXIS_Y + PMC_REF_AXIS_Z:
+            is_arrived = check_axis_ref_arrive(AXIS_Y);
+            is_arrived = check_axis_ref_arrive(AXIS_Z);
+            if(!is_arrived) return false;
+            break;
+        case PMC_REF_AXIS_X + PMC_REF_AXIS_Y + PMC_REF_AXIS_Z:
+            is_arrived = check_axis_ref_arrive(AXIS_X);
+            is_arrived = check_axis_ref_arrive(AXIS_Y);
+            is_arrived = check_axis_ref_arrive(AXIS_Z);
+            if(!is_arrived) return false;
+            break;
+        default:
+            break;
+        }
+        break;
+    default:
+        break;
+    }
+    auto_set_ref_state(ref_type, axis_type);
+    return true;
+}
+
 
 /// @brief 从参考点移动，成为0
 void update_ref_state(){
