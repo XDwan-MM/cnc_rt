@@ -697,8 +697,7 @@ static bool auto_pos_cmd_arrive_check(){
             if(!auto_pos_cmd_axis_arrive_check()) return false;
             // 回参考点检测
             if(IsGreaterThan(cycle_tp->plan_block->ref_number, 0)){
-                auto_set_ref_state(cycle_tp->plan_block->ref_number, cycle_tp->plan_block->ref_axis);
-                LOG(LOG_LEVEL_DEBUG,  "[回%d参考点完成] %f %f %f", cycle_tp->plan_block->ref_number, rt_data->axis_data[AXIS_X].motor_cmd_pos, rt_data->axis_data[AXIS_Y].motor_cmd_pos, rt_data->axis_data[AXIS_Z].motor_cmd_pos);         
+                check_ref_arrive(cycle_tp->plan_block->ref_number, cycle_tp->plan_block->ref_axis); 
             }
             LOG(LOG_LEVEL_DEBUG,  "[到位检测] 机床指令位置:%f %f %f vel:%f", rt_data->axis_data[AXIS_X].motor_cmd_pos, rt_data->axis_data[AXIS_Y].motor_cmd_pos, rt_data->axis_data[AXIS_Z].motor_cmd_pos, cycle_tp->plan_block->end_vel);
             LOG(LOG_LEVEL_DEBUG,  "[到位检测] 电机无补偿位置:%f %f %f vel:%f", rt_data->axis_data[AXIS_X].fb_pos_no_comp, rt_data->axis_data[AXIS_Y].fb_pos_no_comp, rt_data->axis_data[AXIS_Z].fb_pos_no_comp,cycle_tp->plan_block->end_vel);

@@ -97,6 +97,18 @@ GNC_RES parser_init(NC_MODE nc_mode)
     itpParam.suv = par_ncu[PAR_NCU_PARSER_SUV].value.val_int;
     itpParam.ccc = par_ncu[PAR_NCU_PARSER_CCC].value.val_int;
     itpParam.lookAheadSegments = par_ncu[PAR_NCU_PARSER_LOOKAHEADSEGMENTS].value.val_int;
+
+    constexpr int kHomeCrdsIdx[4] = {PAR_AX_HOME_CRDS, PAR_AX_HOME_CRDS2, PAR_AX_HOME_CRDS3, PAR_AX_HOME_CRDS4};
+
+    const int refAxisCount = (SYS_AXES_NUM < ITP_SYS_AXIS_MAX) ? SYS_AXES_NUM : ITP_SYS_AXIS_MAX;
+    itpParam.refPoint.axisCount = refAxisCount;
+    for (int n = 0; n < ITP_SYS_REF_POINT_MAX; ++n)
+    {
+        for (int a = 0; a < refAxisCount; ++a)
+        {
+            itpParam.refPoint.refPos[n][a] = par_axis[a][kHomeCrdsIdx[n]].value.val_real;
+        }
+    }
     ItpSetItpParam(itpParam);
     // 设置机床起点
     double ori_pos_x, ori_pos_y, ori_pos_z;
