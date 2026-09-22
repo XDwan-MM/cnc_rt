@@ -16,9 +16,6 @@ static bool spindle_validate_command_speed(const SPINDLE_DATA *data);
 static double spindle_calculate_target_velocity(const SPINDLE_DATA *data);
 static void spindle_update_planner_state(SPINDLE_DATA *data);
 static void spindle_report_mcode_complete(void);
-static void spindle_start_orientation(void);
-static void spindle_process_orientation(void);
-static bool spindle_orientation_arrived(void);
 
 /* 外部函数定义 */
 void spindle_set_state(void)
@@ -36,8 +33,8 @@ void spindle_set_state(void)
     case SPINDLE_EVENT_STOP:
         spl_data.command_speed = 0.0;
         spl_data.spl_state = SPINDLE_STOP;
-        /* 普通停止、急停或报警都会取消尚未完成的定向流程。 */
-        spl_data.orient_state = SPINDLE_ORIENT_IDLE;
+        /* 停止过程仍保持使能，直到速度规划器降到零。 */
+        Driver_Enable(&spindle);
         LOG(LOG_LEVEL_INFO, "主轴收到停止指令，当前速度=%f", spl_data.vel_planner.current_vel);
         break;
     case SPINDLE_EVENT_CW:
@@ -60,7 +57,7 @@ void spindle_set_state(void)
         break;
     case SPINDLE_EVENT_NONE:
     case SPINDLE_EVENT_ORIENT:
-        spindle_start_orientation();
+        /* 主轴定向功能已移除，保留事件入口以兼容上层调用。 */
         break;
     case SPINDLE_EVENT_RELEASE_ORIENT:
     default:
@@ -81,28 +78,15 @@ void spindle_cal_speed(void)
 
     Hal_Driver_Set_Target_Vel(&spindle, (int32_t)planner->current_vel);
 
-    if (!planner->active && spl_data.spl_state == SPINDLE_STOP)
+    /* 只有驱动器反馈的实际速度已经为零，才允许切回下使能状态。 */
+    if (spl_data.spl_state == SPINDLE_STOP && spindle.actual_vel == 0)
     {
         spl_data.spl_vel_state = SPINDLE_VEL_ZERO;
 
-        if (spl_data.orient_state == SPINDLE_ORIENT_STOPPING)
-        {
-            /* 速度已降为零后，才允许切换到周期同步位置模式。 */
-            /* 切换期间先保持当前位置，避免 CSP 使能瞬间跳到最终位置。 */
-            Hal_Driver_Set_Target_Pos(&spindle, spindle.actual_pos);
-            Driver_Switch_Mode(&spindle, DRV_MODE_CSP);
-            spl_data.orient_state = SPINDLE_ORIENT_SWITCHING_MODE;
-            LOG(LOG_LEVEL_INFO, "主轴停止，开始切换到CSP模式，定向位置=%d", spindle.target_pos);
-        }
-        else if (spl_data.orient_state == SPINDLE_ORIENT_IDLE)
-        {
-            spindle.act_mode = DRV_MODE_NONE;
-            Driver_Disable(&spindle);
-            spindle_report_mcode_complete();
-        }
+        spindle.act_mode = DRV_MODE_NONE;
+        Driver_Disable(&spindle);
+        spindle_report_mcode_complete();
     }
-
-    spindle_process_orientation();
 }
 
 bool spindle_is_stopped(void)
@@ -195,65 +179,4 @@ static void spindle_report_mcode_complete(void)
         spl_data.mcode_feedback = true;
         LOG(LOG_LEVEL_DEBUG, "主轴速度到达 %f", spl_data.vel_planner.current_vel);
     }
-}
-
-static void spindle_start_orientation(void)
-{
-    /* 定向首先复用已有速度规划器，将主轴平滑减速到零。 */
-    spl_data.command_speed = 0.0;
-    spl_data.spl_state = SPINDLE_STOP;
-    spl_data.orient_state = SPINDLE_ORIENT_STOPPING;
-    spl_data.mcode_feedback = false;
-    LOG(LOG_LEVEL_INFO, "主轴定向开始，先减速到零");
-}
-
-static void spindle_process_orientation(void)
-{
-    if (spl_data.orient_state == SPINDLE_ORIENT_SWITCHING_MODE)
-    {
-        /* act_mode 是驱动器反馈的 6061，确认写入成功后再请求上使能。 */
-        if (spindle.act_mode == DRV_MODE_CSP)
-        {
-            spl_data.pos_planner.current_pos = spindle.actual_pos;
-            spl_data.pos_planner.current_vel = 0.0;
-            spl_data.pos_planner.target_pos = rt_data->axis_data[AXIS_SP].spl_orient_pos;
-            spl_data.pos_planner.max_vel = rt_data->axis_data[AXIS_SP].max_feed_vel;
-            spl_data.pos_planner.max_acc = rt_data->axis_data[AXIS_SP].max_feed_acc;
-            spl_data.pos_planner.active = true;
-            Driver_Enable(&spindle);
-            spl_data.orient_state = SPINDLE_ORIENT_POSITIONING;
-            LOG(LOG_LEVEL_INFO, "主轴已切换到CSP模式，请求上使能");
-        }
-    }
-    else if (spl_data.orient_state == SPINDLE_ORIENT_POSITIONING)
-    {
-        bool planner_arrived;
-
-        spl_data.pos_planner.target_pos = rt_data->axis_data[AXIS_SP].spl_orient_pos;
-        planner_arrived = spl_pos_planner_update(&spl_data.pos_planner,
-                                                  spindle_control_period);
-        Hal_Driver_Set_Target_Pos(&spindle,
-                                  (int32_t)llround(spl_data.pos_planner.current_pos));
-        if (spindle.state == DRV_STATE_OPERATION_ENABLED &&
-            planner_arrived && spindle_orientation_arrived())
-        {
-            spl_data.orient_state = SPINDLE_ORIENT_IDLE;
-            spindle_report_mcode_complete();
-            LOG(LOG_LEVEL_INFO, "主轴定向完成，位置=%d", spindle.actual_pos);
-        }
-    }
-}
-
-static bool spindle_orientation_arrived(void)
-{
-    int64_t position_error;
-    int32_t target_position;
-
-    target_position = (int32_t)llround(rt_data->axis_data[AXIS_SP].spl_orient_pos);
-    position_error = (int64_t)spindle.actual_pos - target_position;
-    if (position_error < 0)
-    {
-        position_error = -position_error;
-    }
-    return position_error <= 1;
 }

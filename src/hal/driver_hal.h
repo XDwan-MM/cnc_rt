@@ -73,12 +73,6 @@ typedef enum
 
 } drv_state_t;
 
-typedef enum
-{
-    DRV_TARGET_READY_TO_SWITCH_ON = 0,
-    DRV_TARGET_OPERATION_ENABLED
-} drv_target_state_t;
-
 /*=========================================================
  * 抽象驱动器
  *
@@ -104,7 +98,7 @@ typedef struct
 
     uint16_t error_code;
 
-    drv_target_state_t target_state; /* 上层请求的目标状态 */
+    drv_state_t target_state; /* 上层请求的目标状态 */
 
     /*-----------------------------------------------------
      * 工作模式

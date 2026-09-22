@@ -9,6 +9,7 @@
 
 #ifdef DEBUG_MODE_ENABLED
 
+bool reset_sem = false;
 static int sim_cycle_count = 0;
 
 void simulate_hal_data(void) {

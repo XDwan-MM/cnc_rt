@@ -106,10 +106,10 @@ hal_retcode_t Hal_Driver_Manager_Init(void)
 
         drivers[i]->axis_id = axis_ids[i];
         drivers[i]->initialized = true;
-        drivers[i]->state = DRV_STATE_NOT_READY_TO_SWITCH_ON;
+        drivers[i]->state = DRV_STATE_SWITCHED_ON_DISABLE;
         drivers[i]->act_mode = DRV_MODE_NONE;
         drivers[i]->req_mode = DRV_MODE_NONE;
-        drivers[i]->target_state = DRV_TARGET_OPERATION_ENABLED;
+        drivers[i]->target_state = DRV_STATE_SWITCHED_ON_DISABLE;
     }
     dri_manager.count = driver_count;
 
@@ -172,12 +172,13 @@ hal_retcode_t Hal_Driver_Array_Init(void)
          *-------------------------------------------------*/
         drv->initialized = true;
 
-        drv->state = DRV_STATE_NOT_READY_TO_SWITCH_ON;
+        drv->state = DRV_STATE_SWITCHED_ON_DISABLE;
 
         drv->act_mode = DRV_MODE_NONE;
 
         drv->req_mode = DRV_MODE_NONE;
-        drv->target_state = DRV_TARGET_OPERATION_ENABLED;
+        
+        drv->target_state = DRV_STATE_SWITCHED_ON_DISABLE;
 
         /*-------------------------------------------------
          * 注册

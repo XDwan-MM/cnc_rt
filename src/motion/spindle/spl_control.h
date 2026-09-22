@@ -8,9 +8,17 @@ extern "C" {
 #include <stdbool.h>
 #include <stdint.h>
 #include "spl_vel_planner.h"
-#include "spl_pos_planner.h"
 #include "driver_hal.h"
 #include "global.h"
+
+// 
+typedef enum {
+    SPINDLE_STOP = 0,
+    SPINDLE_CW,
+    SPINDLE_CCW,
+    SPINDLE_ORIENT,
+    SPINDLE_RELEASE_ORIENT
+} SpindleState;
 
 /** 主轴控制事件。 */
 typedef enum
@@ -30,15 +38,6 @@ typedef enum
     SPINDLE_VEL_RAMP,      /**< 当前速度正在变化。 */
     SPINDLE_VEL_ARRIVED    /**< 当前速度已到达目标。 */
 } spindle_velocity_state_t;
-
-/** 主轴定向流程状态。 */
-typedef enum
-{
-    SPINDLE_ORIENT_IDLE = 0,
-    SPINDLE_ORIENT_STOPPING,       /**< CSV 减速并等待主轴停止。 */
-    SPINDLE_ORIENT_SWITCHING_MODE, /**< 已下使能，等待切换到 CSP。 */
-    SPINDLE_ORIENT_POSITIONING     /**< CSP 已使能，正在定位。 */
-} spindle_orient_state_t;
 
 /**
  * 主轴控制数据。
@@ -60,11 +59,9 @@ typedef struct
 
     /* 速度规划状态。 */
     spl_vel_planner_t vel_planner;
-    spl_pos_planner_t pos_planner; /**< CSP 定向位置规划器。 */
 
     /* M 代码握手状态。 */
     bool mcode_feedback;         /**< 是否已经完成当前 M 代码反馈。 */
-    spindle_orient_state_t orient_state;
 } SPINDLE_DATA;
 
 extern SPINDLE_DATA spl_data;

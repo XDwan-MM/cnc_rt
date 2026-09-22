@@ -71,14 +71,6 @@ typedef enum result {
 } GNC_RES;
 
 typedef enum {
-    SPINDLE_STOP = 0,
-    SPINDLE_CW,
-    SPINDLE_CCW,
-    SPINDLE_ORIENT,
-    SPINDLE_RELEASE_ORIENT
-} SpindleState;
-
-typedef enum {
     AXIS_X = 0,
     AXIS_Y,
     AXIS_Z,

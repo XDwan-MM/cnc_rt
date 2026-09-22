@@ -110,7 +110,7 @@ int Master_Start(void)
         return MASTER_ERR_INIT;
     }
 
-    /* 进给轴使用 CSP；主轴使用 CSV，但不上使能。 */
+    /* 进给轴使用 CSP；主轴使用 CSV，但主轴首次启动保持下使能。 */
     Driver_Request_Mode(&x_axis_driver, DRV_MODE_CSP);
     Driver_Request_Mode(&y_axis_driver, DRV_MODE_CSP);
     Driver_Request_Mode(&z_axis_driver, DRV_MODE_CSP);
@@ -157,6 +157,15 @@ int Master_Start(void)
     Hal_Driver_Set_Target_Pos(&y_axis_driver, y_axis_driver.actual_pos);
     Hal_Driver_Set_Target_Pos(&z_axis_driver, z_axis_driver.actual_pos);
     Hal_Driver_Set_Target_Vel(&spindle, 0);
+
+    /*
+     * 首次使能进给轴前，先用实际反馈位置锁定目标位置，
+     * 防止 CSP 上使能时产生位置跳变。主轴不在启动阶段使能，
+     * 仍保持 Switch On Disabled，等待 STOP/CW/CCW 事件。
+     */
+    Driver_Enable(&x_axis_driver);
+    Driver_Enable(&y_axis_driver);
+    Driver_Enable(&z_axis_driver);
 
     /* 让 emcmot 首个周期用实际反馈重建指令位置，避免首次 JOG 产生位置跳变。 */
     update_pos_flag = 0;

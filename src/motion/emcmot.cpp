@@ -235,12 +235,7 @@ static void spindle_control()
         last_driver_state = spindle.state;
         last_driver_mode = spindle.act_mode;
     }
-    if (spl_data.orient_state != SPINDLE_ORIENT_IDLE)
-    {
-        /* 定向流程需要在驱动器下使能后继续运行状态机。 */
-        spindle_cal_speed();
-    }
-    else if ((spindle.act_mode != DRV_MODE_NONE) &&
+    if ((spindle.act_mode != DRV_MODE_NONE) &&
              (spindle.state == DRV_STATE_OPERATION_ENABLED))
     {
         spindle_cal_speed();
@@ -255,7 +250,7 @@ static void spindle_control()
         LOG(LOG_LEVEL_INFO, "主轴停止，驱动器请求下使能 state=%d", spindle.state);
     }
 #ifdef DEBUG_MODE_ENABLED
-    setVarChanInt(0, VAR_CHAN_S_CODE, (int32_t)spl_data.planner.current_vel, 0);
+    setVarChanInt(0, VAR_CHAN_S_CODE, (int32_t)spl_data.vel_planner.current_vel, 0);
 #else
     setVarChanInt(0, VAR_CHAN_S_CODE, spindle.actual_vel, 0);
 #endif
