@@ -1,5 +1,6 @@
 #include "parser.h"
 #include "global.h"
+#include "hmi_request.h"
 #include <hmisysapi.h>
 #include <alarmapi.h>
 #include <string.h> 
@@ -142,8 +143,48 @@ static GNC_RES parser_set_content(NC_MODE nc_mode){
         ItpSetFile(parser_data->parser_file_path);
         LOG(LOG_LEVEL_INFO, "mem程序 %s", parser_data->parser_file_path);
         break;
-    case MODE_MDI:
-        // 读取MDI内容
+    case MODE_MDI: {
+        // HMI 请求区（M/S/T 下发）：有请求就用它，无请求走下面的原有 MDI 内容路径
+        static char mstBuf[HMI_MST_PROGRAM_BUF_LEN];
+        HmiRequestSnapshot mstSnap = {};
+        int32_t mstReason = HMI_REQUEST_ERROR_NONE;
+        const int taken = hmi_request_take(HMI_REQUEST_ACTION_MST_DISPATCH, &mstSnap, &mstReason);
+
+        if (taken == 1) {
+            const int len = hmi_mst_build_program(&mstSnap.params.mst, mstBuf,
+                                                  (int)sizeof(mstBuf));
+            if (len > 0) {
+                // 回执先写：让界面尽早看到反馈
+                hmi_request_ack(mstSnap.seq, HMI_REQUEST_STATE_CONSUMED,
+                                HMI_REQUEST_ERROR_NONE);
+                LOG(LOG_LEVEL_INFO, "mst程序 %s", mstBuf);
+                ItpSetContent(mstBuf, 0);
+                break;
+            }
+            // 如果获取错误
+            hmi_request_ack(mstSnap.seq, HMI_REQUEST_STATE_REJECTED,
+                            HMI_REQUEST_ERROR_PROGRAM);
+            LOG(LOG_LEVEL_WARN, "MST程序生成失败 t=%d s=%d m=%d",
+                mstSnap.params.mst.tValue, mstSnap.params.mst.sValue,
+                mstSnap.params.mst.mValue);
+            return GNC_OPERATOR_ERROR;
+        }
+        if (taken == -2) {
+            // 有请求但拒绝执行：回执 + 日志，且不退回 MDI 内容
+            hmi_request_ack(mstSnap.seq,
+                            (mstReason == HMI_REQUEST_ERROR_STALE)
+                                ? HMI_REQUEST_STATE_TIMEOUT : HMI_REQUEST_STATE_REJECTED,
+                            mstReason);
+            LOG(LOG_LEVEL_WARN, "MST请求未执行 reason=%d", mstReason);
+            return GNC_OPERATOR_ERROR;
+        }
+        if (taken == -1) {
+            // 读取期间被 HMI 改写：不执行
+            LOG(LOG_LEVEL_WARN, "MST请求读取期间被改写，本轮不执行");
+            return GNC_OPERATOR_ERROR;
+        }
+    }
+        // 无 HMI 请求：原有 MDI 内容路径
         getMdiContent(parser_data->mdiContent);
         if((strlen(parser_data->mdiContent) == 0)){
             LOG(LOG_LEVEL_WARN, "MDI内容为空");
