@@ -13,11 +13,10 @@ extern "C" {
  *
  * 文件分两段：
  *   1) 通用协议层：取指针、整块拷贝快照、按动作分派的判据、写回执；
- *   2) 各动作的程序串生成：MST（hmi_mst_build_program）、攻丝回退
- *      （hmi_tapret_build_program，当前为空桩）。新增动作时在本文件追加一个
- *      hmi_xxx_build_program()，通用层只需在判据里加一个动作分支。
- *
- * 判据顺序与约定见 hmi/docs/hmirequest-Instruction.md
+ *   2) 各动作的程序串生成：
+ *      TAPRET：    hmi_tapret_build_program
+ *      TSM：       hmi_mst_build_program
+ *      增加请求时增加对应的生成函数：hmi_xxx_build_program
  *===========================================================================*/
 
 /*! MST 程序串缓冲区建议长度（T≤4位、S≤5位、M≤3位，最长一行约 20 字节） */
@@ -26,8 +25,7 @@ extern "C" {
 /*! 攻丝回退程序串缓冲区长度（与 MST 同量级留余量） */
 #define HMI_TAPRET_PROGRAM_BUF_LEN 64
 
-/*! 攻丝回退量占位值（mm）：先写死，待现场确认后由实现者改（当前空桩未使用）。
- *  取向是"回到攻丝起点"，届时该宏应被起点位置取代 */
+/*! todo: 攻丝回退量占位值（mm）：未确定是否需要，写死 */
 #define HMI_TAPRET_RETRACT_DISTANCE_MM (10.0)
 
 /*! 请求快照：只含 HMI 侧字段，一次整块拷贝出来，调用方在副本上工作 */
@@ -72,7 +70,7 @@ int hmi_mst_build_program(const HmiRequestMstParams *mst, char *out, int outLen)
 
 /**
  * @brief hmi_tapret_build_program 生成攻丝回退程序串
- * @note  当前为**空桩**（固定返回 0）：回退量与指令选择待定，由实现者补齐。
+ * @note  todo：未实现，固定返回 0：回退量与指令选择待定，由实现者补齐！
  *        返回 0 时调用方会回执 REJECTED + HMI_REQUEST_ERROR_PROGRAM，
  *        界面提示"攻丝回退被拒绝（错误码 5）"，机床不动作
  * @return 生成的长度（含换行与结尾 '\0' 之前的字符数）；0 表示未实现/无有效内容

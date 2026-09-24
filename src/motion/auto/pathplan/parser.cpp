@@ -150,8 +150,7 @@ static GNC_RES parser_set_content(NC_MODE nc_mode){
         const int taken = hmi_request_take(&hmiSnap, &hmiReason);
 
         if (taken == 1) {
-            // 按动作生成程序串。两个动作的程序串都很短（最长一行约 20 字节），
-            // 共用一块静态缓冲；长度取两个动作缓冲宏的较大者，将来某个动作放大缓冲也不会截断
+            // 按动作生成程序串。
             static char hmiProgBuf[(HMI_MST_PROGRAM_BUF_LEN > HMI_TAPRET_PROGRAM_BUF_LEN)
                                        ? HMI_MST_PROGRAM_BUF_LEN
                                        : HMI_TAPRET_PROGRAM_BUF_LEN];
@@ -170,7 +169,7 @@ static GNC_RES parser_set_content(NC_MODE nc_mode){
                 break;
             case HMI_REQUEST_ACTION_TAP_RETRACT:
                 // TODO(待实现)：真正能执行之后要加"同一 seq 只执行一次"的去重
-                // （HMI 收到回执后最长 150ms 才撤销请求），见对接说明 §11.5
+                // （HMI 收到回执后最长 150ms 才撤销请求）
                 len = hmi_tapret_build_program(&hmiSnap.params.tapret, hmiProgBuf,
                                                (int)sizeof(hmiProgBuf));
                 if (len > 0) {
@@ -182,7 +181,6 @@ static GNC_RES parser_set_content(NC_MODE nc_mode){
                 }
                 break;
             default:
-                // hmi_request_take 只返回本版认识的动作，这里防御
                 break;
             }
 
@@ -192,7 +190,7 @@ static GNC_RES parser_set_content(NC_MODE nc_mode){
                                 HMI_REQUEST_ERROR_PROGRAM);
                 return GNC_OPERATOR_ERROR;
             }
-            // 回执先写：让界面尽早看到反馈
+            // 回执给界面反馈
             hmi_request_ack(hmiSnap.seq, HMI_REQUEST_STATE_CONSUMED,
                             HMI_REQUEST_ERROR_NONE);
             ItpSetContent(hmiProgBuf, 0);
