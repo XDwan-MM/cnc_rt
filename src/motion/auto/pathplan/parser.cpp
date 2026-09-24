@@ -144,43 +144,73 @@ static GNC_RES parser_set_content(NC_MODE nc_mode){
         LOG(LOG_LEVEL_INFO, "mem程序 %s", parser_data->parser_file_path);
         break;
     case MODE_MDI: {
-        // HMI 请求区（M/S/T 下发）：有请求就用它，无请求走下面的原有 MDI 内容路径
-        static char mstBuf[HMI_MST_PROGRAM_BUF_LEN];
-        HmiRequestSnapshot mstSnap = {};
-        int32_t mstReason = HMI_REQUEST_ERROR_NONE;
-        const int taken = hmi_request_take(HMI_REQUEST_ACTION_MST_DISPATCH, &mstSnap, &mstReason);
+        // HMI 请求区（M/S/T 下发、攻丝回退）：有请求就用它，无请求走下面的原有 MDI 内容路径
+        HmiRequestSnapshot hmiSnap = {};
+        int32_t hmiReason = HMI_REQUEST_ERROR_NONE;
+        const int taken = hmi_request_take(&hmiSnap, &hmiReason);
 
         if (taken == 1) {
-            const int len = hmi_mst_build_program(&mstSnap.params.mst, mstBuf,
-                                                  (int)sizeof(mstBuf));
-            if (len > 0) {
-                // 回执先写：让界面尽早看到反馈
-                hmi_request_ack(mstSnap.seq, HMI_REQUEST_STATE_CONSUMED,
-                                HMI_REQUEST_ERROR_NONE);
-                LOG(LOG_LEVEL_INFO, "mst程序 %s", mstBuf);
-                ItpSetContent(mstBuf, 0);
+            // 按动作生成程序串。两个动作的程序串都很短（最长一行约 20 字节），
+            // 共用一块静态缓冲；长度取两个动作缓冲宏的较大者，将来某个动作放大缓冲也不会截断
+            static char hmiProgBuf[(HMI_MST_PROGRAM_BUF_LEN > HMI_TAPRET_PROGRAM_BUF_LEN)
+                                       ? HMI_MST_PROGRAM_BUF_LEN
+                                       : HMI_TAPRET_PROGRAM_BUF_LEN];
+            int len = 0;
+            switch (hmiSnap.action) {
+            case HMI_REQUEST_ACTION_MST_DISPATCH:
+                len = hmi_mst_build_program(&hmiSnap.params.mst, hmiProgBuf,
+                                            (int)sizeof(hmiProgBuf));
+                if (len > 0) {
+                    LOG(LOG_LEVEL_INFO, "mst程序 %s", hmiProgBuf);
+                } else {
+                    LOG(LOG_LEVEL_WARN, "MST程序生成失败 t=%d s=%d m=%d",
+                        hmiSnap.params.mst.tValue, hmiSnap.params.mst.sValue,
+                        hmiSnap.params.mst.mValue);
+                }
+                break;
+            case HMI_REQUEST_ACTION_TAP_RETRACT:
+                // TODO(待实现)：真正能执行之后要加"同一 seq 只执行一次"的去重
+                // （HMI 收到回执后最长 150ms 才撤销请求），见对接说明 §11.5
+                len = hmi_tapret_build_program(&hmiSnap.params.tapret, hmiProgBuf,
+                                               (int)sizeof(hmiProgBuf));
+                if (len > 0) {
+                    LOG(LOG_LEVEL_INFO, "攻丝回退程序 %s", hmiProgBuf);
+                } else {
+                    LOG(LOG_LEVEL_WARN, "攻丝回退程序生成失败 pitch=%f s=%d m=%d",
+                        (double)hmiSnap.params.tapret.pitchMm, hmiSnap.params.tapret.sValue,
+                        hmiSnap.params.tapret.mValue);
+                }
+                break;
+            default:
+                // hmi_request_take 只返回本版认识的动作，这里防御
                 break;
             }
-            // 如果获取错误
-            hmi_request_ack(mstSnap.seq, HMI_REQUEST_STATE_REJECTED,
-                            HMI_REQUEST_ERROR_PROGRAM);
-            LOG(LOG_LEVEL_WARN, "MST程序生成失败 t=%d s=%d m=%d",
-                mstSnap.params.mst.tValue, mstSnap.params.mst.sValue,
-                mstSnap.params.mst.mValue);
-            return GNC_OPERATOR_ERROR;
+
+            if (len <= 0) {
+                // 生成失败：回执拒绝，且不退回 MDI 内容（与参数被拒同一处理）
+                hmi_request_ack(hmiSnap.seq, HMI_REQUEST_STATE_REJECTED,
+                                HMI_REQUEST_ERROR_PROGRAM);
+                return GNC_OPERATOR_ERROR;
+            }
+            // 回执先写：让界面尽早看到反馈
+            hmi_request_ack(hmiSnap.seq, HMI_REQUEST_STATE_CONSUMED,
+                            HMI_REQUEST_ERROR_NONE);
+            ItpSetContent(hmiProgBuf, 0);
+            break;
         }
         if (taken == -2) {
             // 有请求但拒绝执行：回执 + 日志，且不退回 MDI 内容
-            hmi_request_ack(mstSnap.seq,
-                            (mstReason == HMI_REQUEST_ERROR_STALE)
+            hmi_request_ack(hmiSnap.seq,
+                            (hmiReason == HMI_REQUEST_ERROR_STALE)
                                 ? HMI_REQUEST_STATE_TIMEOUT : HMI_REQUEST_STATE_REJECTED,
-                            mstReason);
-            LOG(LOG_LEVEL_WARN, "MST请求未执行 reason=%d", mstReason);
+                            hmiReason);
+            LOG(LOG_LEVEL_WARN, "HMI请求未执行 action=%u reason=%d",
+                (unsigned)hmiSnap.action, hmiReason);
             return GNC_OPERATOR_ERROR;
         }
         if (taken == -1) {
             // 读取期间被 HMI 改写：不执行
-            LOG(LOG_LEVEL_WARN, "MST请求读取期间被改写，本轮不执行");
+            LOG(LOG_LEVEL_WARN, "HMI请求读取期间被改写，本轮不执行");
             return GNC_OPERATOR_ERROR;
         }
     }

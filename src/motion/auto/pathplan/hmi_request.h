@@ -9,23 +9,31 @@ extern "C" {
 #endif
 
 /*===========================================================================
- * HMI 请求区（M/S/T 下发）RT 侧读取模块
+ * HMI 请求区（M/S/T 下发、攻丝回退）RT 侧读取模块
  *
  * 文件分两段：
- *   1) 通用协议层：取指针、整块拷贝快照、通用判据、写回执；
- *   2) 各动作的程序串生成：目前只有 MST。新增动作时在本文件追加一个
- *      hmi_xxx_build_program()，通用层不动。
+ *   1) 通用协议层：取指针、整块拷贝快照、按动作分派的判据、写回执；
+ *   2) 各动作的程序串生成：MST（hmi_mst_build_program）、攻丝回退
+ *      （hmi_tapret_build_program，当前为空桩）。新增动作时在本文件追加一个
+ *      hmi_xxx_build_program()，通用层只需在判据里加一个动作分支。
  *
  * 判据顺序与约定见 hmi/docs/hmirequest-Instruction.md
  *===========================================================================*/
 
-/*! 程序串缓冲区建议长度（T≤4位、S≤5位、M≤3位，最长一行约 20 字节） */
+/*! MST 程序串缓冲区建议长度（T≤4位、S≤5位、M≤3位，最长一行约 20 字节） */
 #define HMI_MST_PROGRAM_BUF_LEN 64
+
+/*! 攻丝回退程序串缓冲区长度（与 MST 同量级留余量） */
+#define HMI_TAPRET_PROGRAM_BUF_LEN 64
+
+/*! 攻丝回退量占位值（mm）：先写死，待现场确认后由实现者改（当前空桩未使用）。
+ *  取向是"回到攻丝起点"，届时该宏应被起点位置取代 */
+#define HMI_TAPRET_RETRACT_DISTANCE_MM (10.0)
 
 /*! 请求快照：只含 HMI 侧字段，一次整块拷贝出来，调用方在副本上工作 */
 typedef struct {
     uint32_t seq;             /*!< 本次读取到的发布序号 */
-    uint32_t action;          /*!< 动作（等于 take 传入的 expectedAction） */
+    uint32_t action;          /*!< 动作（HmiRequestAction，由 take 判定后带回） */
     uint64_t timestampMs;     /*!< 快照时刻的时间戳（系统级单调毫秒） */
     HmiRequestParams params;  /*!< 动作参数（256 字节，整块拷贝） */
 } HmiRequestSnapshot;
@@ -37,8 +45,9 @@ typedef struct {
 HmiRequestData *hmi_request_data(void);
 
 /**
- * @brief hmi_request_take 读取一条请求
- * @param[in]  expectedAction 期望的动作（如 HMI_REQUEST_ACTION_MST_DISPATCH）
+ * @brief hmi_request_take 读取一条请求并按动作校验
+ * @note  接受的动作：MST_DISPATCH、TAP_RETRACT（判定结果放在 snap->action，
+ *        由调用方二次分派）；其它非 0 动作一律拒绝（UNKNOWN_ACTION）
  * @param[out] snap           请求快照
  * @param[out] errOut         返回 -2 时给出原因（HmiRequestError），可为 NULL
  * @return  1 = 取到可执行请求（snap 有效）
@@ -46,7 +55,7 @@ HmiRequestData *hmi_request_data(void);
  *         -1 = 读取期间被 HMI 改写（本轮不执行、不回执）
  *         -2 = 有请求但拒绝执行（原因见 errOut）
  */
-int hmi_request_take(uint32_t expectedAction, HmiRequestSnapshot *snap, int32_t *errOut);
+int hmi_request_take(HmiRequestSnapshot *snap, int32_t *errOut);
 
 /**
  * @brief hmi_request_ack 回写回执
@@ -60,6 +69,15 @@ void hmi_request_ack(uint32_t seq, uint32_t state, int32_t errorCode);
  * @return 生成的长度（含换行与结尾 '\0' 之前的字符数）；0 表示无有效内容或缓冲不足
  */
 int hmi_mst_build_program(const HmiRequestMstParams *mst, char *out, int outLen);
+
+/**
+ * @brief hmi_tapret_build_program 生成攻丝回退程序串
+ * @note  当前为**空桩**（固定返回 0）：回退量与指令选择待定，由实现者补齐。
+ *        返回 0 时调用方会回执 REJECTED + HMI_REQUEST_ERROR_PROGRAM，
+ *        界面提示"攻丝回退被拒绝（错误码 5）"，机床不动作
+ * @return 生成的长度（含换行与结尾 '\0' 之前的字符数）；0 表示未实现/无有效内容
+ */
+int hmi_tapret_build_program(const HmiRequestTapRetParams *tapret, char *out, int outLen);
 
 #ifdef __cplusplus
 }
