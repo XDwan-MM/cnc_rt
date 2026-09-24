@@ -54,6 +54,7 @@ typedef struct
 
     /* 速度输入。 */
     double command_speed;        /**< CNC 或 M 代码指令速度。 */
+    double mcp_target_speed;     // mcp
     double plc_speed;            /**< PLC 指令速度。 */
     bool speed_mode;             /**< true 使用 PLC 速度，false 使用 CNC 速度。 */
 

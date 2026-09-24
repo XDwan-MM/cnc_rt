@@ -228,13 +228,13 @@ static void spindle_control()
     static drv_mode_t last_driver_mode = DRV_MODE_NONE;
 
     spindle_set_state();
-    if (spindle.state != last_driver_state || spindle.act_mode != last_driver_mode)
-    {
-        LOG(LOG_LEVEL_INFO, "主轴驱动器状态变化 state=%d mode=%d target=%d actual=%d",
-            spindle.state, spindle.act_mode, spindle.target_vel, spindle.actual_vel);
-        last_driver_state = spindle.state;
-        last_driver_mode = spindle.act_mode;
-    }
+    // if (spindle.state != last_driver_state || spindle.act_mode != last_driver_mode)
+    // {
+    //     LOG(LOG_LEVEL_INFO, "主轴驱动器状态变化 state=%d mode=%d target=%d actual=%d",
+    //         spindle.state, spindle.act_mode, spindle.target_vel, spindle.actual_vel);
+    //     last_driver_state = spindle.state;
+    //     last_driver_mode = spindle.act_mode;
+    // }
     if ((spindle.act_mode != DRV_MODE_NONE) &&
              (spindle.state == DRV_STATE_OPERATION_ENABLED))
     {
