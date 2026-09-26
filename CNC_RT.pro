@@ -116,6 +116,7 @@ HEADERS += \
     src/motion/auto/interp/interpolation.h \
     src/motion/auto/pathplan/parser.h \
     src/motion/auto/pathplan/pathplan.h \
+    src/motion/auto/pathplan/hmi_request.h \
     src/motion/spindle/spl_control.h \
     src/motion/emcmot.h \
     src/motion/manual/handwheel.h \
@@ -169,6 +170,7 @@ SOURCES += \
     src/motion/auto/interp/interpolation.c \
     src/motion/auto/pathplan/parser.cpp \
     src/motion/auto/pathplan/pathplan.c \
+    src/motion/auto/pathplan/hmi_request.c \
     src/motion/spindle/spl_control.c \
     src/motion/emcmot.cpp \
     src/motion/manual/handwheel.c \
