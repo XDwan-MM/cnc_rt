@@ -10,6 +10,8 @@
 #include "trace_publisher.h"
 #include "ncitpmacrodef.h"
 #include "macrovarapi.h"
+#include "tapreturn.h"
+#include "sysprog.h"
 
 static void auto_check_error_line();
 static void auto_update_state();
@@ -40,6 +42,7 @@ void handle_auto_cmd(){
     auto_update_cmd();
     // 执行指令
     auto_execute_cmd();
+    tapreturn_update(cycle_tp->plan_block);
     trace_publisher_publish_current(0);
     // 更新阶段
     auto_update_stage();
@@ -448,6 +451,7 @@ static void auto_check_event(){
             break;
         }
         break;
+    case SYS_EVENT_RIGID_RETURN_PREPARE:
     case SYS_EVENT_RIGID_RETURN_ON:
         switch (cycle_tp->plan_block->type)
         {
@@ -456,11 +460,61 @@ static void auto_check_event(){
         default:
             break;
         }
+        if (rt_data->nc_event == SYS_EVENT_RIGID_RETURN_PREPARE)
+        {
+            if(sysprog_is_armed() && sysprog_running_id() == SYS_PROG_RIGID_RETURN)
+            {
+                LOG(LOG_LEVEL_INFO," 刚性攻丝回退程序已经就绪");
+                sysprog_cleanup();
+            }
+            else if (sysprog_active(SYS_PROG_RIGID_RETURN))
+            {
+                LOG(LOG_LEVEL_WARN, "攻丝回退正在执行中");
+                break;                  // 还没取参数 → 不留残留
+            }
+            if (!tapreturn_apply_page_speed()) break;
+            
+        }
+        else
+        {
+            setVarChanInt(0, VAR_CHAN_TARPET_SPEED, 0 , 0);
+        }
+
         switch (rt_data->current_mode)
         {
         case MODE_MDI: // MDI模式下响应攻丝回退事件
+            {
+                // 防重复触发
+                if(sysprog_is_armed() && sysprog_running_id() == SYS_PROG_RIGID_RETURN)
+                {
+                    LOG(LOG_LEVEL_INFO," 刚性攻丝回退已经就绪");
+                    break;
+                }
+                if (rt_data->sys_state[SYS_IS_RIGID_RERTURN])
+                {
+                    LOG(LOG_LEVEL_WARN, "攻丝回退执行中，忽略重复触发");
+                    break;
+                }
+                if (rt_data->sys_state[SYS_IS_ALARMING] || rt_data->sys_state[SYS_IS_ESTOP_ACTIVE])
+                {
+                    LOG(LOG_LEVEL_WARN, "攻丝回退被拒绝：系统报警/急停中，请先复位排除故障");
+                    break;
+                }
+                // 回零守卫：各进给轴参考点必须已建立（断电重启后坐标系未建立时孔内判断不可信）
+                if (!update_pos_flag)
+                {
+                    LOG(LOG_LEVEL_WARN, "攻丝回退被拒绝：参考点未建立，请先回零");
+                    break;
+                }
+                tapreturn_update(cycle_tp->plan_block);
+                if(!sysprog_arm(SYS_PROG_RIGID_RETURN))
+                {
+                    LOG(LOG_LEVEL_WARN, "攻丝回退条件不满足（无攻丝记录或不在孔内）");
+                    break;
+                }
             rt_data->sys_state[SYS_IS_RIGID_RERTURN] = 1;
             LOG(LOG_LEVEL_INFO, "自动模式处理开启攻丝回退");
+            }
             break;
         default:
             break;
@@ -470,6 +524,7 @@ static void auto_check_event(){
         switch (rt_data->current_mode)
         {
         case MODE_MDI:
+            sysprog_cleanup();
             rt_data->sys_state[SYS_IS_RIGID_RERTURN] = 0;
             LOG(LOG_LEVEL_INFO, "自动模式关闭结束攻丝回退");
             break;
@@ -797,6 +852,8 @@ static void auto_get_next_cmd(){
                              cycle_tp->exec_cmd == DO_TAP_CMD);
     auto_update_var();
     rerun_data_store(cycle_tp->plan_block);
+
+    if(tapreturn_record(cycle_tp->plan_block)) rt_clear_rigid_return_param();
 }
 
 static void auto_update_cur_cmd(){
@@ -881,6 +938,8 @@ static void auto_reset_run(){
     queue_reset(pretreat_queue);
     queue_reset(parser_queue);
     cycle_tp_reset();
+    rt_data->sys_state[SYS_IS_RIGID_RERTURN] = 0;
+    sysprog_cleanup();
     trace_publisher_reset(0);
     rt_set_chan_state(0, CHAN_IS_PARSER_RESET, true);
     rt_set_chan_state(0, CHAN_IS_PARSER_RERUN, false);

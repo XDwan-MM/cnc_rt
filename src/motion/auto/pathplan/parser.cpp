@@ -3,6 +3,7 @@
 #include <hmisysapi.h>
 #include <alarmapi.h>
 #include <string.h> 
+#include "tapreturn.h"
 
 static void parser_macro_init();
 static GNC_RES parser_handle_recieve(pmc_data* motion_data, NcItpState *itp_state, int *line_no);
@@ -18,6 +19,21 @@ static GNC_RES parser_set_content(NC_MODE nc_mode);
 static bool parser_check_res(GNC_RES res);
 
 PARSER_DATA* parser_data;
+
+void rt_set_rigid_return_param(double r_plane_z, double pitch, int reverse, int valid)
+{
+    ItpRigidReturnParam rp;
+    rp.r_plane_z = r_plane_z;
+    rp.pitch     = pitch;
+    rp.reverse   = reverse;
+    rp.valid     = valid;
+    ItpSetRigidReturnParam(&rp);
+}
+
+void rt_clear_rigid_return_param(void)
+{
+    ItpClearRigidReturnParam();
+}
 
 static void parser_macro_init()
 {
@@ -116,6 +132,8 @@ GNC_RES parser_init(NC_MODE nc_mode)
     ori_pos_y = rt_data->axis_data[AXIS_Y].wcs_cmd_pos_cur;
     ori_pos_z = rt_data->axis_data[AXIS_Z].wcs_cmd_pos_cur;
     ItpSetOriginMacPos(ori_pos_x, ori_pos_y, ori_pos_z, 0);
+    tapreturn_refresh_return_param();
+
     // 设置程序段来源
     res = parser_set_content(nc_mode);
     if(res != GNC_OPERATOR_SUCCESS) return res;
@@ -128,6 +146,11 @@ static GNC_RES parser_set_content(NC_MODE nc_mode){
     switch (nc_mode)
     {
     case MODE_MEM:
+        if(sysprog_content_ready())
+        {
+            LOG(LOG_LEVEL_INFO, "记忆模式启动：放弃就绪系统程序");
+            sysprog_cleanup();
+        }
         // 选择NC文件
         getNcFilePath(parser_data->parser_file_path);
         // todo：界面增加校验，增加警告
@@ -373,7 +396,6 @@ static GNC_RES parser_handle_gcode(pmc_data* motion_data, NcItpState *itp_state,
             plan_block.rigid_data.screw_offset = motion_data->screw_offset;
             plan_block.rigid_data.speed = motion_data->spindle.speed;
             plan_block.rigid_data.reverse = motion_data->spindle.reverse;
-            plan_block.rigid_data.screw_offset = motion_data->feed.value / motion_data->spindle.speed;
             // LOG(LOG_LEVEL_DEBUG, "no %d speed %d reverse %d screw_offset %f", *line_no, motion_data->spindle.speed, motion_data->spindle.reverse, motion_data->screw_offset);
             break;
         case PMC_G33_2: // 攻丝回退
@@ -382,7 +404,6 @@ static GNC_RES parser_handle_gcode(pmc_data* motion_data, NcItpState *itp_state,
             plan_block.rigid_data.screw_offset = motion_data->screw_offset;
             plan_block.rigid_data.speed = motion_data->spindle.speed;
             plan_block.rigid_data.reverse = motion_data->spindle.reverse;
-            plan_block.rigid_data.screw_offset = motion_data->feed.value / motion_data->spindle.speed;
             // LOG(LOG_LEVEL_DEBUG, "no %d speed %d reverse %d screw_offset %f", *line_no, motion_data->spindle.speed, motion_data->spindle.reverse, motion_data->screw_offset);
             break;
         default:
@@ -427,7 +448,7 @@ static GNC_RES parser_handle_gcode(pmc_data* motion_data, NcItpState *itp_state,
     // if(plan_block.type == CIRCLE_CW || plan_block.type == CIRCLE_CCW ){
     //     LOG(LOG_LEVEL_DEBUG, "center pos %f %f %f no %d", plan_block.circular_data.center_pos.x, plan_block.circular_data.center_pos.y, plan_block.circular_data.center_pos.z, plan_block.line_number);  
     // }
-    // LOG(LOG_LEVEL_DEBUG, "no %d end pos %f %f %f mode %d type:%d fv %f", plan_block.line_number, motion_data->position.x, motion_data->position.y, motion_data->position.z, plan_block.mode, plan_block.type, plan_block.feed_vel);
+    LOG(LOG_LEVEL_DEBUG, "no %d end pos %f %f %f mode %d type:%d fv %f", plan_block.line_number, motion_data->position.x, motion_data->position.y, motion_data->position.z, plan_block.mode, plan_block.type, plan_block.feed_vel);
     // ======= 测试 ===========
     queue_push(parser_queue, &plan_block);
     if(plan_block.mode == pmc_mode::PMC_MODE_STOPSKIP) return GNC_PARSER_WAIT;

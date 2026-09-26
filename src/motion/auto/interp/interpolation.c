@@ -139,7 +139,7 @@ static POS interpolate_helix(POS current_pos, PLAN_BLOCK* current_block, double 
 // 主轴位置 Z = Pitch × (θ/360°)
 static POS interpolate_tap(PLAN_BLOCK* current_block, double accum_distance){
     // 进给值插补位置
-    POS interp_pos;
+    POS interp_pos = current_block->start_pos;
     switch(current_block->plane){
         case PLANE_XY:
             interp_pos.z = current_block->start_pos.z + accum_distance;

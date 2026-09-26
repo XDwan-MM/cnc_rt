@@ -15,6 +15,7 @@
 #include "event_queue.h"
 #include "rt_data.h"
 #include "rerun.h"
+#include "sysprog.h"
 #include "reset.h"
 #include "auto.h"
 #include "ref.h"

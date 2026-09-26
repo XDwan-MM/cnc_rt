@@ -189,11 +189,17 @@ GNC_RES rt_global_init(){
         rt_global_delete();
         return res;
     }
+    res = sysprog_init();
+    if(res != GNC_OPERATOR_SUCCESS){
+        rt_global_delete();
+        return res;
+    }
     res = reset_data_init();
     if(res != GNC_OPERATOR_SUCCESS){
         rt_global_delete();
         return res;
     }
+    tapreturn_data_restore();
     if(pthread_mutex_init(&shm_mutex, NULL) != 0){
         rt_global_delete();
         return GNC_OPERATOR_ERROR;
