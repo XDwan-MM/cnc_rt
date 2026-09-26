@@ -125,6 +125,8 @@ HEADERS += \
     src/motion/servo_sample/servosamplesampler.h \
     src/motion/servo_sample/servosampleevents.h \
     src/motion/rerun/rerun.h \
+    src/motion/sysprog/tapreturn.h \
+    src/motion/sysprog/sysprog.h\
     src/protect/alarm.h \
     src/protect/ferror_control.h \
     src/protect/stored_stroke_check.h \
@@ -175,6 +177,8 @@ SOURCES += \
     src/motion/manual/jog/jog_planner.c \
     src/motion/servo_sample/servosamplesampler.cpp \
     src/motion/rerun/rerun.c \
+    src/motion/sysprog/tapreturn.c \
+    src/motion/sysprog/sysprog.c\
     src/protect/alarm.c \
     src/protect/ferror_control.c \
     src/protect/stored_stroke_check.c \
@@ -211,6 +215,7 @@ INCLUDEPATH += \
     src/motion/manual \
     src/motion/servo_sample \
     src/motion/rerun \
+    src/motion/sysprog \
     src/protect \
     src/plc \
     src/plc/plc_scanner \

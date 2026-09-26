@@ -20,6 +20,10 @@ extern void ItpSetItpParam(ItpParam_temp param);
 extern void ItpSetToolLens(double *toollens, int count);
 extern void ItpSetToolRads(double *toolrads, int count);
 
+extern void ItpSetRigidReturnParam(const ItpRigidReturnParam *P);
+extern void ItpClearRigidReturnParam(void);
+
+
 extern void ItpNextLine();
 
 extern bool ItpIsOver();
