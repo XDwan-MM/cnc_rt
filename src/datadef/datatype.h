@@ -223,7 +223,6 @@ typedef enum {
     SYS_EVENT_EXTERNAL_DECEL_NEG_ON,   /* 外部减速负向生效 */
     SYS_EVENT_EXTERNAL_DECEL_NEG_OFF,  /* 外部减速负向解除 */
 
-    SYS_EVENT_RIGID_RETURN_PREPARE,     /* 刚性攻丝回退，页面确定参数传递*/
 } SYS_EVENT;
 
 double POS_Distance(POS* p1, POS* p2);

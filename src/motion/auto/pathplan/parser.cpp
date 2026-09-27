@@ -5,6 +5,7 @@
 #include <alarmapi.h>
 #include <string.h> 
 #include "tapreturn.h"
+#include "sysprog.h"
 
 static void parser_macro_init();
 static GNC_RES parser_handle_recieve(pmc_data* motion_data, NcItpState *itp_state, int *line_no);
@@ -142,6 +143,103 @@ GNC_RES parser_init(NC_MODE nc_mode)
     return res;
 }
 
+static GNC_RES parser_take_hmi_request(char *buf, int buf_len, bool *handled)
+{
+    *handled = false;
+
+    HmiRequestSnapshot hmiSnap = {};
+    int32_t hmiReason = HMI_REQUEST_ERROR_NONE;
+    const int taken = hmi_request_take(&hmiSnap, &hmiReason);
+
+    static uint32_t lastConsumedSeq = 0;
+    if (taken == 0) {
+        lastConsumedSeq = 0;
+    }
+    if (taken == 1 && hmiSnap.seq == lastConsumedSeq) {
+        LOG(LOG_LEVEL_WARN, "同一HMI请求(seq=%u)已执行过，本次运行忽略",
+            (unsigned)hmiSnap.seq);
+        *handled = true;
+        return GNC_OPERATOR_ERROR;      // 不回执、也不退回编辑器内容：本次不启动
+    }
+
+    if (taken == 1) {
+        *handled = true;
+        if (sysprog_content_ready()) {
+            LOG(LOG_LEVEL_WARN, "HMI 请求启动：放弃已就绪的系统程序（本次跑的是请求内容）");
+            sysprog_cleanup();
+            tapreturn_refresh_return_param();   // 收口把参数清了 → 再对齐（幂等）
+        }
+
+        int len = 0;
+        switch (hmiSnap.action) {
+        case HMI_REQUEST_ACTION_MST_DISPATCH:
+            len = hmi_mst_build_program(&hmiSnap.params.mst, buf, buf_len);
+            if (len > 0) {
+                LOG(LOG_LEVEL_INFO, "mst程序 %s", buf);
+            } else {
+                LOG(LOG_LEVEL_WARN, "MST程序生成失败 t=%d s=%d m=%d",
+                    hmiSnap.params.mst.tValue, hmiSnap.params.mst.sValue,
+                    hmiSnap.params.mst.mValue);
+            }
+            break;
+        case HMI_REQUEST_ACTION_TAP_RETRACT:
+            // 页面给的螺距/转向只作**交叉校验**（真正交给译码器的是记录，见
+            // tapreturn_refresh_return_param）—— 不一致就拒绝，且**不静默改用记录值**：
+            // 页面上输了什么就按什么判，悄悄换掉会让现场以为参数没生效。
+            len = hmi_tapret_build_program(&hmiSnap.params.tapret, buf, buf_len);
+            if (len == HMI_TAPRET_REJECT_PARAM) {
+                hmi_request_ack(hmiSnap.seq, HMI_REQUEST_STATE_REJECTED,
+                                HMI_REQUEST_ERROR_PARAM_INVALID);
+                LOG(LOG_LEVEL_WARN, "攻丝回退被拒：页面参数与记录不符");
+                return GNC_OPERATOR_ERROR;
+            }
+            if (len > 0) {
+                LOG(LOG_LEVEL_INFO, "攻丝回退程序 %s", buf);
+            } else {
+                LOG(LOG_LEVEL_WARN, "攻丝回退程序生成失败 pitch=%f s=%d m=%d",
+                    (double)hmiSnap.params.tapret.pitchMm, hmiSnap.params.tapret.sValue,
+                    hmiSnap.params.tapret.mValue);
+            }
+            break;
+        default:
+            break;
+        }
+
+        if (len <= 0) {
+            // 生成失败：回执拒绝，且不退回 MDI 内容（与参数被拒同一处理）
+            hmi_request_ack(hmiSnap.seq, HMI_REQUEST_STATE_REJECTED,
+                            HMI_REQUEST_ERROR_PROGRAM);
+            return GNC_OPERATOR_ERROR;
+        }
+        // 记住"这条执行过了"（见上面的去重判据）
+        lastConsumedSeq = hmiSnap.seq;
+        // 回执给界面反馈
+        hmi_request_ack(hmiSnap.seq, HMI_REQUEST_STATE_CONSUMED,
+                        HMI_REQUEST_ERROR_NONE);
+        return GNC_OPERATOR_SUCCESS;
+    }
+
+    if (taken == -2) {
+        // 有请求但拒绝执行：回执 + 日志，且不退回 MDI 内容
+        hmi_request_ack(hmiSnap.seq,
+                        (hmiReason == HMI_REQUEST_ERROR_STALE)
+                            ? HMI_REQUEST_STATE_TIMEOUT : HMI_REQUEST_STATE_REJECTED,
+                        hmiReason);
+        LOG(LOG_LEVEL_WARN, "HMI请求未执行 action=%u reason=%d",
+            (unsigned)hmiSnap.action, hmiReason);
+        *handled = true;
+        return GNC_OPERATOR_ERROR;
+    }
+    if (taken == -1) {
+        // 读取期间被 HMI 改写：不执行
+        LOG(LOG_LEVEL_WARN, "HMI请求读取期间被改写，本轮不执行");
+        *handled = true;
+        return GNC_OPERATOR_ERROR;
+    }
+
+    return GNC_OPERATOR_SUCCESS;        // taken == 0：请求区里没有请求
+}
+
 static GNC_RES parser_set_content(NC_MODE nc_mode){
     // 设置程序段来源
     switch (nc_mode)
@@ -168,75 +266,42 @@ static GNC_RES parser_set_content(NC_MODE nc_mode){
         break;
     case MODE_MDI: {
         // HMI 请求区（M/S/T 下发、攻丝回退）：有请求就用它，无请求走下面的原有 MDI 内容路径
-        HmiRequestSnapshot hmiSnap = {};
-        int32_t hmiReason = HMI_REQUEST_ERROR_NONE;
-        const int taken = hmi_request_take(&hmiSnap, &hmiReason);
+      tapreturn_refresh_return_param();
 
-        if (taken == 1) {
-            // 按动作生成程序串。
-            static char hmiProgBuf[(HMI_MST_PROGRAM_BUF_LEN > HMI_TAPRET_PROGRAM_BUF_LEN)
-                                       ? HMI_MST_PROGRAM_BUF_LEN
-                                       : HMI_TAPRET_PROGRAM_BUF_LEN];
-            int len = 0;
-            switch (hmiSnap.action) {
-            case HMI_REQUEST_ACTION_MST_DISPATCH:
-                len = hmi_mst_build_program(&hmiSnap.params.mst, hmiProgBuf,
-                                            (int)sizeof(hmiProgBuf));
-                if (len > 0) {
-                    LOG(LOG_LEVEL_INFO, "mst程序 %s", hmiProgBuf);
-                } else {
-                    LOG(LOG_LEVEL_WARN, "MST程序生成失败 t=%d s=%d m=%d",
-                        hmiSnap.params.mst.tValue, hmiSnap.params.mst.sValue,
-                        hmiSnap.params.mst.mValue);
-                }
-                break;
-            case HMI_REQUEST_ACTION_TAP_RETRACT:
-                // TODO(待实现)：真正能执行之后要加"同一 seq 只执行一次"的去重
-                // （HMI 收到回执后最长 150ms 才撤销请求）
-                len = hmi_tapret_build_program(&hmiSnap.params.tapret, hmiProgBuf,
-                                               (int)sizeof(hmiProgBuf));
-                if (len > 0) {
-                    LOG(LOG_LEVEL_INFO, "攻丝回退程序 %s", hmiProgBuf);
-                } else {
-                    LOG(LOG_LEVEL_WARN, "攻丝回退程序生成失败 pitch=%f s=%d m=%d",
-                        (double)hmiSnap.params.tapret.pitchMm, hmiSnap.params.tapret.sValue,
-                        hmiSnap.params.tapret.mValue);
-                }
-                break;
-            default:
-                break;
-            }
-
-            if (len <= 0) {
-                // 生成失败：回执拒绝，且不退回 MDI 内容（与参数被拒同一处理）
-                hmi_request_ack(hmiSnap.seq, HMI_REQUEST_STATE_REJECTED,
-                                HMI_REQUEST_ERROR_PROGRAM);
-                return GNC_OPERATOR_ERROR;
-            }
-            // 回执给界面反馈
-            hmi_request_ack(hmiSnap.seq, HMI_REQUEST_STATE_CONSUMED,
-                            HMI_REQUEST_ERROR_NONE);
+        // ① 请求优先：请求区里挂着一条就用它
+        //    （去重 / "请求优先时收口已就绪的系统程序" / 收口后再对齐 / 按动作生成 / 回执，
+        //      全在 parser_take_hmi_request 里 —— 那里有完整的来龙去脉）
+        static char hmiProgBuf[(HMI_MST_PROGRAM_BUF_LEN > HMI_TAPRET_PROGRAM_BUF_LEN)
+                                   ? HMI_MST_PROGRAM_BUF_LEN
+                                   : HMI_TAPRET_PROGRAM_BUF_LEN];
+        bool hmiHandled = false;
+        if (parser_take_hmi_request(hmiProgBuf, (int)sizeof(hmiProgBuf), &hmiHandled)
+                != GNC_OPERATOR_SUCCESS) {
+            return GNC_OPERATOR_ERROR;      
+        }
+        if (hmiHandled) {                   
             ItpSetContent(hmiProgBuf, 0);
             break;
         }
-        if (taken == -2) {
-            // 有请求但拒绝执行：回执 + 日志，且不退回 MDI 内容
-            hmi_request_ack(hmiSnap.seq,
-                            (hmiReason == HMI_REQUEST_ERROR_STALE)
-                                ? HMI_REQUEST_STATE_TIMEOUT : HMI_REQUEST_STATE_REJECTED,
-                            hmiReason);
-            LOG(LOG_LEVEL_WARN, "HMI请求未执行 action=%u reason=%d",
-                (unsigned)hmiSnap.action, hmiReason);
-            return GNC_OPERATOR_ERROR;
-        }
-        if (taken == -1) {
-            // 读取期间被 HMI 改写：不执行
-            LOG(LOG_LEVEL_WARN, "HMI请求读取期间被改写，本轮不执行");
-            return GNC_OPERATOR_ERROR;
-        }
     }
         // 无 HMI 请求：原有 MDI 内容路径
-        getMdiContent(parser_data->mdiContent);
+    if (sysprog_content_ready())
+        {
+            if (!sysprog_get_content(parser_data->mdiContent, sizeof(parser_data->mdiContent)))
+            {
+
+                LOG(LOG_LEVEL_ERR, "系统程序内容不可用（超出 MDI 缓冲 %d 字节），本次不启动",
+                    (int)sizeof(parser_data->mdiContent));
+                setAlarm(ALARM_CH, ALARM_WARNING, 2);
+                sysprog_cleanup();
+                return GNC_OPERATOR_ERROR;
+            }
+            sysprog_mark_consumed();
+        }
+        else
+        {
+            getMdiContent(parser_data->mdiContent);
+        }
         if((strlen(parser_data->mdiContent) == 0)){
             LOG(LOG_LEVEL_WARN, "MDI内容为空");
             setAlarm(ALARM_CH, ALARM_WARNING, 2);
@@ -400,7 +465,7 @@ static GNC_RES parser_handle_recieve(pmc_data* motion_data, NcItpState *itp_stat
 }
 
 static GNC_RES parser_handle_null(NcItpState *itp_state, int *line_no){
-    PLAN_BLOCK plan_block;
+    PLAN_BLOCK plan_block ={};
     // 模态
     plan_block.state = *itp_state;
     // 模组
@@ -419,7 +484,7 @@ static GNC_RES parser_handle_null(NcItpState *itp_state, int *line_no){
 
 static GNC_RES parser_handle_gcode(pmc_data* motion_data, NcItpState *itp_state, int *line_no)
 {
-    PLAN_BLOCK plan_block;
+    PLAN_BLOCK plan_block ;
     // 插补类型
     switch(motion_data->interp){
         case PMC_G00:
