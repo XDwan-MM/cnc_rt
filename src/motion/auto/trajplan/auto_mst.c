@@ -137,6 +137,8 @@ static void auto_deal_mstb(){
             spl_context.command_speed = cycle_tp->plan_block->mst_data.spindle.speed;
             spl_context.mcp_target_speed = cycle_tp->plan_block->mst_data.spindle.speed;
             spl_context.mcode_feedback = false;
+            spl_context.m19_active = false;
+            spl_context.orient_hold_stop = false;
             spl_context.command_state = SPINDLE_CW;
             spl_context.start_request_pending = true;
             auto_set_scode_signal(i);
@@ -146,6 +148,8 @@ static void auto_deal_mstb(){
             spl_context.command_speed = cycle_tp->plan_block->mst_data.spindle.speed;
             spl_context.mcp_target_speed = cycle_tp->plan_block->mst_data.spindle.speed;
             spl_context.mcode_feedback = false;
+            spl_context.m19_active = false;
+            spl_context.orient_hold_stop = false;
             spl_context.command_state = SPINDLE_CCW;
             spl_context.start_request_pending = true;
             auto_set_scode_signal(i);
@@ -155,6 +159,8 @@ static void auto_deal_mstb(){
             spl_context.command_speed = 0.0;
             spl_context.command_state = SPINDLE_STOP;
             spl_context.mcode_feedback = false;
+            spl_context.m19_active = false;
+            spl_context.orient_hold_stop = false;
             spl_context.start_request_pending = false;
             auto_set_scode_signal(i);
             break;
@@ -164,7 +170,13 @@ static void auto_deal_mstb(){
             break;    
         case M19: // 主轴定位
             setRegValue8(REG_F, 10, 0x13); 
-            spl_context.spl_event = SPINDLE_EVENT_ORIENT;
+            spl_context.mcode_feedback = false;
+            spl_context.m19_active = true;
+            spl_context.orient_hold_stop = true;
+            spl_context.command_speed = 0.0;
+            spl_context.command_state = SPINDLE_STOP;
+            spl_context.start_request_pending = false;
+            // spl_context.spl_event = SPINDLE_EVENT_ORIENT;
             break;
         default:
             // 判断M代码大小

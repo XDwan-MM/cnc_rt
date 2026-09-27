@@ -39,6 +39,15 @@ typedef enum
     SPINDLE_VEL_ARRIVED   /**< 当前速度已到达目标。 */
 } spindle_velocity_state_t;
 
+/** 主轴定向流程状态。 */
+typedef enum
+{
+    SPINDLE_ORIENT_IDLE = 0,
+    SPINDLE_ORIENT_WAIT_ZERO,
+    SPINDLE_ORIENT_RUNNING,
+    SPINDLE_ORIENT_DONE
+} spindle_orient_phase_t;
+
 /** 主轴速度指令来源。G33.7=0 使用 CNC，G33.7=1 使用 PLC。 */
 typedef enum
 {
@@ -71,6 +80,11 @@ typedef struct
 
     /* M 代码握手状态。 */
     bool mcode_feedback; /**< 是否已经完成当前 M 代码反馈。 */
+    bool m19_active; /**< 当前是否有待完成的 M19。 */
+    bool orient_hold_stop; /**< 定向后保持停止，等待新的 M3/M4。 */
+    bool orient_request_pending; /**< PLC 已请求定向，等待主轴停稳。 */
+    bool orient_release_pending; /**< 定向完成前收到了解除请求。 */
+    spindle_orient_phase_t orient_phase;
     bool reset_requires_start; /**< 复位后必须收到新的 M3/M4 才允许启动。 */
     bool start_request_pending; /**< 自动模式已收到新的 M3/M4 请求。 */
 } spindle_context_t;

@@ -39,6 +39,8 @@ static void spindle_disable_driver_before_operation(void);
 static bool spindle_is_rotating(void);
 static void spindle_publish_status(void);
 static void spindle_report_mcode_complete(void);
+static void spindle_update_orient_state(void);
+static bool spindle_is_at_zero(void);
 
 /* ==========================================================================
  * 2. 外部函数定义
@@ -84,6 +86,7 @@ void spindle_control_update(void)
 
     spindle_process_event(&spl_context);
     spl_orient_update();
+    spindle_update_orient_state();
     spindle_update_driver_control();
     spindle_publish_status();
 }
@@ -91,6 +94,14 @@ void spindle_control_update(void)
 /* CNC M3/M4/M5 只更新目标数据；目标发生变化时在控制层生成事件。 */
 static void spindle_update_command_event(void)
 {
+    /* 定向流程拥有主轴控制权，不能被旧的 M3/M4 目标重新启动。 */
+    if (spl_context.orient_request_pending ||
+        spl_context.orient_phase != SPINDLE_ORIENT_IDLE ||
+        spl_context.orient_hold_stop)
+    {
+        return;
+    }
+
     const double selected_speed = spindle_get_selected_speed(&spl_context);
     const double target_speed = isfinite(selected_speed) ?
         fabs(selected_speed) : 0.0;
@@ -148,18 +159,37 @@ static void spindle_process_event(spindle_context_t *context)
         }
         break;
     case SPINDLE_EVENT_CW:
+        if (context->orient_phase != SPINDLE_ORIENT_IDLE ||
+            context->orient_request_pending || context->orient_hold_stop)
+            break;
         spindle_handle_rotation(context, SPINDLE_CW);
         stop_log_reported = false;
         break;
     case SPINDLE_EVENT_CCW:
+        if (context->orient_phase != SPINDLE_ORIENT_IDLE ||
+            context->orient_request_pending || context->orient_hold_stop)
+            break;
         spindle_handle_rotation(context, SPINDLE_CCW);
         stop_log_reported = false;
         break;
     case SPINDLE_EVENT_ORIENT:
-        spl_orient_request();
+        /* 先停稳，下一阶段再提交驱动器定向请求。 */
+        context->orient_request_pending = true;
+        context->orient_release_pending = false;
+        context->orient_phase = SPINDLE_ORIENT_WAIT_ZERO;
+        spindle_handle_stop(context);
         break;
     case SPINDLE_EVENT_RELEASE_ORIENT:
-        spl_orient_release();
+        if (context->orient_phase == SPINDLE_ORIENT_DONE)
+        {
+            spl_orient_release();
+            context->orient_phase = SPINDLE_ORIENT_IDLE;
+            context->orient_release_pending = false;
+        }
+        else if (context->orient_phase != SPINDLE_ORIENT_IDLE)
+        {
+            context->orient_release_pending = true;
+        }
         break;
     case SPINDLE_EVENT_NONE:
     default:
@@ -402,6 +432,49 @@ static void spindle_update_planner_state(spindle_context_t *context)
     context->spl_vel_state = SPINDLE_VEL_RAMP;
 }
 
+static bool spindle_is_at_zero(void)
+{
+    return fabs(spl_context.vel_planner.current_vel) <=
+               SPINDLE_SPEED_EPSILON &&
+           fabs((double)spindle_driver.actual_vel) <=
+               SPINDLE_ACTUAL_ZERO_EPSILON;
+}
+
+static void spindle_update_orient_state(void)
+{
+    if (spl_context.orient_phase == SPINDLE_ORIENT_WAIT_ZERO &&
+        spl_context.orient_request_pending && spindle_is_at_zero())
+    {
+        if (spl_orient_is_done())
+        {
+            /* 防止上一次定向状态残留。 */
+            spl_orient_release();
+        }
+        spl_orient_request();
+        spl_context.orient_request_pending = false;
+        spl_context.orient_phase = SPINDLE_ORIENT_RUNNING;
+    }
+
+    if (spl_context.orient_phase == SPINDLE_ORIENT_RUNNING &&
+        spl_orient_is_done())
+    {
+        spl_context.orient_phase = SPINDLE_ORIENT_DONE;
+        if (spl_context.m19_active)
+        {
+            spl_context.m19_active = false;
+            spindle_report_mcode_complete();
+        }
+    }
+
+    if (spl_context.orient_phase == SPINDLE_ORIENT_DONE &&
+        spl_context.orient_release_pending)
+    {
+        spl_orient_release();
+        spl_context.orient_release_pending = false;
+        spl_context.orient_phase = SPINDLE_ORIENT_IDLE;
+    }
+}
+
 static void spindle_finish_stop_if_ready(void)
 {
     if (spl_context.spl_state != SPINDLE_STOP)
@@ -420,7 +493,7 @@ static void spindle_finish_stop_if_ready(void)
 
     if (spindle_driver.act_mode == DRV_MODE_NONE)
     {
-        if (!spl_context.mcode_feedback)
+        if (!spl_context.mcode_feedback && !spl_context.m19_active)
         {
             /* 停止目标到达零速也必须产生一次到速信号，供 M 代码 FIN 握手。 */
             spl_context.spl_vel_state = SPINDLE_VEL_ARRIVED;
