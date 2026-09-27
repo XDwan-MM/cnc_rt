@@ -343,6 +343,14 @@ static void plc_output_axis_status()
 
 static void plc_output_spl_vel_status()
 {
+    /* 停止目标已归零时，即使控制周期错过了 ARRIVED 状态，也要发布到速。 */
+    if (spl_context.spl_state == SPINDLE_STOP &&
+        fabs(spl_context.vel_planner.current_vel) <= 1e-6 &&
+        abs(spindle_driver.actual_vel) < 5)
+    {
+        spl_context.spl_vel_state = SPINDLE_VEL_ARRIVED;
+    }
+
     //　主轴速度到达信号F45.3
     if (spl_context.spl_vel_state == SPINDLE_VEL_ARRIVED)
     {
@@ -356,7 +364,11 @@ static void plc_output_spl_vel_status()
     if(abs(spindle_driver.actual_vel) < 5)
     {
         setRegBit(REG_F, 45, 1);
-        spl_context.spl_vel_state = SPINDLE_VEL_ZERO;
+        /* 停止到零时保留 ARRIVED，保证 F45.3 至少保持到 M 代码读到 FIN。 */
+        if (spl_context.spl_vel_state != SPINDLE_VEL_ARRIVED)
+        {
+            spl_context.spl_vel_state = SPINDLE_VEL_ZERO;
+        }
     }
     else
     {

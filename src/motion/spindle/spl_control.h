@@ -56,6 +56,7 @@ typedef struct
 {
     /* 逻辑状态与待处理事件。 */
     spindle_state_t spl_state;
+    spindle_state_t command_state; /**< 最近一条 CNC M3/M4 的方向请求。 */
     spindle_velocity_state_t spl_vel_state;
     spindle_event_t spl_event;
 
@@ -70,6 +71,8 @@ typedef struct
 
     /* M 代码握手状态。 */
     bool mcode_feedback; /**< 是否已经完成当前 M 代码反馈。 */
+    bool reset_requires_start; /**< 复位后必须收到新的 M3/M4 才允许启动。 */
+    bool start_request_pending; /**< 自动模式已收到新的 M3/M4 请求。 */
 } spindle_context_t;
 
 extern spindle_context_t spl_context;

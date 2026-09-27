@@ -77,6 +77,17 @@ void auto_execute_mstb_cmd(){
     }
     // FIN信号 G4.3
     getRegBit(REG_G, 4, 3, &cycle_tp->mstb_cmd_data.signal_fin);
+// #ifdef DEBUG_MODE_ENABLED
+//     /* 仿真模式没有外部 PLC 将 F45.3 回送为 G4.3，使用主轴内部完成反馈。 */
+//     if (!cycle_tp->mstb_cmd_data.signal_fin &&
+//         (cycle_tp->plan_block->mst_data.m_code == M03 ||
+//          cycle_tp->plan_block->mst_data.m_code == M04 ||
+//          cycle_tp->plan_block->mst_data.m_code == M05) &&
+//         spl_context.mcode_feedback)
+//     {
+//         cycle_tp->mstb_cmd_data.signal_fin = true;
+//     }
+// #endif
     // FIN为1时，nc侧将MF选通信号置为0
     if(cycle_tp->mstb_cmd_data.signal_fin){
         // 完成信号宽幅时间，缺省值2ms
@@ -126,6 +137,8 @@ static void auto_deal_mstb(){
             spl_context.command_speed = cycle_tp->plan_block->mst_data.spindle.speed;
             spl_context.mcp_target_speed = cycle_tp->plan_block->mst_data.spindle.speed;
             spl_context.mcode_feedback = false;
+            spl_context.command_state = SPINDLE_CW;
+            spl_context.start_request_pending = true;
             auto_set_scode_signal(i);
             break;
         case M04: // 主轴反转
@@ -133,11 +146,16 @@ static void auto_deal_mstb(){
             spl_context.command_speed = cycle_tp->plan_block->mst_data.spindle.speed;
             spl_context.mcp_target_speed = cycle_tp->plan_block->mst_data.spindle.speed;
             spl_context.mcode_feedback = false;
+            spl_context.command_state = SPINDLE_CCW;
+            spl_context.start_request_pending = true;
             auto_set_scode_signal(i);
             break;
         case M05: // 主轴停止
             setRegValue8(REG_F, 10, 0x05);
+            spl_context.command_speed = 0.0;
+            spl_context.command_state = SPINDLE_STOP;
             spl_context.mcode_feedback = false;
+            spl_context.start_request_pending = false;
             auto_set_scode_signal(i);
             break;
         case M06: // 不输出M代码信号：1、M99，M98，M198；2、调用子程序的M代码；3、调用用户宏程序的M代码
