@@ -30,6 +30,10 @@ extern "C"
 /* Fault Reset */
 #define DRV_CONTROL_FAULT_RESET 0x0080
 
+/* 主轴内部定向：保持到状态字 bit10 和 bit8 同时为1。 */
+#define DRV_CONTROL_ORIENT 0x040F
+#define DRV_STATUS_ORIENT_DONE_MASK 0x0500
+
 /*=========================================================
  * 初始化
  *=========================================================*/
@@ -67,6 +71,11 @@ hal_retcode_t Driver_Request_Mode(hal_driver_t *drv, drv_mode_t mode);
  */
 hal_retcode_t Driver_Switch_Mode(hal_driver_t *drv, drv_mode_t mode);
 
+hal_retcode_t Driver_Request_Mode_Switch(hal_driver_t *drv, drv_mode_t mode);
+bool Driver_Is_Mode_Switching(const hal_driver_t *drv);
+bool Driver_Is_Mode_Switch_Done(const hal_driver_t *drv);
+hal_retcode_t Driver_Get_Mode_Switch_Result(const hal_driver_t *drv);
+
 /*=========================================================
  * 请求驱动器使能
  *=========================================================*/
@@ -76,6 +85,13 @@ hal_retcode_t Driver_Enable(hal_driver_t *drv);
  * 驱动器下使能
  *=========================================================*/
 hal_retcode_t Driver_Disable(hal_driver_t *drv);
+
+/*=========================================================
+ * 主轴内部定向
+ *=========================================================*/
+hal_retcode_t Driver_Orient(hal_driver_t *drv);
+hal_retcode_t Driver_Release_Orient(hal_driver_t *drv);
+bool Driver_Is_Orient_Done(const hal_driver_t *drv);
 
 /*=========================================================
  * 故障复位

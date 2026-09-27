@@ -3,6 +3,7 @@
 #include "rt_sem.h"
 #include "driver_hal.h"
 #include "hal_io.h"
+#include "spl_control.h"
 #include <stdio.h>
 #include <unistd.h>
 #include <stdbool.h>
@@ -16,13 +17,16 @@ void simulate_hal_data(void) {
     x_axis_driver.actual_pos = x_axis_driver.target_pos;
     y_axis_driver.actual_pos = y_axis_driver.target_pos;
     z_axis_driver.actual_pos = z_axis_driver.target_pos;
-    spindle.actual_vel = spindle.target_vel;
+    /* 仿真驱动按照驱动器目标速度返回实际速度反馈。 */
+    spindle_driver.actual_vel = spindle_driver.target_vel;
 
 
     // 模拟状态字（已使能状态）
     x_axis_driver.state = DRV_STATE_OPERATION_ENABLED;
     y_axis_driver.state = DRV_STATE_OPERATION_ENABLED;
     z_axis_driver.state = DRV_STATE_OPERATION_ENABLED;
+    /* 主轴也必须处于运行使能状态，否则运控线程不会执行速度规划。 */
+    spindle_driver.state = DRV_STATE_OPERATION_ENABLED;
 }
 
 void Master_Run_Simulated(void) {

@@ -15,7 +15,7 @@ hal_retcode_t Ethercat_Driver_Read_Feedback(hal_driver_t *drv)
     int ret;
 
     /* -----------------------------------------------------
-     * 6041 Statusword
+     * 6041 从总线反馈PDO读取Statusword，并赋值到抽象驱动器的状态字中
      * ----------------------------------------------------- */
 
     ret = GM_TxPdoEntry_Read(drv->pdo.statusWord, &(drv->status_word), sizeof(drv->status_word));
@@ -26,7 +26,7 @@ hal_retcode_t Ethercat_Driver_Read_Feedback(hal_driver_t *drv)
         return HAL_DRIVER_ERROR;
     }
     /* -----------------------------------------------------
-     * 6064 Position Actual Value
+     * 6064 Position Actual Value（从总线读取）
      * ----------------------------------------------------- */
 
     ret = GM_TxPdoEntry_Read(drv->pdo.act_pos, &drv->actual_pos, sizeof(drv->actual_pos));
@@ -37,7 +37,7 @@ hal_retcode_t Ethercat_Driver_Read_Feedback(hal_driver_t *drv)
         return HAL_DRIVER_ERROR;
     }
     /* -----------------------------------------------------
-     * 606C Velocity Actual Value
+     * 606C Velocity Actual Value（从总线读取）
      * ----------------------------------------------------- */
 
     ret = GM_TxPdoEntry_Read(drv->pdo.act_speed, &drv->actual_vel, sizeof(drv->actual_vel));
@@ -60,7 +60,7 @@ hal_retcode_t Ethercat_Driver_Read_Feedback(hal_driver_t *drv)
     // }
 
     /* -----------------------------------------------------
-     * Error Code
+     * Error Code（从总线读取）
      * ----------------------------------------------------- */
 
     ret = GM_TxPdoEntry_Read(drv->pdo.error_code, &drv->error_code, sizeof(drv->error_code));
@@ -71,7 +71,7 @@ hal_retcode_t Ethercat_Driver_Read_Feedback(hal_driver_t *drv)
         return HAL_DRIVER_ERROR;
     }
     /* -----------------------------------------------------
-     * 6061 Modes of Operation Display
+     * 6061 Modes of Operation Display（从总线读取）
      * ----------------------------------------------------- */
 
     ret = Ethercat_Driver_Read_Actual_Mode(drv);
@@ -191,7 +191,7 @@ hal_retcode_t Ethercat_Driver_Write_Mode(hal_driver_t *drv, drv_mode_t mode)
 }
 
 /*=========================================================
- * 读取实际模式 6061
+ * 读取实际模式 6061 （从总线读取）
  *=========================================================*/
 hal_retcode_t Ethercat_Driver_Read_Actual_Mode(hal_driver_t *drv)
 {

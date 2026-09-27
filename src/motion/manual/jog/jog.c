@@ -112,24 +112,24 @@ static void jog_update_outputs(void);
 void handle_jog_cmd(void)
 {
     // // test mode switch
-    // Hal_Driver_Update(&spindle, true, false);
-    // Ethercat_Driver_Read_Actual_Mode(&spindle);
-    // if(spindle.act_mode != DRV_MODE_CSP)
+    // Hal_Driver_Update(&spindle_driver, true, false);
+    // Ethercat_Driver_Read_Actual_Mode(&spindle_driver);
+    // if(spindle_driver.act_mode != DRV_MODE_CSP)
     // {
-    //     printf("请求切换CSP模式 主轴驱动器当前实际模式 %d\n", spindle.act_mode);
+    //     printf("请求切换CSP模式 主轴驱动器当前实际模式 %d\n", spindle_driver.act_mode);
     //     // 下使能
-    //     Ethercat_Driver_Write_Controlword(&spindle, DRV_CONTROL_DISABLE_OPERATION);
+    //     Ethercat_Driver_Write_Controlword(&spindle_driver, DRV_CONTROL_DISABLE_OPERATION);
     //     // 设置成CSP模式
-    //     Ethercat_Driver_Write_Mode(&spindle, DRV_MODE_CSP);
+    //     Ethercat_Driver_Write_Mode(&spindle_driver, DRV_MODE_CSP);
     //     // 上使能
-    //     Ethercat_Driver_Write_Controlword(&spindle, DRV_CONTROL_ENABLE_OPERATION);
+    //     Ethercat_Driver_Write_Controlword(&spindle_driver, DRV_CONTROL_ENABLE_OPERATION);
 
     // }
-    // if(spindle.act_mode == DRV_MODE_CSP)
+    // if(spindle_driver.act_mode == DRV_MODE_CSP)
     // {
-    //     printf("主轴驱动器当前实际模式 %d\n", spindle.act_mode);
+    //     printf("主轴驱动器当前实际模式 %d\n", spindle_driver.act_mode);
     //     // 下使能
-    //     Ethercat_Driver_Write_Controlword(&spindle, DRV_CONTROL_DISABLE_OPERATION);
+    //     Ethercat_Driver_Write_Controlword(&spindle_driver, DRV_CONTROL_DISABLE_OPERATION);
     // }
     
     bool global_fatal;

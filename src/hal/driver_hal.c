@@ -51,7 +51,7 @@ static uint16_t id_z = 3;
  *=========================================================*/
 driver_manager dri_manager;
 
-hal_driver_t spindle;
+hal_driver_t spindle_driver;
 hal_driver_t x_axis_driver;
 hal_driver_t y_axis_driver;
 hal_driver_t z_axis_driver;
@@ -73,6 +73,10 @@ static void Hal_Driver_Clear(hal_driver_t *drv)
     drv->act_mode = DRV_MODE_NONE;
 
     drv->req_mode = DRV_MODE_NONE;
+    drv->mode_switch_state = DRV_MODE_SWITCH_IDLE;
+    drv->mode_switch_target = DRV_MODE_NONE;
+    drv->mode_switch_source = DRV_MODE_NONE;
+    drv->mode_switch_result = HAL_DRIVER_SUCCESS;
 }
 
 /*=========================================================
@@ -80,7 +84,7 @@ static void Hal_Driver_Clear(hal_driver_t *drv)
  *=========================================================*/
 hal_retcode_t Hal_Driver_Manager_Init(void)
 {
-    hal_driver_t* drivers[] = {&spindle, &x_axis_driver, &y_axis_driver, &z_axis_driver};
+    hal_driver_t* drivers[] = {&spindle_driver, &x_axis_driver, &y_axis_driver, &z_axis_driver};
     const bool physical[] = {physical_sp, physical_x, physical_y, physical_z};
     const uint16_t axis_ids[] = {id_sp, id_x, id_y, id_z};
     const size_t driver_count = sizeof(drivers) / sizeof(drivers[0]);
@@ -121,7 +125,7 @@ hal_retcode_t Hal_Driver_Manager_Init(void)
  *=========================================================*/
 hal_retcode_t Hal_Driver_Array_Init(void)
 {
-    hal_driver_t *drivers[] = {&spindle, &x_axis_driver, &y_axis_driver, &z_axis_driver};
+    hal_driver_t *drivers[] = {&spindle_driver, &x_axis_driver, &y_axis_driver, &z_axis_driver};
 
     const bool physical[] = {physical_sp, physical_x, physical_y, physical_z};
 
@@ -177,8 +181,13 @@ hal_retcode_t Hal_Driver_Array_Init(void)
         drv->act_mode = DRV_MODE_NONE;
 
         drv->req_mode = DRV_MODE_NONE;
+        drv->mode_switch_state = DRV_MODE_SWITCH_IDLE;
+        drv->mode_switch_target = DRV_MODE_NONE;
+        drv->mode_switch_source = DRV_MODE_NONE;
+        drv->mode_switch_result = HAL_DRIVER_SUCCESS;
         
         drv->target_state = DRV_STATE_SWITCHED_ON_DISABLE;
+        drv->orient_state = DRV_ORIENT_IDLE;
 
         /*-------------------------------------------------
          * 注册
@@ -399,6 +408,20 @@ hal_retcode_t Hal_Driver_Update(hal_driver_t *drv, bool read, bool write)
          * Fault Reset 由 Driver_Fault_Reset() 单独写 6040，不受此判断影响。
          */
         if (drv->state == DRV_STATE_FAULT)
+        {
+            return HAL_DRIVER_SUCCESS;
+        }
+
+        /* 内部定向期间由 driver.c 持续发送 0x040F，避免普通目标PDO覆盖定向过程。 */
+        if (drv->orient_state != DRV_ORIENT_IDLE)
+        {
+            return HAL_DRIVER_SUCCESS;
+        }
+
+        if (drv->mode_switch_state == DRV_MODE_SWITCH_WAIT_READY ||
+            drv->mode_switch_state == DRV_MODE_SWITCH_PREPARE_TARGET ||
+            drv->mode_switch_state == DRV_MODE_SWITCH_WAIT_MODE ||
+            drv->mode_switch_state == DRV_MODE_SWITCH_WAIT_ENABLED)
         {
             return HAL_DRIVER_SUCCESS;
         }

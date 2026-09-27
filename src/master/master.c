@@ -191,7 +191,7 @@ void Master_Run()
         // 主轴驱动器设置成CSV模式 并上使能（理解：设置模式放在使能流程之前 即DRV_STATE_SWITCHED_ON_DISABLE后一个状态）
         // 驱动器状态变化：Ready to Switch On >>> Switched On >>> Operation Enabled
         // 驱动器对应控制字下发顺序：0x06 >>> 0x07 >>> 0x0f
-        if(spindle.act_mode != DRV_MODE_NONE) // 实时启动时不会执行
+        if(spindle_driver.act_mode != DRV_MODE_NONE) // 实时启动时不会执行
         {
             // printf("************************************************************wcf\n");
             // 如果抽象主轴驱动器不是　DRV_MODE_DISABLED，就一直读主轴驱动器状态字．
@@ -199,15 +199,15 @@ void Master_Run()
             //根据状态字设置控制字
             if(((status[0] & 0x004f) == 0x0040))
             {
-                spindle.state = DRV_STATE_SWITCHED_ON_DISABLE;
+                spindle_driver.state = DRV_STATE_SWITCHED_ON_DISABLE;
                 // 写控制字0x0006
                 CHECK_FUNC(GM_RxPdoEntry_Write(g_device_data[DEV_ID_SPINDLE_DRIVER].slave.Control_word, 0x0006)); // 主轴驱动器控制字写0x0006
                 CHECK_FUNC(GM_TxPdoEntry_Read(g_device_data[DEV_ID_SPINDLE_DRIVER].slave.act_pos, &pos[0], 4)); // 读主轴驱动器实际位置
             }
             else if((status[0] & 0x006f) == 0x0021)
             {
-                spindle.state = DRV_STATE_READY_TO_SWITCHED_ON;
-                if(spindle.act_mode == DRV_MODE_CSV)
+                spindle_driver.state = DRV_STATE_READY_TO_SWITCHED_ON;
+                if(spindle_driver.act_mode == DRV_MODE_CSV)
                 {
                     // 主轴驱动器模式控制6060写0x09，是将主轴驱动器设置成速度模式。 位置模式 模式控制6060要写0x08，速度模式 模式控制6060要写0x09
                     CHECK_FUNC(GM_RxPdoEntry_Write(g_device_data[DEV_ID_SPINDLE_DRIVER].slave.Modes_of_operation, 0x09));
@@ -217,21 +217,21 @@ void Master_Run()
             }
             else if((status[0] & 0x006f) == 0x0023)
             {
-                spindle.state = DRV_STATE_SWITCHED_ON;
+                spindle_driver.state = DRV_STATE_SWITCHED_ON;
                 // 写控制字0x000f
                 CHECK_FUNC(GM_RxPdoEntry_Write(g_device_data[DEV_ID_SPINDLE_DRIVER].slave.Control_word, 0x000f));
             }
             else if((status[0] & 0x027f) == 0x0237)
             {
-                spindle.state = DRV_STATE_OPERATION_ENABLED;
+                spindle_driver.state = DRV_STATE_OPERATION_ENABLED;
                 // 到这里已经上完使能
             }
         }
         else
         {
-            if(spindle.state != DRV_STATE_READY_TO_SWITCHED_ON)
+            if(spindle_driver.state != DRV_STATE_READY_TO_SWITCHED_ON)
             {
-                spindle.state = DRV_STATE_NOT_READY_TO_SWITCH_ON;
+                spindle_driver.state = DRV_STATE_NOT_READY_TO_SWITCH_ON;
                 CHECK_FUNC(GM_RxPdoEntry_Write(g_device_data[DEV_ID_SPINDLE_DRIVER].slave.Control_word, 0x00)); // 主轴驱动器控制字写0x00，主轴驱动器下使能
             }
         }
@@ -378,25 +378,25 @@ void spindle_driver_servo_on()
     if ((status_word & 0x4f) == 0x40)
     {
         CHECK_FUNC(GM_RxPdoEntry_Write(g_device_data[DEV_ID_SPINDLE_DRIVER].slave.Control_word, 0x06));
-        spindle.state = DRV_STATE_SWITCHED_ON_DISABLE;
+        spindle_driver.state = DRV_STATE_SWITCHED_ON_DISABLE;
     }
     else if ((status_word & 0x6f) == 0x21)
     {
-        if (spindle.act_mode == DRV_MODE_CSV)
+        if (spindle_driver.act_mode == DRV_MODE_CSV)
         {
             CHECK_FUNC(GM_RxPdoEntry_Write(g_device_data[DEV_ID_SPINDLE_DRIVER].slave.Modes_of_operation, 0x09));
         }
         CHECK_FUNC(GM_RxPdoEntry_Write(g_device_data[DEV_ID_SPINDLE_DRIVER].slave.Control_word, 0x07));
-        spindle.state = DRV_STATE_READY_TO_SWITCHED_ON;
+        spindle_driver.state = DRV_STATE_READY_TO_SWITCHED_ON;
     }
     else if ((status_word & 0x6f) == 0x23)
     {
         CHECK_FUNC(GM_RxPdoEntry_Write(g_device_data[DEV_ID_SPINDLE_DRIVER].slave.Control_word, 0x0f));
-        spindle.state = DRV_STATE_SWITCHED_ON;
+        spindle_driver.state = DRV_STATE_SWITCHED_ON;
     }
-    else if ((status_word & 0x27f) == 0x237 && spindle.state == DRV_STATE_SWITCHED_ON)
+    else if ((status_word & 0x27f) == 0x237 && spindle_driver.state == DRV_STATE_SWITCHED_ON)
     {
-        spindle.state = DRV_STATE_OPERATION_ENABLED;
+        spindle_driver.state = DRV_STATE_OPERATION_ENABLED;
     }
 }
 

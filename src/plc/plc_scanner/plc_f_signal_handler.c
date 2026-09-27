@@ -4,6 +4,7 @@
 #include "regapi.h"
 #include "regdata.h"
 #include "spl_control.h"
+#include "spl_orient.h"
 #include <hmisysapi.h>
 #include "alarmapi.h"
 #include "reset.h"
@@ -17,6 +18,7 @@ static void plc_output_auto();
 static void plc_output_reset();
 static void plc_output_axis_status();
 static void plc_output_spl_vel_status();
+static void plc_output_spl_orient_status();
 static void plc_output_spl_vel();
 
 void plc_f_signal_handler_cycle()
@@ -28,6 +30,7 @@ void plc_f_signal_handler_cycle()
     plc_output_reset();
     plc_output_axis_status();
     plc_output_spl_vel_status();
+    plc_output_spl_orient_status();
     plc_output_spl_vel();
 }
 
@@ -341,7 +344,7 @@ static void plc_output_axis_status()
 static void plc_output_spl_vel_status()
 {
     //　主轴速度到达信号F45.3
-    if (spl_data.spl_vel_state == SPINDLE_VEL_ARRIVED)
+    if (spl_context.spl_vel_state == SPINDLE_VEL_ARRIVED)
     {
         setRegBit(REG_F, 45, 3);
     }
@@ -350,17 +353,28 @@ static void plc_output_spl_vel_status()
         clearRegBit(REG_F, 45, 3);
     }
     //　主轴零速信号F45.1
-    if(abs(spindle.actual_vel) < 5)
+    if(abs(spindle_driver.actual_vel) < 5)
     {
         setRegBit(REG_F, 45, 1);
-        spl_data.spl_vel_state = SPINDLE_VEL_ZERO;
+        spl_context.spl_vel_state = SPINDLE_VEL_ZERO;
     }
     else
     {
         clearRegBit(REG_F, 45, 1);
     }
-    // 主轴定向信号 F45.7  定向完成F45.7置高　未完成置低
-    // todo
+}
+
+static void plc_output_spl_orient_status()
+{
+    // 主轴定向信号 F45.7：定向完成置高，未完成置低
+    if (spl_orient_is_done())
+    {
+        setRegBit(REG_F, 45, 7);
+    }
+    else
+    {
+        clearRegBit(REG_F, 45, 7);
+    }
 }
 
 static void plc_output_spl_vel()
@@ -369,13 +383,13 @@ static void plc_output_spl_vel()
     double command_speed;
     uint32_t vel;
 
-    if (spl_data.speed_mode)
+    if (spl_context.speed_source == SPINDLE_SPEED_SOURCE_PLC)
     {
-        command_speed = spl_data.plc_speed;
+        command_speed = spl_context.plc_speed;
     }
     else
     {
-        command_speed = spl_data.command_speed;
+        command_speed = spl_context.command_speed;
     }
     vel = (uint32_t)fabs(command_speed);
 

@@ -123,28 +123,30 @@ static void auto_deal_mstb(){
             break;
         case M03: // 主轴正转
             setRegValue8(REG_F, 10, 0x03); 
-            spl_data.command_speed = cycle_tp->plan_block->mst_data.spindle.speed;
-            spl_data.mcode_feedback = false;
+            spl_context.command_speed = cycle_tp->plan_block->mst_data.spindle.speed;
+            spl_context.mcp_target_speed = cycle_tp->plan_block->mst_data.spindle.speed;
+            spl_context.mcode_feedback = false;
             auto_set_scode_signal(i);
             break;
         case M04: // 主轴反转
             setRegValue8(REG_F, 10, 0x04); 
-            spl_data.command_speed = cycle_tp->plan_block->mst_data.spindle.speed;
-            spl_data.mcode_feedback = false;
+            spl_context.command_speed = cycle_tp->plan_block->mst_data.spindle.speed;
+            spl_context.mcp_target_speed = cycle_tp->plan_block->mst_data.spindle.speed;
+            spl_context.mcode_feedback = false;
             auto_set_scode_signal(i);
             break;
         case M05: // 主轴停止
             setRegValue8(REG_F, 10, 0x05);
-            spl_data.mcode_feedback = false;
+            spl_context.mcode_feedback = false;
             auto_set_scode_signal(i);
             break;
         case M06: // 不输出M代码信号：1、M99，M98，M198；2、调用子程序的M代码；3、调用用户宏程序的M代码
-            spl_data.mcode_feedback = false;
+            spl_context.mcode_feedback = false;
             auto_set_tcode_signal(i);
             break;    
         case M19: // 主轴定位
             setRegValue8(REG_F, 10, 0x13); 
-            spl_data.spl_event = SPINDLE_EVENT_ORIENT;
+            spl_context.spl_event = SPINDLE_EVENT_ORIENT;
             break;
         default:
             // 判断M代码大小

@@ -5,6 +5,7 @@
 #include "regapi.h"
 #include "servosampleevents.h"
 #include "spl_control.h"
+#include "spl_orient.h"
 #include <alarmapi.h>
 #include <hmisysapi.h>
 #include <stdlib.h>
@@ -24,6 +25,7 @@ static void task_handle_reset_event(PLC_EVENT *event_data);
 static void task_handle_hmi_event(PLC_EVENT *event_data);
 static void task_handle_external_decel_event(PLC_EVENT *event_data);
 static bool task_external_decel_enabled(int function);
+static void task_handle_spd_ori_event(PLC_EVENT *event_data);
 
 /* 外部函数定义 */
 
@@ -110,8 +112,8 @@ static GNC_RES task_handle_plc_event(PLC_EVENT *event_data)
     }
     case PLC_EV_MSG_SPD_ORI:
     {
-        LOG(LOG_LEVEL_INFO, "处理主轴定向事件");
-        spl_data.spl_event = SPINDLE_EVENT_ORIENT;
+        task_handle_spd_ori_event(event_data);
+        // spl_orient_request();
         break;
     }
     case PLC_EV_MSG_EXTERNAL_DECEL:
@@ -263,18 +265,32 @@ static void task_handle_spl_event(PLC_EVENT *event_data)
     if (event_data->spindle_payload.direction == 1)
     {
         // LOG(LOG_LEVEL_INFO, "处理主轴正转事件");
-        spl_data.spl_event = SPINDLE_EVENT_CW;
+        spl_context.spl_event = SPINDLE_EVENT_CW;
     }
     if (event_data->spindle_payload.direction == -1)
     {
         // LOG(LOG_LEVEL_INFO, "处理主轴反转事件");
-        spl_data.spl_event = SPINDLE_EVENT_CCW;
+        spl_context.spl_event = SPINDLE_EVENT_CCW;
     }
     if (event_data->spindle_payload.direction == 0)
     {
         // LOG(LOG_LEVEL_INFO, "处理主轴停止事件");
-        spl_data.spl_event = SPINDLE_EVENT_STOP;
-        spl_data.command_speed = 0;
+        spl_context.spl_event = SPINDLE_EVENT_STOP;
+    }
+}
+
+static void task_handle_spd_ori_event(PLC_EVENT *event_data)
+{
+    LOG(LOG_LEVEL_INFO, "处理主轴定向事件 动作%d", event_data->spd_ori_payload.p1);
+    // 推送主轴定向事件
+    if (event_data->spd_ori_payload.p1 == 1)
+    {
+        spl_context.spl_event = SPINDLE_EVENT_ORIENT;
+    }
+    // 推送主轴定向释放事件
+    if (event_data->spd_ori_payload.p1 == -1)
+    {
+        spl_context.spl_event = SPINDLE_EVENT_RELEASE_ORIENT;
     }
 }
 

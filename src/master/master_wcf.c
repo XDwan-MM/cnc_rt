@@ -114,8 +114,8 @@ int Master_Start(void)
     Driver_Request_Mode(&x_axis_driver, DRV_MODE_CSP);
     Driver_Request_Mode(&y_axis_driver, DRV_MODE_CSP);
     Driver_Request_Mode(&z_axis_driver, DRV_MODE_CSP);
-    Driver_Request_Mode(&spindle, DRV_MODE_CSV);
-    Driver_Disable(&spindle);
+    Driver_Request_Mode(&spindle_driver, DRV_MODE_CSV);
+    Driver_Disable(&spindle_driver);
 
     g_master.initialized = true;
 
@@ -156,7 +156,7 @@ int Master_Start(void)
     Hal_Driver_Set_Target_Pos(&x_axis_driver, x_axis_driver.actual_pos);
     Hal_Driver_Set_Target_Pos(&y_axis_driver, y_axis_driver.actual_pos);
     Hal_Driver_Set_Target_Pos(&z_axis_driver, z_axis_driver.actual_pos);
-    Hal_Driver_Set_Target_Vel(&spindle, 0);
+    Hal_Driver_Set_Target_Vel(&spindle_driver, 0);
 
     /*
      * 首次使能进给轴前，先用实际反馈位置锁定目标位置，
@@ -587,6 +587,11 @@ void Master_Run(void)
                     {
                         drv->state = DRV_STATE_NOT_READY_TO_SWITCH_ON;
                         drv->act_mode = DRV_MODE_NONE;
+                        drv->mode_switch_state = DRV_MODE_SWITCH_IDLE;
+                        drv->mode_switch_target = DRV_MODE_NONE;
+                        drv->mode_switch_source = DRV_MODE_NONE;
+                        drv->mode_switch_result = HAL_DRIVER_SUCCESS;
+                        drv->mode_switch_cycles = 0;
                     }
 
                     if (i == 0)

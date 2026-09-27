@@ -32,7 +32,6 @@ static void smx_do_period();
 static void axis_write_out();
 static void check_for_fault();
 static void set_operating_mode();
-static void spindle_control();
 static void handle_nc_event();
 static void get_cmd_pos();
 static void update_status();
@@ -120,7 +119,7 @@ static void chan_do_period()
         // 处理系统事件
         handle_nc_event();
         // 主轴控制
-        spindle_control();
+        spindle_control_update();
         // 根据运动模式计算运动位置
         get_cmd_pos();
     }
@@ -131,7 +130,7 @@ static void smx_do_period()
 {
     // 刚性攻丝同步（进给 = 转速 × 螺距：F = S × Pitch）
     // 主轴位置 Z = Pitch × (θ/360°)
-    // double z_vel = spl_data.current_angle * cycle_tp->plan_block->screw_data.screw_offset;
+    // double z_vel = spl_context.current_angle * cycle_tp->plan_block->screw_data.screw_offset;
     // rt_data->axis_data[AXIS_Z].wcs_cmd_pos_cur += z_vel * (double)par_ncu[PAR_NCU_CYCLE].value.val_uint /
     // TIME_US_2_S;
 
@@ -219,41 +218,6 @@ static void set_operating_mode()
     default:
         break;
     }
-}
-
-// 主轴控制
-static void spindle_control()
-{
-    static drv_state_t last_driver_state = DRV_STATE_INIT;
-    static drv_mode_t last_driver_mode = DRV_MODE_NONE;
-
-    spindle_set_state();
-    // if (spindle.state != last_driver_state || spindle.act_mode != last_driver_mode)
-    // {
-    //     LOG(LOG_LEVEL_INFO, "主轴驱动器状态变化 state=%d mode=%d target=%d actual=%d",
-    //         spindle.state, spindle.act_mode, spindle.target_vel, spindle.actual_vel);
-    //     last_driver_state = spindle.state;
-    //     last_driver_mode = spindle.act_mode;
-    // }
-    if ((spindle.act_mode != DRV_MODE_NONE) &&
-             (spindle.state == DRV_STATE_OPERATION_ENABLED))
-    {
-        spindle_cal_speed();
-    }
-    else if (spl_data.spl_state == SPINDLE_STOP &&
-             spindle.act_mode != DRV_MODE_NONE)
-    {
-        /* 驱动器尚未进入运行使能时直接撤销模式和使能请求。 */
-        Hal_Driver_Set_Target_Vel(&spindle, 0);
-        spindle.act_mode = DRV_MODE_NONE;
-        Driver_Disable(&spindle);
-        LOG(LOG_LEVEL_INFO, "主轴停止，驱动器请求下使能 state=%d", spindle.state);
-    }
-#ifdef DEBUG_MODE_ENABLED
-    setVarChanInt(0, VAR_CHAN_S_CODE, (int32_t)spl_data.vel_planner.current_vel, 0);
-#else
-    setVarChanInt(0, VAR_CHAN_S_CODE, spindle.actual_vel, 0);
-#endif
 }
 
 // 不同加工模式的运动控制
@@ -515,7 +479,7 @@ static void reset_clean_warning()
     {
         // 4.按下MDI上的RESET键
         nc_set_resetting(HMI_RESET);
-        // 复位生效参数
+        // 复位生效存储型限位功能的参数参数
         Axis_Limit_Manager_Init();
         // 清除警告提示
         cleanAllAlarm(ALARM_SY, ALARM_WARNING);

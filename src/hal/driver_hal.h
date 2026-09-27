@@ -50,6 +50,18 @@ typedef enum
 
 } drv_mode_t;
 
+typedef enum
+{
+    DRV_MODE_SWITCH_IDLE = 0,
+    DRV_MODE_SWITCH_DECELERATING,
+    DRV_MODE_SWITCH_WAIT_READY,
+    DRV_MODE_SWITCH_PREPARE_TARGET,
+    DRV_MODE_SWITCH_WAIT_MODE,
+    DRV_MODE_SWITCH_WAIT_ENABLED,
+    DRV_MODE_SWITCH_DONE,
+    DRV_MODE_SWITCH_ERROR
+} drv_mode_switch_state_t;
+
 /*=========================================================
  * 驱动器状态
  *
@@ -72,6 +84,15 @@ typedef enum
     DRV_STATE_FAULT
 
 } drv_state_t;
+
+/* 主轴内部定向状态。定向完成后保持 DONE，直到显式解除。 */
+typedef enum
+{
+    DRV_ORIENT_IDLE = 0,
+    DRV_ORIENT_REQUESTED,
+    DRV_ORIENT_RUNNING,
+    DRV_ORIENT_DONE
+} drv_orient_state_t;
 
 /*=========================================================
  * 抽象驱动器
@@ -100,12 +121,21 @@ typedef struct
 
     drv_state_t target_state; /* 上层请求的目标状态 */
 
+    drv_orient_state_t orient_state;
+
     /*-----------------------------------------------------
      * 工作模式
      *-----------------------------------------------------*/
     drv_mode_t act_mode; /* 6061 */
 
     drv_mode_t req_mode; /* 请求模式 */
+
+    drv_mode_switch_state_t mode_switch_state;
+    drv_mode_t mode_switch_target;
+    drv_mode_t mode_switch_source;
+    hal_retcode_t mode_switch_result;
+    int32_t mode_switch_position;
+    uint32_t mode_switch_cycles;
 
     /*-----------------------------------------------------
      * 实际反馈
@@ -155,7 +185,7 @@ typedef struct
  *=========================================================*/
 extern driver_manager dri_manager;
 
-extern hal_driver_t spindle;
+extern hal_driver_t spindle_driver;
 extern hal_driver_t x_axis_driver;
 extern hal_driver_t y_axis_driver;
 extern hal_driver_t z_axis_driver;
