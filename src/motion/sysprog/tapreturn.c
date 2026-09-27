@@ -9,13 +9,12 @@
 #include "rt_data.h"
 #include <stdio.h>
 #include <string.h>
-#include "tapreturnapi.h"
-
+#include <tapreturnapi.h>
+#include <stdint.h>
+#include <hmirequestdata.h>
 static TAP_RETURN_DATA tap_return_data;
 
 
-/// 记录自检：状态在合法范围内；**有记录时**螺距与转速必须是正数。
-/// 只查"自相矛盾"，不查业务合理性（那由 ready()/generate() 各自把门）。
 static bool saved_record_is_sane(const TAP_RETURN_DATA *d)
 {
     if (d->state < TAPRET_IDLE || d->state > TAPRET_DONE) return false;
@@ -25,19 +24,35 @@ static bool saved_record_is_sane(const TAP_RETURN_DATA *d)
 
 static void tapreturn_data_persist(void)
 {
-
-    setTapReturnData(&tap_return_data);
+    if (setTapReturnData(&tap_return_data) != 0)
+    {
+        LOG(LOG_LEVEL_WARN, "断电块写入失败（共享内存未就绪），本次未落盘（记录仍在 RAM 里）");
+        return;
+    }
+    LOG(LOG_LEVEL_DEBUG, "断电块已更新: state=%d", (int)tap_return_data.state);
 }
+
+
 
 void tapreturn_data_restore(void)
 {
+    TAP_RETURN_DATA restored;
 
-    TAP_RETURN_DATA data;
- 
-    getTapReturnData(&data);
-    tap_return_data= data;
-    // 恢复出来的状态就是"刀在孔里、可回退"（TAPPING/RETURNING）；其余（含 IDLE）不可回退
-    // —— 判据只看 state，不看别的。这条日志是台架验证的关键证据，别删。
+    if (getTapReturnData(&restored) != 0)
+    {
+        LOG(LOG_LEVEL_WARN, "断电块不可用（共享内存未就绪）：按无记录启动");
+        return;
+    }
+
+    if (!saved_record_is_sane(&restored))
+    {
+        LOG(LOG_LEVEL_WARN, "断电块内容不自洽(state=%d pitch=%.4f S=%d)，按无记录处理",
+            (int)restored.state, restored.screw_offset, restored.spindle_speed);
+        return;
+    }
+
+    tap_return_data = restored;
+
     LOG(LOG_LEVEL_INFO, "已恢复攻丝记录: state=%d R平面=%.3f 螺距=%.4f S=%d 攻进方向=%d",
         (int)tap_return_data.state, tap_return_data.tap_start_z,
         tap_return_data.screw_offset, tap_return_data.spindle_speed,
@@ -46,8 +61,6 @@ void tapreturn_data_restore(void)
 
 void tapreturn_clear_ram_for_test(void)
 {
-    // 仅测试夹具：模拟"进程重启后 RAM 丢了、而断电块还在"。**不碰断电块**
-    // （生产路径的清记录用 tapreturn_data_reset()：RAM 与块一起清）。
     memset(&tap_return_data, 0, sizeof(tap_return_data));
 }
 
@@ -209,6 +222,33 @@ void tapreturn_refresh_return_param(void)
     }
 }
 
+#define TAPRET_PITCH_TOL 1e-4
+
+bool tapreturn_page_params_match(double pitch_mm, int m_value)
+{
+    // 与"能不能退"同一道门：没有记录就没有可比的对象（调用方应先过 tapreturn_ready）。
+    if (!tapreturn_ready()) return false;
+
+    // 转向：页面给的是**回退段**的转向，记录里存的是**攻进方向**，回退恒为它的反向
+    //（取反规则与 tapreturn_get_param 同源，见那里的说明）。
+    // 记录 M3 正转攻进 → 回退反转 → 页面应为 M4；反之 M4 攻进 → 回退 M3。
+    const int expect_m = (tap_return_data.reverse != 0) ? 3 : 4;
+    if (m_value != expect_m)
+    {
+        LOG(LOG_LEVEL_ERR, "页面转向 M%d 与记录不符：本次攻进为 %s，回退应为 M%d，拒绝回退",
+            m_value, (tap_return_data.reverse != 0) ? "M4(反转)" : "M3(正转)", expect_m);
+        return false;
+    }
+
+    const double diff = pitch_mm - tap_return_data.screw_offset;
+    if (!(diff > -TAPRET_PITCH_TOL && diff < TAPRET_PITCH_TOL))
+    {
+        LOG(LOG_LEVEL_ERR, "页面螺距 %.4f 与记录 %.4f 不符，拒绝回退（回退必须走记录的螺距）",
+            pitch_mm, tap_return_data.screw_offset);
+        return false;
+    }
+    return true;
+}
 
 static int tapreturn_speed_ceiling(void)
 {
@@ -238,16 +278,9 @@ static int tapreturn_speed_ceiling(void)
 ///
 /// 返回 false = 页面值不合法（**已打日志**），调用方必须放弃本次回退
 /// （**不静默回落到记录值** —— 那与操作员在页面上的意图不符）。
-static bool tapreturn_pick_return_speed(int *speed)
+bool tapreturn_page_speed_ok(int page_speed)
 {
-    int page_speed = 0;     // 读不到（变量表未就绪）就是 0 = 用记录值：安全的默认
-    getVarChanInt(0, VAR_CHAN_TAPRET_SPEED, &page_speed, 0);
-    if (page_speed == 0)
-    {
-        *speed = tap_return_data.spindle_speed;
-        return true;
-    }
-    if (page_speed < 0)
+    if (page_speed <= 0)
     {
         LOG(LOG_LEVEL_ERR, "页面转速 %d 非法（必须为正），拒绝回退", page_speed);
         return false;
@@ -260,16 +293,7 @@ static bool tapreturn_pick_return_speed(int *speed)
         else             LOG(LOG_LEVEL_ERR, "页面转速 %d 无法校验（没有上限可比），拒绝回退", page_speed);
         return false;
     }
-    *speed = page_speed;
-    LOG(LOG_LEVEL_INFO, "本次回退转速用页面下发值 %d（攻丝转速 %d，螺距不变，同步比不变）",
-        page_speed, tap_return_data.spindle_speed);
     return true;
-}
-
-bool tapreturn_apply_page_speed(void)
-{
-    int speed = 0;
-    return tapreturn_pick_return_speed(&speed);
 }
 
 const SYS_PROG_DESC tapreturn_sysprog_desc = {
@@ -282,15 +306,13 @@ const SYS_PROG_DESC tapreturn_sysprog_desc = {
 
 };
 
-GNC_RES tapreturn_generate(char *buf, int buf_len)
+static GNC_RES tapreturn_build_line(int speed, char *buf, int buf_len)
 {
     if (buf == NULL || buf_len <= 0) return GNC_OPERATOR_ERROR;
-    if (!tapreturn_ready()) return GNC_OPERATOR_ERROR;
-
-    int speed = 0;
-    if (!tapreturn_pick_return_speed(&speed)) return GNC_OPERATOR_ERROR;
     if (tap_return_data.screw_offset <= 0.0 ||        // 螺距必须为正
-        speed <= 0)
+        speed <= 0 ||                                 // **生效**转速必须为正
+        tap_return_data.tap_start_z <= -9000.0 ||     // 起点Z异常（未有效记录）
+        tap_return_data.tap_start_z >= 9000.0)
     {
         LOG(LOG_LEVEL_ERR, "攻丝回退参数异常: 螺距%.4f 转速%d 起点Z%.4f，拒绝回退",
             tap_return_data.screw_offset, speed, tap_return_data.tap_start_z);
@@ -300,4 +322,21 @@ GNC_RES tapreturn_generate(char *buf, int buf_len)
     int n = snprintf(buf, buf_len, "G90 M29 S%d G30 P99", speed);
     if (n <= 0 || n >= buf_len) return GNC_OPERATOR_ERROR;
     return GNC_OPERATOR_SUCCESS;
+}
+
+GNC_RES tapreturn_generate(char *buf, int buf_len)
+{
+    if (!tapreturn_ready()) return GNC_OPERATOR_ERROR;
+
+    return tapreturn_build_line(tap_return_data.spindle_speed, buf, buf_len);
+}
+
+GNC_RES tapreturn_generate_with_speed(int speed, char *buf, int buf_len)
+{
+    if (!tapreturn_ready()) return GNC_OPERATOR_ERROR;
+    // 转速由**页面请求**直接给（HMI 请求区）：合法性判据只有一份（tapreturn_page_speed_ok）
+    // if (!tapreturn_page_speed_ok(speed)) return GNC_OPERATOR_ERROR;
+    LOG(LOG_LEVEL_INFO, "本次回退转速用页面下发值 %d（攻丝转速 %d，螺距不变，同步比不变）",
+        speed, tap_return_data.spindle_speed);
+    return tapreturn_build_line(speed, buf, buf_len);
 }

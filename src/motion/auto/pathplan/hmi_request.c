@@ -6,6 +6,8 @@
 #include <time.h>
 
 #include <hmirequestapi.h>
+#include <hmisysapi.h>
+#include "tapreturn.h"
 
 /* 请求区指针 */
 static HmiRequestData *s_hmi_req = NULL;
@@ -168,8 +170,31 @@ int hmi_mst_build_program(const HmiRequestMstParams *mst, char *out, int outLen)
  * --------------------------------------------------------------------------- */
 int hmi_tapret_build_program(const HmiRequestTapRetParams *tapret, char *out, int outLen)
 {
-    (void)tapret;
-    (void)out;
-    (void)outLen;
-    return 0;   /* 空桩：待实现 */
+    if (tapret == NULL || out == NULL || outLen <= 0) {
+        return 0;
+    }
+
+
+    if (!tapreturn_ready()) {
+        LOG(LOG_LEVEL_WARN, "攻丝回退被拒：当前不可回退（无记录 / 刀不在孔内 / 位置基准未建立）");
+        return 0;
+    }
+
+    if (!tapreturn_page_params_match(tapret->pitchMm, tapret->mValue)
+            || !tapreturn_page_speed_ok(tapret->sValue)) {
+        return HMI_TAPRET_REJECT_PARAM;
+    }
+
+    // ③ 生成（行式与记录自洽校验都在模块里）
+    char buf[HMI_TAPRET_PROGRAM_BUF_LEN];
+    if (tapreturn_generate_with_speed(tapret->sValue, buf, (int)sizeof(buf))
+            != GNC_OPERATOR_SUCCESS) {
+        return 0;
+    }
+
+    const int len = snprintf(out, outLen, "%s\n", buf);
+    if (len <= 0 || len >= outLen) {
+        return 0;   // 调用方缓冲不足（与 hmi_mst_build_program 同一约定）
+    }
+    return len;
 }

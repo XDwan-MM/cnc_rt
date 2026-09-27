@@ -12,6 +12,7 @@
 #include <sysdata.h>
 #include <hmisysapi.h>
 #include <pthread.h>
+#include "tapreturn.h"
 
 // ==============全局变量定义===============
 sem_t exit_sem;                         // 退出信号
@@ -189,12 +190,12 @@ GNC_RES rt_global_init(){
         rt_global_delete();
         return res;
     }
-    res = sysprog_init();
+    res = reset_data_init();
     if(res != GNC_OPERATOR_SUCCESS){
         rt_global_delete();
         return res;
     }
-    res = reset_data_init();
+        res = sysprog_init();
     if(res != GNC_OPERATOR_SUCCESS){
         rt_global_delete();
         return res;

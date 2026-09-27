@@ -28,6 +28,8 @@ extern "C" {
 /*! todo: 攻丝回退量占位值（mm）：未确定是否需要，写死 */
 #define HMI_TAPRET_RETRACT_DISTANCE_MM (10.0)
 
+#define HMI_TAPRET_REJECT_PARAM (-1)
+
 /*! 请求快照：只含 HMI 侧字段，一次整块拷贝出来，调用方在副本上工作 */
 typedef struct {
     uint32_t seq;             /*!< 本次读取到的发布序号 */

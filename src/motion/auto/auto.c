@@ -451,7 +451,6 @@ static void auto_check_event(){
             break;
         }
         break;
-    case SYS_EVENT_RIGID_RETURN_PREPARE:
     case SYS_EVENT_RIGID_RETURN_ON:
         switch (cycle_tp->plan_block->type)
         {
@@ -459,25 +458,6 @@ static void auto_check_event(){
             break;
         default:
             break;
-        }
-        if (rt_data->nc_event == SYS_EVENT_RIGID_RETURN_PREPARE)
-        {
-            if(sysprog_is_armed() && sysprog_running_id() == SYS_PROG_RIGID_RETURN)
-            {
-                LOG(LOG_LEVEL_INFO," 刚性攻丝回退程序已经就绪");
-                sysprog_cleanup();
-            }
-            else if (sysprog_active(SYS_PROG_RIGID_RETURN))
-            {
-                LOG(LOG_LEVEL_WARN, "攻丝回退正在执行中");
-                break;                  // 还没取参数 → 不留残留
-            }
-            if (!tapreturn_apply_page_speed()) break;
-            
-        }
-        else
-        {
-            setVarChanInt(0, VAR_CHAN_TARPET_SPEED, 0 , 0);
         }
 
         switch (rt_data->current_mode)
@@ -487,10 +467,10 @@ static void auto_check_event(){
                 // 防重复触发
                 if(sysprog_is_armed() && sysprog_running_id() == SYS_PROG_RIGID_RETURN)
                 {
-                    LOG(LOG_LEVEL_INFO," 刚性攻丝回退已经就绪");
+                    LOG(LOG_LEVEL_INFO," 刚性攻丝回退已经就绪,请按运行键开始");
                     break;
                 }
-                if (rt_data->sys_state[SYS_IS_RIGID_RERTURN])
+                if (!sysprog_arm(SYS_PROG_RIGID_RETURN))
                 {
                     LOG(LOG_LEVEL_WARN, "攻丝回退执行中，忽略重复触发");
                     break;
@@ -524,8 +504,8 @@ static void auto_check_event(){
         switch (rt_data->current_mode)
         {
         case MODE_MDI:
-            sysprog_cleanup();
             rt_data->sys_state[SYS_IS_RIGID_RERTURN] = 0;
+            sysprog_cleanup();
             LOG(LOG_LEVEL_INFO, "自动模式关闭结束攻丝回退");
             break;
         default:
