@@ -1,10 +1,14 @@
 #include <algorithm>
 #include <climits>
+#include <cmath>
+#include <cstdint>
 #include "plctask.h"
 #include "ladapi.h"
 #include "laddata.h"
 #include "regapi.h"
 #include "regdata.h"
+#include "parapi.h"
+#include "varapi.h"
 
 PlcTask::PlcTask() 
     : _ladData(*getLadDataPtr())
@@ -116,6 +120,9 @@ void PlcTask::initDispatchTable() {
     _dispatchTable[OP_ALT] = &PlcTask::handleALT;
     // 旋转操作
     _dispatchTable[OP_ROT] = &PlcTask::handleROT;
+    _dispatchTable[OP_PARGET] = &PlcTask::handlePARGET;
+    _dispatchTable[OP_SPGET] = &PlcTask::handleSPGET;
+    _dispatchTable[OP_AXGET] = &PlcTask::handleAXGET;
 }
 
 void PlcTask::resetContext() {
@@ -534,7 +541,7 @@ int PlcTask::regCount(RegType type) {
 }
 
 bool PlcTask::isRegRangeValid(const LadReg& reg, int offset, int count) {
-    return reg.idx + offset + count <= regCount(reg.type);
+    return reg.idx >= 0 && offset >= 0 && count >= 0 && reg.idx + offset + count <= regCount(reg.type);
 }
 
 int PlcTask::byteRegCount(RegType type) {
@@ -1494,6 +1501,83 @@ void PlcTask::handleROT(const LadInstr& instr) {
         replaceLogicTop(isRev);
         
     }
+}
+
+namespace {
+bool plcScaled(double value, int scale, int* result) {
+    if (scale < 0 || scale > 4 || !std::isfinite(value)) return false;
+    static constexpr double factors[] = {1.0, 10.0, 100.0, 1000.0, 10000.0};
+    const double scaled = std::round(value * factors[scale]);
+    if (!std::isfinite(scaled) || scaled < static_cast<double>(INT_MIN) ||
+        scaled > static_cast<double>(INT_MAX)) return false;
+    *result = static_cast<int>(scaled);
+    return true;
+}
+}
+
+void PlcTask::handlePARGET(const LadInstr& instr) {
+    if (!logicTop()) return;
+    LadReg& idReg = _ladData.regs[instr.regIdx];
+    LadReg& scaleReg = _ladData.regs[instr.regIdx + 1];
+    LadReg& outReg = _ladData.regs[instr.regIdx + 2];
+    const int scale = getValue(scaleReg);
+    if ((idReg.type != REG_TYPE_NONE && !isRegRangeValid(idReg, 0, 1)) || scaleReg.type != REG_TYPE_NONE ||
+        !isRegRangeValid(outReg, 0, 1) || (outReg.type != REG_D && outReg.type != REG_B) ||
+        scale < 0 || scale > 4) { replaceLogicTop(false); return; }
+    ParamUnit parameter = {};
+    if (transParId2Data(getValue(idReg), &parameter) != 0) { replaceLogicTop(false); return; }
+    int result = 0;
+    switch (parameter.type) {
+        case DTYPE_INTEGER: result = parameter.value.val_int; break;
+        case DTYPE_UINT:
+            if (parameter.value.val_uint > static_cast<unsigned int>(INT_MAX)) { replaceLogicTop(false); return; }
+            result = static_cast<int>(parameter.value.val_uint); break;
+        case DTYPE_BOOL: result = parameter.value.val_bool ? 1 : 0; break;
+        case DTYPE_HEX4: result = parameter.value.val_hex4; break;
+        case DTYPE_FLOAT:
+            if (!plcScaled(parameter.value.val_real, scale, &result)) { replaceLogicTop(false); return; }
+            break;
+        default: replaceLogicTop(false); return;
+    }
+    if (parameter.type != DTYPE_FLOAT && scale != 0) { replaceLogicTop(false); return; }
+    setValue(outReg, result);
+}
+
+void PlcTask::handleSPGET(const LadInstr& instr) {
+    if (!logicTop()) return;
+    LadReg& scaleReg = _ladData.regs[instr.regIdx];
+    LadReg& outReg = _ladData.regs[instr.regIdx + 1];
+    const int scale = getValue(scaleReg);
+    if (scaleReg.type != REG_TYPE_NONE || !isRegRangeValid(outReg, 0, 1) || (outReg.type != REG_D && outReg.type != REG_B) || scale < 0 || scale > 4) {
+        replaceLogicTop(false); return;
+    }
+    VarUnion speedVar = {};
+    if (getVarChanValue(0, VAR_CHAN_ACT_SPDL_SPEED, 0, &speedVar, 0) != 0 || speedVar.type != DOUBLE_TYPE) {
+        replaceLogicTop(false); return;
+    }
+    const double speed = speedVar.value.f;
+    int result = 0;
+    if (!plcScaled(speed, scale, &result)) { replaceLogicTop(false); return; }
+    setValue(outReg, result);
+}
+
+void PlcTask::handleAXGET(const LadInstr& instr) {
+    if (!logicTop()) return;
+    const int axis = getValue(_ladData.regs[instr.regIdx]);
+    const int scale = getValue(_ladData.regs[instr.regIdx + 1]);
+    LadReg& outReg = _ladData.regs[instr.regIdx + 2];
+    if (_ladData.regs[instr.regIdx].type != REG_TYPE_NONE || _ladData.regs[instr.regIdx + 1].type != REG_TYPE_NONE ||
+        axis < 0 || axis >= 3 || !isRegRangeValid(outReg, 0, 1) ||
+        (outReg.type != REG_D && outReg.type != REG_B) || scale < 0 || scale > 4) {
+        replaceLogicTop(false); return;
+    }
+    VarUnion speedVar = {};
+    if (getVarAxisValue(axis, VAR_AXIS_ACT_VEL_EX, &speedVar, 0) != 0 || speedVar.type != DOUBLE_TYPE) {
+        replaceLogicTop(false); return;
+    }
+    int result = 0;
+    if (!plcScaled(speedVar.value.f, scale, &result)) { replaceLogicTop(false); return; }
+    setValue(outReg, result);
 }
 
 void PlcTask::setBit(LadReg& reg, bool value) {

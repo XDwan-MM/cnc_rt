@@ -157,6 +157,9 @@ private:
     inline void handleDISAS(const LadInstr& instr);
     inline void handleALT(const LadInstr& instr);
     inline void handleROT(const LadInstr& instr);
+    inline void handlePARGET(const LadInstr& instr);
+    inline void handleSPGET(const LadInstr& instr);
+    inline void handleAXGET(const LadInstr& instr);
 
     inline EdgeState& edgeState(int instrIdx);
     inline bool isRisingEdge(int instrIdx);
