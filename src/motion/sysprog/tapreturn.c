@@ -230,7 +230,6 @@ bool tapreturn_page_params_match(double pitch_mm, int m_value)
     if (!tapreturn_ready()) return false;
 
     // 转向：页面给的是**回退段**的转向，记录里存的是**攻进方向**，回退恒为它的反向
-    //（取反规则与 tapreturn_get_param 同源，见那里的说明）。
     // 记录 M3 正转攻进 → 回退反转 → 页面应为 M4；反之 M4 攻进 → 回退 M3。
     const int expect_m = (tap_return_data.reverse != 0) ? 3 : 4;
     if (m_value != expect_m)
@@ -254,8 +253,7 @@ static int tapreturn_speed_ceiling(void)
 {
     const double max_spdl = rt_data->axis_data[AXIS_SP].spdl_max_speed;
     if (max_spdl > 0.0) return (int)max_spdl;
-    // 返回 0 = **没有上限可比**（参数没配，且连攻丝转速都没有 —— 没有记录）。
-    // 调用方据此拒绝任何非 0 的页面值；这里把话说清，免得读成"高于上限 0"。
+
     if (tap_return_data.spindle_speed <= 0)
     {
         LOG(LOG_LEVEL_WARN, "主轴最大转速未配置(PAR_SPDL_MAX_SPEED)，且当前没有攻丝记录：页面转速无上限可比");
@@ -268,16 +266,6 @@ static int tapreturn_speed_ceiling(void)
     return tap_return_data.spindle_speed;
 }
 
-/// 取**本次回退的转速**：页面下发的优先（`VAR_CHAN_TAPRET_SPEED`），
-/// `0`/未下发 → 记录的攻丝转速。
-///
-/// **只有这一个来源，模块里没有第二份状态**："按物理回退键用记录值"不是在这里判出来的，
-/// 而是**那条入口在发起前把该变量清 0**（auto.c 的 RIGID_RETURN_ON 分支）——
-/// 两条入口各自在同一个地方表明"本次用哪个值"，这里只负责取。
-/// 所以这个函数在任何入口下看到的都是"本次请求的转速"，不区分来源，也无所谓来源。
-///
-/// 返回 false = 页面值不合法（**已打日志**），调用方必须放弃本次回退
-/// （**不静默回落到记录值** —— 那与操作员在页面上的意图不符）。
 bool tapreturn_page_speed_ok(int page_speed)
 {
     if (page_speed <= 0)
