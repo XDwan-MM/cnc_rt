@@ -265,12 +265,7 @@ static GNC_RES parser_set_content(NC_MODE nc_mode){
         LOG(LOG_LEVEL_INFO, "mem程序 %s", parser_data->parser_file_path);
         break;
     case MODE_MDI: {
-        // HMI 请求区（M/S/T 下发、攻丝回退）：有请求就用它，无请求走下面的原有 MDI 内容路径
-      tapreturn_refresh_return_param();
-
-        // ① 请求优先：请求区里挂着一条就用它
-        //    （去重 / "请求优先时收口已就绪的系统程序" / 收口后再对齐 / 按动作生成 / 回执，
-        //      全在 parser_take_hmi_request 里 —— 那里有完整的来龙去脉）
+        tapreturn_refresh_return_param();
         static char hmiProgBuf[(HMI_MST_PROGRAM_BUF_LEN > HMI_TAPRET_PROGRAM_BUF_LEN)
                                    ? HMI_MST_PROGRAM_BUF_LEN
                                    : HMI_TAPRET_PROGRAM_BUF_LEN];
@@ -283,9 +278,8 @@ static GNC_RES parser_set_content(NC_MODE nc_mode){
             ItpSetContent(hmiProgBuf, 0);
             break;
         }
-    }
-        // 无 HMI 请求：原有 MDI 内容路径
-    if (sysprog_content_ready())
+    
+        if (sysprog_content_ready())
         {
             if (!sysprog_get_content(parser_data->mdiContent, sizeof(parser_data->mdiContent)))
             {
@@ -313,6 +307,7 @@ static GNC_RES parser_set_content(NC_MODE nc_mode){
         ItpSetContent(parser_data->mdiContent, 0);
         LOG(LOG_LEVEL_INFO, "mdi程序 %s", parser_data->mdiContent);
         break;
+    }
     default:
         break;
     }
