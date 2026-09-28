@@ -531,6 +531,17 @@ void plc_g_signal_scan_cycle(void)
         var_sys[VAR_SYS_MCP_KEY].value.i = 0;
         LOG(LOG_LEVEL_INFO, "扫描到G46.5 发生下降沿");
     }
+    /* 攻丝回退 G62.6 */
+    if (SIGNAL_RISING(curr_g.g_regs[62], last_g.g_regs[62], 6))
+    {
+        LOG(LOG_LEVEL_INFO, "扫描到G62.6 发生上升沿");
+        plc_dispatch_event(PLC_EV_MSG_ENANLE, RIGID_RETURN, 1, 0, 0);
+    }
+    if (SIGNAL_FALLING(curr_g.g_regs[62], last_g.g_regs[62], 6))
+    {
+        LOG(LOG_LEVEL_INFO, "扫描到G62.6  发生下降沿");
+        plc_dispatch_event(PLC_EV_MSG_ENANLE, RIGID_RETURN, 0, 0, 0);
+    }
 
     /*step3 更新快照供下一周期使用 */
     last_g = curr_g;

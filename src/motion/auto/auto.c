@@ -448,6 +448,35 @@ static void auto_check_event(){
             break;
         }
         break;
+    case SYS_EVENT_RIGID_RETURN_ON:
+        switch (cycle_tp->plan_block->type)
+        {
+        case TAP_RETURN:
+            break;
+        default:
+            break;
+        }
+        switch (rt_data->current_mode)
+        {
+        case MODE_MDI: // MDI模式下响应攻丝回退事件
+            rt_data->sys_state[SYS_IS_RIGID_RERTURN] = 1;
+            LOG(LOG_LEVEL_INFO, "自动模式处理开启攻丝回退");
+            break;
+        default:
+            break;
+        }
+        break;
+    case SYS_EVENT_RIGID_RETURN_OFF:
+        switch (rt_data->current_mode)
+        {
+        case MODE_MDI:
+            rt_data->sys_state[SYS_IS_RIGID_RERTURN] = 0;
+            LOG(LOG_LEVEL_INFO, "自动模式关闭结束攻丝回退");
+            break;
+        default:
+            break;
+        }
+        break;
     case SYS_EVENT_RAPID_OVERRIDE:
         LOG(LOG_LEVEL_INFO, "自动模式处理快速进给倍率切换");
         switch (cycle_tp->exec_state)

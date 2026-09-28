@@ -147,8 +147,15 @@ static void auto_deal_mstb(){
             spl_data.spl_event = SPINDLE_EVENT_ORIENT;
             break;
         case M29: // 刚性攻丝
+            // 切换位置模式
             spl_data.spl_event = SPINDLE_EVENT_ORIENT;
-            // 回参考点
+            // 回参考点（刚性攻丝时回参考点，攻丝回退时不返回参考点）
+            if(rt_data->sys_state[SYS_IS_RIGID_RERTURN]){
+                
+            }else{
+                // RTAP：通知PMC处在刚性攻丝方式中的信号
+                rt_data->sys_state[SYS_IS_RIGID] = 1;
+            }
             break;
         default:
             // 判断M代码大小

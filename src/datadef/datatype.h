@@ -114,6 +114,7 @@ typedef enum {
     RELATIVE_AXIS_HOMING,
 } HOMING_TYPE;
 
+// 插补类型
 typedef enum {
     UNKNOWN = 0,
     RAPID,          // 快速进给 G00
@@ -140,6 +141,7 @@ typedef enum {
     MODE_IDLE,       // 空闲
 } NC_MODE;
 
+// NC 事件
 typedef enum {
     SYS_EVENT_NONE = 0,
     SYS_EVENT_RERUN,
@@ -211,6 +213,8 @@ typedef enum {
     SYS_EVENT_BLOCK_SKIP_OFF,
     SYS_EVENT_STOP_SKIP_ON,
     SYS_EVENT_STOP_SKIP_OFF,
+    SYS_EVENT_RIGID_RETURN_ON,
+    SYS_EVENT_RIGID_RETURN_OFF,
 
     SYS_EVENT_COMP_PARAM_CHANGED,   /* 误差补偿参数变更（需 sync + on_params_synced） */
     SYS_EVENT_COMP_TABLE_CHANGED,   /* 数据表参数变更（需重建表 + on_params_synced） */
