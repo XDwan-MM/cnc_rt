@@ -14,8 +14,9 @@ extern "C" {
  * 文件分两段：
  *   1) 通用协议层：取指针、整块拷贝快照、按动作分派的判据、写回执；
  *   2) 各动作的程序串生成：
- *      TAPRET：    hmi_tapret_build_program
- *      TSM：       hmi_mst_build_program
+ *      TAPRET：      hmi_tapret_build_program
+ *      TSM：         hmi_mst_build_program
+ *      TOOLMEASURE： hmi_toolmeasure_build_program
  *      增加请求时增加对应的生成函数：hmi_xxx_build_program
  *===========================================================================*/
 
@@ -78,6 +79,16 @@ int hmi_mst_build_program(const HmiRequestMstParams *mst, char *out, int outLen)
  * @return 生成的长度（含换行与结尾 '\0' 之前的字符数）；0 表示未实现/无有效内容
  */
 int hmi_tapret_build_program(const HmiRequestTapRetParams *tapret, char *out, int outLen);
+
+/**
+ * @brief hmi_toolmeasure_build_program 执行对刀启动（单把刀具长度测量）
+ * @note  todo：未实现，固定返回 0：测量动作与写刀补待定，由实现者补齐！
+ *        返回 0 时调用方会回执 REJECTED + HMI_REQUEST_ERROR_PROGRAM，
+ *        界面提示"对刀启动被拒绝（错误码 5）"，机床不动作
+ * @return 生成的长度（含换行与结尾 '\0' 之前的字符数）；0 表示未实现/无有效内容
+ */
+int hmi_toolmeasure_build_program(const HmiRequestToolMeasureParams *toolMeasure, char *out,
+                                  int outLen);
 
 #ifdef __cplusplus
 }
