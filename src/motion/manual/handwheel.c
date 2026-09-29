@@ -5,11 +5,12 @@
 simple_tp_t_handwheel simple_tp[5];
 static uint32_t axisandrate = 0;
 static uint32_t current_count = 0; // 手轮计数器
-static bool mpg_statis = true;     // true为复位状态
 static int rate = 0;               // 倍率
 static int axis = 0;               // 轴选
-static int last_axis = 0;          // 上一个周期轴选
-static int last_rate = 0;          // 上一个周期倍率
+static int valid_axis = -1;        // 最后一次有效轴选
+static int valid_rate = -1;        // 最后一次有效倍率
+static bool mpg_enable = false;    // 当前手轮使能状态
+static bool mpg_initialized = false;
 
 //int32_t ratio = 10000;
 int Get_Multiplier_Switch(int output)
@@ -52,6 +53,10 @@ void handwheel_handle_estop()
     {
         memset(&simple_tp[i], 0, sizeof(simple_tp_t_handwheel));
     }
+    valid_axis = -1;
+    valid_rate = -1;
+    mpg_enable = false;
+    mpg_initialized = false;
 }
 
 void Handlewheels_Motion(simple_tp_t_handwheel *tp)
@@ -164,6 +169,10 @@ void Simple_Tp_Update(simple_tp_t_handwheel *tp)
 }
 
 void handle_mpg_cmd() {
+    bool valid_selection;
+    bool selection_changed;
+    int previous_axis;
+
     // 急停不执行
     if (rt_data->sys_state[SYS_IS_ESTOP_ACTIVE]) return;
     HW_Get_Count(&current_count);
@@ -173,45 +182,59 @@ void handle_mpg_cmd() {
     axis = (axisandrate >> 3) & 0b11111;
     axis = Get_Axis_Switch(axis);
 
-    if (axis == -1 || rate < 0 || (last_axis != axis) || (last_rate != rate)) 
+    valid_selection = (axis >= 0 && axis < 5 && rate > 0);
+    if (!valid_selection)
     {
-        for (int i = 0; i < 5; ++i) 
+        mpg_enable = false;
+        if (mpg_initialized && valid_axis >= 0 && valid_axis < 5)
         {
-            simple_tp[i].first_pass = 1;
-            /* Discard counts accumulated while the selector was changing.
-             * Without this, the first valid cycle after a transient OFF
-             * state is interpreted as a large new motion command. */
-            simple_tp[i].joint.old_counts = current_count;
+            simple_tp[valid_axis].joint.old_counts = current_count;
+            Simple_Tp_Update(&simple_tp[valid_axis]);
+            simple_tp[valid_axis].joint.pos_cmd = simple_tp[valid_axis].curr_pos;
+            rt_data->axis_data[valid_axis].wcs_cmd_pos_cur = simple_tp[valid_axis].joint.pos_cmd;
+            rt_data->axis_data[valid_axis].cmd_vel = fabs(simple_tp[valid_axis].curr_vel);
+            rt_data->chan_data[0].cmd_vel = fabs(simple_tp[valid_axis].curr_vel);
         }
-        mpg_statis = true;
+        return;
     } 
-    else if (axis >= 0 && axis < 5) 
+
+    selection_changed = (!mpg_initialized || !mpg_enable || axis != valid_axis || rate != valid_rate);
+    if (selection_changed && mpg_initialized && valid_axis >= 0 && valid_axis < 5 && valid_axis != axis)
     {
-        simple_tp[axis].joint.count = current_count;
-        simple_tp[axis].joint.rate = rate;
-        simple_tp[axis].axis = axis;
-
-        simple_tp[axis].joint.vel_limit = rt_data->axis_data[axis].mpg_spd;
-        simple_tp[axis].joint.jaccel_limit = rt_data->axis_data[axis].max_feed_acc;
-
-        //初始化
-        if (mpg_statis) {
-            simple_tp[axis].joint.pos_cmd = simple_tp[axis].pos_cmd = simple_tp[axis].curr_pos = rt_data->axis_data[axis].wcs_cmd_pos_cur;
-            simple_tp[axis].curr_vel = 0;
-            mpg_statis = false;
-        }
-
-        Handlewheels_Motion(&simple_tp[axis]);
-        Simple_Tp_Update(&simple_tp[axis]);
-        
-        simple_tp[axis].joint.pos_cmd = simple_tp[axis].curr_pos;
+        previous_axis = valid_axis;
+        Simple_Tp_Update(&simple_tp[previous_axis]);
+        simple_tp[previous_axis].joint.pos_cmd = simple_tp[previous_axis].curr_pos;
+        rt_data->axis_data[previous_axis].wcs_cmd_pos_cur = simple_tp[previous_axis].joint.pos_cmd;
+        rt_data->axis_data[previous_axis].cmd_vel = fabs(simple_tp[previous_axis].curr_vel);
     }
-    /* axis can be OFF for a cycle while the selector contacts bounce. */
-    if (!mpg_statis && axis >= 0 && axis < 5) {
-        rt_data->axis_data[axis].wcs_cmd_pos_cur = simple_tp[axis].joint.pos_cmd;
-        rt_data->axis_data[axis].cmd_vel =  fabs(simple_tp[axis].curr_vel);
-        rt_data->chan_data[0].cmd_vel =  fabs(simple_tp[axis].curr_vel);
+
+    if (selection_changed)
+    {
+        simple_tp[axis].joint.old_counts = current_count;
+        simple_tp[axis].first_pass = 1;
+        simple_tp[axis].joint.pos_cmd = rt_data->axis_data[axis].wcs_cmd_pos_cur;
+        simple_tp[axis].pos_cmd = rt_data->axis_data[axis].wcs_cmd_pos_cur;
+        simple_tp[axis].curr_pos = rt_data->axis_data[axis].wcs_cmd_pos_cur;
+        simple_tp[axis].curr_vel = 0;
     }
-    last_axis = axis;
-    last_rate = rate;
+
+    valid_axis = axis;
+    valid_rate = rate;
+    mpg_enable = true;
+    mpg_initialized = true;
+    simple_tp[axis].joint.count = current_count;
+    simple_tp[axis].joint.rate = rate;
+    simple_tp[axis].axis = axis;
+
+    simple_tp[axis].joint.vel_limit = rt_data->axis_data[axis].mpg_spd;
+    simple_tp[axis].joint.jaccel_limit = rt_data->axis_data[axis].max_feed_acc;
+    simple_tp[axis].max_vel = simple_tp[axis].joint.vel_limit;
+    simple_tp[axis].max_acc = simple_tp[axis].joint.jaccel_limit;
+
+    Handlewheels_Motion(&simple_tp[axis]);
+    Simple_Tp_Update(&simple_tp[axis]);
+    simple_tp[axis].joint.pos_cmd = simple_tp[axis].curr_pos;
+    rt_data->axis_data[axis].wcs_cmd_pos_cur = simple_tp[axis].joint.pos_cmd;
+    rt_data->axis_data[axis].cmd_vel = fabs(simple_tp[axis].curr_vel);
+    rt_data->chan_data[0].cmd_vel = fabs(simple_tp[axis].curr_vel);
 }
