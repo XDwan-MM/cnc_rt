@@ -343,6 +343,10 @@ static void plc_output_axis_status()
 
 static void plc_output_spl_vel_status()
 {
+    const bool spindle_orienting =
+        spl_context.orient_phase == SPINDLE_ORIENT_RUNNING ||
+        spl_context.orient_phase == SPINDLE_ORIENT_DONE ||
+        spl_context.orient_phase == SPINDLE_ORIENT_RELEASING;
     const bool spindle_safety_stop =
         rt_data->sys_state[SYS_IS_ESTOP_ACTIVE] ||
         spindle_driver.state == DRV_STATE_FAULT ||
@@ -350,6 +354,7 @@ static void plc_output_spl_vel_status()
 
     /* 停止目标已归零时，即使控制周期错过了 ARRIVED 状态，也要发布到速。 */
     if (!spindle_safety_stop &&
+        !spindle_orienting &&
         spl_context.spl_state == SPINDLE_STOP &&
         fabs(spl_context.vel_planner.current_vel) <= 1e-6 &&
         abs(spindle_driver.actual_vel) < 5)
@@ -358,7 +363,8 @@ static void plc_output_spl_vel_status()
     }
 
     //　主轴速度到达信号F45.3
-    if (spl_context.spl_vel_state == SPINDLE_VEL_ARRIVED)
+    if (spl_context.spl_vel_state == SPINDLE_VEL_ARRIVED &&
+        !spindle_orienting)
     {
         setRegBit(REG_F, 45, 3);
     }

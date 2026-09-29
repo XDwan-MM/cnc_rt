@@ -77,6 +77,15 @@ void auto_execute_mstb_cmd(){
     }
     // FIN信号 G4.3
     getRegBit(REG_G, 4, 3, &cycle_tp->mstb_cmd_data.signal_fin);
+    /* M19 必须等待主轴定向完成 F45.7，不能使用停止到达 F45.3/G4.3。 */
+    if (cycle_tp->plan_block->mst_data.m_code == M19)
+    {
+        getRegBit(REG_F, 45, 7, &cycle_tp->mstb_cmd_data.signal_fin);
+        if (spl_context.orient_phase != SPINDLE_ORIENT_DONE)
+        {
+            cycle_tp->mstb_cmd_data.signal_fin = false;
+        }
+    }
 // #ifdef DEBUG_MODE_ENABLED
 //     /* 仿真模式没有外部 PLC 将 F45.3 回送为 G4.3，使用主轴内部完成反馈。 */
 //     if (!cycle_tp->mstb_cmd_data.signal_fin &&
@@ -177,6 +186,8 @@ static void auto_deal_mstb(){
             spl_context.command_state = SPINDLE_STOP;
             spl_context.start_request_pending = false;
             /* G70.6 上升沿由 PLC 扫描器统一转换为 SPINDLE_EVENT_ORIENT。 */
+            break;
+        case M29: // 
             break;
         default:
             // 判断M代码大小

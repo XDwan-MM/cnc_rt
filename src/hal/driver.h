@@ -94,6 +94,7 @@ hal_retcode_t Driver_Release_Orient(hal_driver_t *drv);
 /* 清除驱动器软件定向状态，不向现场总线发送控制字。 */
 void Driver_Abort_Orient(hal_driver_t *drv);
 bool Driver_Is_Orient_Done(const hal_driver_t *drv);
+bool Driver_Is_Switched_On_Disabled(const hal_driver_t *drv);
 
 /*=========================================================
  * 故障复位

@@ -293,6 +293,12 @@ bool Driver_Is_Orient_Done(const hal_driver_t *drv)
     return drv != NULL && drv->orient_state == DRV_ORIENT_DONE;
 }
 
+bool Driver_Is_Switched_On_Disabled(const hal_driver_t *drv)
+{
+    return drv != NULL &&
+           (drv->status_word & 0x004FU) == 0x0040U;
+}
+
 /*=========================================================
  * 故障复位
  *=========================================================*/

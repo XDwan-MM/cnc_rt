@@ -15,7 +15,7 @@
 #define SPINDLE_SPEED_ARRIVAL_TOL      (0.05)
 #define SPINDLE_SPEED_ARRIVAL_MIN_TOL  (5.0)
 #define SPINDLE_ALARM_MISSING_SPEED    (20)
-#define SPINDLE_ALARM_ORIENT_TIMEOUT   (21)
+#define SPINDLE_ALARM_ORIENT_TIMEOUT   (2100)
 #define ALARM_RESULT_ALREADY_EXISTS    (-8)
 #define SPINDLE_ORIENT_TIMEOUT_CYCLES  (10000U)
 
@@ -128,13 +128,7 @@ void spindle_control_update(void)
     }
     else if (!release_orient_event)
     {
-        /* 复位后的旧目标速度不能再次触发启动。 */
-        if (spl_context.reset_requires_start &&
-            !spl_context.start_request_pending)
-        {
-            // printg("135\n");
-            // spl_context.spl_event = SPINDLE_EVENT_NONE;
-        }
+        /* 复位后的旧 CW/CCW 事件由下面的专用过滤逻辑处理。 */
         spindle_update_command_event();
     }
 
@@ -374,6 +368,13 @@ static void spindle_update_driver_control(void)
     /* 定向控制字由 driver.c 维护，本模块不能在此期间写普通速度/下使能。 */
     if (spl_context.orient_phase != SPINDLE_ORIENT_IDLE)
     {
+        if (spl_context.orient_phase == SPINDLE_ORIENT_RELEASING)
+        {
+            /* 释放阶段每周期维持下使能请求，直到状态字确认完成。 */
+            Hal_Driver_Set_Target_Vel(&spindle_driver, 0);
+            Driver_Disable(&spindle_driver);
+        }
+
         /*
          * 定向期间 0x040F 由 driver.c 持续发送。这里不能调用普通速度
          * 更新或 Driver_Disable，否则会覆盖定向控制字或提前撤销使能。
@@ -724,7 +725,7 @@ static void spindle_update_orient_state(void)
                  SPINDLE_ORIENT_TIMEOUT_CYCLES)
         {
             LOG(LOG_LEVEL_ERR, "主轴定向超时，自动请求释放");
-            // setAlarm(ALARM_AX, ALARM_ERROR, SPINDLE_ALARM_ORIENT_TIMEOUT);
+            setAlarm(ALARM_AX, ALARM_ERROR, SPINDLE_ALARM_ORIENT_TIMEOUT);
             spl_context.m19_active = false;
             if (spl_orient_release())
             {
@@ -765,7 +766,7 @@ static void spindle_update_orient_state(void)
     }
 
     if (spl_context.orient_phase == SPINDLE_ORIENT_RELEASING &&
-        spindle_driver.state == DRV_STATE_SWITCHED_ON_DISABLE)
+        Driver_Is_Switched_On_Disabled(&spindle_driver))
     {
         spl_context.orient_phase = SPINDLE_ORIENT_IDLE;
         spl_context.orient_hold_stop = false;
@@ -778,8 +779,17 @@ static void spindle_update_orient_state(void)
         if (++spl_context.orient_elapsed_cycles >=
             SPINDLE_ORIENT_TIMEOUT_CYCLES)
         {
-            LOG(LOG_LEVEL_ERR, "主轴定向释放下使能超时");
-            // setAlarm(ALARM_AX, ALARM_ERROR, SPINDLE_ALARM_ORIENT_TIMEOUT);
+            LOG(LOG_LEVEL_ERR,
+                "主轴定向释放下使能超时：state=%d target_state=%d "
+                "status_word=0x%04X orient_state=%d mode_switch_state=%d "
+                "actual_vel=%d",
+                spindle_driver.state,
+                spindle_driver.target_state,
+                spindle_driver.status_word,
+                spindle_driver.orient_state,
+                spindle_driver.mode_switch_state,
+                spindle_driver.actual_vel);
+            setAlarm(ALARM_AX, ALARM_ERROR, SPINDLE_ALARM_ORIENT_TIMEOUT);
             spl_context.orient_phase = SPINDLE_ORIENT_IDLE;
             spl_context.orient_hold_stop = true;
             spl_context.reset_requires_start = true;
