@@ -19,6 +19,7 @@ static void plc_output_axis_status();
 static void plc_output_spl_vel_status();
 static void plc_output_spl_orient_status();
 static void plc_output_spl_vel();
+static void plc_output_rigid();
 
 void plc_f_signal_handler_cycle()
 {
@@ -31,6 +32,7 @@ void plc_f_signal_handler_cycle()
     plc_output_spl_vel_status();
     plc_output_spl_orient_status();
     plc_output_spl_vel();
+    plc_output_rigid();
 }
 
 static void plc_output_alarm()
@@ -76,13 +78,9 @@ static void plc_output_auto()
         clearRegBit(REG_F, 2, 6);
     // 可选程序段跳过
     if (rt_get_sys_state(SYS_IS_BLOCK_SKIP))
-    {
         setRegBit(REG_F, 4, 0);
-    }
     else
-    {
         clearRegBit(REG_F, 4, 0);
-    }
     // 辅助功能锁住
     if (rt_data->sys_state[SYS_IS_MSBT_LOCK])
         setRegBit(REG_F, 4, 4);
@@ -108,11 +106,21 @@ static void plc_output_auto()
         setRegBit(REG_F, 2, 4);
     else
         clearRegBit(REG_F, 2, 4);
+}
+
+static void plc_output_rigid(){
     // 刚性攻丝方式中
-    if(rt_data->sys_state[SYS_IS_RIGID])
+    if(rt_data->sys_state[SYS_IS_RIGID]) 
         setRegBit(REG_F, 76, 3);
-    else
+    else 
         clearRegBit(REG_F, 76, 3);
+    // 刚性攻丝返回完成信号
+    if(rt_data->sys_state[SYS_IS_RIGID_RETURN] && rt_data->sys_state[SYS_IS_RIGID_RETURN_FINISH]) 
+        setRegBit(REG_F, 66, 1);
+    else{
+        clearRegBit(REG_F, 66, 1);
+        rt_data->sys_state[SYS_IS_RIGID_RETURN_FINISH] = 0;
+    }
 }
 
 // 各轴返回零点完成、参考点建立

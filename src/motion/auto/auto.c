@@ -439,11 +439,12 @@ static void auto_check_event(){
             case MODE_MDI: // MDI模式下响应攻丝回退事件
                 {
                     LOG(LOG_LEVEL_INFO, "MDI模式处理开启攻丝回退");
-                    rt_data->sys_state[SYS_IS_RIGID_RERTURN] = 1;
+                    rt_data->sys_state[SYS_IS_RIGID_RETURN] = 1;
+                    rt_data->sys_state[SYS_IS_RIGID_RETURN_FINISH] = 0;
                     tapreturn_update(cycle_tp->plan_block);
                     if(!sysprog_arm(SYS_PROG_RIGID_RETURN))
                     {
-                        rt_data->sys_state[SYS_IS_RIGID_RERTURN] = 0;
+                        rt_data->sys_state[SYS_IS_RIGID_RETURN_FINISH] = 1;
                         LOG(LOG_LEVEL_WARN, "攻丝回退条件不满足（无攻丝记录或不在孔内）");
                         break;
                     }    
@@ -463,15 +464,14 @@ static void auto_check_event(){
         }
         break;
     case SYS_EVENT_RIGID_RETURN_OFF:
+        rt_data->sys_state[SYS_IS_RIGID_RETURN] = 0;
         switch (cycle_tp->exec_state)
         {
         case EXEC_RUNNING:
             switch (rt_data->current_mode)
             {
             case MODE_MDI:
-                if(!rt_data->sys_state[SYS_IS_RIGID_RERTURN]) break;
                 LOG(LOG_LEVEL_INFO, "MDI模式关闭结束攻丝回退");
-                rt_data->sys_state[SYS_IS_RIGID_RERTURN] = 0;
                 sysprog_cleanup();
                 // 取消攻丝回退
                 cycle_tp->exec_state = EXEC_RESET;
@@ -645,7 +645,6 @@ static void auto_update_stage(){
     {
     case DO_MOVE_CMD:
     case DO_CHOP_CMD:
-    case DO_TAP_CMD:
         if(auto_pos_cmd_is_finished()) {
             cycle_tp->running_stage = cycle_tp->target_stage;
             switch (cycle_tp->target_stage)
@@ -655,7 +654,6 @@ static void auto_update_stage(){
                 break;
             case BLOCK_STOP_2_END:
                 auto_pop_current_block();
-                tapreturn_update(cycle_tp->plan_block);
                 cycle_tp->exec_cmd = DO_NULL_CMD;
                 cycle_tp->target_stage = PROGRAM_WAIT;
                 if (rt_data->sys_state[SYS_IS_SINGLE_BLOCK]) {
@@ -665,8 +663,51 @@ static void auto_update_stage(){
                 else rt_data->sys_state[SYS_IS_MAC_LOCK_READY] = false;
                 break;
             case BLOCK_PAUSED:
-                tapreturn_update(cycle_tp->plan_block);
             case PROGRAM_WAIT:
+                if (rt_data->sys_state[SYS_IS_MAC_LOCK_ON]) rt_data->sys_state[SYS_IS_MAC_LOCK_READY] = true;
+                else rt_data->sys_state[SYS_IS_MAC_LOCK_READY] = false;
+                break;
+            default:
+                break;
+            }
+        }
+        break;
+    case DO_TAP_CMD:
+        if(auto_pos_cmd_is_finished()) {
+            cycle_tp->running_stage = cycle_tp->target_stage;
+            switch (cycle_tp->target_stage)
+            {
+            case BLOCK_STOP_2_END:
+                auto_pop_current_block();
+                switch (cycle_tp->plan_block->type)
+                {
+                case TAP_RETURN:
+                    tapreturn_update(cycle_tp->plan_block);
+                    rt_data->sys_state[SYS_IS_RIGID_RETURN_FINISH] = 1;
+                    rt_data->sys_state[SYS_IS_RIGID] = 0;
+                    break;
+                default:
+                    break;
+                }
+                cycle_tp->exec_cmd = DO_NULL_CMD;
+                cycle_tp->target_stage = PROGRAM_WAIT;
+                if (rt_data->sys_state[SYS_IS_SINGLE_BLOCK]) {
+                    cycle_tp->exec_state = EXEC_PAUSING;
+                }
+                if (rt_data->sys_state[SYS_IS_MAC_LOCK_ON]) rt_data->sys_state[SYS_IS_MAC_LOCK_READY] = true;
+                else rt_data->sys_state[SYS_IS_MAC_LOCK_READY] = false;
+                break;
+            case BLOCK_PAUSED:
+                switch (cycle_tp->plan_block->type)
+                {
+                case TAP_RETURN:
+                    tapreturn_update(cycle_tp->plan_block);
+                    rt_data->sys_state[SYS_IS_RIGID_RETURN_FINISH] = 1;
+                    rt_data->sys_state[SYS_IS_RIGID] = 0;
+                    break;
+                default:
+                    break;
+                }
                 if (rt_data->sys_state[SYS_IS_MAC_LOCK_ON]) rt_data->sys_state[SYS_IS_MAC_LOCK_READY] = true;
                 else rt_data->sys_state[SYS_IS_MAC_LOCK_READY] = false;
                 break;
@@ -927,9 +968,6 @@ static void auto_reset_run(){
     queue_reset(pretreat_queue);
     queue_reset(parser_queue);
     cycle_tp_reset();
-    rt_data->sys_state[SYS_IS_RIGID_RERTURN] = 0;
-    sysprog_cleanup();
-    trace_publisher_reset(0);
     rt_set_chan_state(0, CHAN_IS_PARSER_RESET, true);
     rt_set_chan_state(0, CHAN_IS_PARSER_RERUN, false);
     rt_set_chan_state(0, CHAN_IS_PARSERING, false);
@@ -939,6 +977,8 @@ static void auto_reset_run(){
     setVarChanInt(0, VAR_CHAN_IS_PROGEND, 1, 0);
     setVarChanInt(0, VAR_CHAN_CYCLE, 0, 0);
     setVarChanInt(0, VAR_CHAN_HOLD, 0, 0);
+    sysprog_cleanup();
+    trace_publisher_reset(0);
     rt_set_zero_vel_params();
     rerun_store_breakpoint(cycle_tp->plan_block->is_breakpoint);
 }
