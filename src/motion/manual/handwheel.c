@@ -56,11 +56,17 @@ void handwheel_handle_estop()
 
 void Handlewheels_Motion(simple_tp_t_handwheel *tp)
 {
-    int new_hw_counts, delta;
+    uint32_t new_hw_counts;
+    int32_t delta;
     double distance, pos, stop_dist;
     /* 从点动手轮获取计数 */
     new_hw_counts = tp->joint.count;
-    delta = new_hw_counts - tp->joint.old_counts;
+    /*
+     * The hardware counter is unsigned and is allowed to wrap.  Converting
+     * the modulo-2^32 difference to int32_t gives the expected signed step
+     * for normal handwheel increments (including wrap-around).
+     */
+    delta = (int32_t)(new_hw_counts - tp->joint.old_counts);
     /* 保存值供下次使用 */
     tp->joint.old_counts = new_hw_counts;
     /* 初始化完成 */
@@ -167,11 +173,15 @@ void handle_mpg_cmd() {
     axis = (axisandrate >> 3) & 0b11111;
     axis = Get_Axis_Switch(axis);
 
-    if (axis == -1 || (last_axis != axis) || (last_rate != rate)) 
+    if (axis == -1 || rate < 0 || (last_axis != axis) || (last_rate != rate)) 
     {
         for (int i = 0; i < 5; ++i) 
         {
             simple_tp[i].first_pass = 1;
+            /* Discard counts accumulated while the selector was changing.
+             * Without this, the first valid cycle after a transient OFF
+             * state is interpreted as a large new motion command. */
+            simple_tp[i].joint.old_counts = current_count;
         }
         mpg_statis = true;
     } 
@@ -196,7 +206,8 @@ void handle_mpg_cmd() {
         
         simple_tp[axis].joint.pos_cmd = simple_tp[axis].curr_pos;
     }
-    if (!mpg_statis) {
+    /* axis can be OFF for a cycle while the selector contacts bounce. */
+    if (!mpg_statis && axis >= 0 && axis < 5) {
         rt_data->axis_data[axis].wcs_cmd_pos_cur = simple_tp[axis].joint.pos_cmd;
         rt_data->axis_data[axis].cmd_vel =  fabs(simple_tp[axis].curr_vel);
         rt_data->chan_data[0].cmd_vel =  fabs(simple_tp[axis].curr_vel);

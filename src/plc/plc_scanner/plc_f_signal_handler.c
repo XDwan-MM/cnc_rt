@@ -343,8 +343,14 @@ static void plc_output_axis_status()
 
 static void plc_output_spl_vel_status()
 {
+    const bool spindle_safety_stop =
+        rt_data->sys_state[SYS_IS_ESTOP_ACTIVE] ||
+        spindle_driver.state == DRV_STATE_FAULT ||
+        (spindle_driver.status_word & 0x0008U) != 0U;
+
     /* 停止目标已归零时，即使控制周期错过了 ARRIVED 状态，也要发布到速。 */
-    if (spl_context.spl_state == SPINDLE_STOP &&
+    if (!spindle_safety_stop &&
+        spl_context.spl_state == SPINDLE_STOP &&
         fabs(spl_context.vel_planner.current_vel) <= 1e-6 &&
         abs(spindle_driver.actual_vel) < 5)
     {

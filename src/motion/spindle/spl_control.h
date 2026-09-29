@@ -82,7 +82,7 @@ typedef struct
     bool mcode_feedback; /**< 是否已经完成当前 M 代码反馈。 */
     bool m19_active; /**< 当前是否有待完成的 M19。 */
     bool orient_hold_stop; /**< 定向后保持停止，等待新的 M3/M4。 */
-    bool orient_request_pending; /**< PLC 已请求定向，等待主轴停稳。 */
+    bool orient_request_pending; /**< PLC 已请求定向，等待提交驱动器定向命令。 */
     bool orient_release_pending; /**< 定向完成前收到了解除请求。 */
     spindle_orient_phase_t orient_phase;
     bool reset_requires_start; /**< 复位后必须收到新的 M3/M4 才允许启动。 */
@@ -93,6 +93,8 @@ extern spindle_context_t spl_context;
 
 /** 执行一个主轴控制周期。 */
 void spindle_control_update(void);
+
+void spl_context_init(spindle_context_t* spl_ctx);
 
 #ifdef __cplusplus
 }

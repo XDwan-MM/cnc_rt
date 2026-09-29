@@ -122,6 +122,7 @@ typedef struct
     drv_state_t target_state; /* 上层请求的目标状态 */
 
     drv_orient_state_t orient_state;
+    bool orient_command_logged;
 
     /*-----------------------------------------------------
      * 工作模式

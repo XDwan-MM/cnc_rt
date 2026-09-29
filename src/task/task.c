@@ -264,18 +264,38 @@ static void task_handle_spl_event(PLC_EVENT *event_data)
     LOG(LOG_LEVEL_INFO, "处理主轴事件 动作%d", event_data->spindle_payload.direction);
     if (event_data->spindle_payload.direction == 1)
     {
-        // LOG(LOG_LEVEL_INFO, "处理主轴正转事件");
+        LOG(LOG_LEVEL_INFO, "处理主轴正转事件");
         spl_context.spl_event = SPINDLE_EVENT_CW;
+        spl_context.command_speed = spl_context.mcp_target_speed;
+        // spl_context.mcp_target_speed = cycle_tp->plan_block->mst_data.spindle.speed;
+        // spl_context.mcode_feedback = false;
+        // spl_context.m19_active = false;
+        // spl_context.orient_hold_stop = false;
+        spl_context.command_state = SPINDLE_CW;
+        spl_context.start_request_pending = true;
     }
     if (event_data->spindle_payload.direction == -1)
     {
-        // LOG(LOG_LEVEL_INFO, "处理主轴反转事件");
+        LOG(LOG_LEVEL_INFO, "处理主轴反转事件");
         spl_context.spl_event = SPINDLE_EVENT_CCW;
+        spl_context.command_speed = spl_context.mcp_target_speed;
+        // spl_context.mcp_target_speed = cycle_tp->plan_block->mst_data.spindle.speed;
+        // spl_context.mcode_feedback = false;
+        // spl_context.m19_active = false;
+        // spl_context.orient_hold_stop = false;
+        spl_context.command_state = SPINDLE_CCW;
+        spl_context.start_request_pending = true;
     }
     if (event_data->spindle_payload.direction == 0)
     {
-        // LOG(LOG_LEVEL_INFO, "处理主轴停止事件");
+        LOG(LOG_LEVEL_INFO, "处理主轴停止事件");
         spl_context.spl_event = SPINDLE_EVENT_STOP;
+        spl_context.command_speed = 0.0;
+        // spl_context.mcode_feedback = false;
+        // spl_context.m19_active = false;
+        // spl_context.orient_hold_stop = false;
+        spl_context.command_state = SPINDLE_STOP;
+        spl_context.start_request_pending = false;
     }
 }
 

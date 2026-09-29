@@ -63,6 +63,7 @@ hal_retcode_t Ethercat_Driver_Read_Feedback(hal_driver_t *drv)
      * Error Code（从总线读取）
      * ----------------------------------------------------- */
 
+    // todo 0928
     ret = GM_TxPdoEntry_Read(drv->pdo.error_code, &drv->error_code, sizeof(drv->error_code));
 
     if (ret < 0){
@@ -70,6 +71,7 @@ hal_retcode_t Ethercat_Driver_Read_Feedback(hal_driver_t *drv)
         printf("drv->pdo.error_code.index) %d\n", (drv->pdo.error_code.index));
         return HAL_DRIVER_ERROR;
     }
+
     /* -----------------------------------------------------
      * 6061 Modes of Operation Display（从总线读取）
      * ----------------------------------------------------- */
@@ -201,13 +203,13 @@ hal_retcode_t Ethercat_Driver_Read_Actual_Mode(hal_driver_t *drv)
         return HAL_DRIVER_ERR_INVALID_PARAM;
     }
 
-    uint8_t mode;
+    uint16_t mode;
 
     int ret = GM_TxPdoEntry_Read(drv->pdo.act_mode, &mode, sizeof(mode));
 
     if (ret < 0)
     {
-        printf("drv->pdo.act_mode.index) %d\n", (drv->pdo.act_mode.index));
+        printf("drv->pdo.act_mode.index) %d,%d\n", (drv->pdo.act_mode.index),(drv->pdo.act_mode.bit_length));
         printf("mode drv GM_TxPdoEntry_Read %d\n",ret);
         return HAL_DRIVER_ERROR;
     }

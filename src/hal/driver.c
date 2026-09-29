@@ -3,6 +3,7 @@
 
 #include <stddef.h>
 #include <stdlib.h>
+#include <hmisysapi.h>
 
 #define DRIVER_MODE_SWITCH_VEL_EPSILON 1
 #define DRIVER_MODE_SWITCH_TIMEOUT_CYCLES 5000U
@@ -10,7 +11,10 @@
 /*=========================================================
  * CiA402状态判断
  *=========================================================*/
-static bool Driver_Is_State(uint16_t status, uint16_t mask, uint16_t value) { return ((status & mask) == value); }
+static bool Driver_Is_State(uint16_t status, uint16_t mask, uint16_t value) 
+{ 
+    return ((status & mask) == value); 
+}
 
 /*=========================================================
  * 初始化驱动器控制状态
@@ -31,6 +35,7 @@ void Driver_Init(hal_driver_t *drv)
     drv->target_state = DRV_STATE_SWITCHED_ON_DISABLE;
 
     drv->orient_state = DRV_ORIENT_IDLE;
+    drv->orient_command_logged = false;
 
     drv->control_word = 0;
 
@@ -247,6 +252,7 @@ hal_retcode_t Driver_Orient(hal_driver_t *drv)
     /* 请求定向时先确保驱动器仍保持使能，实际发送由周期状态机完成。 */
     drv->target_state = DRV_STATE_OPERATION_ENABLED;
     drv->orient_state = DRV_ORIENT_REQUESTED;
+    drv->orient_command_logged = false;
     return HAL_DRIVER_SUCCESS;
 }
 
@@ -380,6 +386,20 @@ hal_retcode_t Driver_Cyclic_Process(hal_driver_t *drv)
                          DRV_STATUS_ORIENT_DONE_MASK)
             {
                 drv->orient_state = DRV_ORIENT_DONE;
+            }
+
+            if (!drv->orient_command_logged)
+            {
+                hal_retcode_t ret =
+                    Ethercat_Driver_Write_Controlword(drv, DRV_CONTROL_ORIENT);
+                if (ret == HAL_DRIVER_SUCCESS)
+                {
+                    drv->orient_command_logged = true;
+                    LOG(LOG_LEVEL_INFO,
+                        "主轴定向已下发控制字 0x%04X，等待状态字 bit10 完成",
+                        DRV_CONTROL_ORIENT);
+                }
+                return ret;
             }
 
             return Ethercat_Driver_Write_Controlword(drv, DRV_CONTROL_ORIENT);

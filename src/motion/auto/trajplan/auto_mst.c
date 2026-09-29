@@ -176,7 +176,7 @@ static void auto_deal_mstb(){
             spl_context.command_speed = 0.0;
             spl_context.command_state = SPINDLE_STOP;
             spl_context.start_request_pending = false;
-            // spl_context.spl_event = SPINDLE_EVENT_ORIENT;
+            /* G70.6 上升沿由 PLC 扫描器统一转换为 SPINDLE_EVENT_ORIENT。 */
             break;
         default:
             // 判断M代码大小

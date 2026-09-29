@@ -404,11 +404,21 @@ hal_retcode_t Hal_Driver_Update(hal_driver_t *drv, bool read, bool write)
 
         /*
          * 驱动器处于 Fault 时，仍需由 Master_Send() 发送周期帧，
-         * 但不要再用上层缓存刷新 607A/60FF 等目标 PDO。
+         * 但不要再用上层缓存刷新 607A 等目标 PDO；CSV 主轴例外地
+         * 固定写入 60FF=0，清除急停前可能残留的速度命令。
          * Fault Reset 由 Driver_Fault_Reset() 单独写 6040，不受此判断影响。
          */
         if (drv->state == DRV_STATE_FAULT)
         {
+            /*
+             * Fault 状态下驱动器不会执行正常控制流程，但仍要把 CSV
+             * 的目标速度写成 0，避免急停前残留的 60FF 在 Fault 解除
+             * 后被驱动器再次执行。
+             */
+            if (drv->req_mode == DRV_MODE_CSV || drv->act_mode == DRV_MODE_CSV)
+            {
+                return Ethercat_Driver_Write_Target_Velocity(drv, 0);
+            }
             return HAL_DRIVER_SUCCESS;
         }
 

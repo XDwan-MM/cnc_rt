@@ -166,6 +166,7 @@ static void rt_reset_axis_data()
         rt_data->axis_data[i].nlmt = par_axis[i][PAR_AX_NLMT].value.val_real;                                            // 轴负软极限
         rt_data->axis_data[i].plmt2 = par_axis[i][PAR_AX_PLMT2].value.val_real;                                          // 轴第二级正软极限
         rt_data->axis_data[i].nlmt2 = par_axis[i][PAR_AX_NLMT2].value.val_real;                                          // 轴第二级负软极限
+        rt_data->axis_data[i].spl_default_speed = par_axis[i][PAR_AX_DEFAULT_S].value.val_real;                          // 主轴缺省S速度
         rt_data->axis_data[i].spdl_max_speed = par_axis[i][PAR_SPDL_MAX_SPEED].value.val_real;                           // 主轴最大转速 (HMI unit: r/min)
         rt_data->axis_data[i].ex_dec_enable_pos_cut = par_axis[i][PAR_AX_EX_DEC_ENABLE_POS_CUT].value.val_bool;          // 外部减速信号对正向切削进给是否生效
         rt_data->axis_data[i].ex_dec_enable_neg_cut = par_axis[i][PAR_AX_EX_DEC_ENABLE_NEG_CUT].value.val_bool;          // 外部减速信号对负向切削进给是否生效

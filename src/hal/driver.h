@@ -30,9 +30,9 @@ extern "C"
 /* Fault Reset */
 #define DRV_CONTROL_FAULT_RESET 0x0080
 
-/* 主轴内部定向：保持到状态字 bit10 和 bit8 同时为1。 */
+/* 主轴内部定向：保持 0x040F，直到状态字 bit10 置1。 */
 #define DRV_CONTROL_ORIENT 0x040F
-#define DRV_STATUS_ORIENT_DONE_MASK 0x0500
+#define DRV_STATUS_ORIENT_DONE_MASK 0x0400
 
 /*=========================================================
  * 初始化
