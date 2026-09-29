@@ -8,6 +8,7 @@
 #include <hmirequestapi.h>
 #include <hmisysapi.h>
 #include "tapreturn.h"
+#include "alarmapi.h"
 
 /* 请求区指针 */
 static HmiRequestData *s_hmi_req = NULL;
@@ -176,6 +177,7 @@ int hmi_tapret_build_program(const HmiRequestTapRetParams *tapret, char *out, in
 
 
     if (!tapreturn_ready()) {
+        setAlarm(ALARM_PS, ALARM_WARNING, 3003);
         LOG(LOG_LEVEL_WARN, "攻丝回退被拒：当前不可回退（无记录 / 刀不在孔内 / 位置基准未建立）");
         return 0;
     }
