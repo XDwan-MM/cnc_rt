@@ -577,7 +577,7 @@ static GNC_RES parser_handle_gcode(pmc_data* motion_data, NcItpState *itp_state,
     // if(plan_block.type == CIRCLE_CW || plan_block.type == CIRCLE_CCW ){
     //     LOG(LOG_LEVEL_DEBUG, "center pos %f %f %f no %d", plan_block.circular_data.center_pos.x, plan_block.circular_data.center_pos.y, plan_block.circular_data.center_pos.z, plan_block.line_number);  
     // }
-    LOG(LOG_LEVEL_DEBUG, "no %d end pos %f %f %f mode %d type:%d fv %f", plan_block.line_number, motion_data->position.x, motion_data->position.y, motion_data->position.z, plan_block.mode, plan_block.type, plan_block.feed_vel);
+    // LOG(LOG_LEVEL_DEBUG, "no %d end pos %f %f %f mode %d type:%d fv %f", plan_block.line_number, motion_data->position.x, motion_data->position.y, motion_data->position.z, plan_block.mode, plan_block.type, plan_block.feed_vel);
     // ======= 测试 ===========
     queue_push(parser_queue, &plan_block);
     if(plan_block.mode == pmc_mode::PMC_MODE_STOPSKIP) return GNC_PARSER_WAIT;
@@ -611,6 +611,7 @@ static GNC_RES parser_handle_mcode(pmc_data* motion_data, NcItpState *itp_state,
     plan_block.mst_data.tool_number = motion_data->tool_number; 
     // 子程序或宏程序
     plan_block.mst_data.sub_program = motion_data->sub_program;
+    // LOG(LOG_LEVEL_DEBUG, "no %d m%d", plan_block.line_number, plan_block.mst_data.m_code);
     // 预留
     plan_block.mst_data.size = 1;
     plan_block.is_breakpoint = false;

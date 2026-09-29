@@ -112,7 +112,7 @@ void auto_execute_pos_cmd(){
     cycle_tp->pos_cmd_data.accum_distance = cycle_tp->pos_cmd_data.traj_data->s;
     cycle_tp->pos_cmd_data.remain_distance = cycle_tp->plan_block->length - cycle_tp->pos_cmd_data.accum_distance;
     // 计算插补位置
-    POS interp_pos = auto_cal_interp_pos(cycle_tp->pos_cmd_data.current_pos, cycle_tp->pos_cmd_data.accum_distance);
+    POS interp_pos = auto_cal_interp_pos(cycle_tp->pos_cmd_data.current_pos, cycle_tp->pos_cmd_data.accum_distance, cycle_tp->pos_cmd_data.target_distance);
     // TODO：计算误差
     if(IsLessThan(cycle_tp->pos_cmd_data.traj_data->v, 0)) {
         LOG(LOG_LEVEL_ERR, "自动加工错误！在插补段%d插补速度计算失败", cycle_tp->plan_block->line_number);

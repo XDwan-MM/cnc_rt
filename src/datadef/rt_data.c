@@ -6,6 +6,7 @@
 
 extern RT_DATA* rt_data;
 static void rt_reset_ncu_data();
+static void rt_reset_sys_data();
 static void rt_reset_chan_data();
 static void rt_reset_axis_data();
 static void rt_reboot_ncu_data();
@@ -107,6 +108,7 @@ static void rt_update_reboot_valid_data(){
 /// @brief 复位时生效的par数据，同步更新到实时数据
 static void rt_upate_reset_valid_data(){
     rt_reset_ncu_data();
+    rt_reset_sys_data();
     rt_reset_chan_data();
     rt_reset_axis_data();
     rt_set_zero_vel_params();
@@ -114,6 +116,12 @@ static void rt_upate_reset_valid_data(){
 }
 
 static void rt_reset_ncu_data(){
+}
+
+static void rt_reset_sys_data(){
+    rt_data->sys_state[SYS_IS_RIGID] = 0;
+    rt_data->sys_state[SYS_IS_RIGID_RETURN] = 0;
+    rt_data->sys_state[SYS_IS_RIGID_RETURN_FINISH] = 0;
 }
 
 static void rt_reset_chan_data()

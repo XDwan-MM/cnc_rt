@@ -77,6 +77,8 @@ void auto_execute_mstb_cmd(){
     }
     // FIN信号 G4.3
     getRegBit(REG_G, 4, 3, &cycle_tp->mstb_cmd_data.signal_fin);
+    // 测试：屏蔽M29逻辑
+    cycle_tp->mstb_cmd_data.signal_fin = 1;
     // FIN为1时，nc侧将MF选通信号置为0
     if(cycle_tp->mstb_cmd_data.signal_fin){
         // 完成信号宽幅时间，缺省值2ms
@@ -149,12 +151,13 @@ static void auto_deal_mstb(){
         case M29: // 刚性攻丝
             // 切换位置模式
             spl_data.spl_event = SPINDLE_EVENT_ORIENT;
+            // RTAP：通知PMC处在刚性攻丝方式中的信号
+            rt_data->sys_state[SYS_IS_RIGID] = 1;
             // 回参考点（刚性攻丝时回参考点，攻丝回退时不返回参考点）
-            if(rt_data->sys_state[SYS_IS_RIGID_RERTURN]){
-                
-            }else{
-                // RTAP：通知PMC处在刚性攻丝方式中的信号
-                rt_data->sys_state[SYS_IS_RIGID] = 1;
+            if(rt_data->sys_state[SYS_IS_RIGID_RETURN]){
+                // 不回参考点
+            }else{    
+                // 回参考点
             }
             break;
         default:
