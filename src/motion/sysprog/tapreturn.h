@@ -52,7 +52,7 @@ void rt_clear_rigid_return_param(void);
 GNC_RES tapreturn_generate(char *buf, int buf_len);
 GNC_RES tapreturn_generate_with_speed(int speed, char *buf, int buf_len);
 bool tapreturn_page_params_match(double pitch_mm, int m_value);
-
+double cal_rigid_pos_sync_error();
 
 /*! }*/
 
