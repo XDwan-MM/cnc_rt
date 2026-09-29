@@ -5,49 +5,34 @@
 #include "spl_control.h"
 #include <hmisysapi.h>
 
-static bool orient_requested;
-static bool orient_done;
-
-void spl_orient_request(void)
+bool spl_orient_request(void)
 {
     if (Driver_Orient(&spindle_driver) != HAL_DRIVER_SUCCESS)
     {
         LOG(LOG_LEVEL_ERR, "主轴定向请求失败");
-        orient_requested = false;
-        orient_done = false;
-        return;
+        return false;
     }
 
-    orient_requested = true;
-    orient_done = false;
-}
-
-void spl_orient_update(void)
-{
-    if (!orient_requested)
-    {
-        return;
-    }
-
-    if (Driver_Is_Orient_Done(&spindle_driver))
-    {
-        orient_done = true;
-    }
+    return true;
 }
 
 bool spl_orient_is_done(void)
 {
-    return orient_done;
+    return Driver_Is_Orient_Done(&spindle_driver);
 }
 
-void spl_orient_release(void)
+bool spl_orient_release(void)
 {
     if (Driver_Release_Orient(&spindle_driver) != HAL_DRIVER_SUCCESS)
     {
         LOG(LOG_LEVEL_ERR, "解除主轴定向失败");
-        return;
+        return false;
     }
 
-    orient_requested = false;
-    orient_done = false;
+    return true;
+}
+
+void spl_orient_abort(void)
+{
+    Driver_Abort_Orient(&spindle_driver);
 }

@@ -15,7 +15,9 @@
 #define SPINDLE_SPEED_ARRIVAL_TOL      (0.05)
 #define SPINDLE_SPEED_ARRIVAL_MIN_TOL  (5.0)
 #define SPINDLE_ALARM_MISSING_SPEED    (20)
+#define SPINDLE_ALARM_ORIENT_TIMEOUT   (21)
 #define ALARM_RESULT_ALREADY_EXISTS    (-8)
+#define SPINDLE_ORIENT_TIMEOUT_CYCLES  (10000U)
 
 spindle_context_t spl_context;
 
@@ -53,6 +55,7 @@ static bool spindle_is_rotating(void);
 static void spindle_publish_status(void);
 static void spindle_report_mcode_complete(void);
 static void spindle_update_orient_state(void);
+static void spindle_apply_deferred_start(void);
 
 /* ==========================================================================
  * 2. 外部函数定义
@@ -66,37 +69,71 @@ static void spindle_update_orient_state(void);
  */
 void spindle_control_update(void)
 {
+    bool release_orient_event;
+
+    release_orient_event =
+        (spl_context.spl_event == SPINDLE_EVENT_RELEASE_ORIENT);
+
     /*
      * 这是 1 ms 周期入口。处理顺序很重要：先锁定安全状态，再处理
      * 新事件，随后更新定向、驱动器控制和对外状态，避免本周期刚检测
      * 到急停又被后续的普通启动逻辑覆盖。
      */
     if (rt_data->sys_state[SYS_IS_ESTOP_ACTIVE] ||
-        spindle_driver.state == DRV_STATE_FAULT ||
         (spindle_driver.status_word & 0x0008U) != 0U)
     {
+        // printg("85\n");
         /* 急停解除后必须等待新的 M3/M4，不能恢复急停前的旧速度。 */
         spl_context.reset_requires_start = true;
         spl_context.start_request_pending = false;
+        spl_context.orient_request_pending = false;
+        spl_context.orient_release_pending = false;
+        spl_context.orient_phase = SPINDLE_ORIENT_IDLE;
+        spl_context.orient_elapsed_cycles = 0U;
+        spl_context.orient_hold_stop = false;
+        spl_context.m19_active = false;
+        spl_context.deferred_start_pending = false;
+        spl_orient_abort();
     }
 
     if ((rt_data->nc_event == SYS_EVENT_HMI_RESET) ||
         (nc_reset != NULL && nc_reset->is_resetting))
     {
         spl_context.reset_requires_start = true;
+        // printg("103\n");
+
+        /*
+         * 复位必须能够中止正在进行或已经完成的定向。PLC 的 G70.6
+         * 下降沿通常会同时送入 RELEASE_ORIENT，但复位事件优先级更高
+         * 时不能让下面的 STOP 覆盖该释放请求；没有下降沿时也要有
+         * 兜底释放，避免状态永久停在 SPINDLE_ORIENT_DONE。
+         */
+        if (spl_context.orient_phase != SPINDLE_ORIENT_IDLE ||
+            spl_context.spl_event == SPINDLE_EVENT_ORIENT ||
+            spl_context.orient_request_pending)
+        {
+            // printg("115\n");
+            spl_context.spl_event = SPINDLE_EVENT_RELEASE_ORIENT;
+            release_orient_event = true;
+        }
+        /* 复位结束当前 M19 握手，新的 M3/M4 可以重新取得主轴控制权。 */
+        spl_context.orient_hold_stop = false;
+        spl_context.m19_active = false;
     }
 
-    if (spindle_stop_is_required(&spl_context))
+    if (spindle_stop_is_required(&spl_context) && !release_orient_event)
     {
+        // printg("126\n");
         spl_context.spl_event = SPINDLE_EVENT_STOP;
     }
-    else
+    else if (!release_orient_event)
     {
         /* 复位后的旧目标速度不能再次触发启动。 */
         if (spl_context.reset_requires_start &&
             !spl_context.start_request_pending)
         {
-            spl_context.spl_event = SPINDLE_EVENT_NONE;
+            // printg("135\n");
+            // spl_context.spl_event = SPINDLE_EVENT_NONE;
         }
         spindle_update_command_event();
     }
@@ -106,30 +143,48 @@ void spindle_control_update(void)
         (spl_context.spl_event == SPINDLE_EVENT_CW ||
          spl_context.spl_event == SPINDLE_EVENT_CCW))
     {
+        // printg("146\n");
         /* 丢弃复位前遗留的 PLC/方向边沿，直到新的 M3/M4 到来。 */
         spl_context.spl_event = SPINDLE_EVENT_NONE;
     }
 
+    /* 事件处理只负责改变逻辑/驱动器目标；定向完成和速度规划在后续阶段更新。 */
     spindle_process_event(&spl_context);
-    spl_orient_update();
+    /* 直接读取 driver.c 的定向状态，并映射到 CNC/PLC 的 orient_phase。 */
     spindle_update_orient_state();
+    /* 根据安全状态、定向状态和速度状态决定使能、模式及 60FF 目标值。 */
     spindle_update_driver_control();
+    /* 将软件速度目标发布到 HMI 变量，供显示和诊断使用。 */
     spindle_publish_status();
 }
 
+/**
+ * @brief 初始化主轴上下文中的面板启动速度。
+ *
+ * 其余成员由全局静态存储区保证初值为零；运行过程中，CNC/PLC 事件
+ * 再分别填充 command_speed、command_state 和各类握手标志。
+ */
 void spl_context_init(spindle_context_t* spl_ctx)
 {
     spl_ctx->mcp_target_speed = rt_data->axis_data[AXIS_SP].spl_default_speed;
 }
 
+/* ==========================================================================
+ * 3. 内部函数定义
+ * ========================================================================== */
 /* CNC M3/M4/M5 只更新目标数据；目标发生变化时在控制层生成事件。 */
 static void spindle_update_command_event(void)
 {
+    /*
+     * 此函数不直接启动驱动器，只比较“期望目标”和规划器目标，生成
+     * CW/CCW/STOP 事件。定向期间禁止执行，防止旧的 S 值抢回控制权。
+     */
     /* 定向流程拥有主轴控制权，不能被旧的 M3/M4 目标重新启动。 */
     if (spl_context.orient_request_pending ||
         spl_context.orient_phase != SPINDLE_ORIENT_IDLE ||
         spl_context.orient_hold_stop)
     {
+        // // printg("187****\n");
         return;
     }
 
@@ -170,14 +225,11 @@ static void spindle_update_command_event(void)
     }
 }
 
-/* ==========================================================================
- * 3. 内部函数定义
- * ========================================================================== */
-
 static void spindle_process_event(spindle_context_t *context)
 {
     static bool stop_log_reported = false;
 
+    /* spl_event 是单槽事件；本函数每周期消费一次并在末尾清空。 */
     switch (context->spl_event)
     {
     case SPINDLE_EVENT_STOP:
@@ -212,24 +264,58 @@ static void spindle_process_event(spindle_context_t *context)
          */
         context->orient_request_pending = false;
         context->orient_release_pending = false;
-        context->orient_phase = SPINDLE_ORIENT_RUNNING;
         spindle_handle_stop(context);
         if (spl_orient_is_done())
         {
             /* 允许重复执行 M19：先清除上一次完成状态再重新请求。 */
-            spl_orient_release();
+            if (!spl_orient_release())
+            {
+                context->orient_phase = SPINDLE_ORIENT_DONE;
+                context->orient_release_pending = true;
+                break;
+            }
         }
-        spl_orient_request();
-        break;
-    case SPINDLE_EVENT_RELEASE_ORIENT:
-        if (context->orient_phase == SPINDLE_ORIENT_DONE)
+        if (spl_orient_request())
         {
-            spl_orient_release();
+            context->orient_phase = SPINDLE_ORIENT_RUNNING;
+            context->orient_elapsed_cycles = 0U;
+        }
+        else
+        {
+            // printg("**********************************************************\n");
+            /* 请求失败时不能伪装成 RUNNING，否则状态机会永久等待 DONE。 */
             context->orient_phase = SPINDLE_ORIENT_IDLE;
             context->orient_release_pending = false;
+            context->orient_hold_stop = true;
+            context->reset_requires_start = true;
+            context->start_request_pending = false;
+            context->command_speed = 0.0;
         }
-        else if (context->orient_phase != SPINDLE_ORIENT_IDLE)
+        // printg("context->orient_phase %d\n", context->orient_phase);
+        // Ethercat_Driver_Write_Controlword(&spindle_driver, 0x040F);
+        break;
+    case SPINDLE_EVENT_RELEASE_ORIENT:
+        /*
+         * 释放既清除底层 0x040F 定向请求，也让普通主轴状态机重新接管。
+         * 必须先清除 pending，避免本周期后续逻辑重新提交定向请求。
+         */
+        context->orient_request_pending = false;
+        context->orient_release_pending = false;
+        /* 释放/复位中止当前 M19，后续不应再为它产生完成反馈。 */
+        context->m19_active = false;
+        context->spl_state = SPINDLE_STOP;
+        context->vel_planner.enable = false;
+        context->vel_planner.target_vel = 0.0;
+        Hal_Driver_Set_Target_Vel(&spindle_driver, 0);
+        if (spl_orient_release())
         {
+            context->orient_phase = SPINDLE_ORIENT_RELEASING;
+            context->orient_release_pending = false;
+            context->orient_elapsed_cycles = 0U;
+        }
+        else
+        {
+            /* 驱动器拒绝释放时保留阶段，后续周期继续重试。 */
             context->orient_release_pending = true;
         }
         break;
@@ -250,6 +336,7 @@ static void spindle_update_driver_control(void)
      * 此时必须立即清掉软件速度规划和目标速度，并保持下使能请求；
      * 不能再走 Driver_Enable()，否则急停释放后会把旧目标速度带回来。
      */
+    /* 安全条件优先级最高：急停/Fault 时立即清零目标并请求下使能。 */
     if (rt_data->sys_state[SYS_IS_ESTOP_ACTIVE] ||
         spindle_driver.state == DRV_STATE_FAULT ||
         (spindle_driver.status_word & 0x0008U) != 0U)
@@ -267,6 +354,7 @@ static void spindle_update_driver_control(void)
         return;
     }
 
+    /* 模式切换期间不允许速度目标继续加速，避免覆盖模式切换状态机。 */
     if (Driver_Is_Mode_Switching(&spindle_driver))
     {
         /*
@@ -283,6 +371,7 @@ static void spindle_update_driver_control(void)
     }
 
     /* 定向期间由驱动器自行减速，不能被普通停止流程下使能或改写。 */
+    /* 定向控制字由 driver.c 维护，本模块不能在此期间写普通速度/下使能。 */
     if (spl_context.orient_phase != SPINDLE_ORIENT_IDLE)
     {
         /*
@@ -336,6 +425,10 @@ static void spindle_update_driver_control(void)
 
 static void spindle_update_velocity(void)
 {
+    /*
+     * 仅在驱动器处于 CSV 且允许速度控制时调用。规划器先计算 current_vel，
+     * 再写入 HAL 缓存；EtherCAT 主循环负责把缓存发送到 60FF。
+     */
     spl_vel_planner_t *planner = &spl_context.vel_planner;
 
     planner->max_acc = rt_data->axis_data[AXIS_SP].max_feed_acc;
@@ -360,13 +453,14 @@ static void spindle_update_velocity(void)
 
     // Ethercat_Driver_Write_Target_Velocity(&spindle_driver, spindle_driver.target_vel);
     
-    // printf("Hal_Driver_Set_Target_Vel调用 target_vel: %d act_mode %d state: %d\n", spindle_driver.target_vel, spindle_driver.act_mode, spindle_driver.state);
+    // // printg("Hal_Driver_Set_Target_Vel调用 target_vel: %d act_mode %d state: %d\n", spindle_driver.target_vel, spindle_driver.act_mode, spindle_driver.state);
 
     spindle_finish_stop_if_ready();
 }
 
 static bool spindle_stop_is_required(const spindle_context_t *context)
 {
+    /* 汇总所有必须停止主轴的原因，供周期入口统一仲裁。 */
     bool stop_required = false;
 
     if (rt_data->sys_state[SYS_IS_ESTOP_ACTIVE])
@@ -396,6 +490,10 @@ static bool spindle_stop_is_required(const spindle_context_t *context)
 
 static void spindle_handle_stop(spindle_context_t *context)
 {
+    /*
+     * 停止事件只撤销速度目标。普通 M5 保持驱动器可受控减速，急停/Fault
+     * 则直接请求下使能；最终是否完成由 spindle_finish_stop_if_ready 判断。
+     */
     context->spl_state = SPINDLE_STOP;
     context->vel_planner.enable = false;
     context->vel_planner.target_vel = 0.0;
@@ -405,10 +503,13 @@ static void spindle_handle_stop(spindle_context_t *context)
      * 正常减速，释放急停后也必须保持下使能，防止旧目标速度恢复。
      * 普通 M5 则保持 CSV 模式并允许驱动器执行受控减速。
      */
+    // if (!rt_data->sys_state[SYS_IS_ESTOP_ACTIVE] &&
+    //     spindle_driver.state != DRV_STATE_FAULT &&
+    //     (spindle_driver.status_word & 0x0008U) == 0U &&
+    //     spindle_driver.act_mode != DRV_MODE_NONE)
     if (!rt_data->sys_state[SYS_IS_ESTOP_ACTIVE] &&
         spindle_driver.state != DRV_STATE_FAULT &&
-        (spindle_driver.status_word & 0x0008U) == 0U &&
-        spindle_driver.act_mode != DRV_MODE_NONE)
+        (spindle_driver.status_word & 0x0008U) == 0U)
     {
         Driver_Enable(&spindle_driver);
     }
@@ -425,6 +526,7 @@ static void spindle_handle_stop(spindle_context_t *context)
 static void spindle_handle_rotation(spindle_context_t *context,
                                     spindle_state_t state)
 {
+    /* 校验速度后切换逻辑方向、选择 CSV 模式，并允许驱动器重新使能。 */
     const double selected_speed = spindle_get_selected_speed(context);
 
     /* M3/M4 S0 与 M5 等价。 */
@@ -464,6 +566,7 @@ static void spindle_handle_rotation(spindle_context_t *context,
 
 static bool spindle_validate_start_request(const spindle_context_t *context)
 {
+    /* 防止没有有效 S 值时误启动主轴；报警只在首次出现时记录。 */
     const double selected_speed = spindle_get_selected_speed(context);
     const bool selected_speed_is_finite = isfinite(selected_speed);
 
@@ -499,6 +602,7 @@ static bool spindle_report_missing_speed_alarm(const char *message)
 
 static double spindle_get_selected_speed(const spindle_context_t *context)
 {
+    /* G33.7 选择 PLC 速度，否则使用 CNC M3/M4 的 S 值。 */
     if (context->speed_source == SPINDLE_SPEED_SOURCE_PLC)
     {
         return context->plc_speed;
@@ -509,6 +613,7 @@ static double spindle_get_selected_speed(const spindle_context_t *context)
 
 static double spindle_calculate_target_velocity(const spindle_context_t *context)
 {
+    /* 应用主轴倍率和最大转速限制，并按 CW/CCW 输出带符号速度。 */
     const double max_speed = fabs(rt_data->axis_data[AXIS_SP].spdl_max_speed);
     const double override = var_chan[0][VAR_CHAN_SPDL_OVERRIDE].value.f / 100.0;
     double target_speed = fabs(spindle_get_selected_speed(context));
@@ -529,6 +634,7 @@ static double spindle_calculate_target_velocity(const spindle_context_t *context
 
 static void spindle_update_planner_state(spindle_context_t *context)
 {
+    /* 软件规划器到位后仍需结合 606C 实际反馈，避免提前产生 FIN。 */
     const bool arrived = spl_vel_planner_update(&context->vel_planner, SPINDLE_CONTROL_PERIOD_SECONDS);
 
     if (!context->vel_planner.active)
@@ -556,6 +662,7 @@ static void spindle_update_planner_state(spindle_context_t *context)
 
 static bool spindle_is_velocity_arrived(void)
 {
+    /* 到速必须同时满足 CSV、Operation Enabled、非零和误差带条件。 */
     const double target = spl_context.vel_planner.current_vel;
     const double actual = (double)spindle_driver.actual_vel;
     const double tolerance = fmax(SPINDLE_SPEED_ARRIVAL_MIN_TOL,
@@ -583,45 +690,116 @@ static bool spindle_is_velocity_arrived(void)
 static void spindle_update_orient_state(void)
 {
     /*
-     * WAIT_ZERO 仅兼容其他可能的定向入口；当前 M19/面板事件会直接
-     * 进入 RUNNING。RUNNING 状态等待 spl_orient 模块检测到状态字 bit10。
+     * 把 spl_orient.c 的底层完成标志同步到本文件的阶段状态，并在 M19
+     * 完成时产生代码握手。释放请求可能在完成前到达，因此单独保留标志。
      */
-    if (spl_context.orient_phase == SPINDLE_ORIENT_WAIT_ZERO &&
-        spl_context.orient_request_pending)
+    /* WAIT_ZERO 仅兼容其他可能的定向入口；当前入口直接进入 RUNNING。 */
+    if (spl_context.orient_request_pending)
     {
         if (spl_orient_is_done())
         {
             /* 防止上一次定向状态残留。 */
-            spl_orient_release();
+            if (!spl_orient_release())
+            {
+                return;
+            }
         }
         /* 兼容其他调用方：收到请求后也立即发送 0x040F。 */
-        spl_orient_request();
-        spl_context.orient_request_pending = false;
-        spl_context.orient_phase = SPINDLE_ORIENT_RUNNING;
+        if (spl_orient_request())
+        {
+            spl_context.orient_request_pending = false;
+            spl_context.orient_phase = SPINDLE_ORIENT_RUNNING;
+            spl_context.orient_elapsed_cycles = 0U;
+        }
     }
 
-    if (spl_context.orient_phase == SPINDLE_ORIENT_RUNNING &&
-        spl_orient_is_done())
+    if (spl_context.orient_phase == SPINDLE_ORIENT_RUNNING)
     {
-        spl_context.orient_phase = SPINDLE_ORIENT_DONE;
-        if (spl_context.m19_active)
+        if (spl_orient_is_done())
         {
+            spl_context.orient_phase = SPINDLE_ORIENT_DONE;
+            spl_context.orient_elapsed_cycles = 0U;
+        }
+        else if (++spl_context.orient_elapsed_cycles >=
+                 SPINDLE_ORIENT_TIMEOUT_CYCLES)
+        {
+            LOG(LOG_LEVEL_ERR, "主轴定向超时，自动请求释放");
+            // setAlarm(ALARM_AX, ALARM_ERROR, SPINDLE_ALARM_ORIENT_TIMEOUT);
             spl_context.m19_active = false;
-            spindle_report_mcode_complete();
+            if (spl_orient_release())
+            {
+                spl_context.orient_phase = SPINDLE_ORIENT_RELEASING;
+                spl_context.orient_release_pending = false;
+                spl_context.orient_elapsed_cycles = 0U;
+                spl_context.orient_hold_stop = true;
+                spl_context.reset_requires_start = true;
+                spl_context.start_request_pending = false;
+            }
+            else
+            {
+                spl_context.orient_phase = SPINDLE_ORIENT_DONE;
+                spl_context.orient_release_pending = true;
+            }
+        }
+    }
+
+    if (spl_context.orient_phase != SPINDLE_ORIENT_IDLE &&
+        spl_context.orient_release_pending)
+    {
+        if (spl_orient_release())
+        {
+            spl_context.orient_release_pending = false;
+            spl_context.orient_phase = SPINDLE_ORIENT_RELEASING;
+            spl_context.orient_elapsed_cycles = 0U;
+        }
+    }
+
+    if (spl_context.orient_phase == SPINDLE_ORIENT_IDLE &&
+        spl_context.orient_release_pending)
+    {
+        if (spl_orient_release())
+        {
+            spl_context.orient_release_pending = false;
+            spl_context.orient_elapsed_cycles = 0U;
+        }
+    }
+
+    if (spl_context.orient_phase == SPINDLE_ORIENT_RELEASING &&
+        spindle_driver.state == DRV_STATE_SWITCHED_ON_DISABLE)
+    {
+        spl_context.orient_phase = SPINDLE_ORIENT_IDLE;
+        spl_context.orient_hold_stop = false;
+        spindle_apply_deferred_start();
+    }
+
+    if (spl_context.orient_phase == SPINDLE_ORIENT_RELEASING &&
+        spindle_driver.state != DRV_STATE_SWITCHED_ON_DISABLE)
+    {
+        if (++spl_context.orient_elapsed_cycles >=
+            SPINDLE_ORIENT_TIMEOUT_CYCLES)
+        {
+            LOG(LOG_LEVEL_ERR, "主轴定向释放下使能超时");
+            // setAlarm(ALARM_AX, ALARM_ERROR, SPINDLE_ALARM_ORIENT_TIMEOUT);
+            spl_context.orient_phase = SPINDLE_ORIENT_IDLE;
+            spl_context.orient_hold_stop = true;
+            spl_context.reset_requires_start = true;
+            spl_context.start_request_pending = false;
+            spl_context.orient_elapsed_cycles = 0U;
         }
     }
 
     if (spl_context.orient_phase == SPINDLE_ORIENT_DONE &&
-        spl_context.orient_release_pending)
+        spl_context.m19_active)
     {
-        spl_orient_release();
-        spl_context.orient_release_pending = false;
-        spl_context.orient_phase = SPINDLE_ORIENT_IDLE;
+        spl_context.m19_active = false;
+        spindle_report_mcode_complete();
     }
+    // // printf("spl_context.orient_phase %d spl_context.orient_request_pending %d\n", spl_context.orient_phase, spl_context.orient_request_pending);
 }
 
 static void spindle_finish_stop_if_ready(void)
 {
+    /* 只有规划器速度和驱动器实际速度都为零，才允许完成停止握手。 */
     /*
      * 停止完成必须同时满足软件规划速度和驱动器实际速度都为零。
      * 仅清零 60FF 不代表电机已经停止，尤其在驱动器下使能或反馈延迟时。
@@ -650,8 +828,22 @@ static void spindle_finish_stop_if_ready(void)
     spindle_report_mcode_complete();
 }
 
+static void spindle_apply_deferred_start(void)
+{
+    if (!spl_context.deferred_start_pending)
+    {
+        return;
+    }
+
+    spl_context.command_state = spl_context.deferred_start_state;
+    spl_context.command_speed = spl_context.deferred_start_speed;
+    spl_context.start_request_pending = true;
+    spl_context.deferred_start_pending = false;
+}
+
 static void spindle_disable_driver_before_operation(void)
 {
+    /* 驱动器尚未进入 Operation Enabled 时，不能做受控减速，只能清零并下使能。 */
     Hal_Driver_Set_Target_Vel(&spindle_driver, 0);
     spindle_disable_driver();
     // LOG(LOG_LEVEL_INFO,
@@ -671,6 +863,7 @@ static void spindle_disable_driver(void)
 
 static bool spindle_is_rotating(void)
 {
+    /* 逻辑方向用于决定规划器是否继续输出目标速度。 */
     switch (spl_context.spl_state)
     {
     case SPINDLE_CW:
@@ -684,6 +877,7 @@ static bool spindle_is_rotating(void)
 
 static void spindle_publish_status(void)
 {
+    /* DEBUG 模式显示规划器速度，实时模式显示实际写入驱动器的目标速度。 */
 #ifdef DEBUG_MODE_ENABLED
     setVarChanInt(0, VAR_CHAN_S_CODE,
                   (int32_t)spl_context.vel_planner.current_vel, 0);
@@ -694,6 +888,7 @@ static void spindle_publish_status(void)
 
 static void spindle_report_mcode_complete(void)
 {
+    /* FIN/完成反馈只允许从未完成变为完成一次，避免重复触发上层握手。 */
     if (!spl_context.mcode_feedback)
     {
         spl_context.mcode_feedback = true;

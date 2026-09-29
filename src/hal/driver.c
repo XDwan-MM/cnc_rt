@@ -263,11 +263,29 @@ hal_retcode_t Driver_Release_Orient(hal_driver_t *drv)
         return HAL_DRIVER_ERR_INVALID_PARAM;
     }
 
-    drv->orient_state = DRV_ORIENT_IDLE;
-    drv->target_state = DRV_STATE_READY_TO_SWITCHED_ON;
-
     /* 显式解除定向，清除 bit10；后续周期再由普通状态机接管。 */
-    return Ethercat_Driver_Write_Controlword(drv, DRV_CONTROL_SHUTDOWN);
+    if (Ethercat_Driver_Write_Controlword(drv, DRV_CONTROL_SHUTDOWN) !=
+        HAL_DRIVER_SUCCESS)
+    {
+        return HAL_DRIVER_ERROR;
+    }
+
+    /* 只有控制字写入成功后，软件才退出定向状态。 */
+    drv->orient_state = DRV_ORIENT_IDLE;
+    drv->target_state = DRV_STATE_SWITCHED_ON_DISABLE;
+    return HAL_DRIVER_SUCCESS;
+}
+
+void Driver_Abort_Orient(hal_driver_t *drv)
+{
+    if (drv == NULL)
+    {
+        return;
+    }
+
+    drv->orient_state = DRV_ORIENT_IDLE;
+    drv->orient_command_logged = false;
+    drv->target_state = DRV_STATE_SWITCHED_ON_DISABLE;
 }
 
 bool Driver_Is_Orient_Done(const hal_driver_t *drv)
@@ -373,7 +391,7 @@ hal_retcode_t Driver_Cyclic_Process(hal_driver_t *drv)
     /* 定向期间不允许普通状态机或目标值流程覆盖 0x040F。 */
     if (drv->orient_state != DRV_ORIENT_IDLE)
     {
-        if (Driver_Is_State(drv->status_word, 0x006F, 0x0027))
+        if (Driver_Is_State(drv->status_word, 0x0027, 0x0027))
         {
             drv->state = DRV_STATE_OPERATION_ENABLED;
 
@@ -435,6 +453,31 @@ hal_retcode_t Driver_Cyclic_Process(hal_driver_t *drv)
         }
 
         return Ethercat_Driver_Write_Controlword(drv, DRV_CONTROL_SHUTDOWN);
+    }
+
+    /* DRV_STATE_READY_TO_SWITCHED_ON 0x0006. */
+    if (drv->target_state == DRV_STATE_READY_TO_SWITCHED_ON)
+    {
+        if (Driver_Is_State(drv->status_word, 0x006F, 0x0027))
+        {
+            drv->state = DRV_STATE_OPERATION_ENABLED;
+            return Ethercat_Driver_Write_Controlword(drv, DRV_CONTROL_DISABLE_OPERATION);
+        }
+        if (Driver_Is_State(drv->status_word, 0x006F, 0x0023))
+        {
+            drv->state = DRV_STATE_SWITCHED_ON;
+            return Ethercat_Driver_Write_Controlword(drv, DRV_CONTROL_SHUTDOWN);
+        }
+        if (Driver_Is_State(drv->status_word, 0x004F, 0x0040))
+        {
+            drv->state = DRV_STATE_SWITCHED_ON_DISABLE;
+            return Ethercat_Driver_Write_Controlword(drv, DRV_CONTROL_SHUTDOWN);
+        }
+        if (Driver_Is_State(drv->status_word, 0x006F, 0x0021))
+        {
+            drv->state = DRV_STATE_READY_TO_SWITCHED_ON;
+            return HAL_DRIVER_SUCCESS;
+        }
     }
 
     /* A disable request follows the CiA402 sequence 0x0007 -> 0x0006. */

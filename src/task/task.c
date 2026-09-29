@@ -265,6 +265,15 @@ static void task_handle_spl_event(PLC_EVENT *event_data)
     if (event_data->spindle_payload.direction == 1)
     {
         LOG(LOG_LEVEL_INFO, "处理主轴正转事件");
+        if (spl_context.orient_phase != SPINDLE_ORIENT_IDLE ||
+            spl_context.orient_request_pending ||
+            spl_context.orient_release_pending)
+        {
+            spl_context.deferred_start_pending = true;
+            spl_context.deferred_start_state = SPINDLE_CW;
+            spl_context.deferred_start_speed = spl_context.mcp_target_speed;
+            return;
+        }
         spl_context.spl_event = SPINDLE_EVENT_CW;
         spl_context.command_speed = spl_context.mcp_target_speed;
         // spl_context.mcp_target_speed = cycle_tp->plan_block->mst_data.spindle.speed;
@@ -277,6 +286,15 @@ static void task_handle_spl_event(PLC_EVENT *event_data)
     if (event_data->spindle_payload.direction == -1)
     {
         LOG(LOG_LEVEL_INFO, "处理主轴反转事件");
+        if (spl_context.orient_phase != SPINDLE_ORIENT_IDLE ||
+            spl_context.orient_request_pending ||
+            spl_context.orient_release_pending)
+        {
+            spl_context.deferred_start_pending = true;
+            spl_context.deferred_start_state = SPINDLE_CCW;
+            spl_context.deferred_start_speed = spl_context.mcp_target_speed;
+            return;
+        }
         spl_context.spl_event = SPINDLE_EVENT_CCW;
         spl_context.command_speed = spl_context.mcp_target_speed;
         // spl_context.mcp_target_speed = cycle_tp->plan_block->mst_data.spindle.speed;
@@ -289,6 +307,19 @@ static void task_handle_spl_event(PLC_EVENT *event_data)
     if (event_data->spindle_payload.direction == 0)
     {
         LOG(LOG_LEVEL_INFO, "处理主轴停止事件");
+
+        /*
+         * M19 通常会同时改变 G29.6 和 G70.6。定向上升沿可能先到达，
+         * 随后的 G29.6 下降沿只是定向前的停转请求，不能覆盖尚未处理
+         * 的 SPINDLE_EVENT_ORIENT；定向流程本身已经会停止主轴。
+         */
+        if (spl_context.spl_event == SPINDLE_EVENT_ORIENT ||
+            spl_context.orient_phase != SPINDLE_ORIENT_IDLE ||
+            spl_context.orient_request_pending)
+        {
+            return;
+        }
+
         spl_context.spl_event = SPINDLE_EVENT_STOP;
         spl_context.command_speed = 0.0;
         // spl_context.mcode_feedback = false;
