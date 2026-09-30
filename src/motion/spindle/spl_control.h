@@ -49,6 +49,16 @@ typedef enum
     SPINDLE_ORIENT_RELEASING /**< 已发送释放，等待驱动器实际下使能。 */
 } spindle_orient_phase_t;
 
+typedef enum
+{
+    SPINDLE_M29_IDLE = 0,
+    SPINDLE_M29_ORIENTING,
+    SPINDLE_M29_RELEASING,
+    SPINDLE_M29_SWITCHING_CSP,
+    SPINDLE_M29_READY,
+    SPINDLE_M29_ERROR
+} spindle_m29_phase_t;
+
 /** 主轴速度指令来源。G33.7=0 使用 CNC，G33.7=1 使用 PLC。 */
 typedef enum
 {
@@ -82,6 +92,9 @@ typedef struct
     /* M 代码握手状态。 */
     bool mcode_feedback; /**< 当前 M 代码/速度握手是否已经报告完成。 */
     bool m19_active; /**< 当前是否有待完成的 M19 定向握手。 */
+    bool m29_active; /**< 当前是否有待完成的 M29 握手。 */
+    spindle_m29_phase_t m29_phase;
+    bool csv_switch_pending; /**< M03/M04 请求从 CSP 安全切回 CSV。 */
     bool orient_hold_stop; /**< M19/定向完成后锁定停止，等待新的 M3/M4。 */
     bool orient_request_pending; /**< 收到定向请求但尚未提交驱动器定向命令。 */
     bool orient_release_pending; /**< 定向完成前收到释放请求，待完成后释放。 */
@@ -100,6 +113,9 @@ extern spindle_context_t spl_context;
 void spindle_control_update(void);
 
 void spl_context_init(spindle_context_t* spl_ctx);
+void spindle_request_m29(void);
+bool spindle_m29_is_ready(void);
+void spindle_complete_m29(void);
 
 #ifdef __cplusplus
 }

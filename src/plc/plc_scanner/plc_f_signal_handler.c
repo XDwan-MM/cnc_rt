@@ -390,8 +390,9 @@ static void plc_output_spl_vel_status()
 
 static void plc_output_spl_orient_status()
 {
-    // 主轴定向信号 F45.7：定向完成置高，未完成置低
-    if (spl_orient_is_done())
+    /* F45.7 is the ordinary M19 orientation-complete signal.
+     * M29 uses the dedicated NC feedback F76.3 instead. */
+    if (spl_orient_is_done() && !spl_context.m29_active)
     {
         setRegBit(REG_F, 45, 7);
     }

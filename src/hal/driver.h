@@ -95,6 +95,7 @@ hal_retcode_t Driver_Release_Orient(hal_driver_t *drv);
 void Driver_Abort_Orient(hal_driver_t *drv);
 bool Driver_Is_Orient_Done(const hal_driver_t *drv);
 bool Driver_Is_Switched_On_Disabled(const hal_driver_t *drv);
+bool Driver_Is_Ready_to_Switch_On(const hal_driver_t *drv);
 
 /*=========================================================
  * 故障复位

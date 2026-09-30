@@ -77,15 +77,6 @@ void auto_execute_mstb_cmd(){
     }
     // FIN信号 G4.3
     getRegBit(REG_G, 4, 3, &cycle_tp->mstb_cmd_data.signal_fin);
-    /* M19 必须等待主轴定向完成 F45.7，不能使用停止到达 F45.3/G4.3。 */
-    if (cycle_tp->plan_block->mst_data.m_code == M19)
-    {
-        getRegBit(REG_F, 45, 7, &cycle_tp->mstb_cmd_data.signal_fin);
-        if (spl_context.orient_phase != SPINDLE_ORIENT_DONE)
-        {
-            cycle_tp->mstb_cmd_data.signal_fin = false;
-        }
-    }
 // #ifdef DEBUG_MODE_ENABLED
 //     /* 仿真模式没有外部 PLC 将 F45.3 回送为 G4.3，使用主轴内部完成反馈。 */
 //     if (!cycle_tp->mstb_cmd_data.signal_fin &&
@@ -105,6 +96,10 @@ void auto_execute_mstb_cmd(){
             LOG(LOG_LEVEL_DEBUG, "4、接收到FIN信号, 执行下一指令"); 
             auto_mstb_fin_reset();
             auto_clear_mstb_signal();
+            if (cycle_tp->plan_block->mst_data.m_code == M29)
+            {
+                spindle_complete_m29();
+            }
             if(cycle_tp->plan_block->mst_data.m_code == M02 || cycle_tp->plan_block->mst_data.m_code == M30) {
                 // 程序运行行光标回到首行
                 setVarChanInt(0, VAR_CHAN_RUN_ROW, 0, 0);
@@ -187,7 +182,9 @@ static void auto_deal_mstb(){
             spl_context.start_request_pending = false;
             /* G70.6 上升沿由 PLC 扫描器统一转换为 SPINDLE_EVENT_ORIENT。 */
             break;
-        case M29: // 
+        case M29: // 将主轴定向，并且到CSP模式上使能
+            setRegValue8(REG_F, 10, 0x1d);
+            spindle_request_m29();
             break;
         default:
             // 判断M代码大小

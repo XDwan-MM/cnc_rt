@@ -265,6 +265,13 @@ static void task_handle_spl_event(PLC_EVENT *event_data)
     if (event_data->spindle_payload.direction == 1)
     {
         LOG(LOG_LEVEL_INFO, "处理主轴正转事件");
+        if (spl_context.m29_active ||
+            (spl_context.m29_phase != SPINDLE_M29_IDLE &&
+             spl_context.m29_phase != SPINDLE_M29_READY))
+        {
+            LOG(LOG_LEVEL_INFO, "M29进行中，忽略主轴正转事件");
+            return;
+        }
         if (spl_context.orient_phase != SPINDLE_ORIENT_IDLE ||
             spl_context.orient_request_pending ||
             spl_context.orient_release_pending)
@@ -286,6 +293,13 @@ static void task_handle_spl_event(PLC_EVENT *event_data)
     if (event_data->spindle_payload.direction == -1)
     {
         LOG(LOG_LEVEL_INFO, "处理主轴反转事件");
+        if (spl_context.m29_active ||
+            (spl_context.m29_phase != SPINDLE_M29_IDLE &&
+             spl_context.m29_phase != SPINDLE_M29_READY))
+        {
+            LOG(LOG_LEVEL_INFO, "M29进行中，忽略主轴反转事件");
+            return;
+        }
         if (spl_context.orient_phase != SPINDLE_ORIENT_IDLE ||
             spl_context.orient_request_pending ||
             spl_context.orient_release_pending)
@@ -307,6 +321,14 @@ static void task_handle_spl_event(PLC_EVENT *event_data)
     if (event_data->spindle_payload.direction == 0)
     {
         LOG(LOG_LEVEL_INFO, "处理主轴停止事件");
+
+        if (spl_context.m29_active ||
+            (spl_context.m29_phase != SPINDLE_M29_IDLE &&
+             spl_context.m29_phase != SPINDLE_M29_READY))
+        {
+            LOG(LOG_LEVEL_INFO, "M29进行中，忽略普通主轴停止事件");
+            return;
+        }
 
         /*
          * M19 通常会同时改变 G29.6 和 G70.6。定向上升沿可能先到达，

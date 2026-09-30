@@ -123,6 +123,11 @@ typedef struct
 
     drv_orient_state_t orient_state;
     bool orient_command_logged;
+    bool orient_target_reach_cleared;
+    uint32_t orient_clear_wait_cycles;
+    uint32_t orient_complete_wait_cycles;
+    bool orient_status_log_initialized;
+    uint16_t orient_last_status_word;
 
     /*-----------------------------------------------------
      * 工作模式
