@@ -62,7 +62,7 @@ bool tapreturn_page_direction_matches(int m_value);
 bool tapreturn_page_params_match(double pitch_mm, int m_value);   /*!< 上面两条都过 */
 bool tapreturn_page_speed_ok(int page_speed);
 void tapreturn_clear_alarms(void);
-
+double cal_rigid_pos_sync_error();
 
 /*! }*/
 

@@ -100,6 +100,7 @@ typedef struct
     double cmd_vel;         // 通道指令合成速度 
     double cmd_acc;         // 通道指令合成加速度 
     double cmd_jk;          // 通道指令合成加加速度
+    double rigid_pos_error; // 攻丝同步误差
     // 重启生效
     bool ex_dec_enable;     // 是否开启外部减速功能
     // 复位生效
@@ -174,6 +175,7 @@ typedef struct
     double mac_act_pos;                 // 机床实际位置 = fb_pos_no_comp
     double motor_cmd_pos;               // 驱动器指令位置（带补偿）
     double motor_act_pos;               // 驱动器反馈位置（带补偿）
+    double motor_act_pos_pre;           // 驱动器反馈位置（上一插补）
     double fb_pos_no_comp;              // 反馈位置（去除补偿）
     double pitch_comp_val;              // 当前位置螺距误差补偿值 (单位:mm)
     double backlash_comp_val;           // 当前位置反向间隙补偿值 (单位:mm)

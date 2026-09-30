@@ -307,7 +307,11 @@ static void check_for_fault()
 
 static void read_from_hal()
 {
-// 读取实际位置
+    // 记录上周期
+    rt_data->axis_data[AXIS_X].wcs_cmd_pos_pre = rt_data->axis_data[AXIS_X].motor_act_pos;
+    rt_data->axis_data[AXIS_Y].wcs_cmd_pos_pre = rt_data->axis_data[AXIS_Y].motor_act_pos;
+    rt_data->axis_data[AXIS_Z].wcs_cmd_pos_pre = rt_data->axis_data[AXIS_Z].motor_act_pos;
+    // 读取实际位置
 #ifdef DEBUG_MODE_ENABLED
     rt_data->axis_data[AXIS_X].motor_act_pos = rt_data->axis_data[AXIS_X].motor_cmd_pos;
     rt_data->axis_data[AXIS_Y].motor_act_pos = rt_data->axis_data[AXIS_Y].motor_cmd_pos;
@@ -551,6 +555,7 @@ static void rebuild_axis_positions_from_feedback()
     for (int i = 0; i < SYS_AXES_NUM; i++)
     {
         rt_data->axis_data[i].motor_cmd_pos = rt_data->axis_data[i].motor_act_pos;
+        rt_data->axis_data[i].motor_act_pos_pre = rt_data->axis_data[i].motor_act_pos;
         double uncompensated_pos;
         // printf("total_comp_cal %f\n", rt_data->axis_data[i].total_comp_cal);
         uncompensated_pos = rt_data->axis_data[i].motor_act_pos - rt_data->axis_data[i].total_comp_cal;
