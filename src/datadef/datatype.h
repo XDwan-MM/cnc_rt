@@ -129,6 +129,14 @@ typedef enum {
     PROBE,          // 探针
 } INTERP_TYPE;
 
+typedef enum {
+    NONE = 0,
+    UNIF_ARC,
+    UNIF_BESIER,
+    UNIF_HERMIT,
+    UNIF_NURBS,          
+} UNIF_TYPE;
+
 // NC 运行模式
 typedef enum {
     MODE_EDIT = 0,   // 编辑
