@@ -177,16 +177,25 @@ int hmi_tapret_build_program(const HmiRequestTapRetParams *tapret, char *out, in
 
 
     if (!tapreturn_ready()) {
-        setAlarm(ALARM_PS, ALARM_WARNING, 3003);
+        setAlarm(ALARM_PS, ALARM_WARNING, TAPRET_ALARM_NO_RECORD);
         LOG(LOG_LEVEL_WARN, "攻丝回退被拒：当前不可回退（无记录 / 刀不在孔内 / 位置基准未建立）");
         return 0;
     }
 
-    if (!tapreturn_page_params_match(tapret->pitchMm, tapret->mValue)
-            || !tapreturn_page_speed_ok(tapret->sValue)) {
+    if (!tapreturn_page_pitch_matches(tapret->pitchMm)) {
+        setAlarm(ALARM_PS, ALARM_WARNING, TAPRET_ALARM_PAGE_PITCH);
         return HMI_TAPRET_REJECT_PARAM;
     }
-
+    if(!tapreturn_page_direction_matches(tapret->mValue))
+    {
+        setAlarm(ALARM_PS, ALARM_WARNING, TAPRET_ALARM_PAGE_DIR);
+        return HMI_TAPRET_REJECT_PARAM;
+    }
+    if(!tapreturn_page_speed_ok(tapret->sValue))
+    {
+        setAlarm(ALARM_PS, ALARM_WARNING, TAPRET_ALARM_PAGE_SPEED);
+        return HMI_TAPRET_REJECT_PARAM;
+    }
     // ③ 生成（行式与记录自洽校验都在模块里）
     char buf[HMI_TAPRET_PROGRAM_BUF_LEN];
     if (tapreturn_generate_with_speed(tapret->sValue, buf, (int)sizeof(buf))
@@ -198,5 +207,6 @@ int hmi_tapret_build_program(const HmiRequestTapRetParams *tapret, char *out, in
     if (len <= 0 || len >= outLen) {
         return 0;   // 调用方缓冲不足（与 hmi_mst_build_program 同一约定）
     }
+    tapreturn_clear_alarms();
     return len;
 }
