@@ -183,9 +183,7 @@ static GNC_RES parser_take_hmi_request(char *buf, int buf_len, bool *handled)
             }
             break;
         case HMI_REQUEST_ACTION_TAP_RETRACT:
-            // 页面给的螺距/转向只作**交叉校验**（真正交给译码器的是记录，见
-            // tapreturn_refresh_return_param）—— 不一致就拒绝，且**不静默改用记录值**：
-            // 页面上输了什么就按什么判，悄悄换掉会让现场以为参数没生效。
+   
             len = hmi_tapret_build_program(&hmiSnap.params.tapret, buf, buf_len);
             if (len == HMI_TAPRET_REJECT_PARAM) {
                 hmi_request_ack(hmiSnap.seq, HMI_REQUEST_STATE_REJECTED,
@@ -577,7 +575,7 @@ static GNC_RES parser_handle_gcode(pmc_data* motion_data, NcItpState *itp_state,
     // if(plan_block.type == CIRCLE_CW || plan_block.type == CIRCLE_CCW ){
     //     LOG(LOG_LEVEL_DEBUG, "center pos %f %f %f no %d", plan_block.circular_data.center_pos.x, plan_block.circular_data.center_pos.y, plan_block.circular_data.center_pos.z, plan_block.line_number);  
     // }
-    // LOG(LOG_LEVEL_DEBUG, "no %d end pos %f %f %f mode %d type:%d fv %f", plan_block.line_number, motion_data->position.x, motion_data->position.y, motion_data->position.z, plan_block.mode, plan_block.type, plan_block.feed_vel);
+    LOG(LOG_LEVEL_DEBUG, "no %d end pos %f %f %f mode %d type:%d fv %f", plan_block.line_number, motion_data->position.x, motion_data->position.y, motion_data->position.z, plan_block.mode, plan_block.type, plan_block.feed_vel);
     // ======= 测试 ===========
     queue_push(parser_queue, &plan_block);
     if(plan_block.mode == pmc_mode::PMC_MODE_STOPSKIP) return GNC_PARSER_WAIT;

@@ -171,6 +171,8 @@ int hmi_mst_build_program(const HmiRequestMstParams *mst, char *out, int outLen)
  * --------------------------------------------------------------------------- */
 int hmi_tapret_build_program(const HmiRequestTapRetParams *tapret, char *out, int outLen)
 {
+    tapreturn_clear_alarms();
+
     if (tapret == NULL || out == NULL || outLen <= 0) {
         return 0;
     }
@@ -207,6 +209,5 @@ int hmi_tapret_build_program(const HmiRequestTapRetParams *tapret, char *out, in
     if (len <= 0 || len >= outLen) {
         return 0;   // 调用方缓冲不足（与 hmi_mst_build_program 同一约定）
     }
-    tapreturn_clear_alarms();
     return len;
 }

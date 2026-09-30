@@ -75,7 +75,8 @@ void tapreturn_data_reset(void)
 
 static bool in_hole_by_feedback(double fb_z, double r_plane_z)
 {
-    return fb_z < r_plane_z;
+    const double tol=rt_data->axis_data[AXIS_Z].pos_tol;
+    return fb_z < (r_plane_z-tol);
 }
 
 
@@ -83,7 +84,7 @@ static bool in_hole_by_feedback(double fb_z, double r_plane_z)
 
 static bool block_has_no_type(const PLAN_BLOCK *block)
 {
-    return block->mode == PMC_MODE_M_CMD || block->mode == PMC_MODE_NULL;
+    return block->mode == PMC_MODE_M_CMD || block->mode == PMC_MODE_NULL || block->mode == PMC_MODE_PAUSE ;
 }
 
 /// 该块是不是刚性攻丝块（G33.1）。
