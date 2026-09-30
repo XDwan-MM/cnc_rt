@@ -117,6 +117,16 @@ typedef struct
     int lookahead_num;      // 速度规划前瞻段数
     double path_tolerance;  // 轨迹轮廓允差
     int corner_dec_factor;  // 拐角降速比例因子
+    double l_min_thre;
+    double l_theta_thre;
+    double theta_thre;
+    double kappa_thre;
+    double seg_theta_thre;
+    double kratio;
+    double nurbs_fiterror;
+    double nurbs_sagittaerror;
+    int nurbs_enable;       // 开启nurbs拟合
+    UNIF_TYPE unif_type;    // 一致性处理方式
 } RT_CHAN;
 
 // 目前仅轨迹线程使用
