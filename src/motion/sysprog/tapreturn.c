@@ -12,6 +12,8 @@
 #include <tapreturnapi.h>
 #include <stdint.h>
 #include <hmirequestdata.h>
+#include "alarmapi.h"
+
 static TAP_RETURN_DATA tap_return_data;
 
 
@@ -224,31 +226,47 @@ void tapreturn_refresh_return_param(void)
 
 #define TAPRET_PITCH_TOL 1e-4
 
-bool tapreturn_page_params_match(double pitch_mm, int m_value)
+bool tapreturn_page_pitch_matches(double pitch_mm)
 {
-    // 与"能不能退"同一道门：没有记录就没有可比的对象（调用方应先过 tapreturn_ready）。
     if (!tapreturn_ready()) return false;
-
-    // 转向：页面给的是**回退段**的转向，记录里存的是**攻进方向**，回退恒为它的反向
-    // 记录 M3 正转攻进 → 回退反转 → 页面应为 M4；反之 M4 攻进 → 回退 M3。
-    const int expect_m = (tap_return_data.reverse != 0) ? 3 : 4;
-    if (m_value != expect_m)
-    {
-        LOG(LOG_LEVEL_ERR, "页面转向 M%d 与记录不符：本次攻进为 %s，回退应为 M%d，拒绝回退",
-            m_value, (tap_return_data.reverse != 0) ? "M4(反转)" : "M3(正转)", expect_m);
-        return false;
-    }
-
     const double diff = pitch_mm - tap_return_data.screw_offset;
     if (!(diff > -TAPRET_PITCH_TOL && diff < TAPRET_PITCH_TOL))
     {
-        LOG(LOG_LEVEL_ERR, "页面螺距 %.4f 与记录 %.4f 不符，拒绝回退（回退必须走记录的螺距）",
+        LOG(LOG_LEVEL_WARN, "页面螺距 %.4f 与记录 %.4f 不符，拒绝回退（回退必须走记录的螺距）",
             pitch_mm, tap_return_data.screw_offset);
         return false;
     }
     return true;
 }
 
+bool tapreturn_page_direction_matches(int m_value)
+{
+    if (!tapreturn_ready()) return false;
+    const int expect_m = (tap_return_data.reverse != 0) ? 3 : 4;
+    if (m_value != expect_m)
+    {
+        LOG(LOG_LEVEL_WARN, "页面转向 M%d 与记录不符：本次攻进为 %s，回退应为 M%d，拒绝回退",
+            m_value, (tap_return_data.reverse != 0) ? "M4(反转)" : "M3(正转)", expect_m);
+        return false;
+    }
+    return true;
+}
+
+bool tapreturn_page_params_match(double pitch_mm, int m_value)
+{
+    // "两项都对"的便捷判据（两条各自会打日志；这里只是不让调用方写两遍）
+    return tapreturn_page_pitch_matches(pitch_mm)
+           && tapreturn_page_direction_matches(m_value);
+}
+
+void tapreturn_clear_alarms(void)
+{
+    // 号与级别必须与上报时一致，否则清不掉（报警按 (type, level, id) 记）
+    delAlarm(ALARM_PS, ALARM_WARNING, TAPRET_ALARM_NO_RECORD);
+    delAlarm(ALARM_PS, ALARM_WARNING, TAPRET_ALARM_PAGE_PITCH);
+    delAlarm(ALARM_PS, ALARM_WARNING, TAPRET_ALARM_PAGE_SPEED);
+    delAlarm(ALARM_PS, ALARM_WARNING, TAPRET_ALARM_PAGE_DIR);
+}
 static int tapreturn_speed_ceiling(void)
 {
     const double max_spdl = rt_data->axis_data[AXIS_SP].spdl_max_speed;
@@ -270,15 +288,15 @@ bool tapreturn_page_speed_ok(int page_speed)
 {
     if (page_speed <= 0)
     {
-        LOG(LOG_LEVEL_ERR, "页面转速 %d 非法（必须为正），拒绝回退", page_speed);
+        LOG(LOG_LEVEL_WARN, "页面转速 %d 非法（必须为正），拒绝回退", page_speed);
         return false;
     }
     const int ceiling = tapreturn_speed_ceiling();
     if (page_speed > ceiling)
     {
         // ceiling == 0 表示"没有可比的量"（参数没配 + 没记录），不是"高于 0"
-        if (ceiling > 0) LOG(LOG_LEVEL_ERR, "页面转速 %d 高于主轴最大转速 %d，拒绝回退", page_speed, ceiling);
-        else             LOG(LOG_LEVEL_ERR, "页面转速 %d 无法校验（没有上限可比），拒绝回退", page_speed);
+        if (ceiling > 0) LOG(LOG_LEVEL_WARN, "页面转速 %d 高于主轴最大转速 %d，拒绝回退", page_speed, ceiling);
+        else             LOG(LOG_LEVEL_WARN, "页面转速 %d 无法校验（没有上限可比），拒绝回退", page_speed);
         return false;
     }
     return true;
@@ -302,7 +320,7 @@ static GNC_RES tapreturn_build_line(int speed, char *buf, int buf_len)
         tap_return_data.tap_start_z <= -9000.0 ||     // 起点Z异常（未有效记录）
         tap_return_data.tap_start_z >= 9000.0)
     {
-        LOG(LOG_LEVEL_ERR, "攻丝回退参数异常: 螺距%.4f 转速%d 起点Z%.4f，拒绝回退",
+        LOG(LOG_LEVEL_WARN, "攻丝回退参数异常: 螺距%.4f 转速%d 起点Z%.4f，拒绝回退",
             tap_return_data.screw_offset, speed, tap_return_data.tap_start_z);
         return GNC_OPERATOR_ERROR;
     }

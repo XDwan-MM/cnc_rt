@@ -15,6 +15,11 @@ extern "C"
 {
 #endif
 
+#define TAPRET_ALARM_NO_RECORD     248   /* 对应译码器NCITPErrorType::RigidTapNoRecord */
+#define TAPRET_ALARM_PAGE_PITCH    249   /* NCITPErrorType::RigidTapPagePitchMismatch */
+#define TAPRET_ALARM_PAGE_SPEED    250   /* NCITPErrorType::RigidTapPageSpeedInvalid */
+#define TAPRET_ALARM_PAGE_DIR      251   /* NCITPErrorType::RigidTapPageDirectionMismatch */
+
 /*! 刚性攻丝返回记录状态 —— 这就是**相位序列**，没有额外的 valid 位。
  *
  *    IDLE       无记录
@@ -26,6 +31,7 @@ extern "C"
  *
  */
 
+ 
 void tapreturn_data_restore(void);
 
 /// 丢弃攻丝状态。只在明确丢弃处调用；复位路径严禁调用
@@ -51,7 +57,11 @@ void rt_clear_rigid_return_param(void);
 
 GNC_RES tapreturn_generate(char *buf, int buf_len);
 GNC_RES tapreturn_generate_with_speed(int speed, char *buf, int buf_len);
-bool tapreturn_page_params_match(double pitch_mm, int m_value);
+bool tapreturn_page_pitch_matches(double pitch_mm);
+bool tapreturn_page_direction_matches(int m_value);
+bool tapreturn_page_params_match(double pitch_mm, int m_value);   /*!< 上面两条都过 */
+bool tapreturn_page_speed_ok(int page_speed);
+void tapreturn_clear_alarms(void);
 
 
 /*! }*/

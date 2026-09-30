@@ -445,11 +445,13 @@ static void auto_check_event(){
                     if(!sysprog_arm(SYS_PROG_RIGID_RETURN))
                     {
                         rt_data->sys_state[SYS_IS_RIGID_RETURN_FINISH] = 1;
+                        setAlarm(ALARM_PS, ALARM_WARNING, TAPRET_ALARM_NO_RECORD);
                         LOG(LOG_LEVEL_WARN, "攻丝回退条件不满足（无攻丝记录或不在孔内）");
                         break;
                     }    
                     // 开始攻丝回退
                     if(check_is_program_rerun()) break;
+                    tapreturn_clear_alarms();
                     auto_start_run();
                     cycle_tp->exec_state = EXEC_RUNNING;
                     cycle_tp->running_stage = PROGRAM_START;
