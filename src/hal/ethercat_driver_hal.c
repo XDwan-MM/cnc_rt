@@ -118,7 +118,7 @@ hal_retcode_t Ethercat_Driver_Write_Controlword(hal_driver_t *drv, uint16_t cont
         return HAL_DRIVER_ERR_INVALID_PARAM;
     }
 
-    int ret = GM_RxPdoEntry_Write(drv->pdo.Control_word, (uint32_t)control_word);
+    int ret = GM_RxPdoEntry_Write(drv->pdo.Control_word, control_word);
 
     if (ret < 0)
     {
@@ -142,7 +142,7 @@ hal_retcode_t Ethercat_Driver_Write_Mode(hal_driver_t *drv, drv_mode_t mode)
         return HAL_DRIVER_ERR_INVALID_PARAM;
     }
 
-    uint8_t cia_mode;
+    int16_t cia_mode;
 
     switch (mode)
     {
@@ -179,7 +179,7 @@ hal_retcode_t Ethercat_Driver_Write_Mode(hal_driver_t *drv, drv_mode_t mode)
         return HAL_DRIVER_ERR_INVALID_PARAM;
     }
 
-    int ret = GM_RxPdoEntry_Write(drv->pdo.Modes_of_operation, (uint32_t)cia_mode);
+    int ret = GM_RxPdoEntry_Write(drv->pdo.Modes_of_operation, (int16_t)cia_mode);
 
     if (ret < 0)
     {
@@ -203,7 +203,7 @@ hal_retcode_t Ethercat_Driver_Read_Actual_Mode(hal_driver_t *drv)
         return HAL_DRIVER_ERR_INVALID_PARAM;
     }
 
-    uint16_t mode;
+    int16_t mode;
 
     int ret = GM_TxPdoEntry_Read(drv->pdo.act_mode, &mode, sizeof(mode));
 
@@ -262,7 +262,9 @@ hal_retcode_t Ethercat_Driver_Write_Target_Position(hal_driver_t *drv, int32_t p
         return HAL_DRIVER_ERR_INVALID_PARAM;
     }
 
-    int ret = GM_RxPdoEntry_Write(drv->pdo.target_pos, (uint32_t)position);
+    // todo wcf测试
+    // int ret = GM_RxPdoEntry_Write(drv->pdo.target_pos, (uint32_t)position);
+    int ret = GM_RxPdoEntry_Write(drv->pdo.target_pos, position);
 
     if (ret < 0)
     {
@@ -284,7 +286,9 @@ hal_retcode_t Ethercat_Driver_Write_Target_Velocity(hal_driver_t *drv, int32_t v
         return HAL_DRIVER_ERR_INVALID_PARAM;
     }
 
-    int ret = GM_RxPdoEntry_Write(drv->pdo.target_speed, (uint32_t)velocity);
+    // todo wcf测试
+    // int ret = GM_RxPdoEntry_Write(drv->pdo.target_speed, (uint32_t)velocity);
+    int ret = GM_RxPdoEntry_Write(drv->pdo.target_speed, velocity);
 
     if (ret < 0)
     {

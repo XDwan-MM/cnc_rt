@@ -72,6 +72,9 @@ hal_retcode_t Driver_Request_Mode(hal_driver_t *drv, drv_mode_t mode);
 hal_retcode_t Driver_Switch_Mode(hal_driver_t *drv, drv_mode_t mode);
 
 hal_retcode_t Driver_Request_Mode_Switch(hal_driver_t *drv, drv_mode_t mode);
+/* 在 Ready-to-Switch-On/下使能状态下切换模式，不重新请求 Operation Enabled。 */
+hal_retcode_t Driver_Switch_Mode_While_Disabled(hal_driver_t *drv,
+                                                 drv_mode_t mode);
 bool Driver_Is_Mode_Switching(const hal_driver_t *drv);
 bool Driver_Is_Mode_Switch_Done(const hal_driver_t *drv);
 hal_retcode_t Driver_Get_Mode_Switch_Result(const hal_driver_t *drv);

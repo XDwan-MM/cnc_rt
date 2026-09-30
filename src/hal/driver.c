@@ -108,10 +108,53 @@ hal_retcode_t Driver_Request_Mode_Switch(hal_driver_t *drv, drv_mode_t mode)
 
     drv->mode_switch_source = drv->act_mode;
     drv->mode_switch_target = mode;
+    /* Lock the source-mode setpoint before disabling the drive.  In CSP,
+     * continuously replacing target_pos with actual_pos would make the
+     * position command follow a running spindle and defeat deceleration. */
+    if (drv->act_mode == DRV_MODE_CSP)
+    {
+        drv->mode_switch_position = drv->target_pos;
+    }
     drv->mode_switch_result = HAL_DRIVER_SUCCESS;
     drv->mode_switch_cycles = 0;
     drv->mode_switch_state = DRV_MODE_SWITCH_DECELERATING;
     drv->target_state = DRV_STATE_READY_TO_SWITCHED_ON;
+    return HAL_DRIVER_SUCCESS;
+}
+
+hal_retcode_t Driver_Switch_Mode_While_Disabled(hal_driver_t *drv,
+                                                 drv_mode_t mode)
+{
+    if (drv == NULL || !drv->initialized ||
+        (mode != DRV_MODE_CSP && mode != DRV_MODE_CSV))
+    {
+        return HAL_DRIVER_ERR_INVALID_PARAM;
+    }
+
+    if (!Driver_Is_State(drv->status_word, 0x006FU, 0x0021U) &&
+        !Driver_Is_State(drv->status_word, 0x004FU, 0x0040U))
+    {
+        return HAL_DRIVER_ERROR;
+    }
+
+    if (Ethercat_Driver_Write_Mode(drv, mode) != HAL_DRIVER_SUCCESS)
+    {
+        return HAL_DRIVER_ERROR;
+    }
+
+    drv->req_mode = mode;
+    drv->target_state = DRV_STATE_READY_TO_SWITCHED_ON;
+    drv->state = DRV_STATE_READY_TO_SWITCHED_ON;
+    drv->target_vel = 0;
+    drv->mode_switch_source = drv->act_mode;
+    drv->mode_switch_target = mode;
+    drv->mode_switch_state = DRV_MODE_SWITCH_DONE;
+    drv->mode_switch_result = HAL_DRIVER_SUCCESS;
+    drv->mode_switch_cycles = 0U;
+    LOG(LOG_LEVEL_INFO,
+        "驱动器已下使能，直接切换工作模式：axis=%u mode=%d "
+        "status_word=0x%04X",
+        drv->axis_id, mode, drv->status_word);
     return HAL_DRIVER_SUCCESS;
 }
 
@@ -153,12 +196,37 @@ static hal_retcode_t Driver_Process_Mode_Switch(hal_driver_t *drv)
     {
     case DRV_MODE_SWITCH_DECELERATING:
         if (drv->mode_switch_source == DRV_MODE_CSV)
+        {
             drv->target_vel = 0;
+            /*
+             * Explicitly queue 60FF=0 before leaving CSV. The normal HAL PDO
+             * writer suppresses target writes once the mode switch reaches
+             * WAIT_READY, so merely clearing target_vel here is insufficient
+             * when actual_vel is already within the stop threshold.
+             */
+            if (Ethercat_Driver_Write_Target_Velocity(drv, 0) !=
+                HAL_DRIVER_SUCCESS)
+            {
+                drv->mode_switch_state = DRV_MODE_SWITCH_ERROR;
+                drv->mode_switch_result = HAL_DRIVER_ERROR;
+                return HAL_DRIVER_ERROR;
+            }
+        }
         else
-            drv->target_pos = drv->actual_pos;
+            drv->target_pos = drv->mode_switch_position;
         if (abs(drv->actual_vel) > DRIVER_MODE_SWITCH_VEL_EPSILON)
             return HAL_DRIVER_SUCCESS;
-        drv->mode_switch_position = drv->actual_pos;
+        if (drv->mode_switch_source == DRV_MODE_CSV)
+        {
+            LOG(LOG_LEVEL_INFO,
+                "CSV零速度目标已写入，允许下使能切换：axis=%u "
+                "actual_vel=%d status_word=0x%04X",
+                drv->axis_id, drv->actual_vel, drv->status_word);
+        }
+        if (drv->mode_switch_source == DRV_MODE_CSV)
+        {
+            drv->mode_switch_position = drv->actual_pos;
+        }
         drv->mode_switch_state = DRV_MODE_SWITCH_WAIT_READY;
         drv->mode_switch_cycles = 0;
         /* fall through */
@@ -216,9 +284,40 @@ static hal_retcode_t Driver_Process_Mode_Switch(hal_driver_t *drv)
     case DRV_MODE_SWITCH_PREPARE_TARGET:
         drv->state = DRV_STATE_SWITCHED_ON;
         if (drv->mode_switch_target == DRV_MODE_CSP)
+        {
             drv->target_pos = drv->mode_switch_position;
+            /*
+             * Load the fixed CSP target while the drive is still disabled.
+             * Hal_Driver_Update intentionally suppresses target PDO writes
+             * during mode switching, so relying on its normal cyclic write
+             * would enable CSP one or more cycles before 607A is updated.
+             */
+            if (Ethercat_Driver_Write_Target_Position(
+                    drv, drv->mode_switch_position) != HAL_DRIVER_SUCCESS)
+            {
+                drv->mode_switch_state = DRV_MODE_SWITCH_ERROR;
+                drv->mode_switch_result = HAL_DRIVER_ERROR;
+                return HAL_DRIVER_ERROR;
+            }
+            LOG(LOG_LEVEL_INFO,
+                "驱动器下使能期间已预装CSP目标位置：axis=%u target_pos=%d "
+                "actual_pos=%d status_word=0x%04X",
+                drv->axis_id, drv->target_pos, drv->actual_pos,
+                drv->status_word);
+        }
         else
+        {
             drv->target_vel = 0;
+            /* HAL suppresses normal target PDO writes while switching.  Make
+             * the zero CSV command explicit before changing 6060/enabling. */
+            if (Ethercat_Driver_Write_Target_Velocity(drv, 0) !=
+                HAL_DRIVER_SUCCESS)
+            {
+                drv->mode_switch_state = DRV_MODE_SWITCH_ERROR;
+                drv->mode_switch_result = HAL_DRIVER_ERROR;
+                return HAL_DRIVER_ERROR;
+            }
+        }
         if (Ethercat_Driver_Write_Mode(drv, drv->mode_switch_target) != HAL_DRIVER_SUCCESS)
             return HAL_DRIVER_ERROR;
         drv->mode_switch_state = DRV_MODE_SWITCH_WAIT_MODE;
