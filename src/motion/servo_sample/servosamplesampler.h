@@ -33,6 +33,9 @@ private:
     bool machineReady(const CncServoSampleConfig& config) const;
     bool isCompositeConfig(const CncServoSampleConfig& config) const;
     bool isExternalMotionConfig(const CncServoSampleConfig& config) const;
+    bool isRigidTapConfig(const CncServoSampleConfig& config) const;
+    bool isSpindleSignal(uint32_t signalId) const;
+    bool isCircleMotionActive() const;
     bool programActive() const;
     bool programFinished() const;
     double actualVelocityMmPerMin(double actualPosition);
@@ -49,12 +52,24 @@ private:
     bool _resetPending = false;
     bool _cycleStartPending = false;
     bool _programObserved = false;
+    bool _circleCaptureStarted = false;
+    bool _tapMotionActive = false;
+    uint32_t _circleArcBlockCount = 0;
+    int32_t _circleArcLineNumber = -1;
     bool _hasLastActualPosition = false;
     double _lastActualPosition = 0.0;
     double _actualVelocityMmPerMin = 0.0;
     bool _hasLastCompositePosition = false;
     double _lastCompositePosition[3] = {0.0, 0.0, 0.0};
     double _actualCompositeVelocityMmPerMin = 0.0;
+    double _tapSyncIntegralMm = 0.0;
+    double _tapSyncErrorSumMm = 0.0;
+    double _tapSyncMinimumMm = 0.0;
+    double _tapSyncMaximumMm = 0.0;
+    uint32_t _tapSyncSampleCount = 0;
+    bool _hasLastTapFeedback = false;
+    double _lastTapSpindleAngle = 0.0;
+    double _lastTapAxisPosition = 0.0;
 };
 
 #endif
