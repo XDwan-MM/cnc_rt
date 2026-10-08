@@ -470,7 +470,10 @@ bool Driver_Is_Switched_On_Disabled(const hal_driver_t *drv)
 bool Driver_Is_Ready_to_Switch_On(const hal_driver_t *drv)
 {
     return drv != NULL &&
-           (drv->status_word & 0x0021U) == 0x0021U;
+           /* Include the state bits that distinguish Ready-to-Switch-On
+            * (0x21) from Switched-On/Operation-Enabled (0x23/0x27).
+            * Checking only 0x21 incorrectly classified 0x1737 as ready. */
+           (drv->status_word & 0x006FU) == 0x0021U;
 }
 
 /*=========================================================

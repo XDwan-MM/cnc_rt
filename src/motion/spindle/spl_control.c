@@ -196,6 +196,9 @@ void spl_context_init(spindle_context_t* spl_ctx)
 
 void spindle_request_m29(void)
 {
+    /* M29 本身是复位后的新主轴操作请求，允许重新取得驱动器使能。 */
+    spl_context.reset_requires_start = false;
+    spl_context.start_request_pending = true;
     spl_context.m29_active = true;
     spl_context.m29_phase = SPINDLE_M29_ORIENTING;
     spl_context.m19_active = false;
@@ -296,6 +299,17 @@ static void spindle_process_event(spindle_context_t *context)
     switch (context->spl_event)
     {
     case SPINDLE_EVENT_STOP:
+        /* G29.6 的停止边沿可能紧跟 G70.6 定向上升沿到达。定向请求
+         * 已经接管主轴后，普通 STOP 不能撤销 Operation Enabled，否则
+         * driver.c 永远等不到 0x27，最终表现为定向超时。释放定向或
+         * 复位事件使用专用 RELEASE_ORIENT 路径。 */
+        if (context->orient_phase != SPINDLE_ORIENT_IDLE ||
+            context->orient_request_pending ||
+            spindle_driver.orient_state != DRV_ORIENT_IDLE ||
+            context->spl_event == SPINDLE_EVENT_ORIENT)
+        {
+            break;
+        }
         if (context->m29_phase == SPINDLE_M29_READY)
         {
             context->m29_active = false;
@@ -334,9 +348,20 @@ static void spindle_process_event(spindle_context_t *context)
          * 完成定位。因此这里立即提交定向请求，不等待软件速度规划器
          * 归零；否则高速主轴可能永远等不到本地“零速”条件。
          */
+        /* 显式 M19/M29 定向请求可以解除复位后的“等待新启动”锁。 */
+        context->reset_requires_start = false;
+        context->start_request_pending = true;
         context->orient_request_pending = false;
         context->orient_release_pending = false;
-        spindle_handle_stop(context);
+        /* M19 must first restore Operation Enabled after a reset.  Calling
+         * spindle_handle_stop() here can request CSP->CSV and overwrite the
+         * orient request with target_state=READY_TO_SWITCH_ON. */
+        context->spl_state = SPINDLE_STOP;
+        context->vel_planner.enable = false;
+        context->vel_planner.target_vel = 0.0;
+        spindle_driver.target_vel = 0;
+        Hal_Driver_Set_Target_Vel(&spindle_driver, 0);
+        Driver_Enable(&spindle_driver);
         if (spl_orient_is_done())
         {
             /* 允许重复执行 M19：先清除上一次完成状态再重新请求。 */
@@ -1428,7 +1453,8 @@ static void spindle_log_m29_csp_trace(void)
 
     /* 目标位置变化立即记录；稳定保持时每 100 ms 记录一次，避免实时
      * 周期日志淹没现场，同时保留判断“目标不变但实际仍在运动”的证据。 */
-    if (target_changed || (trace_cycles % 100U) == 0U)
+    // if (target_changed || (trace_cycles % 100U) == 0U)
+    if (target_changed)
     {
         LOG(LOG_LEVEL_INFO,
             "M29 CSP跟踪：target_pos=%d target_vel=%d actual_pos=%d actual_vel=%d "
