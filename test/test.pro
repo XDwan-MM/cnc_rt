@@ -63,11 +63,13 @@ HEADERS += \
     ../src/datadef/plan_queue.h \
     ../src/datadef/rt_data.h \
     ../src/datadef/record_queue.h \
-    ../src/hal/hal_driver.h \
+    ../src/hal/driver_hal.h \
+    ../src/hal/driver.h \
+    ../src/hal/ethercat_driver_hal.h \
     ../src/hal/hal_io.h \
     ../src/hal/egear_ratio.h \
     ../src/master/master_sim.h \
-    ../src/master/master.h \
+    ../src/master/master_wcf.h \
     ../src/motion/auto/auto.h \
     ../src/motion/auto/trajplan/auto_gcode.h \
     ../src/motion/auto/trajplan/auto_mst.h \
@@ -75,6 +77,7 @@ HEADERS += \
     ../src/motion/auto/pathplan/parser.h \
     ../src/motion/auto/pathplan/pathplan.h \
     ../src/motion/spindle/spl_control.h \
+    ../src/motion/spindle/spl_pos_planner.h \
     ../src/motion/emcmot.h \
     ../src/motion/manual/handwheel.h \
     ../src/motion/manual/ref.h \
@@ -116,11 +119,13 @@ SOURCES += \
     ../src/datadef/plan_queue.c \
     ../src/datadef/rt_data.c \
     ../src/datadef/record_queue.c \
-    ../src/hal/hal_driver.c \
+    ../src/hal/driver_hal.c \
+    ../src/hal/driver.c \
+    ../src/hal/ethercat_driver_hal.c \
     ../src/hal/hal_io.c \
     ../src/hal/egear_ratio.c \
     ../src/master/master_sim.c \
-    ../src/master/master.c \
+    ../src/master/master_wcf.c \
     ../src/motion/auto/auto.c \
     ../src/motion/auto/trajplan/auto_gcode.c \
     ../src/motion/auto/trajplan/auto_mst.c \
@@ -128,6 +133,7 @@ SOURCES += \
     ../src/motion/auto/pathplan/parser.cpp \
     ../src/motion/auto/pathplan/pathplan.c \
     ../src/motion/spindle/spl_control.c \
+    ../src/motion/spindle/spl_pos_planner.c \
     ../src/motion/emcmot.cpp \
     ../src/motion/manual/handwheel.c \
     ../src/motion/manual/ref.c \

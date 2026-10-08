@@ -21,7 +21,7 @@ int update_pos_flag = 0;                // 理论位置读取驱动器位置
 int rc = 0;
 PdoWarn PdoWarnInfo; //pdo警告信息结构体
 int slavernum = 0;
-uint16_t* statis;
+uint16_t* status;
 uint32_t* pos;
 uint32_t* pos_cmd;
 uint16_t* error_code;

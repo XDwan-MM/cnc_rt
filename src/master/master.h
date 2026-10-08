@@ -20,13 +20,7 @@ void Check_Driver_Error();
 // 关闭主站
 int Master_Close();
 
-void driver_set_speed_mode();
-void driver_set_pos_mode();
-void driver_set_state_on();
-void driver_set_state_off();
-
 #ifdef __cplusplus
 }
 #endif
 #endif // MASTER_H
-

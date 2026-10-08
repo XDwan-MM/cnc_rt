@@ -1,7 +1,8 @@
 #include <stdio.h>
 #include <cstdio>
 #include <cerrno>
-#include "hal_driver.h"
+#include "driver_hal.h"
+#include "driver.h"
 #include "hal_io.h"
 #include "main_demo.h"
 #include "shmapi.h"
@@ -15,12 +16,13 @@
 #include "parser.h"
 #include <hmisysapi.h>
 #include "stored_stroke_check.h"
-#include "master.h"
+#include "master_wcf.h"
 #include "log.h"
 #include <QFile>
 #include <QTextStream>
 #include "sysapi.h"
 #include <alarmapi.h>
+#include "spl_control.h"
 
 static char version[64];
 static int sys_start_rt = 0;
@@ -30,16 +32,6 @@ static int sys_close_rt = 0;
 void sigint_handler([[maybe_unused]] int sig) {
     RT_LOG(INFO, "收到 Ctrl + C 按键信号");
     main_exit_flag = 1;
-}
-
-void setup_signal_handler() {
-    struct sigaction sa;
-    sa.sa_handler = sigint_handler;
-    sigemptyset(&sa.sa_mask);
-    sa.sa_flags = SA_RESTART;
-    if (sigaction(SIGINT, &sa, nullptr) == -1) {
-        perror("sigaction failed");
-    }
 }
 
 int main() {  
@@ -82,6 +74,7 @@ int main() {
     };
     RT_LOG(INFO,  "初始化全局变量成功");
     LOG(LOG_LEVEL_INFO, "初始化全局变量成功");
+    spl_context_init(&spl_context);
     // 初始化PLC单例
     PlcTask::instance();
     RT_LOG(INFO,  "初始化PLC单例成功");
@@ -105,19 +98,25 @@ int main() {
     LOG(LOG_LEVEL_INFO, "初始化硬件抽象层成功");
     //初始化行程检查功能
     Axis_Limit_Manager_Init();
+
+    // 创建信号量，需要放在线程启动（threads_start函数）前
+    init_rt_sem();
+    RT_LOG(INFO, "初始化实时信号量成功");
+    LOG(LOG_LEVEL_INFO, "初始化实时信号量成功");
+
     // 启动主站
-    #ifndef DEBUG_MODE_ENABLED
+#ifndef DEBUG_MODE_ENABLED
     if (Master_Start() < 0) {
-        RT_LOG(ERROR, "EtherCAT主站启动失败，请检查ENI文件是否正确");
-        LOG(LOG_LEVEL_ERR, "EtherCAT主站启动失败，请检查ENI文件是否正确");
+        RT_LOG(ERROR, "EtherCAT主站启动失败");
+        LOG(LOG_LEVEL_ERR, "EtherCAT主站启动失败");
         // setAlarm(ALARM_SY, ALARM_ERROR, 6);
         return -1; // 直接退出，不再启动线程
     }
+    
     RT_LOG(INFO, "启动EtherCAT主站");
     LOG(LOG_LEVEL_INFO, "启动EtherCAT主站");
-    #endif
-    // 创建信号量，需要放在线程启动（threads_start函数）前
-    init_rt_sem();
+#endif
+    
     // 启动各个线程，pdo线程运行master_run，给各实时线程发送信号量
     if (threads_start()) {
         RT_LOG(ERROR, "创建线程失败");
@@ -126,15 +125,19 @@ int main() {
     }
     RT_LOG(INFO, "创建所有线程成功");
     LOG(LOG_LEVEL_INFO, "创建所有线程成功");
-    // 发送实时初始化完成信号
+    // 发送实时初始化完成信号 (通知界面：实时系统初始化完成)
     setSysCommInt(SYS_START_RT_FINISH, 1, 0);
     RT_LOG(INFO, "发送实时启动完成信号");
     LOG(LOG_LEVEL_INFO, "发送实时启动完成信号");
-    // 主循环
+
+    // 注册ctrl+C
+    signal(SIGINT, sigint_handler);
+
+    // 主线程等待实时关闭信号
     RT_LOG(INFO, "等待实时关闭信号");
     LOG(LOG_LEVEL_INFO, "等待实时关闭信号");
-    signal(SIGINT, sigint_handler);
-    // setup_signal_handler();
+    
+    // 主循环
     #ifndef DEBUG_MODE_ENABLED
     while (!main_exit_flag) {
         // 等待实时关闭信号
@@ -147,8 +150,10 @@ int main() {
         sleep(1);
     }
     #endif
+    // 16. 开始关闭实时系统
     RT_LOG(INFO, "获取到实时关闭信号");
     LOG(LOG_LEVEL_INFO, "获取到实时关闭信号");
+    // 17. 通知所有线程退出
     thread_exit_flag = 1;
     RT_LOG(INFO, "关闭线程");
     LOG(LOG_LEVEL_INFO, "关闭线程");
@@ -158,25 +163,29 @@ int main() {
     }
     // 释放线程
     threads_joint();
-    if (comp_data_save_current_compensation() != 0) {
-        RT_LOG(WARN, "写入断电保存误差补偿值失败");
-        LOG(LOG_LEVEL_WARN, "写入断电保存误差补偿值失败");
-    }
-    destroy_rt_sem();
-    #ifndef DEBUG_MODE_ENABLED
+#ifndef DEBUG_MODE_ENABLED
     // 关闭主轴
     Master_Close();
     RT_LOG(INFO, "关闭主站");
     LOG(LOG_LEVEL_INFO, "关闭主站");
-    #endif
+#endif
+    // 20. 保存断电误差补偿值
+    // 此时实时线程已经全部退出。
+    if (comp_data_save_current_compensation() != 0) {
+        RT_LOG(WARN, "写入断电保存误差补偿值失败");
+        LOG(LOG_LEVEL_WARN, "写入断电保存误差补偿值失败");
+    }
+    // 21. 销毁实时信号量
+    destroy_rt_sem();
     // 释放全局变量
     rt_global_delete();
     RT_LOG(INFO, "释放全局变量");
     LOG(LOG_LEVEL_INFO, "释放全局变量");
-    // 发送实时关闭完成信号，确保误差补偿值已写回共享内存
+    // 23. 通知界面：实时关闭完成
     setSysCommInt(SYS_CLOSE_RT_FINISH, 1, 0);
     RT_LOG(INFO, "发送实时关闭完成信号");
     LOG(LOG_LEVEL_INFO, "发送实时关闭完成信号");
+    // 24. 退出
     RT_LOG(INFO,  "退出实时程序");
     LOG(LOG_LEVEL_INFO, "退出实时程序");
     RT_LOG(INFO, "********************************************************");

@@ -6,8 +6,14 @@
 #include <unistd.h>
 #include "cJSON.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
 #include "/opt/GreeMaster/include/libGREEMASTER/GreeMasterAPI.h"
 #include "/opt/GreeMaster/include/libGREEMASTER/gm_errcode.h"
+#ifdef __cplusplus
+}
+#endif
 
 // ===============错误检查宏=================
 #define CHECK_RC(rc,info,label) \
@@ -172,7 +178,7 @@ typedef struct {
 }io_addr;
 
 typedef struct {
-    unsigned short statis;
+    unsigned short status;
     unsigned short control;
     int tar_pos;
     int actrul_pos;
@@ -222,4 +228,3 @@ typedef struct {
 int get_device_info_from_eeprom(int slave_num, DEVICE_TYPE* types);
 int device_match(Slave_info* list, DEVICE_TYPE* type, int slave_num);
 #endif
-

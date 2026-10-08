@@ -77,6 +77,17 @@ void auto_execute_mstb_cmd(){
     }
     // FIN信号 G4.3
     getRegBit(REG_G, 4, 3, &cycle_tp->mstb_cmd_data.signal_fin);
+// #ifdef DEBUG_MODE_ENABLED
+//     /* 仿真模式没有外部 PLC 将 F45.3 回送为 G4.3，使用主轴内部完成反馈。 */
+//     if (!cycle_tp->mstb_cmd_data.signal_fin &&
+//         (cycle_tp->plan_block->mst_data.m_code == M03 ||
+//          cycle_tp->plan_block->mst_data.m_code == M04 ||
+//          cycle_tp->plan_block->mst_data.m_code == M05) &&
+//         spl_context.mcode_feedback)
+//     {
+//         cycle_tp->mstb_cmd_data.signal_fin = true;
+//     }
+// #endif
     // FIN为1时，nc侧将MF选通信号置为0
     if(cycle_tp->mstb_cmd_data.signal_fin){
         // 完成信号宽幅时间，缺省值2ms
@@ -85,6 +96,10 @@ void auto_execute_mstb_cmd(){
             LOG(LOG_LEVEL_DEBUG, "4、接收到FIN信号, 执行下一指令"); 
             auto_mstb_fin_reset();
             auto_clear_mstb_signal();
+            if (cycle_tp->plan_block->mst_data.m_code == M29)
+            {
+                spindle_complete_m29();
+            }
             if(cycle_tp->plan_block->mst_data.m_code == M02 || cycle_tp->plan_block->mst_data.m_code == M30) {
                 // 程序运行行光标回到首行
                 setVarChanInt(0, VAR_CHAN_RUN_ROW, 0, 0);
@@ -123,39 +138,53 @@ static void auto_deal_mstb(){
             break;
         case M03: // 主轴正转
             setRegValue8(REG_F, 10, 0x03); 
-            spl_data.mcp_target_speed =cycle_tp->plan_block->mst_data.spindle.speed;
-            spl_data.mcode_feedback = false;
+            spl_context.command_speed = cycle_tp->plan_block->mst_data.spindle.speed;
+            spl_context.mcp_target_speed = cycle_tp->plan_block->mst_data.spindle.speed;
+            spl_context.mcode_feedback = false;
+            spl_context.m19_active = false;
+            spl_context.orient_hold_stop = false;
+            spl_context.command_state = SPINDLE_CW;
+            spl_context.start_request_pending = true;
             auto_set_scode_signal(i);
             break;
         case M04: // 主轴反转
             setRegValue8(REG_F, 10, 0x04); 
-            spl_data.mcp_target_speed = cycle_tp->plan_block->mst_data.spindle.speed;
-            spl_data.mcode_feedback = false;
+            spl_context.command_speed = cycle_tp->plan_block->mst_data.spindle.speed;
+            spl_context.mcp_target_speed = cycle_tp->plan_block->mst_data.spindle.speed;
+            spl_context.mcode_feedback = false;
+            spl_context.m19_active = false;
+            spl_context.orient_hold_stop = false;
+            spl_context.command_state = SPINDLE_CCW;
+            spl_context.start_request_pending = true;
             auto_set_scode_signal(i);
             break;
         case M05: // 主轴停止
             setRegValue8(REG_F, 10, 0x05);
-            spl_data.mcode_feedback = false;
+            spl_context.command_speed = 0.0;
+            spl_context.command_state = SPINDLE_STOP;
+            spl_context.mcode_feedback = false;
+            spl_context.m19_active = false;
+            spl_context.orient_hold_stop = false;
+            spl_context.start_request_pending = false;
             auto_set_scode_signal(i);
             break;
         case M06: // 不输出M代码信号：1、M99，M98，M198；2、调用子程序的M代码；3、调用用户宏程序的M代码
-            spl_data.mcode_feedback = false;
+            spl_context.mcode_feedback = false;
             auto_set_tcode_signal(i);
             break;    
         case M19: // 主轴定位
             setRegValue8(REG_F, 10, 0x13); 
-            spl_data.spl_event = SPINDLE_EVENT_ORIENT;
+            spl_context.mcode_feedback = false;
+            spl_context.m19_active = true;
+            spl_context.orient_hold_stop = true;
+            spl_context.command_speed = 0.0;
+            spl_context.command_state = SPINDLE_STOP;
+            spl_context.start_request_pending = false;
+            /* G70.6 上升沿由 PLC 扫描器统一转换为 SPINDLE_EVENT_ORIENT。 */
             break;
-        case M29: // 刚性攻丝
-            // 切换位置模式
-            spl_data.spl_event = SPINDLE_EVENT_ORIENT;
-            // 回参考点（刚性攻丝时回参考点，攻丝回退时不返回参考点）
-            if(rt_data->sys_state[SYS_IS_RIGID_RERTURN]){
-                
-            }else{
-                // RTAP：通知PMC处在刚性攻丝方式中的信号
-                rt_data->sys_state[SYS_IS_RIGID] = 1;
-            }
+        case M29: // 将主轴定向，并且到CSP模式上使能
+            setRegValue8(REG_F, 10, 0x1d);
+            spindle_request_m29();
             break;
         default:
             // 判断M代码大小

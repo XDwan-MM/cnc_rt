@@ -14,7 +14,9 @@
  * 3. 以后若想增加 G19 或 G32，只需在此数组末尾添加数字 19, 32 即可，无需改动获取数据的函数。
  */
 static const int SCAN_G_REGS[] = {
-    4, 5, 6, 7, 8, 12, 14, 19, 29, 30, 32, 33, 43, 44, 45, 46, 54, 55, 56, 61, 62, 70, 100, 101, 102, 103, 107, 108, 109, 118, 120, 124, 130, 132, 134, 341, 342, 343, 344, /* 已有及外部减速信号地址 */
+    4,  5,  6,   7,   8,   12,  14,  19,  29,  30,  32,  33,  43,  44,  45,  46,  54,  55,  56,  61,
+    62, 70, 100, 101, 102, 103, 107, 108, 109, 118, 120, 124, 130, 132, 134, 341, 342, 343, 344, /* 已有及外部减速信号地址
+                                                                                                  */
 };
 
 /** 计算注册表中元素的个数，用于驱动循环扫描 */
@@ -35,11 +37,20 @@ static void plc_input_fetch_snapshot(G_INPUT_MAP *local_snap);
 /** @brief 将解析出的逻辑打包为 PLC_EVENT 并入队 */
 static void plc_dispatch_event(PLC_EVENT_ID id, int p1, int p2, int p3, int p4);
 
+/** @brief 更新 PLC 主轴速度指令及 G33.7 速度来源选择。 */
+static void process_spindle_speed_command(const G_INPUT_MAP *curr_g);
+
+/** @brief 从 G32/G33 读取 PLC 主轴速度指令原始值。 */
+static uint16_t read_spindle_speed_command_raw(const G_INPUT_MAP *curr_g);
+
 /** @brief 扫描外部减速 G 信号 */
 static void process_external_deceleration(const G_INPUT_MAP *curr_g);
 
 /** @brief 扫描一个外部减速功能正负方向的 G 信号 */
-static void process_external_deceleration_function(const G_INPUT_MAP *curr_g, int function, int positive_reg, int negative_reg);
+static void process_external_deceleration_function(const G_INPUT_MAP *curr_g,
+                                                   int function,
+                                                   int positive_reg,
+                                                   int negative_reg);
 
 /**
  * @brief 模式解析逻辑实现
@@ -76,6 +87,7 @@ void plc_g_signal_scan_cycle(void)
     {
         // 急停按键拍下
         rt_set_sys_state(SYS_ESTOP_INPUT, true);
+        // 本周期急停8.4为0，上周期急停8.4为1，急停拍下
         if (is_first_scan || GET_BIT(last_g.g_regs[8], 4))
         {
             LOG(LOG_LEVEL_INFO, "扫描到急停G8.4信号为0, 急停拍下");
@@ -211,17 +223,17 @@ void plc_g_signal_scan_cycle(void)
     }
 
     /* 主轴正反信号检测 (G70.4 主轴反转, G70.5 主轴正转, G29.6 主轴停止信号) */
-    if (SIGNAL_RISING(curr_g.g_regs[70], last_g.g_regs[70], 4))
-    {
-        LOG(LOG_LEVEL_INFO, "扫描到主轴反转G70.4发生了上升沿");
-        // 产生主轴反转事件 入队
-        plc_dispatch_event(PLC_EV_MSG_SPINDLE, -1, 0, 0, 0);
-    }
     if (SIGNAL_RISING(curr_g.g_regs[70], last_g.g_regs[70], 5))
     {
         LOG(LOG_LEVEL_INFO, "扫描到主轴正转G70.5发生了上升沿");
         // 产生主轴正转事件 入队
         plc_dispatch_event(PLC_EV_MSG_SPINDLE, 1, 0, 0, 0);
+    }
+    if (SIGNAL_RISING(curr_g.g_regs[70], last_g.g_regs[70], 4))
+    {
+        LOG(LOG_LEVEL_INFO, "扫描到主轴反转G70.4发生了上升沿");
+        // 产生主轴反转事件 入队
+        plc_dispatch_event(PLC_EV_MSG_SPINDLE, -1, 0, 0, 0);
     }
     if (SIGNAL_FALLING(curr_g.g_regs[29], last_g.g_regs[29], 6))
     {
@@ -229,11 +241,17 @@ void plc_g_signal_scan_cycle(void)
         // 产生主轴停止事件 入队
         plc_dispatch_event(PLC_EV_MSG_SPINDLE, 0, 0, 0, 0);
     }
+
     /* 主轴定向 G70.6 */
     if (SIGNAL_RISING(curr_g.g_regs[70], last_g.g_regs[70], 6))
     {
-        LOG(LOG_LEVEL_INFO, "扫描到G70.6 发生上升沿");
-        plc_dispatch_event(PLC_EV_MSG_SPD_ORI, 0, 0, 0, 0);
+        LOG(LOG_LEVEL_INFO, "扫描到主轴定向G70.6 发生上升沿");
+        plc_dispatch_event(PLC_EV_MSG_SPD_ORI, 1, 0, 0, 0);
+    }
+    if (SIGNAL_FALLING(curr_g.g_regs[70], last_g.g_regs[70], 6))
+    {
+        LOG(LOG_LEVEL_INFO, "扫描到主轴定向G70.6 发生下降沿");
+        plc_dispatch_event(PLC_EV_MSG_SPD_ORI, -1, 0, 0, 0);
     }
 
     /* 可选程序段跳过 G44.0 */
@@ -264,19 +282,8 @@ void plc_g_signal_scan_cycle(void)
             }
         }
     }
-    /* 处理PLC主轴限制 */
-    uint16_t result = 0;
-    uint8_t high = 0;
-    uint8_t low = 0;
-
-    for (int i = 0; i < 8; i++)
-    {
-        low |= ((uint16_t)(GET_BIT(curr_g.g_regs[32], i) & 1) << i);
-        high |= ((uint16_t)(GET_BIT(curr_g.g_regs[33], i) & 1) << i);
-    }
-    result = ((uint16_t)(high & 0x0f) << 5) | (low & 0xFF);
-    spl_data.plc_speed = par_axis[AXIS_SP][PAR_SPDL_MAX_SPEED].value.val_real * result / 4095;
-    spl_data.speed_mode = GET_BIT(curr_g.g_regs[33], 7);
+    /* 读取 PLC 主轴速度指令，并解析 G33.7 的速度来源选择。 */
+    process_spindle_speed_command(&curr_g);
 
     /* 程序再启动 G6.0 */
     if (SIGNAL_RISING(curr_g.g_regs[6], last_g.g_regs[6], 0))
@@ -554,6 +561,41 @@ void plc_g_signal_scan_cycle(void)
  * 3. 内部函数实现 (Private Implementations)
  * ========================================================================== */
 
+static void process_spindle_speed_command(const G_INPUT_MAP *curr_g)
+{
+    const uint16_t raw_speed = read_spindle_speed_command_raw(curr_g);
+    const double spindle_max_speed =
+        par_axis[AXIS_SP][PAR_SPDL_MAX_SPEED].value.val_real;
+
+    /* G32/G33 的模拟量编码按机床最大主轴速度换算为 rpm。 */
+    spl_context.plc_speed = spindle_max_speed * raw_speed / 4095.0;
+
+    /* G33.7=0：使用 CNC/M 代码速度；G33.7=1：使用 PLC 速度。 */
+    if (GET_BIT(curr_g->g_regs[33], 7))
+    {
+        spl_context.speed_source = SPINDLE_SPEED_SOURCE_PLC;
+    }
+    else
+    {
+        spl_context.speed_source = SPINDLE_SPEED_SOURCE_CNC;
+    }
+}
+
+static uint16_t read_spindle_speed_command_raw(const G_INPUT_MAP *curr_g)
+{
+    uint16_t low_bits = 0;
+    uint16_t high_bits = 0;
+
+    for (int bit = 0; bit < 8; bit++)
+    {
+        low_bits |= (uint16_t)(GET_BIT(curr_g->g_regs[32], bit) & 1) << bit;
+        high_bits |= (uint16_t)(GET_BIT(curr_g->g_regs[33], bit) & 1) << bit;
+    }
+
+    /* G32/G33 的编码格式由 PLC 接口协议定义，保留原始位拼接方式。 */
+    return (uint16_t)((high_bits & 0x0F) << 5) | (low_bits & 0xFF);
+}
+
 /** @brief 从寄存器系统同步数据到本地结构体
  * 遍历注册表，集中抓取数据，数据安全且无遗漏。
  */
@@ -669,7 +711,10 @@ static void process_external_deceleration(const G_INPUT_MAP *curr_g)
 }
 
 /** @brief 扫描一个外部减速功能正负方向的 G 信号 */
-static void process_external_deceleration_function(const G_INPUT_MAP *curr_g, int function, int positive_reg, int negative_reg)
+static void process_external_deceleration_function(const G_INPUT_MAP *curr_g,
+                                                   int function,
+                                                   int positive_reg,
+                                                   int negative_reg)
 {
     for (int axis = 0; axis < PLC_EXTERNAL_DECEL_AXIS_COUNT; axis++)
     {

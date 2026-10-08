@@ -2,7 +2,7 @@
 #include "debug_mode.h"
 #include "rt_sem.h"
 #include <stdio.h>
-#include "hal_driver.h"
+#include "driver_hal.h"
 #include "hal_io.h"
 #include "regapi.h"
 #include "global.h"
@@ -15,7 +15,7 @@
 #include "plc_g_signal_scanner.h"
 #include "plc_x_signal_scanner.h"
 #include "plc_f_signal_handler.h"
-#include "master.h"
+#include "master_wcf.h"
 #include <hmisysapi.h>
 #include <stdio.h>
 #include <time.h>
@@ -134,14 +134,14 @@ void* motion_controller_thread_func(void*) {
         if (thread_exit_flag) break;
         // printf("motion_controller_thread_func");
         start = get_ns();
-        Hal_Driver_Update_All(true, false);
+        // 驱动器反馈由 Master_Receive() 在 PDO 线程中统一读取。
         hmi_events_scan();
         // plc_x_signal_scan_cycle();
         task_mq_proc();
         emcmotTrajPlan();
         plc_f_signal_handler_cycle();
         ServoSampleSampler::instance().execute();
-        Hal_Driver_Update_All(false, true);
+        // 驱动器目标值由 Master_Send() 在 PDO 线程中统一写入。
         end = get_ns();
         #ifndef DEBUG_MODE_ENABLED
         if(IsGreaterThan((end - start) / 1e6, 0.9)){
