@@ -107,8 +107,8 @@ int main() {
     // 启动主站
 #ifndef DEBUG_MODE_ENABLED
     if (Master_Start() < 0) {
-        RT_LOG(ERROR, "EtherCAT主站启动失败，请检查ENI文件是否正确");
-        LOG(LOG_LEVEL_ERR, "EtherCAT主站启动失败，请检查ENI文件是否正确");
+        RT_LOG(ERROR, "EtherCAT主站启动失败");
+        LOG(LOG_LEVEL_ERR, "EtherCAT主站启动失败");
         // setAlarm(ALARM_SY, ALARM_ERROR, 6);
         return -1; // 直接退出，不再启动线程
     }
