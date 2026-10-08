@@ -7,6 +7,9 @@
 #include <hmisysapi.h> 
 #include <alarmapi.h>
 #include "stored_stroke_check.h"
+#include "trace_publisher.h"
+#include "ncitpmacrodef.h"
+#include "macrovarapi.h"
 
 static void auto_check_error_line();
 static void auto_update_state();
@@ -24,6 +27,9 @@ static void auto_handle_alarm();
 static void auto_update_var();
 static bool auto_is_program_end();
 static bool auto_check_program_end();
+static void auto_pop_current_block();
+static void auto_set_stop_skip_macro();
+static void auro_reset_stop_skip();
 
 void handle_auto_cmd(){
     // 更新状态
@@ -34,6 +40,7 @@ void handle_auto_cmd(){
     auto_update_cmd();
     // 执行指令
     auto_execute_cmd();
+    trace_publisher_publish_current(0);
     // 更新阶段
     auto_update_stage();
     // 检查程序结束
@@ -79,6 +86,7 @@ static void auto_update_state(){
             case DO_CHOP_CMD:
             case DO_DWELL_CMD:
             case DO_HOME_CMD:
+            case DO_SKIP_CMD:
             case DO_MSTB_CMD:
             case DO_NULL_CMD:
                 cycle_tp->exec_state = EXEC_PAUSING;
@@ -131,6 +139,7 @@ static void auto_update_state(){
             case DO_CHOP_CMD:
             case DO_HOME_CMD:
             case DO_TAP_CMD:
+            case DO_SKIP_CMD:
                 cycle_tp->exec_state = EXEC_RESET;
                 break;
             case DO_DWELL_CMD:
@@ -214,7 +223,18 @@ static void auto_check_event(){
         switch (cycle_tp->exec_state)
         {
         case EXEC_RUNNING:
-            cycle_tp->running_stage = BLOCK_BREAKPOINT;
+            switch(cycle_tp->exec_cmd){
+            case DO_CHOP_CMD:
+            case DO_HOME_CMD:
+            case DO_TAP_CMD:
+                cycle_tp->running_stage = BLOCK_BREAKPOINT;
+                break;
+            case DO_SKIP_CMD:   // 跳转不受空运行影响
+            case DO_DWELL_CMD:
+            case DO_MSTB_CMD:
+            default:
+                break;
+            }
         case EXEC_PAUSING:
         case EXEC_RESET:
         case EXEC_IDLE:
@@ -228,7 +248,18 @@ static void auto_check_event(){
         switch (cycle_tp->exec_state)
         {
         case EXEC_RUNNING:
-            cycle_tp->running_stage = BLOCK_BREAKPOINT;
+            switch(cycle_tp->exec_cmd){
+            case DO_CHOP_CMD:
+            case DO_HOME_CMD:
+            case DO_TAP_CMD:
+                cycle_tp->running_stage = BLOCK_BREAKPOINT;
+                break;
+            case DO_SKIP_CMD:
+            case DO_DWELL_CMD:
+            case DO_MSTB_CMD:
+            default:
+                break;
+            }
         case EXEC_PAUSING:
         case EXEC_RESET:
         case EXEC_IDLE:
@@ -369,6 +400,30 @@ static void auto_check_event(){
         cycle_tp->trigger_event = NONE_EVENT;
         rt_set_sys_state(SYS_IS_BLOCK_SKIP, false);
         break;
+    case SYS_EVENT_STOP_SKIP_ON:
+        LOG(LOG_LEVEL_INFO, "自动模式处理跳转信号");
+        rt_set_sys_state(SYS_IS_STOP_SKIP, true);
+        switch (cycle_tp->exec_state)
+        {
+        case EXEC_RUNNING:
+            switch(cycle_tp->exec_cmd){
+            case DO_SKIP_CMD:
+                cycle_tp->running_stage = BLOCK_BREAKPOINT;
+                break;
+            default:
+                break;
+            }
+            break;
+        case EXEC_PAUSING:
+        case EXEC_RESET:
+        case EXEC_IDLE:
+            break;
+        }
+        break;
+    case SYS_EVENT_STOP_SKIP_OFF:
+        LOG(LOG_LEVEL_INFO, "自动模式处理跳转信号");
+        rt_set_sys_state(SYS_IS_STOP_SKIP, false);
+        break;
     case SYS_EVENT_FEED_OVERRIDE:
         LOG(LOG_LEVEL_INFO, "自动模式处理进给倍率切换");
         switch (cycle_tp->exec_state)
@@ -379,7 +434,8 @@ static void auto_check_event(){
             case DO_HOME_CMD:
                 cycle_tp->running_stage = BLOCK_BREAKPOINT;
                 break;
-            case DO_TAP_CMD: // 攻丝模式不受倍率影响
+            case DO_TAP_CMD:  // 攻丝模式不受倍率影响
+            case DO_SKIP_CMD: // 跳转不受倍率影响
             case DO_DWELL_CMD:
             case DO_MSTB_CMD:
             default:
@@ -389,6 +445,35 @@ static void auto_check_event(){
         case EXEC_PAUSING:
         case EXEC_RESET:
         case EXEC_IDLE:
+            break;
+        }
+        break;
+    case SYS_EVENT_RIGID_RETURN_ON:
+        switch (cycle_tp->plan_block->type)
+        {
+        case TAP_RETURN:
+            break;
+        default:
+            break;
+        }
+        switch (rt_data->current_mode)
+        {
+        case MODE_MDI: // MDI模式下响应攻丝回退事件
+            rt_data->sys_state[SYS_IS_RIGID_RERTURN] = 1;
+            LOG(LOG_LEVEL_INFO, "自动模式处理开启攻丝回退");
+            break;
+        default:
+            break;
+        }
+        break;
+    case SYS_EVENT_RIGID_RETURN_OFF:
+        switch (rt_data->current_mode)
+        {
+        case MODE_MDI:
+            rt_data->sys_state[SYS_IS_RIGID_RERTURN] = 0;
+            LOG(LOG_LEVEL_INFO, "自动模式关闭结束攻丝回退");
+            break;
+        default:
             break;
         }
         break;
@@ -497,6 +582,7 @@ static void auto_execute_cmd(){
     case DO_MOVE_CMD:
     case DO_CHOP_CMD:
     case DO_TAP_CMD:
+    case DO_SKIP_CMD:
         auto_execute_pos_cmd();
         break;
     case DO_DWELL_CMD:
@@ -523,10 +609,10 @@ static void auto_update_stage(){
             switch (cycle_tp->target_stage)
             {
             case BLOCK_ARRIVE_2_END:
-                queue_pop(plan_queue);
+                auto_pop_current_block();
                 break;
             case BLOCK_STOP_2_END:
-                queue_pop(plan_queue);
+                auto_pop_current_block();
                 cycle_tp->exec_cmd = DO_NULL_CMD;
                 cycle_tp->target_stage = PROGRAM_WAIT;
                 if (rt_data->sys_state[SYS_IS_SINGLE_BLOCK]) {
@@ -545,6 +631,33 @@ static void auto_update_stage(){
             }
         }
         break;
+    case DO_SKIP_CMD:
+        if(auto_pos_cmd_is_finished()) {
+            cycle_tp->running_stage = cycle_tp->target_stage;
+            switch (cycle_tp->target_stage)
+            {
+            case BLOCK_STOP_2_END:
+                auto_pop_current_block();
+                auro_reset_stop_skip();
+                cycle_tp->exec_cmd = DO_NULL_CMD;
+                cycle_tp->target_stage = PROGRAM_WAIT;
+                if (rt_data->sys_state[SYS_IS_SINGLE_BLOCK]) {
+                    cycle_tp->exec_state = EXEC_PAUSING;
+                }
+                if (rt_data->sys_state[SYS_IS_MAC_LOCK_ON]) rt_data->sys_state[SYS_IS_MAC_LOCK_READY] = true;
+                else rt_data->sys_state[SYS_IS_MAC_LOCK_READY] = false;
+                break;
+            case BLOCK_PAUSED:
+            case PROGRAM_WAIT:
+                auto_set_stop_skip_macro();
+                if (rt_data->sys_state[SYS_IS_MAC_LOCK_ON]) rt_data->sys_state[SYS_IS_MAC_LOCK_READY] = true;
+                else rt_data->sys_state[SYS_IS_MAC_LOCK_READY] = false;
+                break;
+            default:
+                break;
+            }
+        }
+        break;
     case DO_DWELL_CMD:
         if(auto_dwell_cmd_is_finished()) {
             cycle_tp->running_stage = cycle_tp->target_stage;
@@ -553,10 +666,10 @@ static void auto_update_stage(){
             switch (cycle_tp->target_stage)
             {
             case BLOCK_ARRIVE_2_END:
-                queue_pop(plan_queue);
+                auto_pop_current_block();
                 break;
             case BLOCK_STOP_2_END:
-                queue_pop(plan_queue);
+                auto_pop_current_block();
                 cycle_tp->exec_cmd = DO_NULL_CMD;
                 cycle_tp->target_stage = PROGRAM_WAIT;
                 if (rt_data->sys_state[SYS_IS_SINGLE_BLOCK]) {
@@ -576,10 +689,10 @@ static void auto_update_stage(){
             switch (cycle_tp->target_stage)
             {
             case BLOCK_ARRIVE_2_END:
-                queue_pop(plan_queue);
+                auto_pop_current_block();
                 break;
             case BLOCK_STOP_2_END:
-                queue_pop(plan_queue);
+                auto_pop_current_block();
                 cycle_tp->exec_cmd = DO_NULL_CMD;
                 cycle_tp->target_stage = PROGRAM_WAIT;
                 if (rt_data->sys_state[SYS_IS_SINGLE_BLOCK]) {
@@ -599,7 +712,8 @@ static void auto_update_stage(){
         switch (cycle_tp->target_stage)
         {
         case BLOCK_STOP_2_END:
-            queue_pop(plan_queue);
+            auto_pop_current_block();
+            auro_reset_stop_skip();
             cycle_tp->exec_cmd = DO_NULL_CMD;
             cycle_tp->target_stage = PROGRAM_WAIT;
             if (rt_data->sys_state[SYS_IS_SINGLE_BLOCK]) {
@@ -649,6 +763,7 @@ static void auto_get_next_cmd(){
     if(queue_is_empty(plan_queue)){ 
         cycle_tp->exec_cmd = DO_NULL_CMD;
         cycle_tp->target_stage = PROGRAM_WAIT;
+        trace_publisher_reset(0);
         return;
     };
     cycle_tp->plan_block = queue_peak(plan_queue);
@@ -660,6 +775,7 @@ static void auto_get_next_cmd(){
     case PMC_MODE_ARRIVE_CHECK:
     case PMC_MODE_TAP:
     case PMC_MODE_TAP_RETURE:
+    case PMC_MODE_STOPSKIP:
         auto_get_pos_cmd();
         break;
     case PMC_MODE_PAUSE:
@@ -674,6 +790,11 @@ static void auto_get_next_cmd(){
     default:
         cycle_tp->exec_cmd = DO_NULL_CMD;
     }
+    trace_publisher_activate(0,
+                             cycle_tp->plan_block,
+                             cycle_tp->exec_cmd == DO_MOVE_CMD ||
+                             cycle_tp->exec_cmd == DO_CHOP_CMD ||
+                             cycle_tp->exec_cmd == DO_TAP_CMD);
     auto_update_var();
     rerun_data_store(cycle_tp->plan_block);
 }
@@ -696,6 +817,7 @@ static void auto_update_cur_cmd(){
     case PMC_MODE_ARRIVE_CHECK:
     case PMC_MODE_TAP:
     case PMC_MODE_TAP_RETURE:
+    case PMC_MODE_STOPSKIP:
         auto_update_pos_cmd();
         break;
     case PMC_MODE_PAUSE:
@@ -722,6 +844,7 @@ static void auto_start_run(){
     queue_reset(parser_queue);
     cycle_tp_reset();
     rt_set_zero_vel_params();
+    trace_publisher_begin_program(0);
     setVarChanInt(0, VAR_CHAN_IS_RUNNING, 1, 0);
     setVarChanInt(0, VAR_CHAN_IS_MOVING, 1, 0);
     setVarChanInt(0, VAR_CHAN_IS_PROGEND, 0, 0);
@@ -758,9 +881,11 @@ static void auto_reset_run(){
     queue_reset(pretreat_queue);
     queue_reset(parser_queue);
     cycle_tp_reset();
+    trace_publisher_reset(0);
     rt_set_chan_state(0, CHAN_IS_PARSER_RESET, true);
     rt_set_chan_state(0, CHAN_IS_PARSER_RERUN, false);
     rt_set_chan_state(0, CHAN_IS_PARSERING, false);
+    rt_set_chan_state(0, CHAN_IS_MOTION_SYNC, false);
     setVarChanInt(0, VAR_CHAN_IS_RUNNING, 0, 0);
     setVarChanInt(0, VAR_CHAN_IS_MOVING, 0, 0);
     setVarChanInt(0, VAR_CHAN_IS_PROGEND, 1, 0);
@@ -792,6 +917,39 @@ static void auto_update_var(){
         rt_set_zero_vel_params();
     default:
         break;
+    }
+}
+
+static void auto_pop_current_block()
+{
+    trace_publisher_complete(0);
+    queue_pop(plan_queue);
+}
+
+static void auro_reset_stop_skip(){
+    if(cycle_tp->plan_block->mode == PMC_MODE_STOPSKIP){
+        rt_set_sys_state(SYS_IS_STOP_SKIP, false);
+        // 更新宏变量轴地址
+        ItpSetOriginMacPos(rt_data->axis_data[AXIS_X].motor_cmd_pos,
+                    rt_data->axis_data[AXIS_Y].motor_cmd_pos,
+                    rt_data->axis_data[AXIS_Z].motor_cmd_pos,
+                    0);
+        rt_set_chan_state(0, CHAN_IS_MOTION_SYNC, true);
+        LOG(LOG_LEVEL_DEBUG, "探针到位 %f %f %f", rt_data->axis_data[AXIS_X].motor_cmd_pos, rt_data->axis_data[AXIS_Y].motor_cmd_pos, rt_data->axis_data[AXIS_Z].motor_cmd_pos);
+    }
+}
+
+static void auto_set_stop_skip_macro(){
+    if(rt_data->sys_state[SYS_IS_STOP_SKIP]){
+        auto_pop_current_block();
+        rt_set_sys_state(SYS_IS_STOP_SKIP, false);
+        // 更新宏变量轴地址
+        ItpSetOriginMacPos(rt_data->axis_data[AXIS_X].motor_cmd_pos,
+                    rt_data->axis_data[AXIS_Y].motor_cmd_pos,
+                    rt_data->axis_data[AXIS_Z].motor_cmd_pos,
+                    0);
+        rt_set_chan_state(0, CHAN_IS_MOTION_SYNC, true);
+        LOG(LOG_LEVEL_DEBUG, "获取到外部跳转信号后减速停止 %f %f %f", rt_data->axis_data[AXIS_X].motor_cmd_pos, rt_data->axis_data[AXIS_Y].motor_cmd_pos, rt_data->axis_data[AXIS_Z].motor_cmd_pos);
     }
 }
 

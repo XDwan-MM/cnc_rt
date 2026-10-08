@@ -37,7 +37,6 @@ typedef enum{
 typedef struct{
     POS center_pos;     // 圆心位置
     double radius;      // 半径
-    PLANE plane;        // 选择的平面
     CIRCLE_DIR dir;     // 方向（顺时针，逆时针）
     double rad;         // 弧度
     double statr_rad;   // 起始弧度
@@ -58,6 +57,28 @@ typedef struct mcode_block{
     bool sub_program;       // 子程序或宏程序标志
 }MST_DATA;
 
+typedef struct{
+    double screw_offset;    // 螺旋插补的螺距(向量)
+    int screw_number;       // 螺距数（涡旋数）
+    double screw_rad;       // 角度
+    int speed;              // 速率
+    int reverse;            // 0正 1反
+}RIGID_DATA;
+
+typedef struct 
+{
+    POS *origin_point;
+    POS *control_point;
+    double *w;
+    double *U;
+    int k;
+    int num;
+    double length;
+    //段信息
+    int startlineno;
+    int endlineno;
+}NURBS_DATA;
+
 typedef struct
 {
     INTERP_TYPE type;   // 插补类型
@@ -67,9 +88,12 @@ typedef struct
     int pause_time;     // 暂停时间
     REF_TYPE ref_number;// 回参考点
     int ref_axis;       // 回参考点轴号
+    PLANE plane;        // 选择的平面
     MST_DATA mst_data;
     CIRCULAR_DATA circular_data;
     HELIX_DATA helical_data;
+    RIGID_DATA rigid_data;
+    NURBS_DATA nurbs_data;
     double length;      // 长度
     double angle_rad;   // 夹角
     double start_vel;   // 起始速度

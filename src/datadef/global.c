@@ -70,7 +70,7 @@ PLAN_QUEUE *parser_queue;       // 译码队列
 PLAN_QUEUE *pretreat_queue;     // 预处理队列
 PLAN_QUEUE *plan_queue;         // 插补队列
 COORD_TP *cycle_tp;             // 循环轨迹规划
-HOMING_TP *homing_tp;           // 回零轨迹规划
+REF_TP *ref_tp;                 // 回零轨迹规划
 
 // 读写共享内存锁（路径规划读时加锁）
 pthread_mutex_t shm_mutex;
@@ -136,7 +136,7 @@ static GNC_RES shm_par_init(){
 
 static GNC_RES tp_init(){
     GNC_RES res = GNC_OPERATOR_SUCCESS;
-    res = homing_tp_init();
+    res = ref_tp_init();
     if(res != GNC_OPERATOR_SUCCESS) return res;
     res = cycle_tp_init();
     if(res != GNC_OPERATOR_SUCCESS) return res;
@@ -155,7 +155,7 @@ static GNC_RES tp_init(){
 }
 
 GNC_RES tp_reset(){
-    homing_tp_reset();
+    ref_tp_reset();
     cycle_tp_reset();
     queue_reset(parser_queue);
     queue_reset(pretreat_queue);
@@ -189,7 +189,7 @@ GNC_RES rt_global_init(){
         rt_global_delete();
         return res;
     }
-    reset_data_init();
+    res = reset_data_init();
     if(res != GNC_OPERATOR_SUCCESS){
         rt_global_delete();
         return res;
@@ -224,7 +224,7 @@ GNC_RES rt_global_delete(){
         plan_queue = NULL;
     }
     cycle_tp_delete();
-    homing_tp_delete();
+    ref_tp_delete();
     if(rt_data != NULL){
         pthread_mutex_destroy(&rt_data->mutex);
         free(rt_data);
@@ -300,13 +300,13 @@ void shm_var_update(){
         // 机械坐标 = 机床指令位置
         setVarAxisDouble(i, VAR_AXIS_CMD_POS_EX, rt_data->axis_data[i].mac_cmd_pos, 0);
         // 机床实际位置
-        setVarAxisDouble(i, VAR_AXIS_ACT_POS_EX, rt_data->axis_data[i].fb_pos_no_comp, 0);
+        setVarAxisDouble(i, VAR_AXIS_ACT_POS_EX, rt_data->axis_data[i].motor_act_pos, 0);
         // 电机脉冲
         setVarAxisInt(i, VAR_AXIS_ENC_CNTR, rt_data->axis_data[i].enc_cntr, 0);
         // 实际轴速度
-        setVarAxisDouble(i, VAR_AXIS_ACT_VEL_EX, rt_data->axis_data[i].act_vel, 0); 
+        setVarAxisDouble(i, VAR_AXIS_ACT_VEL_EX, rt_data->axis_data[i].act_vel * TIME_MINUS_2_S, 0); 
         // 指令轴速度
-        setVarAxisDouble(i, VAR_AXIS_CMD_VEL_EX, rt_data->axis_data[i].cmd_vel, 0);
+        setVarAxisDouble(i, VAR_AXIS_CMD_VEL_EX, rt_data->axis_data[i].cmd_vel * TIME_MINUS_2_S, 0);
         // 轴状态显示：机械锁住、互锁、移动中
         if(rt_data->sys_state[SYS_IS_MAC_LOCK_READY]) setVarAxisInt(i, VAR_AXIS_IS_MAC_LOCK, 1, 0);
         else setVarAxisInt(i, VAR_AXIS_IS_MAC_LOCK, 0, 0);
@@ -323,5 +323,7 @@ void shm_var_update(){
         setVarChanDouble(i, VAR_CHAN_ACT_FEEDRATE, CONV_MM_S_TO_MM_MIN(rt_data->chan_data[i].act_vel), 0);
         // 指令速度
         setVarChanDouble(i, VAR_CHAN_CMD_FEEDRATE, CONV_MM_S_TO_MM_MIN(rt_data->chan_data[i].cmd_vel), 0);
+        // 刚性攻丝中
+        setVarChanInt(0, VAR_CHAN_IS_RIGID, rt_data->sys_state[SYS_IS_RIGID], 0);
     }
 }

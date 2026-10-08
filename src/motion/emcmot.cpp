@@ -10,7 +10,7 @@
 #include "global.h"
 #include "handwheel.h"
 #include "hmisysapi.h"
-#include "homing.h"
+#include "ref.h"
 #include "jog.h"
 #include "master_wcf.h"
 #include "parser.h"
@@ -52,8 +52,8 @@ void emcmot_test_rebuild_axis_positions_from_feedback()
 #endif
 
 // 绝对式电机编码器位置(指令，反馈)
-static int32_t x_cmd_pulse_pos, y_cmd_pulse_pos, z_cmd_pulse_pos;
-static int32_t x_act_pulse_pos, y_act_pulse_pos, z_act_pulse_pos;
+static int32_t x_cmd_pulse_pos, y_cmd_pulse_pos, z_cmd_pulse_pos, sp_cmd_pulse_pos;
+static int32_t x_act_pulse_pos, y_act_pulse_pos, z_act_pulse_pos, sp_act_pulse_pos;
 const char *mode_names[] = {"编辑", "AUTO", "MDI", "DNC", "手轮", "手动", "回零", "空闲"};
 
 // 轨迹规划
@@ -127,13 +127,7 @@ static void chan_do_period()
 
 // 运动同步控制
 static void smx_do_period()
-{
-    // 刚性攻丝同步（进给 = 转速 × 螺距：F = S × Pitch）
-    // 主轴位置 Z = Pitch × (θ/360°)
-    // double z_vel = spl_context.current_angle * cycle_tp->plan_block->screw_data.screw_offset;
-    // rt_data->axis_data[AXIS_Z].wcs_cmd_pos_cur += z_vel * (double)par_ncu[PAR_NCU_CYCLE].value.val_uint /
-    // TIME_US_2_S;
-
+{ 
     // 主轴同步
 
     // 重叠控制
@@ -192,7 +186,7 @@ static void set_operating_mode()
         }
         break;
     case MODE_HOMING:
-        if (!var_chan[0][VAR_CHAN_IS_HOMING].value.i)
+        if (ref_tp[0].ref_state == REF_ABS_EXEC_IDLE && ref_tp[1].ref_state == REF_ABS_EXEC_IDLE && ref_tp[2].ref_state == REF_ABS_EXEC_IDLE)
         {
             rt_data->current_mode = rt_data->target_mode;
             rt_data->sys_state[SYS_IS_SWITCHING_MODE] = false;
@@ -234,7 +228,7 @@ static void get_cmd_pos()
         handle_auto_cmd();
         break;
     case MODE_HOMING: // 回零
-        handle_homing_cmd();
+        handle_ref_cmd();
         break;
     case MODE_JOG: // 点动
         handle_jog_cmd();
@@ -303,22 +297,30 @@ static void read_from_hal()
     rt_data->axis_data[AXIS_X].motor_act_pos = rt_data->axis_data[AXIS_X].motor_cmd_pos;
     rt_data->axis_data[AXIS_Y].motor_act_pos = rt_data->axis_data[AXIS_Y].motor_cmd_pos;
     rt_data->axis_data[AXIS_Z].motor_act_pos = rt_data->axis_data[AXIS_Z].motor_cmd_pos;
+    rt_data->axis_data[AXIS_SP].motor_act_pos = rt_data->axis_data[AXIS_SP].motor_cmd_pos;
 #else
+    // 计算进给轴位置
     Hal_Driver_Get_Actual_Pos(&x_axis_driver, &x_act_pulse_pos);
     rt_data->axis_data[AXIS_X].motor_act_pos = pulses_to_position(&rt_data->axis_data[AXIS_X], x_act_pulse_pos);
     Hal_Driver_Get_Actual_Pos(&y_axis_driver, &y_act_pulse_pos);
     rt_data->axis_data[AXIS_Y].motor_act_pos = pulses_to_position(&rt_data->axis_data[AXIS_Y], y_act_pulse_pos);
     Hal_Driver_Get_Actual_Pos(&z_axis_driver, &z_act_pulse_pos);
     rt_data->axis_data[AXIS_Z].motor_act_pos = pulses_to_position(&rt_data->axis_data[AXIS_Z], z_act_pulse_pos);
+    // todo：计算旋转轴角度
+    Hal_Driver_Get_Actual_Pos(&spindle_driver, &sp_act_pulse_pos);
+    // rt_data->axis_data[AXIS_SP].motor_act_pos = pulses_to_position(&rt_data->axis_data[AXIS_SP], sp_act_pulse_pos);
 #endif
     // 电机脉冲
     rt_data->axis_data[AXIS_X].enc_cntr = x_act_pulse_pos;
     rt_data->axis_data[AXIS_Y].enc_cntr = y_act_pulse_pos;
     rt_data->axis_data[AXIS_Z].enc_cntr = z_act_pulse_pos;
+    rt_data->axis_data[AXIS_SP].enc_cntr = sp_cmd_pulse_pos;
     // 读取实际速度
     rt_data->axis_data[AXIS_X].act_vel = x_axis_driver.actual_vel;
     rt_data->axis_data[AXIS_Y].act_vel = y_axis_driver.actual_vel;
     rt_data->axis_data[AXIS_Z].act_vel = z_axis_driver.actual_vel;
+    rt_data->axis_data[AXIS_SP].act_vel = spindle_driver.actual_vel;
+    // 进给值实际合成速度，不包含主轴
     rt_data->chan_data[0].act_vel = sqrt(pow(x_axis_driver.actual_vel, 2) + pow(y_axis_driver.actual_vel, 2) +
                                          pow(z_axis_driver.actual_vel, 2));
 

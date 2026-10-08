@@ -87,6 +87,12 @@ void ServoSampleSampler::execute()
         }
         sampleIfDue();
 
+        /* External-motion sessions are explicitly stopped by the HMI. They
+         * must not infer completion from CNC program state. */
+        if (isExternalMotionConfig(_config)) {
+            return;
+        }
+
         const bool motionObserved = isCompositeConfig(_config)
             ? std::fabs(var_chan[0][VAR_CHAN_CMD_FEEDRATE].value.f) > kMinVelocity ||
               std::fabs(_actualCompositeVelocityMmPerMin) > kMinVelocity
@@ -201,7 +207,10 @@ void ServoSampleSampler::handleReset()
     __atomic_store_n(&_shared->programSequence, 0U, __ATOMIC_RELEASE);
     __atomic_store_n(&_shared->stopReason, CNC_SERVO_STOP_RESET, __ATOMIC_RELEASE);
     __atomic_store_n(&_shared->errorCode, CNC_SERVO_ERROR_NONE, __ATOMIC_RELEASE);
-    __atomic_store_n(&_shared->state, CNC_SERVO_STATE_WAITING_PROGRAM,
+    __atomic_store_n(&_shared->state,
+                     isExternalMotionConfig(_config)
+                         ? CNC_SERVO_STATE_ARMED
+                         : CNC_SERVO_STATE_WAITING_PROGRAM,
                      __ATOMIC_RELEASE);
 }
 
@@ -261,6 +270,15 @@ bool ServoSampleSampler::registerConfig(const CncServoSampleConfig& config,
 
 void ServoSampleSampler::acknowledgeProgram(uint32_t sequence)
 {
+    if (isExternalMotionConfig(_config)) {
+        /* External mode intentionally never switches target mode to MDI or
+         * requires a program sequence handshake. */
+        __atomic_store_n(&_shared->errorCode, CNC_SERVO_ERROR_NONE,
+                         __ATOMIC_RELEASE);
+        __atomic_store_n(&_shared->acknowledgedSequence, sequence,
+                         __ATOMIC_RELEASE);
+        return;
+    }
     const uint32_t requested = __atomic_load_n(&_shared->requestedProgramSequence,
                                                __ATOMIC_ACQUIRE);
     const uint32_t resetSequence = __atomic_load_n(&_shared->resetSequence,
@@ -325,6 +343,11 @@ void ServoSampleSampler::resetCaptureData()
 bool ServoSampleSampler::validateConfig(const CncServoSampleConfig& config,
                                         int32_t* error) const
 {
+    if (config.mode != CNC_SERVO_SAMPLE_MODE_PROGRAM &&
+        config.mode != CNC_SERVO_SAMPLE_MODE_EXTERNAL) {
+        if (error) *error = CNC_SERVO_ERROR_INVALID_CONFIG;
+        return false;
+    }
     if (config.axis >= SYS_AXES_NUM) {
         if (error) *error = CNC_SERVO_ERROR_INVALID_AXIS;
         return false;
@@ -358,13 +381,36 @@ bool ServoSampleSampler::validateConfig(const CncServoSampleConfig& config,
         } else {
             hasAxisSignal = true;
         }
+        if (channel.axis >= SYS_AXES_NUM && channel.axis != 0U) {
+            if (error) *error = CNC_SERVO_ERROR_INVALID_AXIS;
+            return false;
+        }
         validatedMask |= (1U << i);
     }
     if (validatedMask == 0 || validatedMask != config.channelMask) {
         if (error) *error = CNC_SERVO_ERROR_NO_CHANNEL;
         return false;
     }
-    if ((hasCompositeSignal && hasAxisSignal) ||
+    if (config.mode == CNC_SERVO_SAMPLE_MODE_EXTERNAL) {
+        /* Circle/external sessions require four position channels with
+         * channel-local horizontal/vertical axes. */
+        if (config.loopType != CNC_SERVO_LOOP_POSITION || hasCompositeSignal ||
+            config.channelMask != 0x0FU ||
+            config.channels[0].signalId != CNC_SERVO_SIGNAL_ACT_POS ||
+            config.channels[1].signalId != CNC_SERVO_SIGNAL_ACT_POS ||
+            config.channels[2].signalId != CNC_SERVO_SIGNAL_CMD_POS ||
+            config.channels[3].signalId != CNC_SERVO_SIGNAL_CMD_POS ||
+            config.channels[0].axis >= SYS_AXES_NUM ||
+            config.channels[1].axis >= SYS_AXES_NUM ||
+            config.channels[2].axis >= SYS_AXES_NUM ||
+            config.channels[3].axis >= SYS_AXES_NUM ||
+            config.channels[0].axis == config.channels[1].axis ||
+            config.channels[2].axis != config.channels[0].axis ||
+            config.channels[3].axis != config.channels[1].axis) {
+            if (error) *error = CNC_SERVO_ERROR_INVALID_CONFIG;
+            return false;
+        }
+    } else if ((hasCompositeSignal && hasAxisSignal) ||
         (hasCompositeSignal && config.loopType != CNC_SERVO_LOOP_VELOCITY)) {
         if (error) *error = CNC_SERVO_ERROR_INVALID_CONFIG;
         return false;
@@ -377,6 +423,16 @@ bool ServoSampleSampler::machineReady(const CncServoSampleConfig& config) const
     if (!rt_data || rt_get_sys_state(SYS_IS_ESTOP_ACTIVE) ||
         rt_get_sys_state(SYS_IS_ALARMING)) {
         return false;
+    }
+    if (isExternalMotionConfig(config)) {
+        for (uint32_t i = 0; i < CNC_SERVO_SAMPLE_CHANNEL_COUNT; ++i) {
+            if (!config.channels[i].enabled) continue;
+            const uint32_t axis = config.channels[i].axis;
+            if (axis >= SYS_AXES_NUM || rt_data->axis_data[axis].status.is_disable) {
+                return false;
+            }
+        }
+        return true;
     }
     if (!isCompositeConfig(config)) {
         return config.axis < SYS_AXES_NUM &&
@@ -399,6 +455,11 @@ bool ServoSampleSampler::isCompositeConfig(const CncServoSampleConfig& config) c
         }
     }
     return false;
+}
+
+bool ServoSampleSampler::isExternalMotionConfig(const CncServoSampleConfig& config) const
+{
+    return config.mode == CNC_SERVO_SAMPLE_MODE_EXTERNAL;
 }
 
 bool ServoSampleSampler::programActive() const
@@ -465,18 +526,29 @@ void ServoSampleSampler::sampleOne()
 
     CncServoSampleFrame frame{};
     const double cmdPos = rt_data->axis_data[_config.axis].mac_cmd_pos;
-    const double actPos = rt_data->axis_data[_config.axis].fb_pos_no_comp;
-    const double cmdVel = var_axis[_config.axis][VAR_AXIS_CMD_VEL].value.f * 60.0;
+    const double actPos = rt_data->axis_data[_config.axis].motor_act_pos;
+    const double cmdVel = var_axis[_config.axis][VAR_AXIS_CMD_VEL_EX].value.f;
+    const double actVel = var_axis[_config.axis][VAR_AXIS_ACT_VEL_EX].value.f;
     const double cmdCompositeVel = var_chan[0][VAR_CHAN_CMD_FEEDRATE].value.f;
+
     const double followErrUm = (cmdPos - actPos) * 1000.0;
     for (uint32_t i = 0; i < CNC_SERVO_SAMPLE_CHANNEL_COUNT; ++i) {
         if (!_config.channels[i].enabled) continue;
+        /* Program-mode channels retain the session axis for compatibility;
+         * external (circle) channels explicitly select their own axes. */
+        const uint32_t axis = isExternalMotionConfig(_config)
+            ? _config.channels[i].axis : _config.axis;
+        const double channelCmdPos = rt_data->axis_data[axis].mac_cmd_pos;
+        const double channelActPos = rt_data->axis_data[axis].motor_act_pos;
+        const double channelCmdVel = var_axis[axis][VAR_AXIS_CMD_VEL_EX].value.f;
+        const double channelActVel = var_axis[axis][VAR_AXIS_ACT_VEL_EX].value.f;
+        const double channelFollowErrUm = (channelCmdPos - channelActPos) * 1000.0;
         switch (_config.channels[i].signalId) {
-        case CNC_SERVO_SIGNAL_CMD_POS: frame.values[i] = cmdPos; break;
-        case CNC_SERVO_SIGNAL_ACT_POS: frame.values[i] = actPos; break;
-        case CNC_SERVO_SIGNAL_FOLLOW_ERR: frame.values[i] = followErrUm; break;
-        case CNC_SERVO_SIGNAL_CMD_VEL: frame.values[i] = cmdVel; break;
-        case CNC_SERVO_SIGNAL_ACT_VEL: frame.values[i] = _actualVelocityMmPerMin; break;
+        case CNC_SERVO_SIGNAL_CMD_POS: frame.values[i] = channelCmdPos; break;
+        case CNC_SERVO_SIGNAL_ACT_POS: frame.values[i] = channelActPos; break;
+        case CNC_SERVO_SIGNAL_FOLLOW_ERR: frame.values[i] = channelFollowErrUm; break;
+        case CNC_SERVO_SIGNAL_CMD_VEL: frame.values[i] = channelCmdVel; break;
+        case CNC_SERVO_SIGNAL_ACT_VEL: frame.values[i] = channelActVel; break;
         case CNC_SERVO_SIGNAL_CMD_COMPOSITE_VEL: frame.values[i] = cmdCompositeVel; break;
         case CNC_SERVO_SIGNAL_ACT_COMPOSITE_VEL:
             frame.values[i] = _actualCompositeVelocityMmPerMin;

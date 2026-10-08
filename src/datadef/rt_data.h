@@ -44,6 +44,9 @@ typedef enum
     SYS_IS_MSBT_LOCK,           // 辅助功能锁住
     SYS_IS_RAPID,               // 是否快速
     SYS_IS_PROG_RESTAR,         // 程序再启动
+    SYS_IS_STOP_SKIP,           // 外部跳转
+    SYS_IS_RIGID,               // 刚性攻丝
+    SYS_IS_RIGID_RERTURN,       // 攻丝回退
 } SysStateIndex;
 
 // 路径和轨迹两个线程使用
@@ -53,6 +56,7 @@ typedef enum
     CHAN_IS_PARSERING,          // 解释器是否运行中 is_parsering
     CHAN_IS_PARSER_RERUN,       // 译码器是否运行中 is_parser_running
     CHAN_IS_FIRST_RUN,          // 是否为第一次运行 is_first_run
+    CHAN_IS_MOTION_SYNC,        // 等待运动完成同步握手
 } ChanStateIndex;
 
 typedef struct
@@ -113,6 +117,16 @@ typedef struct
     int lookahead_num;      // 速度规划前瞻段数
     double path_tolerance;  // 轨迹轮廓允差
     int corner_dec_factor;  // 拐角降速比例因子
+    double l_min_thre;
+    double l_theta_thre;
+    double theta_thre;
+    double kappa_thre;
+    double seg_theta_thre;
+    double kratio;
+    double nurbs_fiterror;
+    double nurbs_sagittaerror;
+    int nurbs_enable;       // 开启nurbs拟合
+    UNIF_TYPE unif_type;    // 一致性处理方式
 } RT_CHAN;
 
 // 目前仅轨迹线程使用
@@ -218,6 +232,7 @@ bool rt_get_sys_state(SysStateIndex state);
 void rt_set_chan_state(int chan_index, ChanStateIndex state, bool value);
 bool rt_get_chan_state(int chan_index, ChanStateIndex state);
 void rt_set_zero_vel_params();
+void rt_set_axis_zero_vel_params(AXIS_TYPE axis_type);
 
 #ifdef __cplusplus
 }

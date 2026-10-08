@@ -110,6 +110,7 @@ HEADERS += \
     src/hal/hal_io.h \
     src/hal/egear_ratio.h \
     src/motion/auto/auto.h \
+    src/motion/auto/trace_publisher.h \
     src/motion/auto/trajplan/auto_gcode.h \
     src/motion/auto/trajplan/auto_mst.h \
     src/motion/auto/interp/interpolation.h \
@@ -121,7 +122,7 @@ HEADERS += \
     src/motion/spindle/spl_pos_planner.h \
     src/motion/emcmot.h \
     src/motion/manual/handwheel.h \
-    src/motion/manual/homing.h \
+    src/motion/manual/ref.h \
     src/motion/manual/jog/jog.h \
     src/motion/manual/jog/jog_planner.h \
     src/motion/servo_sample/servosamplesampler.h \
@@ -166,6 +167,7 @@ SOURCES += \
     src/hal/hal_io.c \
     src/hal/egear_ratio.c \
     src/motion/auto/auto.c \
+    src/motion/auto/trace_publisher.c \
     src/motion/auto/trajplan/auto_gcode.c \
     src/motion/auto/trajplan/auto_mst.c \
     src/motion/auto/interp/interpolation.c \
@@ -177,7 +179,7 @@ SOURCES += \
     src/motion/spindle/spl_pos_planner.c \
     src/motion/emcmot.cpp \
     src/motion/manual/handwheel.c \
-    src/motion/manual/homing.c \
+    src/motion/manual/ref.c \
     src/motion/manual/jog/jog.c \
     src/motion/manual/jog/jog_planner.c \
     src/motion/servo_sample/servosamplesampler.cpp \

@@ -203,6 +203,10 @@ bool check_rerun_row_is_valid(){
             break;
         }
         break;
+    case PMC_MODE_STOPSKIP:
+        res = setAlarm(ALARM_CH, ALARM_ERROR, 4);
+        if(res != -8) LOG(LOG_LEVEL_ERR, "跳过不可以执行程序再启动");
+        return false;
     default:
         break;
     }

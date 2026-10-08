@@ -8,8 +8,7 @@
 #include <hmisysapi.h>
 #include "alarmapi.h"
 #include "reset.h"
-#include "homing.h"
-#include <math.h>
+#include "ref.h"
 
 static void plc_output_alarm();
 static void plc_output_mode();
@@ -109,6 +108,11 @@ static void plc_output_auto()
         setRegBit(REG_F, 2, 4);
     else
         clearRegBit(REG_F, 2, 4);
+    // 刚性攻丝方式中
+    if(rt_data->sys_state[SYS_IS_RIGID])
+        setRegBit(REG_F, 76, 3);
+    else
+        clearRegBit(REG_F, 76, 3);
 }
 
 // 各轴返回零点完成、参考点建立

@@ -23,7 +23,7 @@ void handle_estop_cmd()
         reset_ref_state();
         // 重置各个模式
         auto_handle_estop();
-        homing_handle_estop();
+        ref_handle_estop();
         jog_handle_estop();
         handwheel_handle_estop();
         LOG(LOG_LEVEL_INFO, "处理按下急停");

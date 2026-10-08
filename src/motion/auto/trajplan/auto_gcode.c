@@ -15,7 +15,7 @@
 #include "interpolation.h"
 #include "stored_stroke_check.h"
 #include <alarmapi.h>
-#include "homing.h"
+#include "ref.h"
 
 static void auto_cal_target_vel();
 static void auto_look_ahead();
@@ -26,6 +26,7 @@ static void auto_cal_target_vel();
 static void auto_cal_lock_vel();
 static void block_cal_lookahead_vel(PLAN_BLOCK* current_block);
 static void block_cal_exact_stop_vel(PLAN_BLOCK* current_block);
+static void block_cal_stop_skip_vel(PLAN_BLOCK* current_block);
 static void block_cal_tap_vel(PLAN_BLOCK* current_block);
 static void block_cal_chop_vel(PLAN_BLOCK* current_block);
 static void block_cal_default_vel(PLAN_BLOCK* current_block);
@@ -35,22 +36,12 @@ static bool auto_pos_cmd_cycle_is_finished();
 static bool auto_pos_cmd_axis_arrive_check();
 static bool auto_pos_cmd_arrive_check();
 static void auto_cal_axis_vel(POS *current_pos, POS *target_pos, double target_vel);
+static void auto_set_exec_cmd();
 
 void auto_get_pos_cmd(){
     cycle_tp_update_pos_cmd_data();
-    switch (cycle_tp->plan_block->type)
-    {
-    case RAPID:
-        cycle_tp->exec_cmd = DO_MOVE_CMD;
-        break;
-    case TAP_RETURN:
-    case RIGID_TAP:
-        cycle_tp->exec_cmd = DO_TAP_CMD;
-        break;
-    default:
-        cycle_tp->exec_cmd = DO_CHOP_CMD;
-        break;
-    }
+    // 设置pos_cmd的类型
+    auto_set_exec_cmd();
     // 更新目标速度
     auto_cal_target_vel();
     // auto_cal_lock_vel();
@@ -75,19 +66,8 @@ void auto_get_pos_cmd(){
 
 void auto_update_pos_cmd(){
     cycle_tp_update_pos_cmd_data();
-    switch (cycle_tp->plan_block->type)
-    {
-    case RAPID:
-        cycle_tp->exec_cmd = DO_MOVE_CMD;
-        break;
-    case TAP_RETURN:
-    case RIGID_TAP:
-        cycle_tp->exec_cmd = DO_TAP_CMD;
-        break;
-    default:
-        cycle_tp->exec_cmd = DO_CHOP_CMD;
-        break;
-    }
+    // 设置pos_cmd的类型
+    auto_set_exec_cmd();
     // 更新目标速度
     auto_cal_target_vel();
     // 当前速度和目标速度为0
@@ -281,6 +261,9 @@ static void auto_cal_target_vel(){
             if(rt_get_sys_state(SYS_IS_DRY_RUN)) cycle_tp->pos_cmd_data.target_vel = MIN(rt_data->chan_data[0].dryrun_spd * var_chan[0][VAR_CHAN_RAPID_OVERRIDE].value.f / OVERRIDE_PERCENT, cycle_tp->max_rapid_vel);
             else cycle_tp->pos_cmd_data.target_vel = MIN(cycle_tp->plan_block->feed_vel * var_chan[0][VAR_CHAN_RAPID_OVERRIDE].value.f / OVERRIDE_PERCENT, cycle_tp->max_rapid_vel);
             break;
+        case PROBE:
+            cycle_tp->pos_cmd_data.target_vel = MIN(cycle_tp->plan_block->feed_vel, cycle_tp->max_feed_vel);
+            break;
         default:
             if(rt_get_sys_state(SYS_IS_DRY_RUN)) cycle_tp->pos_cmd_data.target_vel = MIN(rt_data->chan_data[0].dryrun_spd * var_chan[0][VAR_CHAN_FEED_OVERRIDE].value.f / OVERRIDE_PERCENT, cycle_tp->max_feed_vel);
             else cycle_tp->pos_cmd_data.target_vel = MIN(cycle_tp->plan_block->feed_vel * var_chan[0][VAR_CHAN_FEED_OVERRIDE].value.f / OVERRIDE_PERCENT, cycle_tp->max_feed_vel);
@@ -288,7 +271,7 @@ static void auto_cal_target_vel(){
         }
         if(!rt_data->sys_state[SYS_IS_MAC_LOCK_READY] && rt_data->sys_state[SYS_IS_MAC_LOCK_ON]) cycle_tp->pos_cmd_data.target_vel = 0;
         if(rt_data->sys_state[SYS_IS_MAC_LOCK_READY] && !rt_data->sys_state[SYS_IS_MAC_LOCK_ON]) cycle_tp->pos_cmd_data.target_vel = 0;
-        if(rt_data->sys_state[SYS_IS_IT_LOCK]) cycle_tp->pos_cmd_data.target_vel = 0;
+        if(rt_data->sys_state[SYS_IS_IT_LOCK] || rt_data->sys_state[SYS_IS_STOP_SKIP]) cycle_tp->pos_cmd_data.target_vel = 0;
         break;
     case EXEC_PAUSING:
     case EXEC_RESET:
@@ -524,7 +507,12 @@ static void block_cal_lookahead_vel(PLAN_BLOCK* current_block){
         // 准确停止、到位检测 G09、G61、G27、G28
         case PMC_MODE_ARRIVE_CHECK:
         case PMC_MODE_EXACT_STOP:
+        case PMC_MODE_MEASURE_TOOL:
             block_cal_exact_stop_vel(current_block);
+            break;
+        // 跳转 G31
+        case PMC_MODE_STOPSKIP:
+            block_cal_stop_skip_vel(current_block);
             break;
         default:
             block_cal_default_vel(current_block);
@@ -660,6 +648,13 @@ static void block_cal_chop_vel(PLAN_BLOCK* current_block){
     }
 }
 
+// 跳转：终点减速，不受倍率和空运行影响
+// todo：可通过参数配置是否受倍率和空运行影响
+static void block_cal_stop_skip_vel(PLAN_BLOCK* current_block){
+    current_block->max_vel = MIN(current_block->feed_vel, cycle_tp->max_feed_vel);
+    current_block->start_vel = current_block->end_vel = 0;
+}
+
 static bool auto_pos_cmd_axis_arrive_check(){
     int res = 0;
     bool is_arrived = true;
@@ -689,7 +684,7 @@ static bool auto_pos_cmd_axis_arrive_check(){
 }
 
 static bool auto_pos_cmd_arrive_check(){
-    // 机械锁住时不进行到位检测
+    // 机械锁住时不进行 到位检测
     if(rt_data->sys_state[SYS_IS_MAC_LOCK_READY]) return true;
     switch (cycle_tp->target_stage)
     {
@@ -698,11 +693,11 @@ static bool auto_pos_cmd_arrive_check(){
         switch (cycle_tp->plan_block->mode) {
         case PMC_MODE_ARRIVE_CHECK:
         case PMC_MODE_EXACT_STOP:
+        case PMC_MODE_STOPSKIP:
             if(!auto_pos_cmd_axis_arrive_check()) return false;
             // 回参考点检测
             if(IsGreaterThan(cycle_tp->plan_block->ref_number, 0)){
-                auto_set_ref_state(cycle_tp->plan_block->ref_number, cycle_tp->plan_block->ref_axis);
-                LOG(LOG_LEVEL_DEBUG,  "[回%d参考点完成] %f %f %f", cycle_tp->plan_block->ref_number, rt_data->axis_data[AXIS_X].motor_cmd_pos, rt_data->axis_data[AXIS_Y].motor_cmd_pos, rt_data->axis_data[AXIS_Z].motor_cmd_pos);         
+                check_ref_arrive(cycle_tp->plan_block->ref_number, cycle_tp->plan_block->ref_axis); 
             }
             LOG(LOG_LEVEL_DEBUG,  "[到位检测] 机床指令位置:%f %f %f vel:%f", rt_data->axis_data[AXIS_X].motor_cmd_pos, rt_data->axis_data[AXIS_Y].motor_cmd_pos, rt_data->axis_data[AXIS_Z].motor_cmd_pos, cycle_tp->plan_block->end_vel);
             LOG(LOG_LEVEL_DEBUG,  "[到位检测] 电机无补偿位置:%f %f %f vel:%f", rt_data->axis_data[AXIS_X].fb_pos_no_comp, rt_data->axis_data[AXIS_Y].fb_pos_no_comp, rt_data->axis_data[AXIS_Z].fb_pos_no_comp,cycle_tp->plan_block->end_vel);
@@ -730,4 +725,23 @@ static void auto_cal_axis_vel(POS *current_pos, POS *target_pos, double target_v
     rt_data->axis_data[AXIS_X].cmd_vel = target_vel * vec.x;
     rt_data->axis_data[AXIS_Y].cmd_vel = target_vel * vec.y;
     rt_data->axis_data[AXIS_Z].cmd_vel = target_vel * vec.z;
+}
+
+static void auto_set_exec_cmd(){
+    switch (cycle_tp->plan_block->type)
+    {
+    case RAPID:
+        cycle_tp->exec_cmd = DO_MOVE_CMD;
+        break;
+    case TAP_RETURN:
+    case RIGID_TAP:
+        cycle_tp->exec_cmd = DO_TAP_CMD;
+        break;
+    case PROBE:
+        cycle_tp->exec_cmd = DO_SKIP_CMD;
+        break;
+    default:
+        cycle_tp->exec_cmd = DO_CHOP_CMD;
+        break;
+    }
 }

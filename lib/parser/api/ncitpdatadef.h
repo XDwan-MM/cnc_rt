@@ -9,6 +9,12 @@ extern "C" {
 #endif
 
 #define PMC_DATA_COUNT_MAX 100     // 单行译码最大结果数
+#define ITP_SYS_REF_POINT_MAX (4)
+#define ITP_SYS_AXIS_MAX (6)
+typedef struct {
+    int axisCount;                                            /*!< 每个参考点的轴数，<= ITP_SYS_AXIS_MAX */
+    double refPos[ITP_SYS_REF_POINT_MAX][ITP_SYS_AXIS_MAX];   /*!< [参考点序号][轴序号]，机床坐标 */
+} IptRefPoint;
 
 typedef struct {
     int cnv;    //干涉检查模式
@@ -18,6 +24,7 @@ typedef struct {
     int suv;    // No.5003#1: 起刀类型高位
     int ccc;    // No.19607#2: 外边拐角连接 0=直线 1=圆弧
     int lookAheadSegments;      // 刀补开启时预读段数，缓冲区容量 = 预读段数 + 1
+    IptRefPoint refPoint;       // 第1、2、3、4参考点
 } ItpParam_temp;
 
 typedef struct {

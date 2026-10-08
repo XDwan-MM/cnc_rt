@@ -80,7 +80,7 @@ HEADERS += \
     ../src/motion/spindle/spl_pos_planner.h \
     ../src/motion/emcmot.h \
     ../src/motion/manual/handwheel.h \
-    ../src/motion/manual/homing.h \
+    ../src/motion/manual/ref.h \
     ../src/motion/manual/jog/jog.h \
     ../src/motion/manual/jog/jog_planner.h \
     ../src/motion/servo_sample/servosamplesampler.h \
@@ -136,7 +136,7 @@ SOURCES += \
     ../src/motion/spindle/spl_pos_planner.c \
     ../src/motion/emcmot.cpp \
     ../src/motion/manual/handwheel.c \
-    ../src/motion/manual/homing.c \
+    ../src/motion/manual/ref.c \
     ../src/motion/manual/jog/jog.c \
     ../src/motion/manual/jog/jog_planner.c \
     ../src/motion/servo_sample/servosamplesampler.cpp \

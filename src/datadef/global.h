@@ -17,7 +17,7 @@
 #include "rerun.h"
 #include "reset.h"
 #include "auto.h"
-#include "homing.h"
+#include "ref.h"
 #include "trajectory.h"
 #include "driver_hal.h"
 #include "hal_io.h"
@@ -126,7 +126,7 @@ extern PLAN_QUEUE *parser_queue;        // 译码队列
 extern PLAN_QUEUE *pretreat_queue;      // 预处理队列
 extern PLAN_QUEUE *plan_queue;          // 插补队列
 extern COORD_TP *cycle_tp;              // 循环轨迹规划
-extern HOMING_TP *homing_tp;            // 回零轨迹规划
+extern REF_TP *ref_tp;                  // 回零轨迹规划
 
 // 读写共享内存锁
 extern pthread_mutex_t shm_mutex;

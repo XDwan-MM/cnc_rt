@@ -97,6 +97,18 @@ GNC_RES parser_init(NC_MODE nc_mode)
     itpParam.suv = par_ncu[PAR_NCU_PARSER_SUV].value.val_int;
     itpParam.ccc = par_ncu[PAR_NCU_PARSER_CCC].value.val_int;
     itpParam.lookAheadSegments = par_ncu[PAR_NCU_PARSER_LOOKAHEADSEGMENTS].value.val_int;
+
+    constexpr int kHomeCrdsIdx[4] = {PAR_AX_HOME_CRDS, PAR_AX_HOME_CRDS2, PAR_AX_HOME_CRDS3, PAR_AX_HOME_CRDS4};
+
+    const int refAxisCount = (SYS_AXES_NUM < ITP_SYS_AXIS_MAX) ? SYS_AXES_NUM : ITP_SYS_AXIS_MAX;
+    itpParam.refPoint.axisCount = refAxisCount;
+    for (int n = 0; n < ITP_SYS_REF_POINT_MAX; ++n)
+    {
+        for (int a = 0; a < refAxisCount; ++a)
+        {
+            itpParam.refPoint.refPos[n][a] = par_axis[a][kHomeCrdsIdx[n]].value.val_real;
+        }
+    }
     ItpSetItpParam(itpParam);
     // 设置机床起点
     double ori_pos_x, ori_pos_y, ori_pos_z;
@@ -212,6 +224,11 @@ GNC_RES parser_reading(){
             CHECK_RES(parser_check_res(res));
         }
     }
+    if (res == GNC_PARSER_WAIT)
+    {
+        ItpNextLine();
+        return res;
+    }
     if (ItpIsOver())
     {
         // LOG(LOG_LEVEL_WARN, "译码结束");
@@ -239,8 +256,7 @@ static bool parser_check_res(GNC_RES res){
             return false;
         case GNC_CAL_SUCCESS:
         case GNC_OPERATOR_SUCCESS:
-            if(parser_data->parser_state == PARSER_WAITING_FOR_BUF || 
-                parser_data->parser_state == PARSER_WAITING_FOR_MOTION)
+            if(parser_data->parser_state == PARSER_WAITING_FOR_BUF)
             {
                 parser_data->parser_state = PARSER_READING;
             }
@@ -267,15 +283,16 @@ static GNC_RES parser_handle_recieve(pmc_data* motion_data, NcItpState *itp_stat
     if (motion_data) {
         // 模式
         switch(motion_data->mode){
-            case PMC_MODE_EXACT_STOP: // 精准停模式
-            case PMC_MODE_CHOP: // 切削模式
-            case PMC_MODE_ARRIVE_CHECK: // 到位检测
-            case PMC_MODE_TAP: // 攻丝模式
-            case PMC_MODE_PAUSE: // 暂停模式
-            case PMC_MODE_TAP_RETURE: // 攻丝回退
+            case PMC_MODE_EXACT_STOP:       // 精准停模式
+            case PMC_MODE_CHOP:             // 切削模式
+            case PMC_MODE_ARRIVE_CHECK:     // 到位检测
+            case PMC_MODE_TAP:              // 攻丝模式
+            case PMC_MODE_PAUSE:            // 暂停模式
+            case PMC_MODE_TAP_RETURE:       // 攻丝回退
+            case PMC_MODE_STOPSKIP:         // 跳转
                 res = parser_handle_gcode(motion_data, itp_state, line_no);
                 break; 
-            case PMC_MODE_M_CMD: // M指令
+            case PMC_MODE_M_CMD:            // M指令
                 res = parser_handle_mcode(motion_data, itp_state, line_no);
                 break;
             // 更新：其他模式
@@ -291,7 +308,6 @@ static GNC_RES parser_handle_recieve(pmc_data* motion_data, NcItpState *itp_stat
 }
 
 static GNC_RES parser_handle_null(NcItpState *itp_state, int *line_no){
-
     PLAN_BLOCK plan_block;
     // 模态
     plan_block.state = *itp_state;
@@ -300,6 +316,7 @@ static GNC_RES parser_handle_null(NcItpState *itp_state, int *line_no){
     // 行号
     plan_block.line_number = *line_no;
     plan_block.is_breakpoint = false;
+    // LOG(LOG_LEVEL_DEBUG, "空包: no %d mode %d type %d", plan_block.line_number, plan_block.mode, plan_block.type);
     // 加入队列
     if(queue_is_full(parser_queue)){
         return GNC_DATA_FULL;
@@ -325,22 +342,19 @@ static GNC_RES parser_handle_gcode(pmc_data* motion_data, NcItpState *itp_state,
             plan_block.circular_data.center_pos.x = motion_data->circle_center.x_coc;
             plan_block.circular_data.center_pos.y = motion_data->circle_center.y_coc;
             plan_block.circular_data.center_pos.z = motion_data->circle_center.z_coc;
-            // 平面
-            plan_block.circular_data.plane = (PLANE)(motion_data->plane);
             break;
         case PMC_G03:
             plan_block.type = CIRCLE_CCW;
             plan_block.circular_data.center_pos.x = motion_data->circle_center.x_coc;
             plan_block.circular_data.center_pos.y = motion_data->circle_center.y_coc;
             plan_block.circular_data.center_pos.z = motion_data->circle_center.z_coc;
-            plan_block.circular_data.plane = (PLANE)(motion_data->plane);
             break;
         case PMC_G02_5:
             plan_block.type = HELIX_CW;
+            
             plan_block.circular_data.center_pos.x = motion_data->circle_center.x_coc;
             plan_block.circular_data.center_pos.y = motion_data->circle_center.y_coc;
             plan_block.circular_data.center_pos.z = motion_data->circle_center.z_coc;
-            plan_block.circular_data.plane = (PLANE)(motion_data->plane);
             plan_block.helical_data.screw_number = motion_data->screw_number;
             plan_block.helical_data.screw_offset = motion_data->screw_offset;
             break;
@@ -349,21 +363,40 @@ static GNC_RES parser_handle_gcode(pmc_data* motion_data, NcItpState *itp_state,
             plan_block.circular_data.center_pos.x = motion_data->circle_center.x_coc;
             plan_block.circular_data.center_pos.y = motion_data->circle_center.y_coc;
             plan_block.circular_data.center_pos.z = motion_data->circle_center.z_coc;
-            plan_block.circular_data.plane = (PLANE)(motion_data->plane);
             plan_block.helical_data.screw_number = motion_data->screw_number;
             plan_block.helical_data.screw_offset = motion_data->screw_offset;
+            // LOG(LOG_LEVEL_DEBUG, "no %d speed %f reverse %f", *line_no, motion_data->spindle.speed, motion_data->spindle.reverse); 
             break;
         case PMC_G33_1: // 攻丝循环
             plan_block.type = RIGID_TAP;
+            plan_block.rigid_data.screw_number = motion_data->screw_number;
+            plan_block.rigid_data.screw_offset = motion_data->screw_offset;
+            plan_block.rigid_data.speed = motion_data->spindle.speed;
+            plan_block.rigid_data.reverse = motion_data->spindle.reverse;
+            plan_block.rigid_data.screw_offset = motion_data->feed.value / motion_data->spindle.speed;
+            // LOG(LOG_LEVEL_DEBUG, "no %d speed %d reverse %d screw_offset %f", *line_no, motion_data->spindle.speed, motion_data->spindle.reverse, motion_data->screw_offset);
             break;
         case PMC_G33_2: // 攻丝回退
             plan_block.type = TAP_RETURN;
+            plan_block.rigid_data.screw_number = motion_data->screw_number;
+            plan_block.rigid_data.screw_offset = motion_data->screw_offset;
+            plan_block.rigid_data.speed = motion_data->spindle.speed;
+            plan_block.rigid_data.reverse = motion_data->spindle.reverse;
+            plan_block.rigid_data.screw_offset = motion_data->feed.value / motion_data->spindle.speed;
+            // LOG(LOG_LEVEL_DEBUG, "no %d speed %d reverse %d screw_offset %f", *line_no, motion_data->spindle.speed, motion_data->spindle.reverse, motion_data->screw_offset);
             break;
         default:
             // 未支持的插补类型
             rt_set_parser_state(3001, *line_no);
             LOG(LOG_LEVEL_DEBUG, "不支持该插补类型: %d", motion_data->interp);
             return GNC_PARSER_OVER;
+    }
+    switch(motion_data->mode){
+        case PMC_MODE_STOPSKIP:
+            plan_block.type = PROBE;
+            break;
+        default:
+            break;
     }
     // 进给速度
     plan_block.feed_vel = motion_data->feed.value / TIME_MINUS_2_S;
@@ -382,6 +415,8 @@ static GNC_RES parser_handle_gcode(pmc_data* motion_data, NcItpState *itp_state,
     // 回参考点
     plan_block.ref_number = (REF_TYPE)motion_data->ref_point_number;
     plan_block.ref_axis = motion_data->ref_axis_flag;
+    // 选择平面
+    plan_block.plane = (PLANE)(motion_data->plane);
     // 回断点
     plan_block.is_breakpoint = false;
     // 加入队列
@@ -392,9 +427,11 @@ static GNC_RES parser_handle_gcode(pmc_data* motion_data, NcItpState *itp_state,
     // if(plan_block.type == CIRCLE_CW || plan_block.type == CIRCLE_CCW ){
     //     LOG(LOG_LEVEL_DEBUG, "center pos %f %f %f no %d", plan_block.circular_data.center_pos.x, plan_block.circular_data.center_pos.y, plan_block.circular_data.center_pos.z, plan_block.line_number);  
     // }
-    // LOG(LOG_LEVEL_DEBUG, "end pos %f %f %f mode %d type:%d no %d", motion_data->position.x, motion_data->position.y, motion_data->position.z, plan_block.mode, plan_block.type, plan_block.line_number);
+    // LOG(LOG_LEVEL_DEBUG, "no %d end pos %f %f %f mode %d type:%d fv %f", plan_block.line_number, motion_data->position.x, motion_data->position.y, motion_data->position.z, plan_block.mode, plan_block.type, plan_block.feed_vel);
     // ======= 测试 ===========
     queue_push(parser_queue, &plan_block);
+    if(plan_block.mode == pmc_mode::PMC_MODE_STOPSKIP) return GNC_PARSER_WAIT;
+
     return GNC_OPERATOR_SUCCESS;
 }
 
@@ -448,16 +485,30 @@ GNC_RES parser_waiting_for_buf(){
     return res;
 }
 
+
 GNC_RES parser_waiting_for_motion() {
-    GNC_RES res = GNC_CAL_SUCCESS;
-    int start_index = parser_data->interp_list_index;
+    if(!rt_get_chan_state(0, CHAN_IS_MOTION_SYNC)) return GNC_CAL_SUCCESS;
+
+    int start_index = parser_data->interp_list_index+1;
     for(int i = start_index; i < parser_data->itp_datas.count; i++){
         pmc_data motion_data = parser_data->itp_datas.datas[i];
+        GNC_RES res = parser_handle_recieve(&motion_data, &parser_data->itp_state, &parser_data->itp_line_no);
+        if(res == GNC_PARSER_WAIT)
+        {
+            parser_data->interp_list_index = i;
+            rt_set_chan_state(0, CHAN_IS_MOTION_SYNC, false);
+            return GNC_CAL_SUCCESS;
+        }
+        if(!parser_check_res(res)) return GNC_CAL_SUCCESS;
         parser_data->interp_list_index = i;
-        res = parser_handle_recieve(&motion_data, &parser_data->itp_state, &parser_data->itp_line_no);
-        CHECK_RES(parser_check_res(res));
     }
-    return res;
+    rt_set_chan_state(0, CHAN_IS_MOTION_SYNC, false);
+    if(ItpIsOver())
+    {
+        return GNC_PARSER_OVER;
+    }
+    parser_data->parser_state = PARSER_READING;
+    return GNC_CAL_SUCCESS;
 }
 
 GNC_RES parser_waiting_to_end() {
@@ -480,6 +531,7 @@ void parser_reset(){
     ItpReset();
     parser_data->parser_state = PARSER_IDLE;
     rt_set_chan_state(0, CHAN_IS_PARSERING, false);
+    rt_set_chan_state(0, CHAN_IS_MOTION_SYNC, false);
     rt_set_chan_state(0, CHAN_IS_PARSER_RERUN, false);
 }
 
@@ -508,3 +560,12 @@ int t_macroVarSetValue(int no, double mac)
     
     return macroVarSetValue(no, mac, 0);
 }
+
+/*
+1、G31
+
+G90 G54 G40 G00 X1 Y1 Z1
+G31 G90 X3.0 F100
+Y100
+
+*/

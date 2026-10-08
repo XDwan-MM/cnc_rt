@@ -64,6 +64,8 @@ typedef enum
     SINGLE_BLOCK,        // 单段
     BLOCK_SKIP = 3,      // 程序段跳过（1~9） 
     PROG_RESTAR,         // 程序再启动
+    STOP_SKIP,           // 跳过
+    RIGID_RETURN,        // 攻丝回退
     // 机械锁住
     MAC_LOCK = 12,       // 所有轴机床锁住（MLK,MLK1~4）
     MAC_LOCK1,           // 各轴轴机床锁住   
