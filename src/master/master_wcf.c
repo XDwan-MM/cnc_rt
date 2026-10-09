@@ -110,6 +110,12 @@ int Master_Start(void)
         return MASTER_ERR_INIT;
     }
 
+    // 清一下驱动器报错
+    Driver_Fault_Reset(&x_axis_driver);
+    Driver_Fault_Reset(&y_axis_driver);
+    Driver_Fault_Reset(&z_axis_driver);
+    Driver_Fault_Reset(&spindle_driver);
+
     /* 进给轴使用 CSP；主轴使用 CSV，但主轴首次启动保持下使能。 */
     Driver_Request_Mode(&x_axis_driver, DRV_MODE_CSP);
     Driver_Request_Mode(&y_axis_driver, DRV_MODE_CSP);
