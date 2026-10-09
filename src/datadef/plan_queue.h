@@ -74,6 +74,7 @@ typedef struct
     int k;
     int num;
     double length;
+    double curvature;   // 最大曲率
     //段信息
     int startlineno;
     int endlineno;

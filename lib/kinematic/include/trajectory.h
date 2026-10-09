@@ -99,8 +99,14 @@ void vp_cal_bid_lookahead(VELPLAN_TYPE velplan_type, PLAN_QUEUE* plan_queue, dou
 /// @param chord_error 圆弧弓高误差
 /// @param cycle_time 
 /// @return double radius_error, double circular_min_vel,
-double vp_cal_circular_max_vel(PLAN_BLOCK* cur_block, double chord_error, double cycle_time);
+double vp_cal_circular_max_vel(PLAN_BLOCK* cur_block, double chord_error, double max_fv_arc_radius, double radius_r_max_fv, double circular_min_vel, double cycle_time);
 
+/// @brief nurbs曲线的加速度进行的速度控制
+/// @param cur_block 
+/// @param chord_error 轮廓误差
+/// @param cycle_time 
+/// @return 
+double vp_cal_nurbs_max_vel(PLAN_BLOCK* cur_block, double chord_error, double cycle_time);
 
 #ifdef __cplusplus
 }

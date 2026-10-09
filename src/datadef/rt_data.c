@@ -126,6 +126,10 @@ static void rt_reset_chan_data()
         rt_data->chan_data[i].lookahead_num = par_chan[i][PAR_CH_LOOKAHEAD_NUM].value.val_uint;                          // 速度规划前瞻段数
         rt_data->chan_data[i].path_tolerance = par_chan[i][PAR_CH_PATH_TOLERANCE].value.val_real;                        // 轨迹轮廓允差
         rt_data->chan_data[i].corner_dec_factor = par_chan[i][PAR_CH_CONER_DEC_FACTOR].value.val_int;                    // 拐角降速比例因子 ("def": "100", "min": "1", "max": "200")
+        rt_data->chan_data[i].max_fv_arc_radius = par_chan[i][PAR_CH_MAX_FEEDRATE_ARC_RADIUS].value.val_real;            // 与最大进给速度相对应的圆弧半径值
+        rt_data->chan_data[i].radius_r_max_fv = CONV_MM_MIN_TO_MM_S(par_chan[i][PAR_CH_RADIUS_R_MAX_FEEDRATE].value.val_real); // 半径R的圆弧最大进给速度
+        rt_data->chan_data[i].circular_min_vel = CONV_MM_MIN_TO_MM_S(par_chan[i][PAR_CH_CIRCLE_MIN_VEL].value.val_real);       // 基于圆弧插补下减速的下限速度
+        rt_data->chan_data[i].axis_min_vel = CONV_MM_MIN_TO_MM_S(par_chan[i][PAR_CH_AXIS_MIN_VEL].value.val_real);             // 基于每个轴加速度的下限速度
         rt_data->chan_data[i].ex_dec2_enable = par_chan[i][PAR_CH_EX_DEC2_ENABLE].value.val_bool;                        // 是否开启外部减速功能2
         rt_data->chan_data[i].ex_dec3_enable = par_chan[i][PAR_CH_EX_DEC3_ENABLE].value.val_bool;                        // 是否开启外部减速功能3
         rt_data->chan_data[i].ex_dec4_enable = par_chan[i][PAR_CH_EX_DEC4_ENABLE].value.val_bool;                        // 是否开启外部减速功能4
