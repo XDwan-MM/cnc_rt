@@ -33,6 +33,9 @@ GNC_RES rt_data_reset(void){
     pthread_mutex_lock(&rt_data->mutex);
     rt_upate_reset_valid_data();
     setVarChanInt(0, VAR_CHAN_IS_PROGEND, 1, 0);
+    rt_data->sys_state[SYS_IS_RIGID] = 0;
+    rt_data->sys_state[SYS_IS_RIGID_RETURN] = 0;
+    rt_data->sys_state[SYS_IS_RIGID_RETURN_FINISH] = 0;
     pthread_mutex_unlock(&rt_data->mutex);
     return GNC_OPERATOR_SUCCESS;
 }
@@ -118,10 +121,7 @@ static void rt_upate_reset_valid_data(){
 static void rt_reset_ncu_data(){
 }
 
-static void rt_reset_sys_data(){
-    rt_data->sys_state[SYS_IS_RIGID] = 0;
-    rt_data->sys_state[SYS_IS_RIGID_RETURN] = 0;
-    rt_data->sys_state[SYS_IS_RIGID_RETURN_FINISH] = 0;
+static void rt_reset_sys_data(){  
 }
 
 static void rt_reset_chan_data()

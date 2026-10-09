@@ -88,6 +88,7 @@ void auto_execute_mstb_cmd(){
 //         cycle_tp->mstb_cmd_data.signal_fin = true;
 //     }
 // #endif
+    cycle_tp->mstb_cmd_data.signal_fin = 1;
     // FIN为1时，nc侧将MF选通信号置为0
     if(cycle_tp->mstb_cmd_data.signal_fin){
         // 完成信号宽幅时间，缺省值2ms
@@ -186,11 +187,12 @@ static void auto_deal_mstb(){
             setRegValue8(REG_F, 10, 0x1d);
             // RTAP：通知PMC处在刚性攻丝方式中的信号
             rt_data->sys_state[SYS_IS_RIGID] = 1;
+            spindle_request_m29();
             // 回参考点（刚性攻丝时回参考点，攻丝回退时不返回参考点）
             if(rt_data->sys_state[SYS_IS_RIGID_RETURN]){
                 
             }else{
-                spindle_request_m29();
+                
             }
             break;
         default:
