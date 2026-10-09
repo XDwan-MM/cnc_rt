@@ -167,11 +167,13 @@ static void set_operating_mode()
     {
     case MODE_IDLE:
         rt_data->current_mode = rt_data->target_mode;
+        rt_data->sys_state[SYS_IS_SWITCHING_MODE] = false;
         break;
     case MODE_MPG:
         rt_data->current_mode = rt_data->target_mode;
+        rt_data->sys_state[SYS_IS_SWITCHING_MODE] = false;
         LOG(LOG_LEVEL_INFO, "系统模式切换为 %s", mode_names[rt_data->current_mode]);
-        rerun_update_when_swithing();
+        rerun_update_when_switching();
         break;
     case MODE_JOG:
         // 当前点动速度为零,才能切模式成功
@@ -182,7 +184,7 @@ static void set_operating_mode()
             rt_data->current_mode = rt_data->target_mode;
             rt_data->sys_state[SYS_IS_SWITCHING_MODE] = false;
             LOG(LOG_LEVEL_INFO, "系统模式切换为 %s", mode_names[rt_data->current_mode]);
-            rerun_update_when_swithing();
+            rerun_update_when_switching();
         }
         break;
     case MODE_HOMING:
@@ -191,7 +193,7 @@ static void set_operating_mode()
             rt_data->current_mode = rt_data->target_mode;
             rt_data->sys_state[SYS_IS_SWITCHING_MODE] = false;
             LOG(LOG_LEVEL_INFO, "系统模式切换为 %s", mode_names[rt_data->current_mode]);
-            rerun_update_when_swithing();
+            rerun_update_when_switching();
         }
         break;
     case MODE_MDI:
@@ -202,7 +204,7 @@ static void set_operating_mode()
             rt_data->current_mode = rt_data->target_mode;
             rt_data->sys_state[SYS_IS_SWITCHING_MODE] = false;
             LOG(LOG_LEVEL_INFO, "系统模式切换为 %s", mode_names[rt_data->current_mode]);
-            rerun_update_when_swithing();
+            rerun_update_when_switching();
         }
         break;
     case MODE_EDIT:

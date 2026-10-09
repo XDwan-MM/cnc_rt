@@ -89,7 +89,7 @@ void rerun_store_breakpoint(bool is_breakpoint){
 }
 
 /// @brief 切换模式
-void rerun_update_when_swithing(){
+void rerun_update_when_switching(){
     delAlarm(ALARM_CH, ALARM_WARNING, 3);
     switch (rt_data->target_mode)
     {

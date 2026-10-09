@@ -51,7 +51,7 @@ typedef struct
 
 GNC_RES rerun_data_init();
 void rerun_data_reset();
-void rerun_update_when_swithing();
+void rerun_update_when_switching();
 void rerun_data_store(PLAN_BLOCK* break_block);
 void rerun_store_breakpoint(bool is_breakpoint);
 bool check_is_program_rerun();
