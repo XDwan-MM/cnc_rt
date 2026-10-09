@@ -11,7 +11,7 @@
 
 static void block_cal_pos(PLAN_BLOCK* parser_block, PLAN_BLOCK* current_block, POS* start_pos);
 static void block_cal_vel(PLAN_BLOCK* current_block);
-static void block_cal_angle(PLAN_BLOCK* current_block, VECTOR* pre_end_vector, VECTOR* cur_start_vector);
+static void block_cal_angle(PLAN_BLOCK* current_block, VECTOR* pre_end_vector);
 static void block_cal_circle_vector(PLAN_BLOCK* current_block);
 static double block_cal_circle_length(PLAN_BLOCK* current_block);
 static void block_deal_run_row(PLAN_BLOCK* parser_block, PLAN_BLOCK* pretreat_block);
@@ -130,7 +130,7 @@ static void block_deal_parser_block(PLAN_BLOCK* parser_block, PLAN_BLOCK* pretre
         // 计算长度
         block_cal_length(pretreat_block);
         // 计算两段衔接夹角
-        block_cal_angle(pretreat_block, &pretreat_queue->pre_vec, &pretreat_block->start_vec);
+        block_cal_angle(pretreat_block, &pretreat_queue->pre_vec);
         // 更新上一段终点
         pretreat_queue->pre_pos = pretreat_block->end_pos;
         pretreat_queue->pre_vec = pretreat_block->end_vec;
@@ -218,7 +218,7 @@ static void block_cal_vel(PLAN_BLOCK* current_block){
         case HELIX_CCW:
             current_block->max_acc = MIN3(rt_data->axis_data[0].max_feed_acc, rt_data->axis_data[1].max_feed_acc, rt_data->axis_data[2].max_feed_acc);
             current_block->max_jerk = MIN3(rt_data->axis_data[0].max_feed_jk, rt_data->axis_data[1].max_feed_jk, rt_data->axis_data[2].max_feed_jk);
-            double vc = vp_cal_circular_max_vel(current_block, rt_data->chan_data[0].path_tolerance, rt_data->ncu_data.cycle);
+            double vc = vp_cal_circular_max_vel(current_block, rt_data->chan_data[0].path_tolerance, rt_data->chan_data[0].max_fv_arc_radius, rt_data->chan_data[0].radius_r_max_fv, rt_data->chan_data[0].circular_min_vel, rt_data->ncu_data.cycle);
             current_block->max_vel = current_block->feed_vel = MIN3(current_block->feed_vel, min_feed, vc);   // G02G03最大速度
             break;
         default:
@@ -239,20 +239,24 @@ static double cal_two_vectors_angle(VECTOR* vector1, VECTOR* vector2){
 }
 
 // 根据切失计算两段之间的衔接角度
-static void block_cal_angle(PLAN_BLOCK* current_block, VECTOR* pre_end_vector, VECTOR* cur_start_vector){
+static void block_cal_angle(PLAN_BLOCK* current_block, VECTOR* pre_end_vector){
     switch(current_block->type){
-        case RAPID:
-        case LINE:
         case CIRCLE_CCW:
         case CIRCLE_CW:
         case HELIX_CW:
         case HELIX_CCW:
+            double angle_rad_start = cal_two_vectors_angle(pre_end_vector, &current_block->start_vec);
+            double angle_rad_end = cal_two_vectors_angle(pre_end_vector, &current_block->end_vec);
+            current_block->angle_rad = fmax(angle_rad_start, angle_rad_end);
+            // LOG(LOG_LEVEL_DEBUG, "no %d, angle:%f", current_block->line_number, current_block->angle_rad);
+            break;
+        case RAPID:
+        case LINE:
         case RIGID_TAP:
         case TAP_RETURN:
         case PROBE:
-            current_block->angle_rad = cal_two_vectors_angle(pre_end_vector, cur_start_vector);
-            break;
         default:
+            current_block->angle_rad = cal_two_vectors_angle(pre_end_vector, &current_block->start_vec);
             break;
     }
 }
@@ -414,7 +418,6 @@ void block_cal_vector(PLAN_BLOCK* current_block){
         case CIRCLE_CW:
         case HELIX_CW:
         case HELIX_CCW:
-            // 计算圆弧的切失，指向圆心
             block_cal_circle_vector(current_block);
             return;
         default:

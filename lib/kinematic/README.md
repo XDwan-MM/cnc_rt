@@ -7,4 +7,4 @@
 
 1、运行 sudo ./build.sh
 
-2、检查 bin 下是否生成 libkinematic.a
+2、检查 bin 下是否生成 libkinematics.a
