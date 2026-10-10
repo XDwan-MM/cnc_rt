@@ -19,8 +19,6 @@
 #include "auto.h"
 #include "ref.h"
 #include "trajectory.h"
-#include "driver_hal.h"
-#include "hal_io.h"
 #include "jog.h"
 #include "ferror_control.h"
 #include "stored_stroke_check.h"
@@ -70,38 +68,21 @@
 extern "C" {
 #endif
 
-extern sem_t exit_sem;                         // 退出信号
-extern sem_t op_sem;                           // 已进入op信号，用于线程间通信
-extern int InterruptFlag;                      // 打断标志位
+/* 这里曾有一批旧驱动层遗留的全局量：exit_sem / op_sem / InterruptFlag / rc /
+ * PdoWarnInfo / slavernum / statis / pos / pos_cmd / error_code，以及 14 个 PDO 条目
+ * 数组（DI0/DO0/StatusWord/CurPos/ControlWord/PurPos…）和 MCPDI/MCPDO。
+ *
+ * 它们随 HAL 接入全部退休：
+ *   - PDO 条目数组在 A 阶段就已查明是**死代码**（除定义与声明外全仓库零命中，
+ *     连填充它们的 GM_*PdoEntry_Get_By_* 都零调用）；
+ *   - PdoWarnInfo / slavernum / statis / pos / pos_cmd / error_code 是 master.c 用的，
+ *     而 master.c 已被 HAL 整体取代；
+ *   - exit_sem / op_sem / InterruptFlag 同样零引用。
+ *
+ * 顺带去掉了一个隐患：全局 `int rc`。它与每个函数里的局部 rc 同名，
+ * 任何一处漏写声明都会静默用上全局变量。 */
+
 extern int update_pos_flag;                    // 理论位置读取驱动器位置
-extern int rc;
-extern PdoWarn PdoWarnInfo; //pdo警告信息结构体
-extern int slavernum;
-extern uint16_t* status;
-extern uint32_t* pos;
-extern uint32_t* pos_cmd;
-extern uint16_t* error_code;
-
-extern TxEntry_Unit DI0[MAX_IO_MODULES];
-extern TxEntry_Unit DI1[MAX_IO_MODULES];
-extern RxEntry_Unit DO0[MAX_IO_MODULES];
-extern RxEntry_Unit DO1[MAX_IO_MODULES];
-
-extern TxEntry_Unit StatusWord[MAX_DRIVERS];      // 状态字
-extern TxEntry_Unit CurPos[MAX_DRIVERS];          // 当前位置
-extern TxEntry_Unit CurVel[MAX_DRIVERS];          // 当前速度
-extern TxEntry_Unit CurTor[MAX_DRIVERS];          // 当前转矩
-extern TxEntry_Unit ErrorNumb[MAX_DRIVERS];       // 报警码
-
-extern RxEntry_Unit ControlWord[MAX_DRIVERS];     // 控制字
-extern RxEntry_Unit PurPos[MAX_DRIVERS];          // 目标位置
-extern RxEntry_Unit PurVel[MAX_DRIVERS];          // 目标速度
-extern RxEntry_Unit PurTor[MAX_DRIVERS];          // 目标转矩
-extern RxEntry_Unit OperationMode[MAX_DRIVERS];   // 操作模式
-
-
-extern TxEntry_Unit MCPDI[11];
-extern RxEntry_Unit MCPDO[7];
 
 // 共享内存
 extern VarData* var_data;                                    // var 变量

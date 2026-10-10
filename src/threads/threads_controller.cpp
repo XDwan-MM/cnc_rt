@@ -2,8 +2,6 @@
 #include "debug_mode.h"
 #include "rt_sem.h"
 #include <stdio.h>
-#include "driver_hal.h"
-#include "hal_io.h"
 #include "regapi.h"
 #include "global.h"
 #include "task.h"
@@ -15,16 +13,13 @@
 #include "plc_g_signal_scanner.h"
 #include "plc_x_signal_scanner.h"
 #include "plc_f_signal_handler.h"
-#include "master_wcf.h"
+#include "rt_hal_adapter.h"
 #include <hmisysapi.h>
 #include <stdio.h>
 #include <time.h>
 #include <alarmapi.h>
 #include "hmi_scanner.h"
-#include "device.h"
-#ifdef DEBUG_MODE_ENABLED
-#include "master_sim.h"
-#endif
+#include "alarm.h"
 
 #ifdef DEBUG_MODE_ENABLED
 // ============ 调试模式线程配置 ============
@@ -59,6 +54,14 @@ static inline long long get_ns() {
     return ts.tv_sec * 1000000000LL + ts.tv_nsec;
 }
 
+/* 映像段长不再硬编码，start 后问适配层要（HAL 按各设备 Entry 位长算出）。
+ *
+ * 但只写 [0, x_size) 这一段，**不**对 REG_X 全量写 512 字节：PLC 用动态下标
+ * （plctask.cpp 的 regX[mapping.src.idx]），索引来自运行时加载的梯形图，
+ * 静态界定不了它的使用范围，全量写会清掉梯形图自己的 X 用途。
+ * 这条边界要以真机梯形图为准。 */
+#define RT_IO_IMAGE_MAX  512u   /* 与 REG_X_NUM/REG_Y_NUM 一致；适配层也按这个尺寸收发 */
+
 // 软PLC线程的具体实现
 void* soft_plc_thread_func(void*) {
     while (!thread_exit_flag) {
@@ -67,48 +70,54 @@ void* soft_plc_thread_func(void*) {
 
         long long start_time = get_ns();
 
-        #ifndef DEBUG_MODE_ENABLED
-        // 将IO和MCP输入数据写至X变量
-        uint32_t io_input = 0;
-        Hal_Io_Read_Di(&hal_io_module[0], &io_input);
-        Hal_Io_Update(&hal_io_module[0], 1, 0);
-        for (int i = 0; i < 4; i++) {
-            setRegValue8(REG_X, i, (char)(io_input & 0xFF));
-            io_input >>= 8;
+        /* 本拍周期号：开工时取走，干完原样写回。PDO 线程的完成屏障靠它确认
+         * "完成的确实是第 N 拍"，光看信号量计数无法区分迟到的第 N 拍。 */
+        const uint32_t plc_cycle = __atomic_load_n(&plc_cycle_target, __ATOMIC_ACQUIRE);
+
+        uint32_t x_size = 0, y_size = 0;
+        if (rt_hal_io_image_size(&x_size, &y_size) != HAL_OK) x_size = y_size = 0;
+        /* 调试模式下这两个尺寸只取不写（面板/IO 由 HMI 直供 REG_X/REG_Y），
+         * 但仍要取——它同时验证 HAL 侧映像已就绪，是启动期的健康检查。 */
+        (void)x_size; (void)y_size;
+
+        /* X 映像：HAL 在本拍 begin 之后已经备好，这里只取不碰总线。
+         * 取回来的是完整缓冲，但只把 [0, x_size) 那一段写进 REG_X。
+         *
+         * **只在真机做这件事。** 调试模式下 X 的来源是内存桩里的常量
+         * （rt_hal_sim_backend 的 s_panel_in / s_io_in 初始化后再无写入者），
+         * 而 HMI 按 X 区约定（regdata.h 的 regX「机床 -> PLC」）把面板按键直接
+         * 写进这批寄存器。每拍照搬桩的常量，等于把 HMI 写进去的按键冲掉——
+         * 面板因此完全没反应。基线调试模式不写这一段，所以能工作。 */
+#ifndef DEBUG_MODE_ENABLED
+        static uint8_t x_image[RT_IO_IMAGE_MAX];
+        if (rt_hal_io_fetch_inputs(x_image, sizeof(x_image)) == HAL_OK) {
+            for (uint32_t i = 0; i < x_size; ++i)
+                setRegValue8(REG_X, (int)i, (char)x_image[i]);
         }
-        uint16_t mcp_input = 0;
-        for (int i = 0; i < 11; i++) {
-            GM_TxPdoEntry_Read(g_device_data[0].control.input_addr[i], &mcp_input, 2);
-            setRegValue8(REG_X, i * 2 + 4, (char)(mcp_input & 0xFF));
-            setRegValue8(REG_X, i * 2 + 5, (char)((mcp_input >> 8) & 0xFF));
-        }
-        #endif
+#endif
 
         // Plc执行器逻辑
         PlcTask::instance().execute();
         LadTraceSampler::instance().execute();
 
-        #ifndef DEBUG_MODE_ENABLED
-        // 将Y变量数据写至IO和MCP输出
-        uint32_t io_output = 0;
-        for (int i = 0; i < 4; i++) {
+        /* Y 映像：只读物理 IO 那一段，其余补 0。补 0 而不是读 REG_Y 的剩余部分，
+         * 是为了让"未使用寄存器不参与输出映像"这件事显式——旧路径里那些寄存器
+         * 本来也没有对应的物理输出。
+         *
+         * 同 X 侧：**只在真机做**。调试模式下发进桩就没了（桩的 s_panel_out /
+         * s_io_out 写进去没有任何回程），HMI 也就读不到指示灯状态。留在 REG_Y
+         * 让 HMI 按 regY「PLC -> 机床」自己读，与基线调试模式一致。 */
+#ifndef DEBUG_MODE_ENABLED
+        static uint8_t y_image[RT_IO_IMAGE_MAX];
+        for (uint32_t i = 0; i < y_size; ++i) {
             char value = 0;
-            getRegValue8(REG_Y, i, &value);
-            io_output |= (uint32_t)(unsigned char)value << (i * 8);
+            getRegValue8(REG_Y, (int)i, &value);
+            y_image[i] = (uint8_t)value;
         }
-        Hal_Io_Write_Do(&hal_io_module[0], io_output);
-        Hal_Io_Update(&hal_io_module[0], 0, 1);
-        uint16_t mcp_output = 0;
-        for (int i = 0; i < 7; i++) {
-            char value1 = 0;
-            getRegValue8(REG_Y, i * 2 + 4, &value1);
-            char value2 = 0;
-            getRegValue8(REG_Y, i * 2 + 5, &value2);
-            mcp_output = (uint32_t)(unsigned char)value1 | (uint32_t)(unsigned char)value2 << 8;
-            GM_RxPdoEntry_Write(g_device_data[0].control.output_addr[i], mcp_output);
-        }
-        #endif
-        
+        for (uint32_t i = y_size; i < sizeof(y_image); ++i) y_image[i] = 0;
+        (void)rt_hal_io_publish_outputs(y_image, sizeof(y_image));
+#endif
+
         plc_g_signal_scan_cycle();
         plc_a_signal_scan_cycle();
 
@@ -122,6 +131,12 @@ void* soft_plc_thread_func(void*) {
             }
         }else plc_overtime_count = 0;
         #endif
+
+        /* 完成屏障，必须放在本拍最后，且**无论超时与否都要发**——超时已经报了
+         * ALARM_PC，但 PDO 线程仍要往下走完这一拍，不能让整个周期卡死在这里。
+         * 周期号原样写回：PDO 线程据此确认完成的是本拍，而不是迟到的上一拍。 */
+        __atomic_store_n(&plc_done_cycle, plc_cycle, __ATOMIC_RELEASE);
+        sem_post(&plc_done_sem);
     }
     return NULL;
 }
@@ -132,16 +147,23 @@ void* motion_controller_thread_func(void*) {
     {
         sem_wait(&motion_sem);
         if (thread_exit_flag) break;
+        /* 本拍周期号：开工取走、收工写回，让 PDO 线程能确认完成的确实是本拍
+         * （只看信号量计数区分不了迟到的上一拍）。 */
+        const uint32_t motion_cycle = __atomic_load_n(&motion_cycle_target, __ATOMIC_ACQUIRE);
         // printf("motion_controller_thread_func");
         start = get_ns();
-        // 驱动器反馈由 Master_Receive() 在 PDO 线程中统一读取。
+        /* 总线的读写在 PDO 线程的 begin/commit 里，本线程只消费快照、发布请求。 */
         hmi_events_scan();
         // plc_x_signal_scan_cycle();
         task_mq_proc();
         emcmotTrajPlan();
+        /* HAL 侧的报警检查放在 emcmotTrajPlan 之后：它先处理完本拍的 NC 事件
+         * （含复位请求），这里再去看 HAL 那边进展到哪了。 */
+        alarm_poll_hal();
+        /* 每拍把轴使能意图同步给 HAL。 */
+        hal_axis_intent_poll();
         plc_f_signal_handler_cycle();
         ServoSampleSampler::instance().execute();
-        // 驱动器目标值由 Master_Send() 在 PDO 线程中统一写入。
         end = get_ns();
         #ifndef DEBUG_MODE_ENABLED
         if(IsGreaterThan((end - start) / 1e6, 0.9)){
@@ -152,6 +174,7 @@ void* motion_controller_thread_func(void*) {
             } 
         }else rt_overtime_count = 0;
         #endif
+        __atomic_store_n(&motion_done_cycle, motion_cycle, __ATOMIC_RELEASE);
         sem_post(&moton_sem_exec_done);
     }
     return NULL;
@@ -175,11 +198,17 @@ void* path_plan_thread_func(void*) {
 
 // PDO线程的具体实现
 void* pdo_thread_func(void*) {
-    #ifdef DEBUG_MODE_ENABLED
-        Master_Run_Simulated();  // 调试模式使用模拟主站
-    #else
-        Master_Run();            // 实时模式使用真实主站
-    #endif
+    /* 整圈循环在适配层里。调试与实时走同一条路径，差别只在链接进来的驱动层
+     * （实时是真主站，调试是 rt_hal_sim_backend 的桩），这里没有 ifdef 分叉。 */
+    const int rc = rt_hal_pdo_loop();
+    /* 循环退出后本线程不再 post motion_sem，运动线程会卡在 sem_wait 上，
+     * alarm_poll_hal 也就不会再跑。所以错误必须由这里自己报出去——
+     * 否则总线故障只会留下一行 stderr，界面上什么都看不到。 */
+    /* 正常停止不算报警：thread_exit_flag 置位后循环返回的就是 HAL_ERROR_STOPPED
+     * （"已请求停止"）。原来只要 rc 非零就报，于是每次正常退出都留一条报警 122，
+     * 真正该看的故障反而被它淹掉。总线故障仍然报得出去——那种情况 rc 不是 STOPPED，
+     * 而且上面那段注释说的理由依然成立。 */
+    if (rc && rc != HAL_ERROR_STOPPED) alarm_report_hal_error(rc);
     return NULL;
 }
 
