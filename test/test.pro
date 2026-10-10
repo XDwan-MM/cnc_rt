@@ -22,6 +22,12 @@ exists(/usr/include/gtest/gtest.h):exists(/usr/include/gmock/gmock.h) {
     message(Using system GoogleTest/GoogleMock from /usr/local)
     INCLUDEPATH += /usr/local/include
     LIBS += -L/usr/local/lib -lgmock -lgtest
+} else:exists(/usr/src/googletest/googletest/src/gtest-all.cc) {
+    message(Using local GoogleTest/GoogleMock sources)
+    INCLUDEPATH += /usr/src/googletest/googletest/include /usr/src/googletest/googlemock/include
+    INCLUDEPATH += /usr/src/googletest/googletest /usr/src/googletest/googlemock
+    SOURCES += /usr/src/googletest/googletest/src/gtest-all.cc
+    SOURCES += /usr/src/googletest/googlemock/src/gmock-all.cc
 } else {
     message(Using bundled lightweight GoogleTest/GoogleMock compatibility headers)
     INCLUDEPATH += $$PWD/gtest_compat
@@ -133,6 +139,9 @@ SOURCES += \
     ../src/motion/auto/pathplan/parser.cpp \
     ../src/motion/auto/pathplan/pathplan.c \
     ../src/motion/spindle/spl_control.c \
+    ../src/motion/spindle/spl_orient.c \
+    ../src/motion/spindle/spl_vel_planner.c \
+    ../src/motion/auto/trace_publisher.c \
     ../src/motion/spindle/spl_pos_planner.c \
     ../src/motion/emcmot.cpp \
     ../src/motion/manual/handwheel.c \
@@ -202,9 +211,27 @@ HEADERS += \
     gtest_compat/gmock/gmock.h
 
 # 自动查找所有 test_* 子目录下的测试源文件（tst_*.cpp）
-for(dir, $$list($$files($$PWD/test_*))) {
-    !exists($$dir/*):next()
-    files = $$files($$dir/tst_*.cpp)
-    SOURCES += $$files
-    INCLUDEPATH += $$dir
+# 可显式指定回归文件，避免无关的历史测试接口失配阻断定向测试。
+isEmpty(TEST_SOURCES) {
+    for(dir, $$list($$files($$PWD/test_*))) {
+        !exists($$dir/*):next()
+        files = $$files($$dir/tst_*.cpp)
+        SOURCES += $$files
+        INCLUDEPATH += $$dir
+    }
+} else {
+    SOURCES += $$TEST_SOURCES
+}
+
+contains(SOURCES, .*tst_spindle.cpp) {
+    # 单元测试不访问真实 EtherCAT 控制字 PDO。
+    QMAKE_LFLAGS += -Wl,--wrap=Ethercat_Driver_Write_Controlword
+}
+
+SOURCES = $$unique(SOURCES)
+HEADERS = $$unique(HEADERS)
+
+# 测试使用仿真主站；同时链接实时主站会重复定义 reset_sem。
+contains(DEFINES, DEBUG_MODE_ENABLED) {
+    SOURCES -= ../src/master/master_wcf.c
 }

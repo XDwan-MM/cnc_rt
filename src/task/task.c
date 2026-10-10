@@ -272,6 +272,7 @@ static void task_handle_spl_event(PLC_EVENT *event_data)
             LOG(LOG_LEVEL_INFO, "M29进行中，忽略主轴正转事件");
             return;
         }
+        spindle_clear_velocity_arrival();
         if (spl_context.orient_phase != SPINDLE_ORIENT_IDLE ||
             spl_context.orient_request_pending ||
             spl_context.orient_release_pending)
@@ -300,6 +301,7 @@ static void task_handle_spl_event(PLC_EVENT *event_data)
             LOG(LOG_LEVEL_INFO, "M29进行中，忽略主轴反转事件");
             return;
         }
+        spindle_clear_velocity_arrival();
         if (spl_context.orient_phase != SPINDLE_ORIENT_IDLE ||
             spl_context.orient_request_pending ||
             spl_context.orient_release_pending)
@@ -349,6 +351,8 @@ static void task_handle_spl_event(PLC_EVENT *event_data)
         // spl_context.orient_hold_stop = false;
         spl_context.command_state = SPINDLE_STOP;
         spl_context.start_request_pending = false;
+        spl_context.deferred_start_pending = false;
+        spindle_clear_velocity_arrival();
     }
 }
 
@@ -358,11 +362,15 @@ static void task_handle_spd_ori_event(PLC_EVENT *event_data)
     // 推送主轴定向事件
     if (event_data->spd_ori_payload.p1 == 1)
     {
+        spindle_clear_velocity_arrival();
+        spl_context.start_request_pending = false;
+        spl_context.deferred_start_pending = false;
         spl_context.spl_event = SPINDLE_EVENT_ORIENT;
     }
     // 推送主轴定向释放事件
     if (event_data->spd_ori_payload.p1 == -1)
     {
+        spindle_clear_velocity_arrival();
         spl_context.spl_event = SPINDLE_EVENT_RELEASE_ORIENT;
     }
 }
