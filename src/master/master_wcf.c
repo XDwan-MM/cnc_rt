@@ -110,7 +110,8 @@ int Master_Start(void)
         return MASTER_ERR_INIT;
     }
 
-    // 清一下驱动器报错
+    // todo 待删除
+    // 蓝海华腾平台暂时读不了驱动器错误码，启动前清一下驱动器报错
     Driver_Fault_Reset(&x_axis_driver);
     Driver_Fault_Reset(&y_axis_driver);
     Driver_Fault_Reset(&z_axis_driver);
