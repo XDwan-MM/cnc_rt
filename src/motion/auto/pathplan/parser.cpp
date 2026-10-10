@@ -3,6 +3,7 @@
 #include <hmisysapi.h>
 #include <alarmapi.h>
 #include <string.h> 
+#include "rerun.h"
 
 static void parser_macro_init();
 static GNC_RES parser_handle_recieve(pmc_data* motion_data, NcItpState *itp_state, int *line_no);
@@ -112,9 +113,15 @@ GNC_RES parser_init(NC_MODE nc_mode)
     ItpSetItpParam(itpParam);
     // 设置机床起点
     double ori_pos_x, ori_pos_y, ori_pos_z;
-    ori_pos_x = rt_data->axis_data[AXIS_X].wcs_cmd_pos_cur;
-    ori_pos_y = rt_data->axis_data[AXIS_Y].wcs_cmd_pos_cur;
-    ori_pos_z = rt_data->axis_data[AXIS_Z].wcs_cmd_pos_cur;
+    if (rerun_data->is_rerun && rerun_data->program_start_valid) {
+        ori_pos_x = rerun_data->program_start.x;
+        ori_pos_y = rerun_data->program_start.y;
+        ori_pos_z = rerun_data->program_start.z;
+    } else {
+        ori_pos_x = rt_data->axis_data[AXIS_X].wcs_cmd_pos_cur;
+        ori_pos_y = rt_data->axis_data[AXIS_Y].wcs_cmd_pos_cur;
+        ori_pos_z = rt_data->axis_data[AXIS_Z].wcs_cmd_pos_cur;
+    }
     ItpSetOriginMacPos(ori_pos_x, ori_pos_y, ori_pos_z, 0);
     // 设置程序段来源
     res = parser_set_content(nc_mode);

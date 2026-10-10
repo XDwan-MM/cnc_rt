@@ -194,6 +194,7 @@ GNC_RES rt_global_init(){
         rt_global_delete();
         return res;
     }
+    rerun_restore();
     if(pthread_mutex_init(&shm_mutex, NULL) != 0){
         rt_global_delete();
         return GNC_OPERATOR_ERROR;

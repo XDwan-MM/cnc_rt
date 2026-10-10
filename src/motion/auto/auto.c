@@ -877,6 +877,7 @@ static void auto_restart_run(){
 }
 
 static void auto_reset_run(){
+    rerun_store_program_start();
     queue_reset(plan_queue);
     queue_reset(pretreat_queue);
     queue_reset(parser_queue);

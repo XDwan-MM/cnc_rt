@@ -51,30 +51,32 @@ static void block_deal_run_row(PLAN_BLOCK* parser_block, PLAN_BLOCK* pretreat_bl
     {
     // 再启动行号前
     case BEFORE_THE_RERUN_ROW:
+        rerun_mst_collect(parser_block);
         queue_pop(parser_queue);
         break;
 
     // 再启动行号
     case EXACT_THE_RERUN_ROW:
         // 再启动断点
-        if(!check_rerun_row_is_valid()) break;
+        if(!check_rerun_row_is_valid(parser_block)) break;
+        rerun_program_changed(parser_block);
         // fanuc恢复辅助功能
-        for(int i = 0; i < rerun_data->record_mcode.length; i++){
-            if(record_queue_is_empty(&rerun_data->record_mcode)) break;
-            PLAN_BLOCK* mcode_block = record_queue_peak(&rerun_data->record_mcode);
-            mcode_block->line_number = rerun_data->rerun_row;
-            pretreat_block = queue_peak_tail(pretreat_queue);
-            memcpy(pretreat_block, mcode_block, sizeof(PLAN_BLOCK));
-            block_deal_parser_block(mcode_block, pretreat_block);
-            record_queue_pop(&rerun_data->record_mcode);
+        for(int i = 0; i < rerun_data->mst.count; i++){
+            if(queue_is_full(pretreat_block)) break;
+            PLAN_BLOCK* slot = queue_peak_tail(pretreat_block);
+            if(slot == NULL) break;
+            PLAN_BLOCK mst_blk = {0};
+            rerun_make_mst_block(&rerun_data->mst, i, parser_block, &mst_blk);
+            memcpy(slot, &mst_blk, sizeof(PLAN_BLOCK));
+            block_deal_parser_block(&mst_blk, slot);
             queue_soft_push(pretreat_queue);
-            LOG(LOG_LEVEL_DEBUG, "恢复第%d个辅助指令M%d", i+1, mcode_block->mst_data.m_code);
+
         }
         pretreat_block = queue_peak_tail(pretreat_queue);
         PLAN_BLOCK* rerun_block = (PLAN_BLOCK*)calloc(sizeof(PLAN_BLOCK), 1);
         if(rerun_block == NULL) break;
         // 华中回到断点位置
-        create_rerun_block(rerun_block);
+        create_rerun_block(parser_block, rerun_block);
         memcpy(pretreat_block, rerun_block, sizeof(PLAN_BLOCK));
         block_deal_parser_block(rerun_block, pretreat_block);
         // fanuc回到程序终点
