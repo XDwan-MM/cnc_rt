@@ -139,16 +139,29 @@ static void rt_reset_chan_data()
         rt_data->chan_data[i].cut_ex_dec3_vel = CONV_MM_MIN_TO_MM_S(par_chan[i][PAR_CH_CUT_EX_DEC3_VEL].value.val_real); // 外部减速3对切削进给的减速速度(mm/min)
         rt_data->chan_data[i].cut_ex_dec4_vel = CONV_MM_MIN_TO_MM_S(par_chan[i][PAR_CH_CUT_EX_DEC4_VEL].value.val_real); // 外部减速4对切削进给的减速速度(mm/min)
         rt_data->chan_data[i].cut_ex_dec5_vel = CONV_MM_MIN_TO_MM_S(par_chan[i][PAR_CH_CUT_EX_DEC5_VEL].value.val_real); // 外部减速5对切削进给的减速速度(mm/min)
-        rt_data->chan_data[i].l_min_thre = par_chan[i][PAR_CH_HSPL_MIN_LEN].value.val_real;                              //  小线段剔除
-        rt_data->chan_data[i].l_theta_thre = par_chan[i][PAR_CH_L_MIN_THR].value.val_real;                               //  逆行修复：线段长度阈值（小于该值的才修复）
-        rt_data->chan_data[i].theta_thre = par_chan[i][PAR_CH_L_THETA_THR].value.val_real;                               //  逆行修复：线段间角度阈值（连续角度判定）  
-        rt_data->chan_data[i].kappa_thre = par_chan[i][PAR_CH_L_KAPPA_THR].value.val_real;                               //  逆行修复：线段间曲率阈值 未使用
-        rt_data->chan_data[i].seg_theta_thre = par_chan[i][PAR_CH_SEG_THETA_THR].value.val_real;                         //  角度分段    
-        rt_data->chan_data[i].kratio = par_chan[i][PAR_CH_KRATIO].value.val_real;                                        //  曲率分段 未使用
-        rt_data->chan_data[i].nurbs_fiterror = par_chan[i][PAR_CH_NURBS_FIT_ERROR].value.val_real;                       //  拟合误差
-        rt_data->chan_data[i].nurbs_sagittaerror = par_chan[i][PAR_CH_NURBS_SAGITTA_ERROR].value.val_real;               //  弓高误差
-        rt_data->chan_data[i].nurbs_enable = par_chan[i][PAR_CH_NURBS_ENABLE].value.val_int;                             //  1 开启nurbs  0 关闭nurbs
-        rt_data->chan_data[i].unif_type = par_chan[i][PAR_CH_UNIF_TYPE].value.val_int;                                   //  选择一致性类型
+        // rt_data->chan_data[i].l_min_thre = par_chan[i][PAR_CH_L_MIN_THR].value.val_real;                              //  小线段剔除
+        // rt_data->chan_data[i].l_theta_thre = par_chan[i][PAR_CH_L_THETA_THR].value.val_real;                               //  逆行修复：线段长度阈值（小于该值的才修复）
+        // rt_data->chan_data[i].theta_thre = par_chan[i][PAR_CH_L_THETA_THR].value.val_real;                               //  逆行修复：线段间角度阈值（连续角度判定）  
+        // rt_data->chan_data[i].kappa_thre = par_chan[i][PAR_CH_L_KAPPA_THR].value.val_real;                               //  逆行修复：线段间曲率阈值 未使用
+        // rt_data->chan_data[i].seg_theta_thre = par_chan[i][PAR_CH_SEG_THETA_THR].value.val_real;                         //  角度分段    
+        // rt_data->chan_data[i].kratio = par_chan[i][PAR_CH_KRATIO].value.val_real;                                        //  曲率分段 未使用
+        // rt_data->chan_data[i].nurbs_fiterror = par_chan[i][PAR_CH_NURBS_FIT_ERROR].value.val_real;                       //  拟合误差
+        // rt_data->chan_data[i].nurbs_sagittaerror = par_chan[i][PAR_CH_NURBS_SAGITTA_ERROR].value.val_real;               //  弓高误差
+        // rt_data->chan_data[i].nurbs_enable = par_chan[i][PAR_CH_NURBS_ENABLE].value.val_int;                             //  1 开启nurbs  0 关闭nurbs
+        // rt_data->chan_data[i].unif_type = par_chan[i][PAR_CH_UNIF_TYPE].value.val_int;                                   //  选择一致性类型
+
+        rt_data->chan_data[i].nurbs_fiterror = 0.002;                       //  拟合误差
+        rt_data->chan_data[i].nurbs_sagittaerror = 0.01;               //  弓高误差
+        rt_data->chan_data[i].l_min_thre = 0.003;
+        rt_data->chan_data[i].l_theta_thre = 0.008;
+        rt_data->chan_data[i].theta_thre = 5.0;
+        rt_data->chan_data[i].kappa_thre = 10.0;
+        rt_data->chan_data[i].seg_theta_thre = 5.0;
+        rt_data->chan_data[i].kratio = 20;
+        rt_data->chan_data[i].nurbs_enable = 1;                             //  1 开启nurbs  0 关闭nurbs
+        rt_data->chan_data[i].unif_type = 4;                                   //  选择一致性类型
+
+
     }
 }
 

@@ -5,6 +5,8 @@
 set -e
 
 # export PATH=$PATH:/opt/Qt5.15.16/5.15.16/gcc_64/bin/
+export PATH=$PATH:/home/pub/Qt5.15.16/5.15.16/gcc_64/lib
+export QMAKE="/home/pub/Qt5.15.16/5.15.16/gcc_64/bin/qmake"
 
 SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
 LIB_DIR="$SCRIPT_DIR/lib"
@@ -55,7 +57,7 @@ print_help() {
 build_shm_lib() {
     mkdir -p "$LIB_DIR/cncshm/build"
     cd "$LIB_DIR/cncshm/build"
-    qmake ../shm.pro CONFIG+=debug
+    "$QMAKE" ../shm.pro CONFIG+=debug
     make -j$(nproc)
     if [ $? -eq 0 ]; then
         echo -e "${GREEN}[OK] 编译共享内存库成功"
@@ -72,7 +74,7 @@ build_debug() {
     mkdir -p "$BUILD_DIR_DEBUG"
     cd "$BUILD_DIR_DEBUG"
 
-    qmake "$SCRIPT_DIR/CNC_RT.pro" "CONFIG+=debug_mode"
+    "$QMAKE" "$SCRIPT_DIR/CNC_RT.pro" "CONFIG+=debug_mode"
     make -j$(nproc)
 
     if [ $? -eq 0 ]; then
@@ -90,7 +92,7 @@ build_release() {
     mkdir -p "$BUILD_DIR_RELEASE"
     cd "$BUILD_DIR_RELEASE"
 
-    qmake "$SCRIPT_DIR/CNC_RT.pro" "CONFIG+=release_platform"
+    "$QMAKE" "$SCRIPT_DIR/CNC_RT.pro" "CONFIG+=release_platform"
     make -j$(nproc)
 
     if [ $? -eq 0 ]; then

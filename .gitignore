@@ -89,6 +89,9 @@ lib/log/bin/
 
 lib/kinematic/*.c
 lib/kinematic/test/
+lib/nurbs/*.c
+lib/circleSmooth/*.c
+
 
 # data
 data/
