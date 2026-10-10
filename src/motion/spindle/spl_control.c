@@ -1,8 +1,6 @@
 #include "spl_control.h"
-#include "driver.h"
-#include "rt_data.h"
-#include "spl_orient.h"
-#include "spl_vel_planner.h"
+#include "rt_hal_adapter.h"
+#include <hmisysapi.h>
 #include <alarmapi.h>
 #include <hmisysapi.h>
 #include <math.h>
@@ -47,6 +45,103 @@ static void spindle_handle_rotation(spindle_context_t *context,
 static bool spindle_validate_start_request(const spindle_context_t *context);
 static bool spindle_report_missing_speed_alarm(const char *message);
 static double spindle_get_selected_speed(const spindle_context_t *context);
+
+/* ---- HAL 访问器（方案 B）--------------------------------------------------
+ * 他们的主轴逻辑直接读 driver_hal_t 的字段（共 155 处）。换成 HAL 之后不再有那份
+ * 句柄，所以这里给一组**按需查询**的访问器：每次调用现查 HAL 快照，不留持久镜像，
+ * 免得镜像和 HAL 脱节。
+ *
+ * HAL 没有的（target_vel / target_pos / req_mode）才是 RT 本地量，见下面 s_spl_*。
+ * 状态机内部的（DS402 状态、控制字、模式切换进度）**HAL 独占**，上层不该看 ——
+ * 原来读它们的逻辑要改成"看结果不看过程"（如 enabled / mode）。
+ * -------------------------------------------------------------------------- */
+static int spl_drv_enabled(void) {
+    HalCAxisStatus st;
+    return rt_hal_axis_status(RT_HAL_AXIS_SP, &st) == HAL_OK ? st.enabled : 0;
+}
+static int spl_drv_mode(void) {
+    HalCSpindleStatus ss;
+    return rt_hal_spindle_status(RT_HAL_AXIS_SP, &ss) == HAL_OK ? ss.mode : -1;
+}
+static double spl_drv_actual_vel(void) {
+    double v = 0.0;
+    return rt_hal_spindle_speed(RT_HAL_AXIS_SP, &v) == HAL_OK ? v : 0.0;
+}
+static double spl_drv_actual_pos(void) {
+    HalCSpindleStatus ss;
+    return rt_hal_spindle_status(RT_HAL_AXIS_SP, &ss) == HAL_OK ? ss.position_deg : 0.0;
+}
+static uint16_t spl_drv_status_word(void) {
+    HalCAxisStatus st;
+    return rt_hal_axis_status(RT_HAL_AXIS_SP, &st) == HAL_OK ? st.raw_status : 0;
+}
+static int spl_drv_orient_state(void) {
+    int32_t v = HAL_ORIENT_NONE;
+    return rt_hal_spindle_orient_state(RT_HAL_AXIS_SP, &v) == HAL_OK ? (int)v : HAL_ORIENT_NONE;
+}
+/* 状态字 0x21 = Switch On Disabled：带电但没使能。 */
+static int spl_drv_switch_on_disabled(void) {
+    return (spl_drv_status_word() & 0x006FU) == 0x0021U;
+}
+/* HAL 的释放是把控制字交回状态机并重新使能，不是退回 0x21，
+ * 所以"释放完成"看的是定向状态已经退回 NONE。 */
+static int spl_drv_orient_inactive(void) {
+    return spl_drv_orient_state() == HAL_ORIENT_NONE;
+}
+
+/* RT 本地量：HAL 没有对应的查询接口。 */
+static double s_spl_target_vel;
+static double s_spl_target_pos;
+static int    s_spl_req_mode = HAL_SPINDLE_CSV;
+
+/* ---- 模式切换 ----
+ * HAL 自己走完"减速 -> 去使能 -> 写 6060 -> 等 6061 -> 重新使能"，
+ * 上层不再有中间状态，只留一个完成闩锁，表达"请求下去了没有、跟上没有"。
+ * 同事那套 DECELERATING/WAIT_READY/WAIT_MODE/... 由 HAL 内部取代。 */
+#define SPL_MS_IDLE      0
+#define SPL_MS_SWITCHING 1
+#define SPL_MS_DONE      2
+#define SPL_MS_ERROR     3
+static int     s_spl_ms = SPL_MS_IDLE;
+static int32_t s_spl_ms_rc = HAL_OK;
+
+static void spl_ms_poll(void) {
+    if (s_spl_ms == SPL_MS_SWITCHING && spl_drv_mode() == (int)s_spl_req_mode)
+        s_spl_ms = SPL_MS_DONE;
+}
+/* 每次调用顺带推进闩锁，调用顺序就不影响判断。 */
+static int spl_ms_switching(void) { spl_ms_poll(); return s_spl_ms == SPL_MS_SWITCHING; }
+static int spl_ms_done(void)      { spl_ms_poll(); return s_spl_ms == SPL_MS_DONE; }
+static int32_t spl_ms_result(void) { return s_spl_ms_rc; }
+/* 取消遗留切换（复位/急停）。HAL 侧没有可取消的东西，清闩锁即可。 */
+static void spl_ms_reset(void) { s_spl_ms = SPL_MS_IDLE; s_spl_ms_rc = HAL_OK; }
+
+static int spl_ms_request(HalSpindleMode mode) {
+    if (spl_drv_mode() == (int)mode) {   /* 已经在这个模式，不用切 */
+        s_spl_req_mode = mode;
+        s_spl_ms = SPL_MS_DONE;
+        s_spl_ms_rc = HAL_OK;
+        return HAL_OK;
+    }
+    s_spl_ms_rc = rt_hal_request_spindle_mode(RT_HAL_AXIS_SP, mode);
+    if (s_spl_ms_rc == HAL_OK) {
+        s_spl_req_mode = mode;
+        s_spl_ms = SPL_MS_SWITCHING;
+    } else {
+        s_spl_ms = SPL_MS_ERROR;
+    }
+    return s_spl_ms_rc;
+}
+
+/* 使能声明。**这里只设"意愿位"，不直接写 HAL。**
+ *
+ * 主轴若自己写 HAL，就和 hal_axis_intent_poll() 抢同一个字段，而后者每拍无条件
+ * enable(1)、后写赢——结果就是主轴所有去使能全部失效（M5 停稳后仍带力矩、
+ * CSP/CSV 切换失败也不下使能），而且复位在飞时还会把待复位取消掉。
+ * 现在统一由 poll 表达：它把这里的意愿合并进去，急停与轴屏蔽永远优先。 */
+static void spl_drv_enable(void)  { rt_data->axis_data[AXIS_SP].status.spindle_wants_torque = true; }
+static void spl_drv_disable(void) { rt_data->axis_data[AXIS_SP].status.spindle_wants_torque = false; }
+
 static double spindle_calculate_target_velocity(const spindle_context_t *context);
 static void spindle_update_driver_control(void);
 static void spindle_update_velocity(void);
@@ -88,7 +183,7 @@ void spindle_control_update(void)
      * 到急停又被后续的普通启动逻辑覆盖。
      */
     if (rt_data->sys_state[SYS_IS_ESTOP_ACTIVE] ||
-        (spindle_driver.status_word & 0x0008U) != 0U)
+        (spl_drv_status_word() & 0x0008U) != 0U)
     {
         // printg("85\n");
         /* 急停解除后必须等待新的 M3/M4，不能恢复急停前的旧速度。 */
@@ -104,14 +199,8 @@ void spindle_control_update(void)
         spl_context.m29_phase = SPINDLE_M29_IDLE;
         spl_context.csv_switch_pending = false;
         spl_context.deferred_start_pending = false;
-        /* 安全事件取消遗留模式切换，避免驱动器周期函数继续执行旧
-         * 切换并在超时后返回 HAL_DRIVER_ERROR。 */
-        if (Driver_Is_Mode_Switching(&spindle_driver))
-        {
-            spindle_driver.mode_switch_state = DRV_MODE_SWITCH_IDLE;
-            spindle_driver.mode_switch_result = HAL_DRIVER_SUCCESS;
-            spindle_driver.mode_switch_cycles = 0U;
-        }
+        /* 安全事件取消遗留模式切换，免得闸门一直卡在"正在切换"。 */
+        spl_ms_reset();
         spl_orient_abort();
     }
 
@@ -141,11 +230,8 @@ void spindle_control_update(void)
         spl_context.m29_active = false;
         spl_context.m29_phase = SPINDLE_M29_IDLE;
         spl_context.csv_switch_pending = false;
-        /* HMI RESET 同样必须取消所有未完成的模式切换；否则周期驱动
-         * 会在普通停止逻辑之前继续执行旧切换状态。 */
-        spindle_driver.mode_switch_state = DRV_MODE_SWITCH_IDLE;
-        spindle_driver.mode_switch_result = HAL_DRIVER_SUCCESS;
-        spindle_driver.mode_switch_cycles = 0U;
+        /* HMI RESET 同样取消未完成的模式切换。 */
+        spl_ms_reset();
     }
 
     if (spindle_stop_is_required(&spl_context) && !release_orient_event)
@@ -299,13 +385,12 @@ static void spindle_process_event(spindle_context_t *context)
     switch (context->spl_event)
     {
     case SPINDLE_EVENT_STOP:
-        /* G29.6 的停止边沿可能紧跟 G70.6 定向上升沿到达。定向请求
-         * 已经接管主轴后，普通 STOP 不能撤销 Operation Enabled，否则
-         * driver.c 永远等不到 0x27，最终表现为定向超时。释放定向或
-         * 复位事件使用专用 RELEASE_ORIENT 路径。 */
+        /* G29.6 的停止边沿可能紧跟 G70.6 定向上升沿到达。定向已经接管主轴后，
+         * 普通 STOP 不能撤销使能，否则 HAL 永远等不到完成位，表现为定向超时。
+         * 释放定向或复位走专用 RELEASE_ORIENT 路径。 */
         if (context->orient_phase != SPINDLE_ORIENT_IDLE ||
             context->orient_request_pending ||
-            spindle_driver.orient_state != DRV_ORIENT_IDLE ||
+            spl_drv_orient_state() != HAL_ORIENT_NONE ||
             context->spl_event == SPINDLE_EVENT_ORIENT)
         {
             break;
@@ -359,39 +444,37 @@ static void spindle_process_event(spindle_context_t *context)
         context->spl_state = SPINDLE_STOP;
         context->vel_planner.enable = false;
         context->vel_planner.target_vel = 0.0;
-        spindle_driver.target_vel = 0;
-        Hal_Driver_Set_Target_Vel(&spindle_driver, 0);
-        Driver_Enable(&spindle_driver);
+        s_spl_target_vel = 0;
+        (void)rt_hal_request_spindle_speed(RT_HAL_AXIS_SP, 0.0, 0);   /* 停转 */
+        spl_drv_enable();
         if (spl_orient_is_done())
         {
-            /* 允许重复执行 M19：先清除上一次完成状态再重新请求。 */
-            if (!spl_orient_release())
-            {
-                context->orient_phase = SPINDLE_ORIENT_RELEASING;
-                context->orient_release_pending = true;
-                context->m19_active = false;
-                break;
-            }
+            /* 重复执行 M19：先释放上一次的保持，本轮**不再**重新请求。
+             * 驱动器还没退出厂商状态、完成位还挂着，马上重请求会立刻"完成"。
+             * 交给轮询，等完成位落下去再提交。 */
+            (void)spl_orient_release();
+            context->orient_phase = SPINDLE_ORIENT_RELEASING;
+            context->orient_release_pending = false;
+            context->orient_request_pending = true;
+            context->orient_elapsed_cycles = 0U;
+            break;
         }
-        if (spl_orient_request())
+        /* 受理证据与下面 WAIT_ZERO 分支一致：适配层的 setter 只表示"记下了"，
+         * 真正受理要等 PDO 线程在轴使能之后去调 HAL。所以不能只看返回值——
+         * 否则第一次被拒就直接进 RUNNING，此后没人重发，只能等定向超时。 */
+        if (spl_orient_request() && spl_drv_orient_state() != HAL_ORIENT_NONE)
         {
             context->orient_phase = SPINDLE_ORIENT_RUNNING;
             context->orient_elapsed_cycles = 0U;
         }
         else
         {
-            // printg("**********************************************************\n");
-            /* 请求失败时不能伪装成 RUNNING，否则状态机会永久等待 DONE。 */
-            context->orient_phase = SPINDLE_ORIENT_IDLE;
-            context->orient_release_pending = false;
-            context->orient_hold_stop = true;
-            context->m19_active = false;
-            context->reset_requires_start = true;
-            context->start_request_pending = false;
-            context->command_speed = 0.0;
+            /* HAL 只在轴已使能后受理定向，而刚下发的使能下一拍才生效。
+             * 转 WAIT_ZERO 让轮询重试，不能当成 M19 失败。 */
+            context->orient_request_pending = true;
+            context->orient_phase = SPINDLE_ORIENT_WAIT_ZERO;
+            context->orient_elapsed_cycles = 0U;
         }
-        // printg("context->orient_phase %d\n", context->orient_phase);
-        // Ethercat_Driver_Write_Controlword(&spindle_driver, 0x040F);
         break;
     case SPINDLE_EVENT_RELEASE_ORIENT:
         /*
@@ -405,7 +488,7 @@ static void spindle_process_event(spindle_context_t *context)
         context->spl_state = SPINDLE_STOP;
         context->vel_planner.enable = false;
         context->vel_planner.target_vel = 0.0;
-        Hal_Driver_Set_Target_Vel(&spindle_driver, 0);
+        (void)rt_hal_request_spindle_speed(RT_HAL_AXIS_SP, 0.0, 0);   /* 停转 */
         if (spl_orient_release())
         {
             context->orient_phase = SPINDLE_ORIENT_RELEASING;
@@ -430,15 +513,10 @@ static void spindle_update_driver_control(void)
 {
     bool velocity_control_ready = false;
 
-    /*
-     * 急停或驱动器 Fault 时，驱动器已经不能执行受控减速。
-     * 此时必须立即清掉软件速度规划和目标速度，并保持下使能请求；
-     * 不能再走 Driver_Enable()，否则急停释放后会把旧目标速度带回来。
-     */
-    /* 安全条件优先级最高：急停/Fault 时立即清零目标并请求下使能。 */
+    /* 安全条件优先级最高：急停或驱动器 Fault 时立即清零目标并请求下使能，
+     * 否则急停释放后会把旧目标速度带回来。0x0008 是状态字的 Fault 位。 */
     if (spindle_reset_or_estop_active() ||
-        spindle_driver.state == DRV_STATE_FAULT ||
-        (spindle_driver.status_word & 0x0008U) != 0U)
+        (spl_drv_status_word() & 0x0008U) != 0U)
     {
         spl_context.spl_state = SPINDLE_STOP;
         spl_context.vel_planner.enable = false;
@@ -447,38 +525,30 @@ static void spindle_update_driver_control(void)
         spl_context.vel_planner.active = false;
         /* 安全停机不是“到速”：禁止沿用急停前的 ARRIVED/FIN 状态。 */
         spl_context.spl_vel_state = SPINDLE_VEL_ZERO;
-        spindle_driver.target_vel = 0;
-        Hal_Driver_Set_Target_Vel(&spindle_driver, 0);
-        /* 急停/Fault 不等待 CSP->CSV。取消遗留切换并立即请求下使能，
-         * 否则 Driver_Cyclic_Process 仍可能继续旧切换直到超时。 */
-        if (Driver_Is_Mode_Switching(&spindle_driver))
-        {
-            spindle_driver.mode_switch_state = DRV_MODE_SWITCH_IDLE;
-            spindle_driver.mode_switch_result = HAL_DRIVER_SUCCESS;
-            spindle_driver.mode_switch_cycles = 0U;
-        }
+        s_spl_target_vel = 0;
+        (void)rt_hal_request_spindle_speed(RT_HAL_AXIS_SP, 0.0, 0);   /* 停转 */
+        /* 急停/Fault 不等待 CSP->CSV，直接清闩锁并请求下使能。 */
+        spl_ms_reset();
         spl_context.csv_switch_pending = false;
+        /* CSP 下没有速度目标可用，复位/急停先把期望模式扳回 CSV，
+         * 免得下次 M3 还要再切一次。HAL 只记期望模式，急停中的轴不会因此被使能。 */
         if (spindle_reset_or_estop_active() &&
-            spindle_driver.act_mode == DRV_MODE_CSP &&
-            !(spindle_driver.req_mode == DRV_MODE_CSV &&
-              Driver_Is_Mode_Switch_Done(&spindle_driver)) &&
-            Driver_Is_Ready_to_Switch_On(&spindle_driver))
+            spl_drv_mode() == HAL_SPINDLE_CSP &&
+            !(s_spl_req_mode == HAL_SPINDLE_CSV && spl_ms_done()))
         {
-            if (Driver_Switch_Mode_While_Disabled(&spindle_driver,
-                                                   DRV_MODE_CSV) !=
-                HAL_DRIVER_SUCCESS)
+            if (spl_ms_request(HAL_SPINDLE_CSV) != HAL_OK)
             {
                 LOG(LOG_LEVEL_ERR,
-                    "复位/急停后下使能状态切换CSV失败：status_word=0x%04X",
-                    spindle_driver.status_word);
+                    "复位/急停后切回CSV失败：status_word=0x%04X",
+                    spl_drv_status_word());
             }
         }
-        Driver_Disable(&spindle_driver);
+        spl_drv_disable();
         return;
     }
 
-    /* 模式切换期间不允许速度目标继续加速，避免覆盖模式切换状态机。 */
-    if (Driver_Is_Mode_Switching(&spindle_driver))
+    /* 模式切换期间不允许速度目标继续加速。 */
+    if (spl_ms_switching())
     {
         /*
          * 模式切换期间禁止继续加速。若当前源模式是 CSV，仍让规划器
@@ -486,10 +556,10 @@ static void spindle_update_driver_control(void)
          */
         spl_context.vel_planner.enable = false;
         spl_context.vel_planner.target_vel = 0.0;
-        if (spindle_driver.act_mode == DRV_MODE_CSV)
+        if (spl_drv_mode() == HAL_SPINDLE_CSV)
             spindle_update_velocity();
         else
-            spindle_driver.target_vel = 0;
+            s_spl_target_vel = 0;
         return;
     }
 
@@ -498,37 +568,28 @@ static void spindle_update_driver_control(void)
         spl_context.spl_state = SPINDLE_STOP;
         spl_context.vel_planner.enable = false;
         spl_context.vel_planner.target_vel = 0.0;
-        spindle_driver.target_vel = 0;
-        Hal_Driver_Set_Target_Vel(&spindle_driver, 0);
-        if (spindle_driver.act_mode == DRV_MODE_CSP)
-        {
-            spindle_driver.mode_switch_state = DRV_MODE_SWITCH_IDLE;
-            spindle_driver.mode_switch_result = HAL_DRIVER_SUCCESS;
-            spindle_driver.mode_switch_cycles = 0U;
-        }
+        s_spl_target_vel = 0;
+        (void)rt_hal_request_spindle_speed(RT_HAL_AXIS_SP, 0.0, 0);   /* 停转 */
+        if (spl_drv_mode() == HAL_SPINDLE_CSP)
+            spl_ms_reset();
         spl_context.csv_switch_pending = false;
-        Driver_Disable(&spindle_driver);
+        spl_drv_disable();
         return;
     }
 
-    /* 定向期间由驱动器自行减速，不能被普通停止流程下使能或改写。 */
-    /* 定向控制字由 driver.c 维护，本模块不能在此期间写普通速度/下使能。 */
+    /* 定向期间 0x040F 由 HAL 持续下发，这里不能写普通速度，否则两边打架。 */
     if (spl_context.orient_phase != SPINDLE_ORIENT_IDLE)
     {
         if (spl_context.orient_phase == SPINDLE_ORIENT_RELEASING)
         {
-            /* 释放阶段每周期维持下使能请求，直到状态字确认完成。 */
-            Hal_Driver_Set_Target_Vel(&spindle_driver, 0);
-            Driver_Disable(&spindle_driver);
+            /* 释放后 HAL 会把控制字交回状态机并**重新使能**，所以这里不能再去
+             * 使能，否则下次 M19 会因为轴未使能而收不到定向请求。只清速度目标。 */
+            (void)rt_hal_request_spindle_speed(RT_HAL_AXIS_SP, 0.0, 0);   /* 停转 */
         }
 
-        /*
-         * 定向期间 0x040F 由 driver.c 持续发送。这里不能调用普通速度
-         * 更新或 Driver_Disable，否则会覆盖定向控制字或提前撤销使能。
-         */
         spl_context.vel_planner.enable = false;
         spl_context.vel_planner.target_vel = 0.0;
-        spindle_driver.target_vel = 0;
+        s_spl_target_vel = 0;
         return;
     }
 
@@ -547,29 +608,30 @@ static void spindle_update_driver_control(void)
          * Driver_Process_Mode_Switch 在 PREPARE_TARGET 阶段再次装载，
          * 因此 READY 阶段只保持该值，不再改写。
         */
+        /* 攻丝期间的角度由**插补**给（emcmot 每拍把它下发给主轴），这里不再发位置：
+         * 以前每拍重发一个固定角度，等于把主轴锁死，攻丝转不起来。
+         * 这里只把插补的指令角镜像下来，供到位判据与日志使用。 */
+        s_spl_target_pos = rt_data->axis_data[AXIS_SP].wcs_cmd_pos_cur;
         spindle_log_m29_csp_trace();
-        Driver_Enable(&spindle_driver);
+        spl_drv_enable();
         return;
     }
 
     if (spl_context.csv_switch_pending)
     {
-        if (spindle_driver.act_mode == DRV_MODE_CSP &&
-            !Driver_Is_Mode_Switching(&spindle_driver))
+        if (spl_drv_mode() == HAL_SPINDLE_CSP && !spl_ms_switching())
         {
-            if (Driver_Request_Mode_Switch(&spindle_driver, DRV_MODE_CSV) !=
-                HAL_DRIVER_SUCCESS)
+            if (spl_ms_request(HAL_SPINDLE_CSV) != HAL_OK)
             {
                 LOG(LOG_LEVEL_ERR,
                     "主轴CSP切换CSV请求失败，继续保持停止："
-                    "status_word=0x%04X state=%d",
-                    spindle_driver.status_word, spindle_driver.state);
+                    "status_word=0x%04X enabled=%d",
+                    spl_drv_status_word(), spl_drv_enabled());
             }
             return;
         }
 
-        if (Driver_Is_Mode_Switch_Done(&spindle_driver) &&
-            spindle_driver.act_mode == DRV_MODE_CSV)
+        if (spl_ms_done() && spl_drv_mode() == HAL_SPINDLE_CSV)
         {
             spl_context.csv_switch_pending = false;
             if (spl_context.command_state == SPINDLE_STOP)
@@ -583,30 +645,20 @@ static void spindle_update_driver_control(void)
                     SPINDLE_EVENT_CCW : SPINDLE_EVENT_CW;
             }
         }
-        else if (Driver_Get_Mode_Switch_Result(&spindle_driver) !=
-                 HAL_DRIVER_SUCCESS)
+        else if (spl_ms_result() != HAL_OK)
         {
             LOG(LOG_LEVEL_ERR,
-                "主轴CSP切换CSV失败，保留重试：status_word=0x%04X "
-                "state=%d mode_switch_state=%d",
-                spindle_driver.status_word, spindle_driver.state,
-                spindle_driver.mode_switch_state);
-            if (Driver_Request_Mode_Switch(&spindle_driver,
-                                           DRV_MODE_CSV) !=
-                HAL_DRIVER_SUCCESS)
-            {
-                Driver_Disable(&spindle_driver);
-            }
+                "主轴CSP切换CSV失败，保留重试：status_word=0x%04X enabled=%d",
+                spl_drv_status_word(), spl_drv_enabled());
+            if (spl_ms_request(HAL_SPINDLE_CSV) != HAL_OK)
+                spl_drv_disable();
         }
         return;
     }
 
-    if (spindle_driver.act_mode == DRV_MODE_CSV)
+    if (spl_drv_mode() == HAL_SPINDLE_CSV && spl_drv_enabled())
     {
-        if (spindle_driver.state == DRV_STATE_OPERATION_ENABLED)
-        {
-            velocity_control_ready = true;
-        }
+        velocity_control_ready = true;
     }
 
     if (spl_context.spl_state == SPINDLE_STOP)
@@ -615,9 +667,9 @@ static void spindle_update_driver_control(void)
         {
             spindle_update_velocity();
         }
-        else if (spindle_driver.act_mode == DRV_MODE_NONE)
+        else if (spl_drv_mode() < 0)    /* < 0 = 驱动器没报出工作模式。HAL 里 CSV == 0！ */
         {
-            spindle_driver.target_vel = 0;
+            s_spl_target_vel = 0;
             spindle_finish_stop_if_ready();
         }
         else
@@ -650,7 +702,7 @@ static void spindle_update_velocity(void)
 
     planner->max_acc = rt_data->axis_data[AXIS_SP].max_feed_acc;
     /* enable=false 时，规划器按最大减速度将 current_vel 拉回零。 */
-    planner->enable = spindle_is_rotating() && !Driver_Is_Mode_Switching(&spindle_driver);
+    planner->enable = spindle_is_rotating() && !spl_ms_switching();
     planner->target_vel = 0.0;
 
     if (planner->enable)
@@ -664,14 +716,11 @@ static void spindle_update_velocity(void)
      * 规划器输出是本周期的目标速度。这里只更新 HAL 缓存，真正写入
      * EtherCAT 60FF 由主站发送周期统一完成。
      */
-    spindle_driver.target_vel = (int32_t)planner->current_vel;
-    
-    Hal_Driver_Set_Target_Vel(&spindle_driver, spindle_driver.target_vel);
-
-    // Ethercat_Driver_Write_Target_Velocity(&spindle_driver, spindle_driver.target_vel);
-    
-    // // printg("Hal_Driver_Set_Target_Vel调用 target_vel: %d act_mode %d state: %d\n", spindle_driver.target_vel, spindle_driver.act_mode, spindle_driver.state);
-
+    s_spl_target_vel = (int32_t)planner->current_vel;
+    (void)rt_hal_request_spindle_speed(RT_HAL_AXIS_SP,
+                                       fabs((double)s_spl_target_vel),
+                                       s_spl_target_vel > 0 ? 1 :
+                                       (s_spl_target_vel < 0 ? -1 : 0));
     spindle_finish_stop_if_ready();
 }
 
@@ -715,7 +764,7 @@ static void spindle_handle_stop(spindle_context_t *context)
     context->vel_planner.enable = false;
     context->vel_planner.target_vel = 0.0;
 
-    if (spindle_driver.act_mode == DRV_MODE_CSP)
+    if (spl_drv_mode() == HAL_SPINDLE_CSP)
     {
         bool preserve_m29_request;
 
@@ -731,20 +780,16 @@ static void spindle_handle_stop(spindle_context_t *context)
             context->m29_phase = SPINDLE_M29_IDLE;
             context->csv_switch_pending = false;
             context->command_state = SPINDLE_STOP;
-            /* 复位必须取消尚未完成的 CSP/CSV 模式切换；否则
-             * Driver_Cyclic_Process 会优先继续处理旧切换并在超时后返回 -1。 */
-            spindle_driver.mode_switch_state = DRV_MODE_SWITCH_IDLE;
-            spindle_driver.mode_switch_result = HAL_DRIVER_SUCCESS;
-            spindle_driver.mode_switch_cycles = 0U;
-            spindle_driver.target_pos = spindle_driver.actual_pos;
-            Hal_Driver_Set_Target_Pos(&spindle_driver,
-                                      spindle_driver.actual_pos);
-            Driver_Disable(&spindle_driver);
-            Hal_Driver_Set_Target_Vel(&spindle_driver, 0);
+            /* 复位必须取消尚未完成的 CSP/CSV 模式切换。 */
+            spl_ms_reset();
+            s_spl_target_pos = spl_drv_actual_pos();
+            (void)rt_hal_request_axis_pos(RT_HAL_AXIS_SP, spl_drv_actual_pos());
+            spl_drv_disable();
+            (void)rt_hal_request_spindle_speed(RT_HAL_AXIS_SP, 0.0, 0);   /* 停转 */
             return;
         }
 
-        if (Driver_Is_Mode_Switching(&spindle_driver))
+        if (spl_ms_switching())
         {
             return;
         }
@@ -756,41 +801,29 @@ static void spindle_handle_stop(spindle_context_t *context)
             context->m29_phase = SPINDLE_M29_IDLE;
         }
         context->command_state = SPINDLE_STOP;
-        if (Driver_Request_Mode_Switch(&spindle_driver, DRV_MODE_CSV) ==
-            HAL_DRIVER_SUCCESS)
+        if (spl_ms_request(HAL_SPINDLE_CSV) == HAL_OK)
         {
             context->csv_switch_pending = true;
         }
         else
         {
-            Driver_Disable(&spindle_driver);
+            spl_drv_disable();
         }
         return;
     }
 
-    /*
-     * 急停或驱动器 Fault 时不能请求重新使能：驱动器已经无法执行
-     * 正常减速，释放急停后也必须保持下使能，防止旧目标速度恢复。
-     * 普通 M5 则保持 CSV 模式并允许驱动器执行受控减速。
-     */
-    // if (!rt_data->sys_state[SYS_IS_ESTOP_ACTIVE] &&
-    //     spindle_driver.state != DRV_STATE_FAULT &&
-    //     (spindle_driver.status_word & 0x0008U) == 0U &&
-    //     spindle_driver.act_mode != DRV_MODE_NONE)
+    /* 普通 M5 保持 CSV 并允许驱动器受控减速，不能下使能；只有急停、复位或
+     * 驱动器 Fault 才请求去使能，防止旧目标速度恢复。 */
     if (!spindle_reset_or_estop_active() &&
-        spindle_driver.state != DRV_STATE_FAULT &&
-        (spindle_driver.status_word & 0x0008U) == 0U)
+        (spl_drv_status_word() & 0x0008U) == 0U)
     {
-        Driver_Enable(&spindle_driver);
+        spl_drv_enable();
     }
     else
     {
-        Driver_Disable(&spindle_driver);
+        spl_drv_disable();
     }
-    Hal_Driver_Set_Target_Vel(&spindle_driver, 0);
-    // 直接下使能
-    // Ethercat_Driver_Write_Target_Velocity(&spindle_driver, 0);
-    // Ethercat_Driver_Write_Controlword(&spindle_driver, 0x06);
+    (void)rt_hal_request_spindle_speed(RT_HAL_AXIS_SP, 0.0, 0);   /* 停转 */
 }
 
 static bool spindle_reset_or_estop_active(void)
@@ -807,8 +840,7 @@ static bool spindle_reset_or_estop_active(void)
 static void spindle_handle_rotation(spindle_context_t *context,
                                     spindle_state_t state)
 {
-    if (spindle_driver.act_mode == DRV_MODE_CSP &&
-        !Driver_Is_Mode_Switching(&spindle_driver))
+    if (spl_drv_mode() == HAL_SPINDLE_CSP && !spl_ms_switching())
     {
         context->m29_active = false;
         context->m29_phase = SPINDLE_M29_IDLE;
@@ -818,16 +850,9 @@ static void spindle_handle_rotation(spindle_context_t *context,
         context->orient_hold_stop = false;
         context->reset_requires_start = false;
         context->start_request_pending = false;
-        if (Driver_Request_Mode_Switch(&spindle_driver, DRV_MODE_CSV) ==
-            HAL_DRIVER_SUCCESS)
-        {
-            context->csv_switch_pending = true;
-        }
-        else
-        {
-            /* 模式切换失败不能丢失启动请求，后续周期继续重试。 */
-            context->csv_switch_pending = true;
-        }
+        /* 请求被拒（台账未清）也不能丢失启动请求，后续周期继续重试。 */
+        (void)spl_ms_request(HAL_SPINDLE_CSV);
+        context->csv_switch_pending = true;
         return;
     }
 
@@ -855,7 +880,7 @@ static void spindle_handle_rotation(spindle_context_t *context,
 
     /*
      * 新 M3/M4 是急停/复位后的明确启动授权。清除 reset_requires_start
-     * 后才允许 Driver_Enable，防止旧的 PLC 方向信号自动恢复主轴。
+     * 后才允许使能主轴，防止旧的 PLC 方向信号自动恢复。
      */
     context->spl_state = state;
     if (context->reset_requires_start && !context->start_request_pending)
@@ -866,8 +891,10 @@ static void spindle_handle_rotation(spindle_context_t *context,
     context->start_request_pending = false;
     context->mcode_feedback = false;
     context->spl_vel_state = SPINDLE_VEL_RAMP;
-    spindle_driver.act_mode = DRV_MODE_CSV;
-    Driver_Enable(&spindle_driver);
+    /* HAL 只认实际模式（0x6061），所以这里真的请求一次 CSV，不能像以前那样
+     * 只改本地镜像。请求被拒说明台账未清，返回值有意忽略。 */
+    (void)spl_ms_request(HAL_SPINDLE_CSV);
+    spl_drv_enable();
 
     // LOG(LOG_LEVEL_INFO,
     //     "主轴收到%s转指令，目标速度=%f",
@@ -975,7 +1002,7 @@ static bool spindle_is_velocity_arrived(void)
 {
     /* 到速必须同时满足 CSV、Operation Enabled、非零和误差带条件。 */
     const double target = spl_context.vel_planner.current_vel;
-    const double actual = (double)spindle_driver.actual_vel;
+    const double actual = (double)spl_drv_actual_vel();
     const double tolerance = fmax(SPINDLE_SPEED_ARRIVAL_MIN_TOL,
                                   fabs(target) * SPINDLE_SPEED_ARRIVAL_TOL);
 
@@ -983,8 +1010,7 @@ static bool spindle_is_velocity_arrived(void)
      * 606C 实际速度和 60FF 目标速度必须来自同一 CSV 单位。除误差带外
      * 还要求实际速度非零，避免驱动器未使能或电机未转时误发 M3 FIN。
      */
-    if (spindle_driver.act_mode != DRV_MODE_CSV ||
-        spindle_driver.state != DRV_STATE_OPERATION_ENABLED)
+    if (spl_drv_mode() != HAL_SPINDLE_CSV || !spl_drv_enabled())
     {
         return false;
     }
@@ -1001,35 +1027,57 @@ static bool spindle_is_velocity_arrived(void)
 static void spindle_update_orient_state(void)
 {
     static bool release_status_log_active;
-    static drv_state_t last_release_driver_state;
-    static drv_state_t last_release_target_state;
     static uint16_t last_release_status_word;
-    static drv_orient_state_t last_release_orient_state;
+    static int last_release_enabled;
+    static int last_release_orient_state;
 
     /*
-     * 把 spl_orient.c 的底层完成标志同步到本文件的阶段状态，并在 M19
-     * 完成时产生代码握手。释放请求可能在完成前到达，因此单独保留标志。
+     * 把 HAL 的定向进展映射到本文件的阶段状态，并在 M19 完成时产生代码握手。
+     * HAL 那边只有 NONE / RUNNING / DONE 三态；RELEASING 是这边为了等
+     * "控制字真的交回状态机"而加的本地阶段。
      */
-    /* WAIT_ZERO 仅兼容其他可能的定向入口；当前入口直接进入 RUNNING。 */
+
+    /* 1) 请求还没被 HAL 受理。两个原因：轴刚被请求使能、这一拍还没生效；
+     *    或上次定向的完成位还挂着，这时重请求会立刻"完成"。等条件满足。 */
     if (spl_context.orient_request_pending)
     {
-        if (spl_orient_is_done())
-        {
-            /* 防止上一次定向状态残留。 */
-            if (!spl_orient_release())
-            {
-                return;
-            }
-        }
-        /* 兼容其他调用方：收到请求后也立即发送 0x040F。 */
-        if (spl_orient_request())
+        const bool done_bit_clear =
+            (spl_drv_status_word() & (uint16_t)RT_PLACEHOLDER_ORIENT_DONE) == 0U;
+
+        /* 每拍重发一次意图：适配层的请求是"取走一次"，而 HAL 只在轴已使能时受理
+         * （刚声明的使能下一拍才生效），所以第一次被拒是正常的，必须重发。
+         *
+         * 受理与否**不能**看 spl_orient_request() 的返回值 —— 适配层那个 setter 只要
+         * context 在就返回 OK（spl_orient.c 的注释期望它回 NOT_ENABLED，但受理是 PDO
+         * 线程过一会儿才做的，setter 不可能知道）。真正的证据是 HAL 的定向状态：
+         * 受理了才会从 NONE 变出去。 */
+        const bool requested = done_bit_clear && spl_orient_request();
+        const bool accepted = spl_drv_orient_state() != HAL_ORIENT_NONE;
+
+        if (requested && accepted)
         {
             spl_context.orient_request_pending = false;
             spl_context.orient_phase = SPINDLE_ORIENT_RUNNING;
             spl_context.orient_elapsed_cycles = 0U;
         }
+        else if (++spl_context.orient_elapsed_cycles >=
+                 SPINDLE_ORIENT_TIMEOUT_CYCLES)
+        {
+            LOG(LOG_LEVEL_ERR,
+                "主轴定向请求一直不被受理：status_word=0x%04X enabled=%d",
+                spl_drv_status_word(), spl_drv_enabled());
+            setAlarm(ALARM_AX, ALARM_ERROR, SPINDLE_ALARM_ORIENT_TIMEOUT);
+            spl_context.orient_request_pending = false;
+            spl_context.orient_phase = SPINDLE_ORIENT_IDLE;
+            spl_context.m19_active = false;
+            spl_context.orient_hold_stop = true;
+            spl_context.reset_requires_start = true;
+            spl_context.start_request_pending = false;
+            spl_context.command_speed = 0.0;
+        }
     }
 
+    /* 2) 已请求，等 HAL 把完成位置起来。 */
     if (spl_context.orient_phase == SPINDLE_ORIENT_RUNNING)
     {
         if (spl_orient_is_done())
@@ -1043,101 +1091,64 @@ static void spindle_update_orient_state(void)
             LOG(LOG_LEVEL_ERR, "主轴定向超时，自动请求释放");
             setAlarm(ALARM_AX, ALARM_ERROR, SPINDLE_ALARM_ORIENT_TIMEOUT);
             spl_context.m19_active = false;
-            if (spl_orient_release())
-            {
-                spl_context.orient_phase = SPINDLE_ORIENT_RELEASING;
-                spl_context.orient_release_pending = false;
-                spl_context.orient_elapsed_cycles = 0U;
-                spl_context.orient_hold_stop = true;
-                spl_context.reset_requires_start = true;
-                spl_context.start_request_pending = false;
-            }
-        else
-            {
-                spl_context.orient_phase = SPINDLE_ORIENT_RELEASING;
-                spl_context.orient_release_pending = true;
-                spl_context.m19_active = false;
-            }
-        }
-    }
-
-    if (spl_context.orient_phase != SPINDLE_ORIENT_IDLE &&
-        spl_context.orient_release_pending)
-    {
-        if (spl_orient_release())
-        {
-            spl_context.orient_release_pending = false;
             spl_context.orient_phase = SPINDLE_ORIENT_RELEASING;
+            spl_context.orient_release_pending = true;
             spl_context.orient_elapsed_cycles = 0U;
         }
     }
 
-    if (spl_context.orient_phase == SPINDLE_ORIENT_IDLE &&
-        spl_context.orient_release_pending)
+    /* 3) 待处理的释放请求（定向完成前的释放、复位、超时都走这里）。 */
+    if (spl_context.orient_release_pending && spl_orient_release())
     {
-        if (spl_orient_release())
+        spl_context.orient_release_pending = false;
+        if (spl_context.orient_phase != SPINDLE_ORIENT_IDLE)
         {
-            spl_context.orient_release_pending = false;
-            spl_context.orient_elapsed_cycles = 0U;
+            spl_context.orient_phase = SPINDLE_ORIENT_RELEASING;
         }
+        spl_context.orient_elapsed_cycles = 0U;
     }
 
-    /* 只有状态字确认 Switch On Disabled，才结束释放握手。 */
+    /* 4) 释放收尾。HAL 的释放是"控制字交回状态机并重新使能"，不是退回
+     *    Switch On Disabled，所以看的是定向状态已经退回 NONE。 */
     if (spl_context.orient_phase == SPINDLE_ORIENT_RELEASING &&
-        Driver_Is_Ready_to_Switch_On(&spindle_driver))
+        spl_drv_orient_inactive())
     {
         spl_context.orient_phase = SPINDLE_ORIENT_IDLE;
         spl_context.orient_hold_stop = false;
-        spindle_apply_deferred_start();
+        spl_context.orient_elapsed_cycles = 0U;
         release_status_log_active = false;
+        spindle_apply_deferred_start();
     }
 
+    /* 5) 释放迟迟收不了尾就报警。这里不再退回去使能——HAL 那边已经重新使能了。 */
     if (spl_context.orient_phase == SPINDLE_ORIENT_RELEASING)
     {
-        bool release_status_changed;
-
-        release_status_changed =
+        const bool release_status_changed =
             !release_status_log_active ||
-            last_release_driver_state != spindle_driver.state ||
-            last_release_target_state != spindle_driver.target_state ||
-            last_release_status_word != spindle_driver.status_word ||
-            last_release_orient_state != spindle_driver.orient_state;
+            last_release_status_word != spl_drv_status_word() ||
+            last_release_enabled != spl_drv_enabled() ||
+            last_release_orient_state != spl_drv_orient_state();
 
         if (release_status_changed)
         {
             LOG(LOG_LEVEL_INFO,
-                "主轴定向释放状态：state=%d target_state=%d "
-                "status_word=0x%04X orient_state=%d actual_vel=%d",
-                spindle_driver.state,
-                spindle_driver.target_state,
-                spindle_driver.status_word,
-                spindle_driver.orient_state,
-                spindle_driver.actual_vel);
+                "主轴定向释放状态：status_word=0x%04X enabled=%d "
+                "orient_state=%d actual_vel=%.0f",
+                spl_drv_status_word(), spl_drv_enabled(),
+                spl_drv_orient_state(), spl_drv_actual_vel());
             release_status_log_active = true;
-            last_release_driver_state = spindle_driver.state;
-            last_release_target_state = spindle_driver.target_state;
-            last_release_status_word = spindle_driver.status_word;
-            last_release_orient_state = spindle_driver.orient_state;
+            last_release_status_word = spl_drv_status_word();
+            last_release_enabled = spl_drv_enabled();
+            last_release_orient_state = spl_drv_orient_state();
         }
 
-        if (Driver_Is_Ready_to_Switch_On(&spindle_driver))
-        {
-            return;
-        }
-
-        if (++spl_context.orient_elapsed_cycles >=
-            SPINDLE_ORIENT_TIMEOUT_CYCLES)
+        if (++spl_context.orient_elapsed_cycles >= SPINDLE_ORIENT_TIMEOUT_CYCLES)
         {
             LOG(LOG_LEVEL_ERR,
-                "主轴定向释放下使能超时：state=%d target_state=%d "
-                "status_word=0x%04X orient_state=%d mode_switch_state=%d "
-                "actual_vel=%d",
-                spindle_driver.state,
-                spindle_driver.target_state,
-                spindle_driver.status_word,
-                spindle_driver.orient_state,
-                spindle_driver.mode_switch_state,
-                spindle_driver.actual_vel);
+                "主轴定向释放超时：status_word=0x%04X enabled=%d "
+                "orient_state=%d actual_vel=%.0f",
+                spl_drv_status_word(), spl_drv_enabled(),
+                spl_drv_orient_state(), spl_drv_actual_vel());
             setAlarm(ALARM_AX, ALARM_ERROR, SPINDLE_ALARM_ORIENT_TIMEOUT);
             spl_context.orient_phase = SPINDLE_ORIENT_IDLE;
             spl_context.orient_hold_stop = true;
@@ -1147,13 +1158,13 @@ static void spindle_update_orient_state(void)
         }
     }
 
+    /* 6) M19 完成握手。 */
     if (spl_context.orient_phase == SPINDLE_ORIENT_DONE &&
         spl_context.m19_active)
     {
         spl_context.m19_active = false;
         spindle_report_mcode_complete();
     }
-    // // printf("spl_context.orient_phase %d spl_context.orient_request_pending %d\n", spl_context.orient_phase, spl_context.orient_request_pending);
 }
 
 static void spindle_update_m29(void)
@@ -1170,8 +1181,8 @@ static void spindle_update_m29(void)
         LOG(LOG_LEVEL_ERR,
             "M29主轴定向失败：orient_phase=%d status_word=0x%04X "
             "actual_vel=%d",
-            spl_context.orient_phase, spindle_driver.status_word,
-            spindle_driver.actual_vel);
+            spl_context.orient_phase, spl_drv_status_word(),
+            spl_drv_actual_vel());
         spl_context.m29_phase = SPINDLE_M29_ERROR;
         spl_context.reset_requires_start = true;
         spl_context.start_request_pending = false;
@@ -1197,21 +1208,20 @@ static void spindle_update_m29(void)
         }
     }
 
+    /* 释放后 HAL 会重新使能，所以判据是"定向已交回 + 主轴真的停了"，
+     * 而不是同事那侧的 Switch On Disabled。位置目标等 CSP 到位后再写
+     * （CSV 下的位置写会被 HAL 以 MODE_MISMATCH 拒收）。 */
     if (spl_context.m29_phase == SPINDLE_M29_RELEASING &&
-        (((spindle_driver.status_word & 0x006FU) == 0x0021U) ||
-         Driver_Is_Ready_to_Switch_On(&spindle_driver)) &&
-        fabs((double)spindle_driver.actual_vel) <=
-            SPINDLE_ACTUAL_ZERO_EPSILON)
+        spl_drv_orient_inactive() &&
+        fabs((double)spl_drv_actual_vel()) <= SPINDLE_ACTUAL_ZERO_EPSILON)
     {
-        spindle_driver.target_pos = spindle_driver.actual_pos;
-        Hal_Driver_Set_Target_Pos(&spindle_driver, spindle_driver.actual_pos);
+        s_spl_target_pos = spl_drv_actual_pos();
         LOG(LOG_LEVEL_INFO,
-            "M29定向停止确认，切换CSP保持：actual_pos=%d actual_vel=%d "
+            "M29定向停止确认，切换CSP保持：actual_pos=%.0f actual_vel=%.0f "
             "status_word=0x%04X",
-            spindle_driver.actual_pos, spindle_driver.actual_vel,
-            spindle_driver.status_word);
-        if (Driver_Request_Mode_Switch(&spindle_driver, DRV_MODE_CSP) ==
-            HAL_DRIVER_SUCCESS)
+            spl_drv_actual_pos(), spl_drv_actual_vel(),
+            spl_drv_status_word());
+        if (spl_ms_request(HAL_SPINDLE_CSP) == HAL_OK)
         {
             spl_context.orient_phase = SPINDLE_ORIENT_IDLE;
             spl_context.m29_phase = SPINDLE_M29_SWITCHING_CSP;
@@ -1227,21 +1237,24 @@ static void spindle_update_m29(void)
 
     if (spl_context.m29_phase == SPINDLE_M29_SWITCHING_CSP)
     {
-        if (Driver_Is_Mode_Switch_Done(&spindle_driver) &&
-            spindle_driver.act_mode == DRV_MODE_CSP &&
-            spindle_driver.state == DRV_STATE_OPERATION_ENABLED)
+        if (spl_drv_mode() == HAL_SPINDLE_CSP && spl_drv_enabled())
         {
             spl_context.m29_phase = SPINDLE_M29_READY;
+            /* 攻丝起点：把"现在这个角度"定为 0°。插补里算的角度是**从本段起点
+             * 算起**的绝对累计角（acc/螺距×360），必须与这里的零点对齐，否则
+             * 第一个目标角会让主轴先跳回旧零点。
+             * 先设零、再写 0° 保持（适配层同一拍内按此顺序消费），此后角度由插补
+             * 每拍下发（见 emcmot 的 output_to_hal）。 */
+            rt_data->axis_data[AXIS_SP].wcs_cmd_pos_cur = 0.0;
+            s_spl_target_pos = 0.0;
+            (void)rt_hal_axis_set_pos(RT_HAL_AXIS_SP, 0.0);
+            (void)rt_hal_request_axis_pos(RT_HAL_AXIS_SP, 0.0);
         }
-        else if (Driver_Get_Mode_Switch_Result(&spindle_driver) !=
-                 HAL_DRIVER_SUCCESS)
+        else if (spl_ms_result() != HAL_OK)
         {
             LOG(LOG_LEVEL_ERR,
-                "M29切换CSP失败：status_word=0x%04X state=%d "
-                "target_state=%d mode_switch_state=%d",
-                spindle_driver.status_word, spindle_driver.state,
-                spindle_driver.target_state,
-                spindle_driver.mode_switch_state);
+                "M29切换CSP失败：status_word=0x%04X enabled=%d",
+                spl_drv_status_word(), spl_drv_enabled());
             spl_context.m29_phase = SPINDLE_M29_ERROR;
             spl_context.reset_requires_start = true;
             spl_context.start_request_pending = false;
@@ -1253,11 +1266,8 @@ static void spindle_update_m29(void)
                  SPINDLE_M29_MODE_TIMEOUT_CYCLES)
         {
             LOG(LOG_LEVEL_ERR,
-                "M29切换CSP超时：status_word=0x%04X state=%d "
-                "target_state=%d mode_switch_state=%d act_mode=%d",
-                spindle_driver.status_word, spindle_driver.state,
-                spindle_driver.target_state, spindle_driver.mode_switch_state,
-                spindle_driver.act_mode);
+                "M29切换CSP超时：status_word=0x%04X enabled=%d act_mode=%d",
+                spl_drv_status_word(), spl_drv_enabled(), spl_drv_mode());
             setAlarm(ALARM_AX, ALARM_ERROR, SPINDLE_ALARM_ORIENT_TIMEOUT);
             spl_context.m29_phase = SPINDLE_M29_ERROR;
             spl_context.reset_requires_start = true;
@@ -1285,13 +1295,13 @@ static void spindle_update_m29_feedback(void)
         unsettled_cycles = 0U;
     }
 
-    position_error = fabs((double)spindle_driver.target_pos -
-                          (double)spindle_driver.actual_pos);
+    position_error = fabs((double)s_spl_target_pos -
+                          (double)spl_drv_actual_pos());
     complete = spl_context.m29_active &&
                spl_context.m29_phase == SPINDLE_M29_READY &&
-               spindle_driver.act_mode == DRV_MODE_CSP &&
-               spindle_driver.state == DRV_STATE_OPERATION_ENABLED &&
-               fabs((double)spindle_driver.actual_vel) <=
+               spl_drv_mode() == HAL_SPINDLE_CSP &&
+               spl_drv_enabled() &&
+               fabs((double)spl_drv_actual_vel()) <=
                    SPINDLE_ACTUAL_ZERO_EPSILON &&
                position_error <= SPINDLE_CSP_POSITION_EPSILON;
     if (complete)
@@ -1307,13 +1317,11 @@ static void spindle_update_m29_feedback(void)
         {
             LOG(LOG_LEVEL_INFO,
                 "M29定向及CSP切换完成，输出F76.3：status_word=0x%04X "
-                "act_mode=%d state=%d target_pos=%d actual_pos=%d "
-                "actual_vel=%d position_error=%.0f",
-                spindle_driver.status_word, spindle_driver.act_mode,
-                spindle_driver.state,
-                spindle_driver.target_pos,
-                spindle_driver.actual_pos,
-                spindle_driver.actual_vel, position_error);
+                "act_mode=%d enabled=%d target_pos=%.0f actual_pos=%.0f "
+                "actual_vel=%.0f position_error=%.0f",
+                spl_drv_status_word(), spl_drv_mode(), spl_drv_enabled(),
+                s_spl_target_pos, spl_drv_actual_pos(),
+                spl_drv_actual_vel(), position_error);
             feedback_active = true;
         }
         setRegBit(REG_F, 76, 3);
@@ -1328,13 +1336,13 @@ static void spindle_update_m29_feedback(void)
             (++unsettled_cycles % 1000U) == 0U)
         {
             LOG(LOG_LEVEL_WARN,
-                "M29 CSP尚未稳定，禁止输出F76.3：target_pos=%d "
-                "actual_pos=%d actual_vel=%d position_error=%.0f "
-                "act_mode=%d state=%d status_word=0x%04X",
-                spindle_driver.target_pos, spindle_driver.actual_pos,
-                spindle_driver.actual_vel, position_error,
-                spindle_driver.act_mode, spindle_driver.state,
-                spindle_driver.status_word);
+                "M29 CSP尚未稳定，禁止输出F76.3：target_pos=%.0f "
+                "actual_pos=%.0f actual_vel=%.0f position_error=%.0f "
+                "act_mode=%d enabled=%d status_word=0x%04X",
+                s_spl_target_pos, spl_drv_actual_pos(),
+                spl_drv_actual_vel(), position_error,
+                spl_drv_mode(), spl_drv_enabled(),
+                spl_drv_status_word());
         }
     }
 }
@@ -1354,14 +1362,14 @@ static void spindle_finish_stop_if_ready(void)
     {
         return;
     }
-    if (fabs((double)spindle_driver.actual_vel) > SPINDLE_ACTUAL_ZERO_EPSILON)
+    if (fabs((double)spl_drv_actual_vel()) > SPINDLE_ACTUAL_ZERO_EPSILON)
     {
         return;
     }
 
-    if (spindle_driver.act_mode != DRV_MODE_NONE)
+    if (spl_drv_mode() >= 0)
     {
-        Hal_Driver_Set_Target_Vel(&spindle_driver, 0);
+        (void)rt_hal_request_spindle_speed(RT_HAL_AXIS_SP, 0.0, 0);   /* 停转 */
         spindle_disable_driver();
     }
 
@@ -1386,21 +1394,15 @@ static void spindle_apply_deferred_start(void)
 static void spindle_disable_driver_before_operation(void)
 {
     /* 驱动器尚未进入 Operation Enabled 时，不能做受控减速，只能清零并下使能。 */
-    Hal_Driver_Set_Target_Vel(&spindle_driver, 0);
+    (void)rt_hal_request_spindle_speed(RT_HAL_AXIS_SP, 0.0, 0);   /* 停转 */
     spindle_disable_driver();
-    // LOG(LOG_LEVEL_INFO,
-    //     "主轴停止，驱动器尚未进入运行使能，state=%d",
-    //     spindle_driver.state);
 }
 
 static void spindle_disable_driver(void)
 {
-    /*
-     * 停止只撤销驱动器使能，不清除实际工作模式。
-     * 主轴正常运行模式为 CSV，停止后仍保持 6060/6061 = 0x09，
-     * 后续收到 M3/M4 时可以直接重新使能。
-     */
-    Driver_Disable(&spindle_driver);
+    /* 停止只撤销使能，不清除期望模式：HAL 那边期望模式仍是 CSV，
+     * 6060/6061 保持 0x09，后续收到 M3/M4 直接重新使能即可。 */
+    spl_drv_disable();
 }
 
 static bool spindle_is_rotating(void)
@@ -1424,7 +1426,7 @@ static void spindle_publish_status(void)
     setVarChanInt(0, VAR_CHAN_S_CODE,
                   (int32_t)spl_context.vel_planner.current_vel, 0);
 #else
-    setVarChanInt(0, VAR_CHAN_S_CODE, spindle_driver.target_vel, 0);
+    setVarChanInt(0, VAR_CHAN_S_CODE, s_spl_target_vel, 0);
 #endif
 }
 
@@ -1449,7 +1451,7 @@ static void spindle_log_m29_csp_trace(void)
 
     trace_cycles++;
     target_changed = !target_initialized ||
-                     last_target_pos != spindle_driver.target_pos;
+                     last_target_pos != s_spl_target_pos;
 
     /* 目标位置变化立即记录；稳定保持时每 100 ms 记录一次，避免实时
      * 周期日志淹没现场，同时保留判断“目标不变但实际仍在运动”的证据。 */
@@ -1457,16 +1459,14 @@ static void spindle_log_m29_csp_trace(void)
     if (target_changed)
     {
         LOG(LOG_LEVEL_INFO,
-            "M29 CSP跟踪：target_pos=%d target_vel=%d actual_pos=%d actual_vel=%d "
-            "act_mode=%d req_mode=%d state=%d target_state=%d "
-            "status_word=0x%04X control_word=0x%04X mode_switch=%d",
-            spindle_driver.target_pos, spindle_driver.target_vel, spindle_driver.actual_pos,
-            spindle_driver.actual_vel, spindle_driver.act_mode,
-            spindle_driver.req_mode, spindle_driver.state,
-            spindle_driver.target_state, spindle_driver.status_word,
-            spindle_driver.control_word, spindle_driver.mode_switch_state);
+            "M29 CSP跟踪：target_pos=%.0f target_vel=%.0f actual_pos=%.0f "
+            "actual_vel=%.0f act_mode=%d req_mode=%d enabled=%d "
+            "status_word=0x%04X",
+            s_spl_target_pos, s_spl_target_vel, spl_drv_actual_pos(),
+            spl_drv_actual_vel(), spl_drv_mode(),
+            s_spl_req_mode, spl_drv_enabled(), spl_drv_status_word());
     }
 
-    last_target_pos = spindle_driver.target_pos;
+    last_target_pos = s_spl_target_pos;
     target_initialized = true;
 }

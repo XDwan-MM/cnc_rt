@@ -4,44 +4,20 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-#include "cJSON.h"
 
-#ifdef __cplusplus
-extern "C" {
-#endif
 #include "/opt/GreeMaster/include/libGREEMASTER/GreeMasterAPI.h"
 #include "/opt/GreeMaster/include/libGREEMASTER/gm_errcode.h"
-#ifdef __cplusplus
-}
-#endif
 
-// ===============错误检查宏=================
-#define CHECK_RC(rc,info,label) \
-    do { \
-        if ((rc) < 0) { \
-            printf("%s,rc = %d\n", info,rc); \
-            goto label; \
-        } \
-    } while(0)
-#define CHECK_FUNC(func) do { \
-    int ret = (func); \
-    if (ret < 0) { \
-        fprintf(stderr, "Error in function: %s, rc = %d\n", #func, ret); \
-    } \
-} while (0)
-
-#define SYNC0_CYCLE 1000000   
-#define SYNC0_SHIFT 500000                  
-#define SYNC1_CYCLE 0                
-#define SYNC1_SHIFT 0 
+/* 错误检查宏不在这里：本层在 main_demo.c 里按「各阶段共用一份启动预算」的需要
+ * 重定义了 CHECK_RC。device.h 旧版那个与它语义不同、且全仓库无人使用，已删除。 */
 
 typedef struct{
    int slave_pos;
    int slave_total;
-   int ID;
-   int CODE;
-   int Revision;
-   int Serial;
+   uint32_t ID;
+   uint32_t CODE;
+   uint32_t Revision;
+   uint32_t Serial;
    int type;
 }DEVICE_BASIC_INFO;
 
@@ -60,7 +36,7 @@ typedef struct{
 // 紧凑结构体 (禁止填充)
 typedef struct {
     unsigned short int type;      // 数据类型 (Word 1)
-    unsigned short int length;    // 数据内容长度 (Word 2)，注意：此值通常代表**字节数**
+    unsigned short int length;    // 数据内容长度 (Word 2)。**单位是 Word，不是字节**：字节数 = 该值 × 2
 } ECAT_EEPROM_CLASS_HEADER;
 
 // 1. PDO 头部结构
@@ -130,28 +106,9 @@ typedef enum {
     UNKNOWN_TYPE
 } DEVICE_TYPE;
 
-typedef struct {
-    unsigned int id;
-    unsigned int code;
-    unsigned int revision;
-    DEVICE_TYPE type;
-    const char* name;
-} DEVICE_TYPE_MAP;
+/* 设备类型不再用硬编码表匹配——改查设备字典（devdict + devices.json，
+ * 见 src/Greemaster/devices.json）。匹配逻辑在 get_device_types_from_info()。 */
 
-// 静态设备类型匹配库
-static const DEVICE_TYPE_MAP device_type_library[] = {
-    {441, 2, 0, SERVO_TYPE, "Sanyo Servo Driver"},
-    {477, 271601776, 33818120, SERVO_TYPE, "Delta Servo Driver"},
-    {1647, 1614282758, 65536, SERVO_TYPE, "Panasonic Servo Driver"},
-    {2252, 6, 0, GREE_AXIS6_TYPE, "Gree axis6 Servo Driver"},
-    {0xB13E2412, 1, 0, GREE_AXIS4_TYPE, "Gree axis4 Servo Driver"},
-    {2252, 269418498, 1, CONTROL_PANEL_TYPE, "Control Panel Module"},
-    {2252, 269418497, 1, IO_MODEL_TYPE, "IO Module"},
-    {1717, 1026, 268435457, SERVO_TYPE, "GHSD"},
-    {1710, 131073, 65536, SERVO_TYPE, "SPS_ECAT_CoE_02"},
-    {1337, 35652353, 268435456, SERVO_TYPE, "SGD7S"},
-    // 可继续添加更多类型...
-};
 #define MAX_DEVICE_NUM 30   //假设最多 30 个设备
 typedef struct {
     TxEntry_Unit statusWord;
@@ -168,38 +125,18 @@ typedef struct {
 }slave_addr;
 
 typedef struct {
-    RxEntry_Unit output_addr[7];
-    TxEntry_Unit input_addr[11];
+    RxEntry_Unit output_addr[64];
+    TxEntry_Unit input_addr[64];
+    uint8_t out_count;
+    uint8_t in_count;
 }control_addr;
 
 typedef struct {
-    RxEntry_Unit io_output_addr[2];
-    TxEntry_Unit io_input_addr[2];
+    RxEntry_Unit io_output_addr[64];
+    TxEntry_Unit io_input_addr[64];
+    uint8_t io_out_count;
+    uint8_t io_in_count;
 }io_addr;
-
-typedef struct {
-    unsigned short status;
-    unsigned short control;
-    int tar_pos;
-    int actrul_pos;
-    short actrul_torque;
-    unsigned short error;
-    int actrul_speed;
-    int tar_speed;
-    unsigned char mode;
-    unsigned char actrul_mode;
-    short tar_torque;
-}slave_parameter;
-
-typedef struct {
-    unsigned short output[7];
-    unsigned short input[11];
-}control_parameter;
-
-typedef struct {
-    unsigned short io_output[2];
-    unsigned short io_input[2];
-}io_parameter;
 
 // 统一的联合体：所有设备数据结构的“容器”
 typedef union {
@@ -224,7 +161,16 @@ typedef struct {
     uint8_t bitLen;
 } TARGET_ENTRY;
 
-#define DEVICE_TYPE_LIBRARY_SIZE (sizeof(device_type_library) / sizeof(device_type_library[0]))
-int get_device_info_from_eeprom(int slave_num, DEVICE_TYPE* types);
+/* 一台从站在 g_device_data 里占几个槽（多轴驱动器占多个：axis6→6，axis4→4）。
+ * 装配与建表两处都必须走这个规则，各写一遍就会整体错位，而且不报错。 */
+int device_slot_count(DEVICE_TYPE type);
+void device_reset(void);
+
+/* 某台从站的 EEPROM 身份（按【从站号】索引）。越界返回一个全零的静态对象。 */
+const DEVICE_BASIC_INFO* device_identity_get(int slave_pos);
+
+int get_device_info_from_eeprom(int slave_num, DEVICE_TYPE* types,
+                              uint32_t cycle_us, int dc_enable);
 int device_match(Slave_info* list, DEVICE_TYPE* type, int slave_num);
+const char* device_bind_error(void);
 #endif

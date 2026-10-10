@@ -207,6 +207,9 @@ static void rt_reboot_axis_data()
         rt_data->axis_data[i].pm_munit = CONV_UM_TO_MM(par_axis[i][PAR_AX_PM_MUNIT].value.val_int); // 轴电子齿轮比分子 (HMI unit: um, | 实时 单位: mm)
         rt_data->axis_data[i].pm_pulse = par_axis[i][PAR_AX_PM_PULSE].value.val_int;                // 轴电子齿轮比分母 (HMI unit: 脉冲)
         rt_data->axis_data[i].enc_off = par_axis[i][PAR_AX_ENC_OFF].value.val_real;                 // 轴编码器反馈偏置量 (HMI unit: mm)
+        /* 电机每转脉冲数。参数域里没填就是 0——调用方要能区分"没填"和"填了 0"，
+         * 所以这里不做任何兜底，兜底放在消费侧（main.cpp 的 fill_hal_params）。 */
+        rt_data->axis_data[i].mt_ppr = par_axis[i][PAR_AX_MT_PPR].value.val_int;
     }
 }
 

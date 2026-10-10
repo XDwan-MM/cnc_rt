@@ -1,7 +1,6 @@
 #ifndef SPL_CONTROL_H
 #define SPL_CONTROL_H
 
-#include "driver_hal.h"
 #include "global.h"
 #include "spl_vel_planner.h"
 #include <stdbool.h>

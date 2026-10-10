@@ -1,4 +1,5 @@
 #include "plc_f_signal_handler.h"
+#include "rt_hal_adapter.h"
 #include "alarmapi.h"
 #include "global.h"
 #include "regapi.h"
@@ -351,17 +352,21 @@ static void plc_output_spl_vel_status()
         spl_context.orient_phase == SPINDLE_ORIENT_RUNNING ||
         spl_context.orient_phase == SPINDLE_ORIENT_DONE ||
         spl_context.orient_phase == SPINDLE_ORIENT_RELEASING;
+    HalCAxisStatus ax_status;
+    double spl_actual_rpm = 0.0;
+    const bool spindle_faulted =
+        rt_hal_axis_status(RT_HAL_AXIS_SP, &ax_status) == HAL_OK &&
+        (ax_status.raw_status & 0x0008U) != 0U;
     const bool spindle_safety_stop =
-        rt_data->sys_state[SYS_IS_ESTOP_ACTIVE] ||
-        spindle_driver.state == DRV_STATE_FAULT ||
-        (spindle_driver.status_word & 0x0008U) != 0U;
+        rt_data->sys_state[SYS_IS_ESTOP_ACTIVE] || spindle_faulted;
 
     /* 停止目标已归零时，即使控制周期错过了 ARRIVED 状态，也要发布到速。 */
     if (!spindle_safety_stop &&
         !spindle_orienting &&
         spl_context.spl_state == SPINDLE_STOP &&
         fabs(spl_context.vel_planner.current_vel) <= 1e-6 &&
-        abs(spindle_driver.actual_vel) < 5)
+        (rt_hal_spindle_speed(RT_HAL_AXIS_SP, &spl_actual_rpm) != HAL_OK ||
+         fabs(spl_actual_rpm) < 5.0))
     {
         spl_context.spl_vel_state = SPINDLE_VEL_ARRIVED;
     }
@@ -376,8 +381,15 @@ static void plc_output_spl_vel_status()
     {
         clearRegBit(REG_F, 45, 3);
     }
-    //　主轴零速信号F45.1
-    if(abs(spindle_driver.actual_vel) < 5)
+//    if(spl_data.spl_vel_state == SPINDLE_VEL_ZERO)
+//    {
+//        setRegBit(REG_F, 45, 1);
+//    }
+//    else
+//    {
+//        clearRegBit(REG_F, 45, 1);
+//    }
+    if (fabs(rt_hal_spindle_rpm()) < 5.0)
     {
         setRegBit(REG_F, 45, 1);
         /* 停止到零时保留 ARRIVED，保证 F45.3 至少保持到 M 代码读到 FIN。 */

@@ -42,17 +42,22 @@ int threads_start() {
     pdo.config = pdo_config;
     pdo.function = pdo_thread_func;
 
-    // 7. 依次创建并启动所有线程
+    // 7. 依次创建并启动所有线程。
+    //    每成功一个就记 created——中途失败时后面的没建，退出路径要据此挑着 join。
     if (create_managed_thread(&pdo) != 0) return EXIT_FAILURE;
+    pdo.created = 1;
     RT_LOG(INFO, "创建pdo线程成功");
     LOG(LOG_LEVEL_INFO, "创建pdo线程成功");
     if (create_managed_thread(&soft_plc) != 0) return EXIT_FAILURE;
+    soft_plc.created = 1;
     RT_LOG(INFO, "创建plc线程成功");
     LOG(LOG_LEVEL_INFO, "创建plc线程成功");
     if (create_managed_thread(&motion_controller) != 0) return EXIT_FAILURE;
+    motion_controller.created = 1;
     RT_LOG(INFO, "创建运动线程成功");
     LOG(LOG_LEVEL_INFO, "创建运动线程成功");
     if (create_managed_thread(&path_plan) != 0) return EXIT_FAILURE;
+    path_plan.created = 1;
     RT_LOG(INFO, "创建路径规划线程成功");
     LOG(LOG_LEVEL_INFO, "创建路径规划线程成功");
     // if (create_managed_thread(&task_controller) != 0) return EXIT_FAILURE;
@@ -60,18 +65,33 @@ int threads_start() {
 }
 
 void threads_joint() {
-    pthread_join(motion_controller.id, NULL);
-    RT_LOG(INFO, "退出运动线程");
-    LOG(LOG_LEVEL_INFO, "退出运动线程");
-    pthread_join(soft_plc.id, NULL);
-    RT_LOG(INFO, "退出plc线程");
-    LOG(LOG_LEVEL_INFO, "退出plc线程");
+    // 只 join 真的创建成功的线程。join 未创建的 pthread_t 是未定义行为，
+    // 而这在"threads_start 中途失败"的路径上必然发生。
+    // join 完清标志，使本函数可重复调用（重复停机幂等）。
+    if (motion_controller.created) {
+        pthread_join(motion_controller.id, NULL);
+        motion_controller.created = 0;
+        RT_LOG(INFO, "退出运动线程");
+        LOG(LOG_LEVEL_INFO, "退出运动线程");
+    }
+    if (soft_plc.created) {
+        pthread_join(soft_plc.id, NULL);
+        soft_plc.created = 0;
+        RT_LOG(INFO, "退出plc线程");
+        LOG(LOG_LEVEL_INFO, "退出plc线程");
+    }
     // pthread_join(task_controller.id, NULL);
     // LOG(LOG_LEVEL_INFO, "退出任务线程");
-    pthread_join(path_plan.id, NULL);
-    RT_LOG(INFO, "退出路径规划线程");
-    LOG(LOG_LEVEL_INFO, "退出路径规划线程");
-    pthread_join(pdo.id, NULL);
-    RT_LOG(INFO, "退出pdo线程");
-    LOG(LOG_LEVEL_INFO, "退出pdo线程");
+    if (path_plan.created) {
+        pthread_join(path_plan.id, NULL);
+        path_plan.created = 0;
+        RT_LOG(INFO, "退出路径规划线程");
+        LOG(LOG_LEVEL_INFO, "退出路径规划线程");
+    }
+    if (pdo.created) {
+        pthread_join(pdo.id, NULL);
+        pdo.created = 0;
+        RT_LOG(INFO, "退出pdo线程");
+        LOG(LOG_LEVEL_INFO, "退出pdo线程");
+    }
 }
