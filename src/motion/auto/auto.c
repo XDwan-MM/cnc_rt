@@ -30,9 +30,7 @@ static bool auto_check_program_end();
 static void auto_pop_current_block();
 static void auto_set_stop_skip_macro();
 static void auro_reset_stop_skip();
-static double linenoo=0.0;
-static double nurbsnoo=0.0;
-static double fitrate=0.0f;
+
 void handle_auto_cmd(){
     // 更新状态
     auto_update_state();
@@ -530,9 +528,6 @@ static void auto_update_cmd(){
             auto_reset_run();
             auto_check_soft_limit_del_done();
             LOG(LOG_LEVEL_INFO, "程序运行结束");
-            printf("拟合率为：%f,\t%f,%f\n",fitrate,linenoo,nurbsnoo);
-            linenoo=0;
-            nurbsnoo=0;
             break;
         case EXEC_IDLE:
         default:
@@ -797,14 +792,6 @@ static void auto_get_next_cmd(){
     case PMC_MODE_TAP_RETURE:
     case PMC_MODE_STOPSKIP:
         auto_get_pos_cmd();
-        if (cycle_tp->plan_block->type==NURBS)
-        {
-            nurbsnoo=nurbsnoo+(cycle_tp->plan_block->nurbs_data.endlineno-cycle_tp->plan_block->nurbs_data.startlineno);
-            linenoo+=(cycle_tp->plan_block->nurbs_data.endlineno-cycle_tp->plan_block->nurbs_data.startlineno);
-        }
-        else         
-            linenoo++;
-        fitrate=nurbsnoo/linenoo;
         break;
     case PMC_MODE_PAUSE:
         auto_get_dwell_cmd();
@@ -959,7 +946,7 @@ static void auto_update_var(){
     }
     // 运行行号
     setVarChanInt(0, VAR_CHAN_RUN_ROW, cycle_tp->plan_block->line_number, 0);
-    // LOG(LOG_LEVEL_DEBUG, "line number:%d", cycle_tp->plan_block->line_number);
+    // LOG(LOG_LEVEL_DEBUG, "line number:%d type:%d", cycle_tp->plan_block->line_number, cycle_tp->plan_block->type);
     // 速度
     switch (cycle_tp->plan_block->mode)
     {
