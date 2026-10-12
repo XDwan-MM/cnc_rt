@@ -91,7 +91,7 @@ lib/kinematic/*.c
 lib/kinematic/test/
 lib/nurbs/*.c
 lib/circleSmooth/*.c
-
+CNC_RT.pro
 
 # data
 data/

@@ -44,7 +44,7 @@ target_include_directories(nurbs PUBLIC
     ${CNC_RT_SRC_DIR}/hal
     ${CNC_RT_SRC_DIR}/plc/plc_scanner
     ${CNC_RT_SRC_DIR}/utils/math
-    
+    ${CNC_RT_SRC_DIR}/master
     ${CNC_RT_LIB_DIR}/cncshm/api
     ${CNC_RT_LIB_DIR}/parser/api
     ${CNC_RT_LIB_DIR}/kinematic/include

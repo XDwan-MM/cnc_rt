@@ -58,6 +58,8 @@ double basis(int i, int p, double u, const double *U, int nCtrl);
 
 double basis_derivative(int i, int p, double u, const double *U, int nCtrl);
 
+void nurbs_curve_derivative(double u, const POS *P, const double *w, const double *U,int nCtrl, int p, POS *dC);
+
 double nurbs_curve_curvature(double u, const POS *P, const double *w, const double *U, int nCtrl, int p);
 
 double get_max_curvature(const POS *controlPoint, const double *w, const double *U, int nCtrl, int p, int precise);

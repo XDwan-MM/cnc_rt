@@ -391,10 +391,16 @@ static GNC_RES block_unif_by_nurbs()
                             LOG(LOG_LEVEL_INFO, "nurbs拟合/拟合失败，在%d段出现", treat_block->line_number);
                             return GNC_OPERATOR_SUCCESS;
                         }
+                        // nurbs段重算速度与长度
+                        treat_block->length = treat_block->nurbs_data.length;
                         double min_feed = MIN3(rt_data->axis_data[0].max_feed_vel, rt_data->axis_data[1].max_feed_vel, rt_data->axis_data[2].max_feed_vel);
                         double vn = vp_cal_nurbs_max_vel(treat_block, rt_data->chan_data[0].path_tolerance, rt_data->ncu_data.cycle);
                         treat_block->max_vel = treat_block->feed_vel = MIN3(treat_block->feed_vel, min_feed, vn);
-                        treat_block->length = treat_block->nurbs_data.length;
+                        // nurbs段重算切矢与上一段连接角度
+                        block_cal_vector(treat_block);
+                        block_cal_angle(treat_block, &queue_peak_pre_tail(unif_queue)->end_vec);  
+                        // nurbs段重算与下一段连接角度
+                        block_cal_angle(queue_peak(fix_queue), &treat_block->end_vec);  
                         queue_push(unif_queue, treat_block);
                         return GNC_OPERATOR_SUCCESS;
                     }
@@ -467,10 +473,17 @@ static GNC_RES block_unif_by_nurbs()
                             LOG(LOG_LEVEL_INFO, "nurbs拟合/拟合失败，在%d段出现", treat_block->line_number);
                             return GNC_OPERATOR_SUCCESS;
                         }
+                         // nurbs段重算速度与长度
+                        treat_block->length = treat_block->nurbs_data.length;
                         double min_feed = MIN3(rt_data->axis_data[0].max_feed_vel, rt_data->axis_data[1].max_feed_vel, rt_data->axis_data[2].max_feed_vel);
                         double vn = vp_cal_nurbs_max_vel(treat_block, rt_data->chan_data[0].path_tolerance, rt_data->ncu_data.cycle);
                         treat_block->max_vel = treat_block->feed_vel = MIN3(treat_block->feed_vel, min_feed, vn);
-                        treat_block->length = treat_block->nurbs_data.length;
+                        // nurbs段重算切矢与上一段连接角度
+                        block_cal_vector(treat_block);
+                        block_cal_angle(treat_block, &queue_peak_pre_tail(unif_queue)->end_vec);  
+                        // nurbs段重算与下一段连接角度
+                        block_cal_angle(queue_peak(fix_queue), &treat_block->end_vec);  
+
                         queue_push(unif_queue, treat_block);
                         return GNC_OPERATOR_SUCCESS;
                     }
@@ -497,10 +510,17 @@ static GNC_RES block_unif_by_nurbs()
                             LOG(LOG_LEVEL_INFO, "nurbs拟合/拟合失败，在%d段出现", nurbs_temp_block->line_number);
                             return GNC_OPERATOR_SUCCESS;
                         }
-                        double min_feed = MIN3(rt_data->axis_data[0].max_feed_vel, rt_data->axis_data[1].max_feed_vel, rt_data->axis_data[2].max_feed_vel);
-                        double vn = vp_cal_nurbs_max_vel(treat_block, rt_data->chan_data[0].path_tolerance, rt_data->ncu_data.cycle);
-                        treat_block->max_vel = treat_block->feed_vel = MIN3(treat_block->feed_vel, min_feed, vn);
+                         // nurbs段重算速度与长度
                         nurbs_temp_block->length = nurbs_temp_block->nurbs_data.length;
+                        double min_feed = MIN3(rt_data->axis_data[0].max_feed_vel, rt_data->axis_data[1].max_feed_vel, rt_data->axis_data[2].max_feed_vel);
+                        double vn = vp_cal_nurbs_max_vel(nurbs_temp_block, rt_data->chan_data[0].path_tolerance, rt_data->ncu_data.cycle);
+                        nurbs_temp_block->max_vel = nurbs_temp_block->feed_vel = MIN3(nurbs_temp_block->feed_vel, min_feed, vn);
+                        // nurbs段重算切矢与上一段连接角度
+                        block_cal_vector(nurbs_temp_block);
+                        block_cal_angle(nurbs_temp_block, &queue_peak_pre_tail(unif_queue)->end_vec);  
+                        // nurbs段重算与下一段连接角度
+                        block_cal_angle(queue_peak(fix_queue), &nurbs_temp_block->end_vec);  
+                       
                         queue_push(unif_queue, nurbs_temp_block);
                         // 如果前瞻队列已满，提前结束
                         if (queue_is_full(unif_queue))
@@ -729,6 +749,7 @@ static void block_cal_angle(PLAN_BLOCK* current_block, VECTOR* pre_end_vector){
             current_block->angle_rad = fmax(angle_rad_start, angle_rad_end);
             // LOG(LOG_LEVEL_DEBUG, "no %d, angle:%f", current_block->line_number, current_block->angle_rad);
             break;
+        case NURBS:
         case RAPID:
         case LINE:
         case RIGID_TAP:
@@ -990,7 +1011,13 @@ void block_cal_vector(PLAN_BLOCK* current_block){
             break;
         case NURBS:
             // TODO: 计算切矢
-            current_block->end_vec = current_block->start_vec = VECTOR_Unit(&current_block->start_pos, &current_block->end_pos);
+            POS start_vec, end_vec;
+            nurbs_curve_derivative(1, current_block->nurbs_data.control_point, current_block->nurbs_data.w, current_block->nurbs_data.U,current_block->nurbs_data.num, current_block->nurbs_data.k, &end_vec);
+            nurbs_curve_derivative(0, current_block->nurbs_data.control_point, current_block->nurbs_data.w, current_block->nurbs_data.U,current_block->nurbs_data.num, current_block->nurbs_data.k, &end_vec);
+            POS_Divide(&end_vec, POS_Norm(end_vec));
+            POS_Divide(&start_vec, POS_Norm(start_vec));
+            current_block->end_vec = end_vec;
+            current_block->start_vec = start_vec;
             break;
         default:
             break;
