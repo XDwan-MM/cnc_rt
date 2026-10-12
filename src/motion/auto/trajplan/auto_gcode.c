@@ -575,6 +575,8 @@ static void block_cal_tap_vel(PLAN_BLOCK* current_block){
             break;
 
         case LINE:
+        case CIRCLE_CCW:
+        case CIRCLE_CW:
             if (rt_get_sys_state(SYS_IS_DRY_RUN))
             {
                 current_block->max_vel = MIN(rt_data->chan_data[0].dryrun_spd, cycle_tp->max_feed_vel);
@@ -586,8 +588,6 @@ static void block_cal_tap_vel(PLAN_BLOCK* current_block){
             else current_block->start_vel = current_block->end_vel = current_block->max_vel;    
             break;
         
-        case CIRCLE_CCW:
-        case CIRCLE_CW:
         case HELIX_CW:
         case HELIX_CCW:
             if (rt_get_sys_state(SYS_IS_DRY_RUN))
@@ -619,6 +619,8 @@ static void block_cal_chop_vel(PLAN_BLOCK* current_block){
             break;
         
         case LINE:
+        case CIRCLE_CCW:
+        case CIRCLE_CW:
             if (rt_get_sys_state(SYS_IS_DRY_RUN))
             {
                 current_block->max_vel = MIN(rt_data->chan_data[0].dryrun_spd * var_chan[0][VAR_CHAN_FEED_OVERRIDE].value.f / OVERRIDE_PERCENT, cycle_tp->max_feed_vel);
@@ -630,8 +632,6 @@ static void block_cal_chop_vel(PLAN_BLOCK* current_block){
             else current_block->start_vel = current_block->end_vel = current_block->max_vel;  
             break;
         
-        case CIRCLE_CCW:
-        case CIRCLE_CW:
         case HELIX_CW:
         case HELIX_CCW:
             if (rt_get_sys_state(SYS_IS_DRY_RUN))
