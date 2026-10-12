@@ -94,13 +94,17 @@ void auto_update_pos_cmd(){
 }
 
 void auto_execute_pos_cmd(){
-    if (auto_pos_cmd_cycle_is_finished()) return;
+    if (auto_pos_cmd_cycle_is_finished()) 
+    {
+        return;
+    }
     cycle_tp->pos_cmd_data.interp_cycle += 1;
     // 计算插补速度和距离
     vp_cal_traj_data(cycle_tp->velplan_mode, cycle_tp->pos_cmd_data.vel_profile, cycle_tp->pos_cmd_data.interp_cycle, cycle_tp->pos_cmd_data.traj_data, cycle_tp->ncu_cycle);
     cycle_tp->pos_cmd_data.current_distance = cycle_tp->pos_cmd_data.target_distance;
     cycle_tp->pos_cmd_data.target_distance = cycle_tp->pos_cmd_data.traj_data->s - cycle_tp->pos_cmd_data.accum_distance;
-    if(IsLessThan(cycle_tp->pos_cmd_data.target_distance, 0)){
+    if (IsLessThan(cycle_tp->pos_cmd_data.target_distance, 0))
+    {
         setAlarm(ALARM_CH, ALARM_ERROR, 2);
         cycle_tp->target_stage = PROGRAM_END;
         cycle_tp->exec_cmd = DO_NULL_CMD;
@@ -111,8 +115,15 @@ void auto_execute_pos_cmd(){
     }
     cycle_tp->pos_cmd_data.accum_distance = cycle_tp->pos_cmd_data.traj_data->s;
     cycle_tp->pos_cmd_data.remain_distance = cycle_tp->plan_block->length - cycle_tp->pos_cmd_data.accum_distance;
+
+    struct timespec start2,end2;
+    double time_taken2;
+	clock_gettime(CLOCK_MONOTONIC,&start2);
     // 计算插补位置
-    POS interp_pos = auto_cal_interp_pos(cycle_tp->pos_cmd_data.current_pos, cycle_tp->pos_cmd_data.accum_distance);
+    POS interp_pos = auto_cal_interp_pos(&cycle_tp->pos_cmd_data, cycle_tp->pos_cmd_data.accum_distance, cycle_tp->pos_cmd_data.target_distance);
+
+    clock_gettime(CLOCK_MONOTONIC,&end2);
+	time_taken2=((end2.tv_sec-start2.tv_sec)*1e9+(end2.tv_nsec-start2.tv_nsec))/1000.0f;//us
     // TODO：计算误差
     if(IsLessThan(cycle_tp->pos_cmd_data.traj_data->v, 0)) {
         LOG(LOG_LEVEL_ERR, "自动加工错误！在插补段%d插补速度计算失败", cycle_tp->plan_block->line_number);
@@ -126,6 +137,52 @@ void auto_execute_pos_cmd(){
     cycle_tp->pos_cmd_data.current_pos.x = rt_data->axis_data[AXIS_X].wcs_cmd_pos_cur = interp_pos.x;
     cycle_tp->pos_cmd_data.current_pos.y = rt_data->axis_data[AXIS_Y].wcs_cmd_pos_cur = interp_pos.y;
     cycle_tp->pos_cmd_data.current_pos.z = rt_data->axis_data[AXIS_Z].wcs_cmd_pos_cur = interp_pos.z;
+    
+    // static FILE *fpp;
+    // static int flagg = 0;
+    // if (!flagg)
+    // {
+    //     fpp = fopen("插补.txt", "r");
+    //     if (fpp == NULL)
+    //     {
+    //         fpp = fopen("插补.txt", "w");
+    //         if (fpp == NULL)
+    //         {
+    //             // 创建失败，返回 NULL
+    //             return NULL;
+    //         }
+    //     }
+    // }
+    // fprintf(
+    //     fpp,
+    //     "%f,%f,%f,\t%f, %d, %d,%f,%f\n",
+    //     interp_pos.x,
+    //     interp_pos.y,
+    //     interp_pos.z,
+    //     cycle_tp->pos_cmd_data.traj_data->v,
+    //     cycle_tp->plan_block->type,
+    //     cycle_tp->plan_block->line_number,
+    //     cycle_tp->pos_cmd_data.u_current,
+    //     time_taken2
+    // );
+    // printf( "%f,%f,%f,%d,%d\n",
+    //     interp_pos.x,
+    //     interp_pos.y,
+    //     interp_pos.z,
+    //     cycle_tp->plan_block->type,
+    //     cycle_tp->plan_block->line_number
+    // );
+    // // if(cycle_tp->plan_block->line_number>=5101)
+    // // {
+    // //     printf("..\n");
+    // // }
+    // flagg++;
+    // if (flagg > 1600000)
+    // {
+    //     fclose(fpp);
+    //     fpp = NULL;
+    //     flagg=0;
+    // }
 }
 
 static bool auto_pos_cmd_cycle_is_finished(){
@@ -217,21 +274,6 @@ void auto_update_null_cmd(){
 
 void auto_execute_null_cmd(){
     auto_pos_cmd_arrive_check();
-}
-
-void cycle_tp_add_block(){
-    PLAN_BLOCK* pretreat_block;
-    PLAN_BLOCK* plan_block;
-    // 拷贝 pretreat_queue 的数据
-    for(int i = 0; i < LOOK_AHEAD_SIZE; i++){
-        // 如果前瞻队列已满，提前结束
-        if(queue_is_full(plan_queue)) break;
-        // 如果预处理队列无数据，提前结束
-        if(queue_is_empty(pretreat_queue)) break;
-        pretreat_block = queue_peak(pretreat_queue);
-        queue_push(plan_queue, pretreat_block);
-        queue_pop(pretreat_queue);
-    }
 }
 
 static bool is_newval_unvalid(){
@@ -419,6 +461,8 @@ void cycle_tp_reset_pos_cmd_data(){
     cycle_tp->pos_cmd_data.remain_distance = 0.0;
     cycle_tp->pos_cmd_data.current_distance = 0.0;
     cycle_tp->pos_cmd_data.target_distance = 0.0;
+    cycle_tp->pos_cmd_data.u_current = 0.0;
+    cycle_tp->pos_cmd_data.u_next = 0.0;
 }
 
 void cycle_tp_reset_dwell_cmd_data(){
@@ -544,6 +588,7 @@ static void block_cal_exact_stop_vel(PLAN_BLOCK* current_block){
         case CIRCLE_CW:
         case HELIX_CW:
         case HELIX_CCW:
+        case NURBS:
             // 被钳制在最大切削进给速度上
             if (rt_get_sys_state(SYS_IS_DRY_RUN))
             {
@@ -577,6 +622,7 @@ static void block_cal_tap_vel(PLAN_BLOCK* current_block){
         case LINE:
         case CIRCLE_CCW:
         case CIRCLE_CW:
+        case NURBS:
             if (rt_get_sys_state(SYS_IS_DRY_RUN))
             {
                 current_block->max_vel = MIN(rt_data->chan_data[0].dryrun_spd, cycle_tp->max_feed_vel);
@@ -621,6 +667,7 @@ static void block_cal_chop_vel(PLAN_BLOCK* current_block){
         case LINE:
         case CIRCLE_CCW:
         case CIRCLE_CW:
+        case NURBS:
             if (rt_get_sys_state(SYS_IS_DRY_RUN))
             {
                 current_block->max_vel = MIN(rt_data->chan_data[0].dryrun_spd * var_chan[0][VAR_CHAN_FEED_OVERRIDE].value.f / OVERRIDE_PERCENT, cycle_tp->max_feed_vel);

@@ -67,9 +67,17 @@ INCLUDEPATH += $$PWD/lib/parser/api $$PWD/lib/parser
 LIBS += -L"$$PWD/lib/kinematic/bin/" -lkinematic
 INCLUDEPATH += $$PWD/lib/kinematic/include $$PWD/lib/kinematic
 
+# 添加nurbs库
+ LIBS += -L"$$PWD/lib/nurbs/bin/" -lnurbsfit
+ INCLUDEPATH += $$PWD/lib/nurbs/include $$PWD/lib/nurbsfit
+
 # 添加误差补偿库
 LIBS += -L"$$PWD/lib/CNC_ErrorComp/lib" -lCNC_ErrorComp
 INCLUDEPATH += $$PWD/lib/CNC_ErrorComp/include $$PWD/lib/CNC_ErrorComp
+
+# 添加圆弧过渡库
+LIBS += -L"$$PWD/lib/circleSmooth/bin" -lcircleSmooth
+INCLUDEPATH += $$PWD/lib/circleSmooth/include $$PWD/lib/circleSmooth
 
 unix:!macx: {
     DESTDIR = $$PWD/bin
@@ -153,6 +161,8 @@ HEADERS += \
     src/hal/driver_hal.h \
     src/hal/driver.h \
     src/hal/ethercat_driver_hal.h \
+    lib/nurbs/include/nurbsfit.h \
+    lib/circleSmooth/include/circle_smooth.h \
     
 
 SOURCES += \
@@ -205,6 +215,8 @@ SOURCES += \
     src/hal/driver_hal.c \
     src/hal/driver.c \
     src/hal/ethercat_driver_hal.c \
+    #lib/nurbs/nurbsfit.c \
+    #lib/circleSmooth/circle_smooth.c \
 
 
 INCLUDEPATH += \
@@ -234,3 +246,6 @@ INCLUDEPATH += \
     src/utils/math \
     src/utils/log \
     lib/kinematic/include \
+    lib/nurbs/include \
+    lib/circleSmooth/include \
+

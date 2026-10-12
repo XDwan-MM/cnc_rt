@@ -92,9 +92,9 @@ void emcmotPathPlan()
         // 添加block
         chan_add_block();
         // 预处理
-        // pretreat_block();
+        pretreat_block();
         // 一致性处理
-        // unif_block();
+        unif_block();
     }
 }
 
