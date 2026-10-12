@@ -25,8 +25,6 @@ static GNC_RES block_unif_by_treat();
 static GNC_RES block_fixturnning_point();
 // 圆弧平滑入口，使用明确的无参数函数原型。
 static GNC_RES block_unif_by_circle_smooth(void);
-
-
 //cy 异常点处理
 static void block_cal_curvature(PLAN_BLOCK* current_block, POS* pre_start_pos, POS* pre_end_pos, POS* current_pos);
 static int block_cal_segment(PLAN_BLOCK* pretreat_block, double seg_theta_thre,PLAN_QUEUE* temp);
@@ -73,7 +71,6 @@ GNC_RES pretreat_block()
             queue_pop(pretreat_queue);
             return GNC_OPERATOR_SUCCESS;
         }
-
     }
 
     // 每次最多处理 PRE_TREAT_SIZE
@@ -88,9 +85,8 @@ GNC_RES pretreat_block()
         treat_block = queue_peak_tail(treat_queue);
         if(treat_block == NULL) return GNC_DATA_NULL;
         memcpy(treat_block, pretreat_block, sizeof(PLAN_BLOCK));
-        // TODO:处理异常点
+        // 处理异常点
         block_deal_outlier(pretreat_block, treat_block);
-        
     }
     return GNC_CAL_SUCCESS;
 }
@@ -102,17 +98,16 @@ GNC_RES unif_block()
     // 根据类型选择拟合方案
     switch (rt_data->chan_data[0].unif_type)
     {
-        case UNIF_NURBS:
-            res = block_fixturnning_point();
-            res = block_unif_by_nurbs();               // nurbs拟合
-            break;
-        case UNIF_CIRCLE:
-            res = block_unif_by_circle_smooth();
-            break;
-        default:
-            res = block_unif_by_treat();         // 不做处理，treat传到unif队列
-            break;
-
+    case UNIF_NURBS:
+        res = block_fixturnning_point();
+        res = block_unif_by_nurbs();         // nurbs拟合
+        break;
+    case UNIF_CIRCLE:
+        res = block_unif_by_circle_smooth();
+        break;
+    default:
+        res = block_unif_by_treat();         // 不做处理，treat传到unif队列
+        break;
     }
     return res;
 }
@@ -196,10 +191,6 @@ static void block_deal_parser_block(PLAN_BLOCK* parser_block, PLAN_BLOCK* pretre
             rt_set_chan_state(0, CHAN_IS_FIRST_RUN, false);
             // LOG(LOG_LEVEL_DEBUG,  "%f %f %f", pretreat_queue->pre_pos.x, pretreat_queue->pre_pos.y, pretreat_queue->pre_pos.z);
         }
-        // if(pretreat_block->line_number>=45)
-        // {
-        //     printf("ss\n");
-        // }
         // 构造成段
         pretreat_block->max_vel = pretreat_block->feed_vel = parser_block->feed_vel;
         block_cal_pos(parser_block, pretreat_block, &pretreat_queue->pre_pos);
@@ -211,14 +202,12 @@ static void block_deal_parser_block(PLAN_BLOCK* parser_block, PLAN_BLOCK* pretre
         block_cal_vector(pretreat_block);
         // 计算两段衔接夹角
         block_cal_angle(pretreat_block, &pretreat_queue->pre_vec);
-
         // 计算起点曲率
         block_cal_curvature(pretreat_block, &pretreat_queue->pre_startpos, &pretreat_queue->pre_pos,&pretreat_block->end_pos);
         // 保存信息
         pretreat_queue->pre_pos = pretreat_block->end_pos;
         pretreat_queue->pre_vec = pretreat_block->end_vec;
         pretreat_queue->pre_startpos = pretreat_block->start_pos;
-
         break;
     }
 }
@@ -331,18 +320,13 @@ static GNC_RES block_unif_by_nurbs()
             queue_push(unif_queue, treat_block);
             queue_pop(fix_queue);
             return GNC_OPERATOR_SUCCESS;
-
         }
-
     }
 
     treat_block = queue_peak(fix_queue);
     if (treat_block == NULL)
         return GNC_DATA_NULL;
-    // if(queue_peak(fix_queue)->line_number>=141||queue_peak(fix_queue)->line_number==674 )
-    // {
-    //     printf("ss\n");
-    // }
+
     switch (treat_block->mode)
     {
     // 处理空包和非移动指令
@@ -357,7 +341,6 @@ static GNC_RES block_unif_by_nurbs()
         break;
     // 处理移动指令
     default:
-
         // 处理遗留未入队的nurbs队列， 防止treat队列满了导致两段nurbs和为一起。
         if (queue_peak(fix_queue)->type != NURBS)
         {
@@ -965,7 +948,6 @@ static double block_cal_nurbs_length(PLAN_BLOCK *current_block)
     {
         setAlarm(ALARM_CH, ALARM_ERROR, 2);
         LOG(LOG_LEVEL_ERR, "尚未进行nurbs拟合/拟合失败，在%d段出现", current_block->line_number);
-
     }
 }
 
@@ -1010,7 +992,6 @@ void block_cal_vector(PLAN_BLOCK* current_block){
             block_cal_circle_vector(current_block);
             break;
         case NURBS:
-            // TODO: 计算切矢
             POS start_vec, end_vec;
             nurbs_curve_derivative(1, current_block->nurbs_data.control_point, current_block->nurbs_data.w, current_block->nurbs_data.U,current_block->nurbs_data.num, current_block->nurbs_data.k, &end_vec);
             nurbs_curve_derivative(0, current_block->nurbs_data.control_point, current_block->nurbs_data.w, current_block->nurbs_data.U,current_block->nurbs_data.num, current_block->nurbs_data.k, &end_vec);
