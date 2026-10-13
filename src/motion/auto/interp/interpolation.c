@@ -1,5 +1,6 @@
 ﻿#include "plan_queue.h"
 #include "global.h"
+#include "nurbsfit.h"
 
 static POS interpolate_line(PLAN_BLOCK* current_block, double accum_distance);
 static POS interpolate_rapid(PLAN_BLOCK* current_block, double accum_distance);
@@ -7,10 +8,10 @@ static POS interpolate_circle(POS current_pos, PLAN_BLOCK* current_block, double
 static POS interpolate_helix(POS current_pos, PLAN_BLOCK* current_block, double accum_distance);
 static POS interpolate_tap(PLAN_BLOCK* current_block, double accum_distance, double target_distance);
 
-POS auto_cal_interp_pos(POS current_pos, double accum_distance, double target_distance){
-    if(accum_distance <= 0) return current_pos;
+POS auto_cal_interp_pos(POS_CMD_DATA* pos_cmd_data, double accum_distance, double target_distance){
+    if(accum_distance <= 0) return pos_cmd_data->current_pos;
     PLAN_BLOCK* current_block = cycle_tp->plan_block;
-    if(current_block == NULL) return current_pos;
+    if(current_block == NULL) return pos_cmd_data->current_pos;
     POS interp_pos;
     switch(current_block->type){
         case RAPID:
@@ -22,19 +23,23 @@ POS auto_cal_interp_pos(POS current_pos, double accum_distance, double target_di
             break;
         case CIRCLE_CCW:
         case CIRCLE_CW:
-            interp_pos = interpolate_circle(current_pos, current_block, accum_distance);
+            interp_pos = interpolate_circle(pos_cmd_data->current_pos, current_block, accum_distance);
             break;
         case HELIX_CW:
         case HELIX_CCW:
-            interp_pos = interpolate_helix(current_pos, current_block, accum_distance);
+            interp_pos = interpolate_helix(pos_cmd_data->current_pos, current_block, accum_distance);
+            break;
+        case NURBS:
+            interp_pos = interpolate_nurbs(target_distance, &pos_cmd_data->u_current, &pos_cmd_data->u_next);
             break;
         case RIGID_TAP:
         case TAP_RETURN:
             interp_pos = interpolate_tap(current_block, accum_distance, target_distance);
             break;
         case UNKNOWN:
+		
         default:
-            interp_pos = current_pos;
+            interp_pos = pos_cmd_data->current_pos;
             break;
     }
     return interp_pos;
