@@ -281,6 +281,20 @@ int Master_WaitCycle(void) {
 int Master_CommitCycle(void) {
     if (!s_opened) return -1;
     if (atomic_load(&s_stop_requested)) return MASTER_STOP_REQUESTED;
+    /* CNC_RT_SIM_CYCLE_FAIL=<第几拍>：到那一拍就返回失败，用来离线验证
+     * PDO 意外退出 → 主线程收尾这条链（不设置时行为不变）。 */
+    {
+        static long fail_at = -1;
+        static long commits;
+        if (fail_at < 0) {
+            const char* f = getenv("CNC_RT_SIM_CYCLE_FAIL");
+            fail_at = f ? strtol(f, NULL, 10) : 0;
+        }
+        if (++commits == fail_at) {
+            fprintf(stderr, "[SIM] 注入周期错误（CNC_RT_SIM_CYCLE_FAIL=%ld）\n", fail_at);
+            return -1;
+        }
+    }
     /* 只有 bit7 上升沿清 Fault；桩不能替 HAL 修改主站的输出控制字。
      * CNC_RT_SIM_FAULT_STUCK=1 时故意不清，把复位按在 PENDING（见 s_fault_stuck）。 */
     for (int i = 0; i < SIM_SLOT_COUNT; ++i) {

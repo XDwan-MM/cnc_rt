@@ -60,13 +60,15 @@ static inline long long get_ns() {
  * （plctask.cpp 的 regX[mapping.src.idx]），索引来自运行时加载的梯形图，
  * 静态界定不了它的使用范围，全量写会清掉梯形图自己的 X 用途。
  * 这条边界要以真机梯形图为准。 */
-#define RT_IO_IMAGE_MAX  512u   /* 与 REG_X_NUM/REG_Y_NUM 一致；适配层也按这个尺寸收发 */
+/* 缓冲尺寸的唯一来源是适配层的 RT_HAL_IO_IMAGE_MAX（它与 REG_X/REG_Y 同长）。
+ * 启动时适配层会拿 HAL 实算的段长和它比，超了直接拒绝启动。 */
+#define RT_IO_IMAGE_MAX  RT_HAL_IO_IMAGE_MAX
 
 // 软PLC线程的具体实现
 void* soft_plc_thread_func(void*) {
-    while (!thread_exit_flag) {
+    while (!__atomic_load_n(&thread_exit_flag, __ATOMIC_ACQUIRE)) {
         sem_wait(&plc_sem);
-        if (thread_exit_flag) break;
+        if (__atomic_load_n(&thread_exit_flag, __ATOMIC_ACQUIRE)) break;
 
         long long start_time = get_ns();
 
@@ -143,10 +145,10 @@ void* soft_plc_thread_func(void*) {
 
 // 运动控制器线程的具体实现
 void* motion_controller_thread_func(void*) {
-    while (!thread_exit_flag)
+    while (!__atomic_load_n(&thread_exit_flag, __ATOMIC_ACQUIRE))
     {
         sem_wait(&motion_sem);
-        if (thread_exit_flag) break;
+        if (__atomic_load_n(&thread_exit_flag, __ATOMIC_ACQUIRE)) break;
         /* 本拍周期号：开工取走、收工写回，让 PDO 线程能确认完成的确实是本拍
          * （只看信号量计数区分不了迟到的上一拍）。 */
         const uint32_t motion_cycle = __atomic_load_n(&motion_cycle_target, __ATOMIC_ACQUIRE);
@@ -182,7 +184,7 @@ void* motion_controller_thread_func(void*) {
 
 // 路径规划线程的具体实现
 void* path_plan_thread_func(void*) {
-    while (!thread_exit_flag)
+    while (!__atomic_load_n(&thread_exit_flag, __ATOMIC_ACQUIRE))
     {
         // if(gcode_queue_is_full(gcode_queue)){
         //     usleep(1);
@@ -190,7 +192,7 @@ void* path_plan_thread_func(void*) {
         // }
         // todo：不需要信号量
         sem_wait(&path_plan_sem);
-        if (thread_exit_flag) break;
+        if (__atomic_load_n(&thread_exit_flag, __ATOMIC_ACQUIRE)) break;
         emcmotPathPlan();
     }
     return NULL;
@@ -209,12 +211,19 @@ void* pdo_thread_func(void*) {
      * 真正该看的故障反而被它淹掉。总线故障仍然报得出去——那种情况 rc 不是 STOPPED，
      * 而且上面那段注释说的理由依然成立。 */
     if (rc && rc != HAL_ERROR_STOPPED) alarm_report_hal_error(rc);
+    /* 正常停止 = 主线程已经置了 thread_exit_flag。除此之外任何退出（哪怕 rc 是 0 或
+     * STOPPED）都必须告诉主线程：本线程不再 post 信号量了，运动/PLC 线程会卡住，
+     * 只能由主线程统一收尾（置退出标志 → 唤醒等待者 → join → 关 HAL）。 */
+    if (!__atomic_load_n(&thread_exit_flag, __ATOMIC_ACQUIRE)) {
+        __atomic_store_n(&pdo_unexpected_exit, 1, __ATOMIC_RELEASE);
+        LOG(LOG_LEVEL_ERR, "PDO 循环意外退出：rc=%d（未收到关闭请求）", rc);
+    }
     return NULL;
 }
 
 // 任务控制器线程的具体实现
 // void* task_controller_thread_func(void*) {
-//     while (!thread_exit_flag) {
+//     while (!__atomic_load_n(&thread_exit_flag, __ATOMIC_ACQUIRE)) {
 //         // todo：修改此处写法    
 //     }
 //     return NULL;

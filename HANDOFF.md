@@ -40,7 +40,7 @@
 | `/home/mxh/CNC/cnc_rt` | **我们的开发树**。1.24.15 + cnc_hal 接入已完成 | 能改 |
 | `/home/mxh/CNC/HAL` | **HAL 仓库**（独立 git，有远程 gitea） | 能改 |
 | `/home/mxh/CNC/cnc_rt_last` | **同事的树**，v1.27.1，936 个提交 | **不要动** |
-| `/home/mxh/CNC/port_work` | **移植工作副本**（cnc_rt_last 的拷贝 + 分支 `dsh/hal-port`） | 在这里干活 |
+| `/home/mxh/CNC/port_work` | **移植工作副本**（cnc_rt_last 的拷贝 + 分支 `new-hal`） | 在这里干活 |
 | `/home/mxh/CNC/固件库/cnc_rt_1.27.0.1` | **用户实际运行的固件包**（无 src，`./run.sh`） | 部署目标 |
 
 ---
@@ -108,20 +108,58 @@
 ### C. 移植到 v1.27.1 —— **代码移植完成，编译通过**
 - 同事确认：这版稳定、不会再大改，做出来就是为了合进抽象层
 
+### D. 移植之后又做的几批（2026-10-10 ~ 10-12，详情见 HAL 的 `docs/续接说明.md` D–I 段）
+
+| 批 | 做了什么 | 影响面 |
+|---|---|---|
+| D | 函数改名 + **ABI 闸门改成真编译期 `#error`**；两套回归加界面闸门 | port_work |
+| E | 删掉两个"现场确认"开关：台账只保留"参数域给全了没有" | port_work |
+| F | **主轴定向：发出控制字后先等 10 ms 再采完成位**（手册要求）→ `HalCAxisCfg.vendor_orient_delay_ms`，ABI **7.0→7.1** | HAL + port_work |
+| G | **速度单位可配**（默认 rpm；pulse/s 时 HAL 双向换算）+ **进给轴显示换算成 mm/min** + 按需取用接口 `rt_axis_view_*`，ABI **7.1→7.2** | HAL + port_work |
+| H | **刚性攻丝闭环**：M29 起点设零（新增 `rt_hal_axis_set_pos`）+ 插补的绝对角度由 `emcmot` 每拍下发（以前算了不发现、且 READY 阶段把主轴锁死），见第十节 | port_work |
+| I | **IO 映像段长上限收成一处 + 启动期断言**（防越界写 / 防无声失效）| port_work |
+| 其他 | 适配层把"轴尚未使能"这类预期内失败从错误日志摘出去；`pm_munit` 由 `int` 改 `double`（亚毫米截断）；`build.sh` 失败返回非 0 | port_work |
+
+让 HAL 那边的知识（手册结论、ABI 变更理由、未决项）也成了可交接的文档：
+`HAL/docs/续接说明.md`（详细）、`HAL/docs/上机检查单.md`（现场照着划的）、
+`HAL/docs/仿真进HAL方案.md`（下一阶段）。
+
+
 ---
 
-## 三、移植现状（`port_work` / 分支 `dsh/hal-port`）
+## 三、移植现状（`port_work` / 分支 `new-hal`）
 
-### 已提交
+### 当前状态（每次交接前更新这一块）
+
+| | |
+|---|---|
+| HAL HEAD | `4d1183f 文档：IO 映像段长断言；上机清单补两条（计数模式、主轴当量单位）` |
+| port_work HEAD | `c9f2e21 …`（IO 段长断言那批；**本文件自己那次提交不在内**）|
+| ABI | **7.2**（`HAL_C_ABI_MAJOR` 7 / `HAL_C_ABI_MINOR` 2）—— 布局变更，库 / 头 / RT / 固件包**必须一起换** |
+| `bin/cnc_rt` | sha256 前 16 位 `e69d065c47f036aa` |
+| `bin/cnc_rt_d` | sha256 前 16 位 `384fbc92111993a1` |
+| 离线回归板 | HAL 用例 4/4；离线配置自检 45/45；轴量接口自检 22/22；冒烟 5 场景 + 主轴全 PASS |
+
+> 改了 HAL 的头/源码之后：`bash build_all.sh`（在 HAL）→ `lib/cnc_hal/sync.sh`（在 port_work）
+> → `./build.sh`。**RT 侧的 ABI 闸门是编译期 `#error`**，忘了改期望值就编不过（这是故意的）。
+
+### 已提交（最近）
 
 ```
-d698f7d  （他们的 HEAD，起点）
-acaf518  WIP: 三方合并完成，9 个冲突待解
-0fd7e4f  WIP: 解完 6 个冲突，删掉旧抽象层
-6fbf7a1  移植 1-3 步：骨架 + 机械合并 + 主轴头用他们的模型
-d714ff9  移植第 4 步（进行中）：spl_control.c 接 HAL
-d432adb  加交接文档
-（以下为本次未提交的改动）
+c9f2e21 IO 映像段长：上限收成一处，并在启动期断言（防越界写 / 防无声失效）
+7f4d232 刚性攻丝闭环：角度算了就要下发，并对齐零点
+976215c 按需取用接口：指令/反馈脉冲 + 两种速度口径（不发共享内存）
+a41e10b 蓝图：进给轴显示换算成 mm/min；速度单位值接通；加 rpm 口径的读接口
+10d1883 蓝图：定向等 10ms；ABI 闸门期望 7.1
+8826b33 适配层：把"轴尚未使能"这类预期内拒绝从错误日志里摘出去
+7097af6 适配层：主轴模式握手只在"发过请求且已请求使能"时做（去掉假警报）
+d5d6ae0 删掉两个"现场确认"开关：台账只留"参数域给全了没有"
+010d866 rt_hal_config：函数改名 + ABI 闸门改成真编译期；两套回归加界面闸门
+1dd319b rt_hal_config.h：按 rt_hal_adapter.h 的规格补全函数注释
+af30d6e 接入层与移植层收口：复位链、使能单一写者、主轴上限、驱动器故障码
+b97ea13 接入层注释补全；vendored 同步到 HAL 30fec81
+d6c4dbf vendored 同步：hal_config_api.h 补注释
+6bc2a41 接入新hal
 ```
 
 ### 进度：全部完成
@@ -135,7 +173,7 @@ d432adb  加交接文档
 | `Hal_Driver_*` / `Driver_*` 调用点 30 处 | 完成 |
 | `spindle_driver.*` 字段引用 155 处 | 完成，0 残留 |
 | `spl_orient.c` / `jog.c` / `plc_f_signal_handler.c` / `reset.c` / `emcmot.cpp` / `main.cpp` | 完成 |
-| `lib/cnc_hal` vendored 副本 -> ABI 7.0 | 完成 |
+| `lib/cnc_hal` vendored 副本 | 完成（现在 ABI **7.2**，由 `lib/cnc_hal/sync.sh` 同步）|
 | **编译（debug + release）** | 完成，都出二进制 |
 
 ### 台账：只反映"参数域给全了没有"
@@ -147,9 +185,10 @@ d432adb  加交接文档
 现在台账只剩"参数域给全了没有"（按轴算的 SCALING / ENC_OFF / ENCODER）：
 **参数域为空时仍然会挡住运动**，四轴参数写全后自动清空。
 
-> 本次同步了 `port_work/src/hal/*` = `cnc_rt/src/hal/*`。
-> 之前那份是 cnc_rt 的**旧快照**（ABI 5.1、没有定向、注释还是啰嗦版），
-> 逐文件比对过：**没有任何 port_work 专属适配**，所以整体覆盖是安全的。
+> 当初移植时逐文件比对过 `port_work/src/hal/*` 与 `cnc_rt/src/hal/*`：没有任何 port_work
+> 专属适配，所以整体覆盖是安全的。**现在 HAL 是唯一的源**：改完 HAL 跑
+> `lib/cnc_hal/sync.sh` 把公共头/内部头/静态库/设备字典同步到 vendored 副本，
+> 提交时把 `lib/cnc_hal` 一起带上（`SYNCED.txt` 记来源提交）。
 
 ### 替换映射（下次改别处照着来）
 
@@ -180,90 +219,51 @@ d432adb  加交接文档
 
 ---
 
-## 四、验证结果（本次）
+## 四、验证结果（当前）
 
-### 编译
-```
-调试版本: [OK]  port_work/bin/cnc_rt_d
-实时版本: [OK]  port_work/bin/cnc_rt
-```
-
-### 单元测试：跑起来了，79 个用例
-
-`port_work/test/test.pro` 之前指着已删的旧驱动/主站源文件，本次一并修好
-（去重、补 `spl_orient.c`/`spl_vel_planner.c`/`trace_publisher.c`、接 HAL 库、
-去掉本机没有的 `-lethercat`、排除用旧字段名的 `tst_homing.cpp`）。
+### 回归板（每次改完都跑这四条）
 
 ```
-79 tests from 9 test suites
-26 FAILED / 53 PASSED
-```
+# 1) HAL 离线用例（含 ABI、DS402、定向、速度单位、readiness）
+cd ../HAL && bash build_all.sh && ctest --test-dir build/all
 
-**26 个失败与本次移植无关，已用对照实验证明：**
+# 2) 机床 profile 的离线校验（不进总线，只验配置能不能过 HAL 校验）
+bash test/build_hal_config_check.sh          # 45 项
 
-| | 用例数 | 失败数 |
-|---|---|---|
-| `cnc_rt`（我们的代码 + HAL） | 79 | **26** |
-| `port_work`（同事代码 + HAL 移植） | 79 | **26** |
+# 3) 轴量按需接口的纯换算自检
+bash test/build_axis_view_check.sh           # 22 项
 
-两边**失败清单逐条完全一致**（`TestAuto` 12、`TestJog` 10、`TestCompData` 3、`TestServoSample` 1），
-说明是**测试本身就过时**，不是移植带来的。旁证：这些测试文件的最后提交时间都早于
-它们测的源码（`tst_jog.cpp` 09-07 vs `jog.c` 09-27；`tst_auto.cpp` 08-31 vs `auto.c` 09-28）。
-
-> 两个测试进程在 `Global test environment tear-down` 之后都会段错误，
-> 两边同样如此，也是既有问题。
-
-### 无界面主轴回归：**全部 PASS**（新增）
-
-RT 启动时会阻塞等 HMI 写 `SYS_START_RT`（`main.cpp` 那个 while），所以这一轮用
-`test/rt_offline_helper.c` 扮演界面，主轴指令走**真路径**：写 G 寄存器造边沿 →
-`plc_g_signal_scanner` 翻译成主轴事件 → 从 F 寄存器读回主轴自己的判断。
-
-```
-# 直接编调试版就行：台账只反映"参数域给全了没有"，握手端会把四轴参数写全。
-bash build.sh debug
-
+# 4) RT 侧冒烟 + 主轴（要先把界面和 RT 都停掉：共享内存只允许 2 个进程）
+sudo ./test/rt_offline_smoke.sh 8 params params     # 场景：params/drverr/drverrf/estopmid/fault
 sudo ./test/rt_offline_spindle.sh
 ```
 
-> 曾经为了绕开那两个现场确认开关，另编过一个 `bin/cnc_rt_ledger_d`
-> （`CONFIG+=offline_ledger`）；开关删掉后那个档也没用了，脚本不再拦人。
+| 项 | 结果 |
+|---|---|
+| HAL 用例 | 4/4（`hal_hardware_selftest` / `hal_public_link` / `hal_static_link` / `hal_regressions`）|
+| 离线配置自检 | 45/45 |
+| 轴量接口自检 | 22/22（脉冲/速度换算、拒绝路径、主轴角度）|
+| 冒烟 5 场景 | 全 PASS（params 5 / drverr 9 / drverrf 9 / estopmid 8 / fault 11）|
+| 主轴回归 | 全 PASS（含 M3 到速 / M5 停稳不带力矩 / M19 定向与重复 / 释放）|
 
-```
-[SPL] M3 前: 倍率=100.0% S码=0   F45.1=1 F45.3=1 F45.7=0
--> M3（G70.5 上升沿）
-[SPL] M3 后: 倍率=100.0% S码=500 F45.1=0 F45.3=1 F45.7=0
-  PASS  M3 后 F45.3（到速）
-  PASS  M3 后 F45.1（转速<5，应为 0）
--> M5（G29.6 下降沿）
-  PASS  M5 后 F45.1（转速<5，应为 1）
--> M19（G70.6 上升沿）
-  PASS  M19 后 F45.7（定向完成）
--> 释放定向（G70.6 下降沿）
-  PASS  释放后 F45.7 落下去
--> 再来一次 M19
-  PASS  重复 M19 后 F45.7
-汇总：失败 0 项
-```
+### 几条"先红后绿"的证据（改哪条就复现哪条）
 
-HAL 侧的硬证据（`CNC_RT_DUMP=14000` 打在定向窗口里）：
+- **定向等待期**：把 `orient_delay_left` 短路 → `hal_regressions` 失败；恢复后 4/4。
+- **IO 段长断言**：上限临时改 `10u`（仿真段长 X=26/Y=18）→ RT **拒绝启动**并打出超限原因；恢复后全过。
+- **ABI 闸门**：期望值故意改错 → `build.sh` 返回非 0 且打印 `#error`（以前它返回 0，见第五节）。
 
-```
-HAL轴3 身份=SIM spindle | 使能=1 速度=0.000 状态字=0x0637
-                                  ^^^^^^ = 0x0237 | 0x0400（厂商完成位）
-spindle_update_orient_state: 主轴定向释放状态：
-    status_word=0x0637 enabled=1 orient_state=2 actual_vel=0
-```
+### 移植期的历史结论（保留备查）
 
-`状态字=0x0637` 说明厂商控制字 0x040F 真的下发了、完成位真的回来了；
-`orient_state=2` 就是 `HAL_ORIENT_DONE`。
-
-> 未覆盖：**释放前就重复 M19** 那条分支（PLC 只有边沿，造不出来），
-> 以及 M29。
+移植完成那轮跑过 `test/test.pro` 的 gtest：**79 用例、26 失败**，且
+`cnc_rt`（我们的代码 + HAL）与 `port_work`（同事代码 + HAL）**失败清单逐条一致**
+（`TestAuto` 12 / `TestJog` 10 / `TestCompData` 3 / `TestServoSample` 1），
+说明是**测试本身过时**，不是移植带来的。两个进程在 tear-down 后都段错误，也是既有问题。
 
 ### 仍未做
-- **GUI 仿真**：上面那轮是无界面的，但**没有走 NC 程序**（即 M3/M19 由 G 代码驱动那条链）
-- **上机验证**
+
+- **NC 程序驱动 + 攻丝的离线回归**：离线 harness 不做程序译码，跑不了 M29/G33，
+  所以攻丝只能上机验（判据见 `HAL/docs/上机检查单.md` §5.6）。
+- **上机验证**：整个清单在 `HAL/docs/上机检查单.md`。
 
 ---
 
@@ -271,7 +271,7 @@ spindle_update_orient_state: 主轴定向释放状态：
 
 | 坑 | 事实 | 正确做法 |
 |---|---|---|
-| **`build.sh` 失败也返回 rc=0** | 看 `[FAIL]` / `[OK]` 标记 | **永远不信 rc，看产物** |
+| ~~`build.sh` 失败也返回 rc=0~~ | **已修**（2026-10-10）：任一档失败就返回非 0 | 仍然建议看 `[OK]`/`[FAIL]` 与产物时间戳 |
 | **`test/build.sh` 失败也返回 rc=0** | 同上 | 同上 |
 | **qmake 不重编测试** | 换过 gtest 后旧 `.o` 仍注册到旧 runner，`Running 25 tests` 是假象 | **改完构建配置先 `./build.sh clean`** |
 | **部署 ≠ 生效** | 已运行的进程仍用旧二进制 | **部署后必须重启 RT 进程** |
@@ -279,7 +279,9 @@ spindle_update_orient_state: 主轴定向释放状态：
 | **make 有时不重链** | `.o` 新但二进制旧 | 删掉 `bin/cnc_rt*` 再 make |
 | **台账只剩"参数给全了没有"** | 两个现场确认开关（IO_MAP / MOTION）已删（2026-10-10）；参数域为空时运动仍被挡是**正常的** | 离线回归把四轴参数写全（`rt_offline_helper` 已经会写），台账自动清空 |
 | **离线跑主轴要先补三个参数** | `PAR_AX_FEED_ACC`=0 → 加速度 0 → M3 转速永远不动；软限位=0 而位置是 -150 → 行程报警 → `SYS_IS_ALARMING` 每拍把主轴事件改写成 STOP；主轴倍率默认 0 → 目标速度乘成 0 | 见 `rt_offline_helper.c` 的 `set_axis()` / `write_spindle_params()` / `spl_set_override()` |
-| **ABI 现在是 7.2，是破坏性变更**（7.1→7.2：`HalCAxisCfg` 加 `speed_unit` / `command_pulses_per_rev`，`HalCAxisStatus` 加 `actual_speed_rpm`）| `struct_size` 变了，还删了函数与字段 | HAL 库 + RT + 固件包**必须一起更新**；旧的 `cnc_rt` / 固件包配不上就拒启 |
+| **ABI 现在是 7.2，是破坏性变更** | 7.0→7.1 加 `vendor_orient_delay_ms`；7.1→7.2 加 `speed_unit` / `command_pulses_per_rev` / `actual_speed_rpm` | `struct_size` 变了 → HAL 库 + RT + 固件包**必须一起更新**；RT 侧有编译期 `#error` 闸门会拦 |
+| **改了 HAL 头必须先 sync 再编 RT** | RT 的 make 不跟踪 `lib/cnc_hal/include` 的头文件依赖 | 改 HAL → `sync.sh` → `./build.sh`；同步后闸门会替你确认 ABI |
+| **共享内存只允许 2 个进程** | 界面 + RT 各占一个；跑离线回归前两者都要停 | `rt_offline_smoke.sh` / `rt_offline_spindle.sh` 开头已自动清理并检查 |
 
 验证产物三步：`grep -c 关键串 二进制` -> `stat 时间戳` -> `重启进程`。
 
@@ -303,19 +305,45 @@ spindle_update_orient_state: 主轴定向释放状态：
 
 ## 七、待办
 
+按"卡在谁"分。**HAL 的 `docs/续接说明.md` 是详细版**（含 F/G/H/I 各批的来龙去脉），
+`HAL/docs/上机检查单.md` 是现场照着划的版本。
+
+### 台架上要做（P0）
+
 | 项 | 说明 |
 |---|---|
-| **NC 程序驱动的仿真** | 上面那轮是直接写 G 寄存器的。还差"跑一段 G 代码（M3/M5/M19）"那条链，需要 HMI 或再写一个离线驱动器 |
-| **提交这些改动** | `port_work` 有 21 个文件未提交；`cnc_rt` 有 4 个 |
-| **上机验证** | 驱动器认不认 `0x040F`、转到哪个位置 —— 只有真机能答 |
-| **26 个过时测试** | 要么更新测试，要么确认可以不管。**同事那边也一样过时**，值得问一句 |
-| **`cnc_rt_last` 交付不完整** | `lib/cncshm/` 是**空目录**，`g_device_data` 只有 extern 没有定义，`test.pro` 有重复源文件且漏 `spl_orient.c` —— 他们那份树在本机**编不起来**。（本次是靠 `port_work` 里我们自己补的 cncshm 才跑通） |
-| **攻丝同步（G33.1/G33.2）不通** | **已查明，未修**，详见第十节。不是 HAL 的问题，是 RT 自己的缺口 |
-| **M29 刚性攻丝上机** | 他们标"待平台测试"，我们这边接上了 HAL，但没实机验证 |
-| **主轴"既定零点"要不要跟坐标零点分开** | 只有做"转到某个刻度"的分度/定位功能才需要；**攻丝用不上**。定了才能动 |
-| ~~`hal_rt_axis_readiness()` 口径矛盾~~ | **已按"甲"改完**，见第十一节 |
-| **`hal_rt_axis_readiness()` 没包进适配层** | HAL 有、RT 够不着。当初是给"写不进去时归因"用的 |
-| **HAL 仓库推送** | `9c71f54` 是破坏性 ABI 变更，**没推** |
+| 四个未知量 | 当量/方向、`act_vel` 口径、**M19 定向真值**（控制字已由手册确认）、**`0x603F` 清零口径** |
+| 驱动器侧参数 | 清单 §0b：`C2-00=0`（速度单位，出厂默认是 pulse/s）、`P0-04/P0-05`、`b0-01`、`PA-00` 等 |
+| **位置计数模式** | 清单 §1.7：面板 `F0-17` 转两圈，判断单圈模计数还是多圈 → 决定 `feedback_wrap` |
+| **主轴当量那一栏** | 清单 §2.5：填 `360000`（千分之一度），填 360 会小 1000 倍 |
+| 刚性攻丝 | 清单 §5.6：主轴真的跟着 Z 转 / 退回反向 / 螺纹规；看日志 target_pos 是否跟着 Z 变 |
+| IO、报警、参数逐项 | 清单 §2–§9 |
+
+### 代码（离线能验，按危险程度）
+
+| 项 | 说明 |
+|---|---|
+| **模式切换失败没有 RT 侧超时动作** | 缺陷 #6：5000 拍 → 报错 + 重试 + 下使能。现在只有 HAL 侧超时 |
+| **报警去抖 + `delAlarm`** | `alarm.c` 报了没有"清" |
+| **当量只在 create 时快照** | 运行中改参数不生效（基线是每拍读）|
+| **多段攻丝之间主轴会反向一整圈** | 见第十节 ②（本次只修了①③）|
+| `enc_cntr` / 主轴位置那格 | 按需接口都有了，接不接界面待定 |
+| `test/build.sh` 失败返回 0 | 与 `build.sh` 同样的坑，`build.sh` 已修，测试脚本没查 |
+
+### 工程 / 跨产品
+
+| 项 | 说明 |
+|---|---|
+| **HAL 推 gitea** | 破坏性 ABI（现在 7.2），推之前跟组里打招呼；也是"子模块/仿真进 HAL"的前提 |
+| **仿真进 HAL** | 方案见 `HAL/docs/仿真进HAL方案.md`，四阶段 |
+| HAL 变子模块 / `sync.sh` 去掉 mtime 闸门 | 二选一 |
+| 字典里加蓝海华腾 | `devices.json` 手动加一条，`profile: "ds402"` |
+| 报警号 120-131 的文本 | 随包 `alarmcontent.xml` 里没有条目 → 找 HMI 包负责人 |
+| 驱动器故障要不要 `setAlarm` | 等 `0x603F` 口径 |
+| 复位超时契约要不要改 | 见 `HAL/docs/续接说明.md` 未决表 |
+| 速度单位要不要做成机床参数 | 现在在 profile（改要重编）；进 cncshm 是跨产品 |
+| 单圈刻度接口（`hal_rt_spindle_write_pos`）| 现在**无调用者**（攻丝走绝对角度）→ 删或留给"手动转刻度" |
+| 主轴零点归谁 | 目前只有攻丝起点在用 `set_pos`；回零流程（`ref.c`）不设零，要确认现场惯例 |
 
 ---
 
@@ -346,69 +374,50 @@ delta 平台、驱动器上下使能逻辑
 
 ---
 
-## 十、攻丝（G33.1 / G33.2）不同步 —— 已查明，未修
+## 十、攻丝（G33.1 / G33.2）不同步 —— **①③ 已修，② 仍在**
 
-查于 2026-10-09。**不是 HAL 的问题，是 RT 自己的缺口**，而且三处连在一起，
-只补一句下发解决不了。
+查于 2026-10-09，修于 2026-10-12（方案 1：软件给绝对角度、主轴在 CSP 跟随）。
 
-### ① 主轴角度压根没下发到驱动器
+### ① 主轴角度压根没下发到驱动器 —— **已修**
 
-`interpolation.c:159` 把算出来的角度写进 `rt_data->axis_data[AXIS_SP].wcs_cmd_pos_cur`，
-但 `emcmot.cpp` 的 `output_to_hal()` 只发 X/Y/Z 三根轴，**没有主轴**：
+- 原来：`interpolate_tap()`（`interpolation.c:159`）把角度写进
+  `rt_data->axis_data[AXIS_SP].wcs_cmd_pos_cur`，但 `output_to_hal()` 只发 X/Y/Z，主轴没发。
+- 现在：`output_to_hal()` 里**当前块是 `RIGID_TAP` 时**，每拍把 `wcs_cmd_pos_cur`
+  （绝对累计角）发给主轴。只在攻丝段发，避免盖掉 M29 保位。
 
-```c
-static void output_to_hal() {
-    (void)rt_hal_request_axis_pos(RT_HAL_AXIS_X, ...);
-    (void)rt_hal_request_axis_pos(RT_HAL_AXIS_Y, ...);
-    (void)rt_hal_request_axis_pos(RT_HAL_AXIS_Z, ...);
-    /* ← 主轴这一句没有 */
-}
+### ② 每个攻丝段开头会**回退一整圈** —— **仍在，待办**
+
+`interpolate_tap()` 算的是**本段相对角度**（段起点 = 0）。而 `mac_cmd_pos` 是按拍差分
+累加 `(wcs_cmd_pos_cur - wcs_cmd_pos_pre)` 进机床坐标的 → 上一段结束是 360、新段头一拍写 0
+→ delta = −360 → 主轴倒转一圈。
+
+现在下发的是 `wcs_cmd_pos_cur` 本身（不再走那条差分链），所以**单段攻丝的同步是对的**；
+但**多段之间**仍会出现"从 360 回到 0"的整圈反向。段间本来没咬在工件里，危害有限，
+但白转一圈。要修就得让角度**跨段累计**：要么插补侧维护一个全局基准（M29 时清零），
+要么 `spl_control` 在换段时把已走的角度补进去。
+
+### ③ M29 保位和这条累加链**不同源** —— **已修**
+
+原来 M29 保位用 `s_spl_target_pos`（定向释放那一刻的反馈值），攻丝的角度是另一条链，
+两者不等 → 起步会跳。现在 M29 进 READY 时统一为：
+
+```
+把"现在这个角度"定为 0°（rt_hal_axis_set_pos(SP, 0)）→ 写 0° 保持
+→ 插补的角度就是从这个零点起算的绝对角（段起点 = 0，正好对齐）
 ```
 
-同事那版（`Hal_Driver_Set_Target_Pos` × 3）也一样。全树往 HAL 写位置的调用点一共 5 处，
-另外两处是 `spl_control.c:607`（M29 保位）和 `:778`（复位路径），跟攻丝无关。
-
-### ② 每个攻丝段开头会**回退一整圈**
-
-`interpolate_tap()`（`interpolation.c:140-160`）算的是**本段相对角度**：
-
-```c
-double spl_pos   = accum_distance / current_block->rigid_data.screw_offset;  // 螺距
-double spl_angle = spl_pos * 360;          // 段起点 = 0，不带任何基准
-if (current_block->rigid_data.reverse) spl_angle = -spl_angle;
-rt_data->axis_data[AXIS_SP].wcs_cmd_pos_cur = spl_angle;
-```
-
-而它是**按拍差分累加**进机床坐标的（`calcul_mac_cmd_pos`，`emcmot.cpp:475`）：
-
-```c
-mac_cmd_pos += (wcs_cmd_pos_cur - wcs_cmd_pos_pre);
-```
-
-上一段结束时 `wcs_cmd_pos_cur` 是 360，新段头一拍写 0 → delta = −360 → **主轴倒转一圈**。
-
-### ③ M29 保位和这条累加链**不同源**
-
-M29 保位用的是 `s_spl_target_pos`（定向释放那一刻取的**反馈值**，`spl_control.c:607`），
-攻丝的 `motor_cmd_pos` 是 `wcs_cmd_pos_cur` 增量累加出来的。两者不等 → 攻丝起步会跳。
-
-### 要修的话
-
-三处必须一起理顺，核心是定「**主轴 CSP 目标归谁管**」：
-
-- 攻丝段的目标应该是 **M29 保位位置 + 相对角度**，并在攻丝段让 `spl_control` 让出这一路；
-- 只在该段下发（判 `cycle_tp->plan_block->type` 是不是 `RIGID_TAP` / `TAP_RETURN`）。
-  **不能无条件发**：`output_to_hal()` 跑在 `spl_control` 之后，后写赢，
-  无条件发就会把 M29 保位盖掉 —— 那会把已经验证通过的 M19/M29 弄坏。
+`READY` 阶段**不再自己发位置**（以前每拍重发固定角度，等于把主轴锁死），
+只把插补的指令角镜像给到位判据和日志。
 
 ### 验不了的部分
 
-真实同步精度、驱动器跟不跟得上 —— **只能上机**。离线最多能验"值发出去了、并按螺距跟随"。
+真实同步精度、驱动器跟不跟得上 —— **只能上机**（判据见《上机检查单》§5.6）。
+离线 harness 不做程序译码，跑不了 M29/G33。
 
 ### 附：`spl_pos_planner.c` 是死代码
 
-注释写着"单轴周期同步位置规划器"，全树**没人调用**。看着是当初为这条路准备的，没接上。
-攻丝其实也不需要它（角度是从进给距离直接算的，不是独立规划出来的）。
+注释写着"单轴周期同步位置规划器"，全树**没人调用**。攻丝不需要它
+（角度是从进给距离直接算的，不是独立规划出来的）。
 
 ---
 
@@ -457,5 +466,7 @@ if (a->mode != want)            r |= HAL_READY_MODE_ACTUAL;
 **回归**：HAL 离线用例 4/4；RT 侧 smoke 与主轴回归与基线逐条一致
 （RT 适配层没包这个接口，本来就碰不到）。
 
-**ABI**：这又是一条语义变更，和上面的清理一起记在 7.0 里（7.0 还没对外发布）。
-若要让编号严格对应，发布前改成 8.0。
+**ABI**：这又是一条语义变更，和上面的清理一起记在 7.0 里。之后 7.0→7.1（加定向等待字段）、
+7.1→7.2（加速度单位/换算字段与 `actual_speed_rpm`）都是**布局变更**。
+**HAL 至今没对外发布**（没推 gitea，见第七节）——所以真要严格对应编号，
+可以在发布前把 7.x 这几版整理成一次 8.0。

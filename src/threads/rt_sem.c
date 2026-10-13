@@ -3,6 +3,8 @@
 volatile sig_atomic_t exit_flag = 0;
 volatile sig_atomic_t main_exit_flag = 0;
 volatile sig_atomic_t thread_exit_flag = 0;
+/* 下面这个由 PDO 线程置位、主线程读走：写用 RELEASE、读用 ACQUIRE。 */
+volatile sig_atomic_t pdo_unexpected_exit = 0;
 volatile int op_flag = 0;
 
 sem_t plc_sem, motion_sem, /*task_sem,*/ path_plan_sem, moton_sem_exec_done;

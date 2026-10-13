@@ -81,7 +81,7 @@ sleep 2
 echo "== 3. 起 RT 调试版（HAL 内存桩）=="
 # 只读快照打在定向窗口里（M19 大约在 RT 起来后 12.3 秒 = 第 12300 拍），
 # 用来看那时控制字/状态字到底是什么。可用 DUMP_CYCLE 覆盖。
-DUMP_CYCLE="${DUMP_CYCLE:-9500,14000}"
+DUMP_CYCLE="5000,6000,7000,8000,9000,9500,10000,11000,12000,13000,14000"   # 加密：停稳窗口要能扫到（见 check_sp_win）
 echo "   CNC_RT_DUMP=$DUMP_CYCLE"
 env CNC_RT_DUMP="$DUMP_CYCLE" "$RT_BIN" > /tmp/spindle_rt.out 2>&1 &
 RT_PID=$!
@@ -150,7 +150,35 @@ check_sp() {
     fi
 }
 SP_CHECK_FAIL=0
-check_sp 9500  0 "M5 停稳后主轴不带力矩（对齐 v1.27.1）"
+
+# 语义式检查：不绑固定拍号。在 [from,to] 拍里只看"停稳窗口"（速度=0）的快照，
+# 只要**出现过** want 那个使能值就算过；一拍都没有 → N/A（不训练人忽略 FAIL）。
+# 这样时序微调不会再假红，真坏了（比如停稳后再也没去使能）仍然报 FAIL。
+check_sp_win() {
+    local from="$1" to="$2" want="$3" desc="$4" cyc line speed got n=0 hit=0
+    for cyc in $(grep -aoE '只读快照 @第 [0-9]+ 拍' /tmp/spindle_rt.out 2>/dev/null |
+                 grep -aoE '[0-9]+' | awk -v a="$from" -v b="$to" '$1>=a && $1<=b'); do
+        line=$(grep -a -A4 "只读快照 @第 ${cyc} 拍" /tmp/spindle_rt.out | grep -a 'HAL轴3' | head -1)
+        [[ -z "$line" ]] && continue
+        speed=$(printf '%s' "$line" | grep -aoE '速度=[0-9.]+' | head -1 | cut -d= -f2)
+        [[ "$speed" != "0.000" ]] && continue          # 只认停稳窗口
+        got=$(printf '%s' "$line" | grep -aoE '使能=-?[0-9]+' | head -1 | cut -d= -f2)
+        n=$((n + 1))
+        [[ "$got" == "$want" ]] && hit=1
+    done
+    if [[ "$n" -eq 0 ]]; then
+        echo "  N/A   $desc（[${from},${to}] 拍内没有停稳快照，检查 DUMP_CYCLE）"
+        return
+    fi
+    if [[ "$hit" -eq 1 ]]; then
+        echo "  PASS  $desc（$n 个停稳快照里出现过使能=$want）"
+    else
+        echo "  FAIL  $desc（$n 个停稳快照里没出现过使能=$want）"
+        SP_CHECK_FAIL=1
+    fi
+}
+
+check_sp_win 5000 13000 0 "M5 停稳后主轴不带力矩（对齐 v1.27.1）"
 check_sp 14000 1 "定向窗口主轴带力矩（对照：证明快照读得到）"
 
 echo

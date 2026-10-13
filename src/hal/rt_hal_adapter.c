@@ -46,6 +46,7 @@ static int32_t s_req_fail_rc[RT_HAL_AXIS_COUNT][RT_REQ_KINDS];
 /* "轴尚未使能"这类预期内失败已经连着失败了多少拍；到点才报一行，见 report_req()。 */
 static uint32_t s_req_fail_age[RT_HAL_AXIS_COUNT][RT_REQ_KINDS];
 static int32_t s_snap_reset[RT_HAL_AXIS_COUNT];   /* 复位进展快照 */
+static int32_t s_snap_orient[RT_HAL_AXIS_COUNT];  /* 主轴定向状态快照 */
 static int32_t s_cycle_error;                     /* 周期循环异常退出的原因；0 = 无 */
 static HalSpindleMode s_req_mode[RT_HAL_AXIS_COUNT];      /* 期望的 CSV / CSP */
 static int    s_req_mode_dirty[RT_HAL_AXIS_COUNT];        /* 同上：只有变了才下发 */
@@ -66,16 +67,15 @@ static int      s_mode_warned[RT_HAL_AXIS_COUNT];    /* 超上限报过一次就
 static uint8_t  s_mode_requested[RT_HAL_AXIS_COUNT]; /* 发过模式请求没；去使能时清掉 */
 
 /* IO 单缓冲，512 与 REG_X_NUM/REG_Y_NUM 一致；不引 cncshm 头 */
-#define RT_HAL_IO_MAX 512u
-static uint8_t s_x_image[RT_HAL_IO_MAX];   /* 输入映像：PDO 线程从 HAL 取，别的线程读 */
-static uint8_t s_y_image[RT_HAL_IO_MAX];   /* 输出映像：别的线程写，PDO 线程下发 */
+static uint8_t s_x_image[RT_HAL_IO_IMAGE_MAX];   /* 输入映像：PDO 线程从 HAL 取，别的线程读 */
+static uint8_t s_y_image[RT_HAL_IO_IMAGE_MAX];   /* 输出映像：别的线程写，PDO 线程下发 */
 static int     s_io_ready;                 /* 1 = 本拍输入映像取到了；取不到连输出也不发 */
 /* 映像段长，start 后向 HAL 问一次并缓存；不要自己推 */
 static uint32_t s_x_size, s_y_size;        /* X / Y 段长（字节） */
 static int     s_in_cycle;                 /* 已 begin 未 commit：停机帧只能在这个窗口发 */
 
 /* 超时停机要下发的 Y。默认未配置：不能假设全零安全，宁可不写 */
-static uint8_t s_stop_image[RT_HAL_IO_MAX];   /* 停机时要写出去的 Y 映像 */
+static uint8_t s_stop_image[RT_HAL_IO_IMAGE_MAX];   /* 停机时要写出去的 Y 映像 */
 static int     s_stop_image_valid;            /* 0 = 没配过，那就什么都不写 */
 
 /* 入参一律是 RT 轴槽；跨到 HAL 时统一走 rt_hal_config_hal_axis()。 */
@@ -217,6 +217,7 @@ int rt_hal_create(const RtHalAxisParams* params, char* err, uint32_t err_len) {
     memset(s_req_fail_rc, 0, sizeof(s_req_fail_rc));
     memset(s_req_fail_age, 0, sizeof(s_req_fail_age));
     memset(s_snap_reset, 0, sizeof(s_snap_reset));
+    memset(s_snap_orient, 0, sizeof(s_snap_orient));
     s_cycle_error = 0;
     memset(s_req_mode_dirty, 0, sizeof(s_req_mode_dirty));
     __atomic_store_n(&plc_cycle_target, 0, __ATOMIC_RELEASE);
@@ -241,6 +242,20 @@ int rt_hal_start(char* err, uint32_t err_len) {
     (void)hal_io_image_size(s_ctx, &s_x_size, &s_y_size);
     printf("映像段长（按设备 Entry 实算）：X=%u 字节, Y=%u 字节\n",
            (unsigned)s_x_size, (unsigned)s_y_size);
+    /* 段长超过本适配层缓冲就必须在这里挡住，不能往下跑：
+     *   - HAL 侧只会在"缓冲太短"时返回 ARGUMENT，而周期里那两处把结果
+     *     当成"没就绪" —— IO 会**无声失效**（输入恒 0、输出不下发）；
+     *   - 线程层按 HAL 给的段长循环写自己的 512 字节缓冲 → **越界写**。
+     * 这两条都比"启动失败"糟得多。改大就得三处一起改（见头文件的注释）。 */
+    if (s_x_size > RT_HAL_IO_IMAGE_MAX || s_y_size > RT_HAL_IO_IMAGE_MAX) {
+        if (err && err_len)
+            snprintf(err, err_len,
+                     "IO 映像段长超上限：X=%u Y=%u 字节 > %u（要放大就改 RT_HAL_IO_IMAGE_MAX，"
+                     "并同步 REG_X/REG_Y 与线程层缓冲）",
+                     (unsigned)s_x_size, (unsigned)s_y_size, (unsigned)RT_HAL_IO_IMAGE_MAX);
+        log_hs("IO 映像段长超上限", -1, HAL_ERROR_CONFIG);
+        return HAL_ERROR_CONFIG;
+    }
 
     s_running = 1;
     /* emcmotTrajPlan() 拿 op_flag 当门控，"主站已进 OP"这个事实只有这里知道。 */
@@ -298,6 +313,12 @@ static void publish_snapshot(void) {
         if (hal_rt_axis_fault_reset_state(s_ctx, (HalAxisId)hal_axis, &rst) != HAL_OK)
             rst = HAL_RESET_NONE;
         s_snap_reset[i] = rst;
+        /* 定向状态也进快照：这个查询是公开接口，别的线程会调，
+         * 不能从它们那儿碰 context（契约：只有 PDO 线程碰）。 */
+        int32_t ori = HAL_ORIENT_NONE;
+        if (hal_rt_spindle_orient_state(s_ctx, (HalAxisId)hal_axis, &ori) != HAL_OK)
+            ori = HAL_ORIENT_NONE;
+        s_snap_orient[i] = ori;
     }
     s_snap_valid = 1;
 }
@@ -330,12 +351,20 @@ static void take_requests(void) {
              * 之后每拍被拒的"轴尚未使能"看起来就像失败（report_req 用的就是它）。 */
             s_req_enable[i] = 0;
             s_req_enable_dirty[i] = 0;
+            /* 光 continue 不够：暂存的位置/转速/模式/刻度会留到**下一拍**
+             * （急停解除后）被当成新意图消费掉。这几类都是一次性意图，
+             * 作废就是丢 dirty —— 上层要继续运动自然会重发。 */
+            s_req_pos_dirty[i] = s_req_speed_dirty[i] = 0;
+            s_req_mode_dirty[i] = s_req_turn_dirty[i] = 0;
             continue;             /* 本拍该轴的其余请求全部作废 */
         }
 
         /* 故障复位同样不受台账阻挡 */
         if (s_req_reset[i]) {
             s_req_reset[i] = 0;
+            /* 复位同样作废本拍暂存：跟急停一个道理（复位期间这些目标已过期）。 */
+            s_req_pos_dirty[i] = s_req_speed_dirty[i] = 0;
+            s_req_mode_dirty[i] = s_req_turn_dirty[i] = 0;
             report_req("hal_rt_axis_fault_reset", i, RT_REQ_RESET,
                        hal_rt_axis_fault_reset(s_ctx, (HalAxisId)hal_axis));
             continue;   /* 复位与运动互斥，本拍不再下发运动指令 */
@@ -452,7 +481,7 @@ static void make_deadline(struct timespec* ts) {
 static int32_t wait_done(const char* what, volatile uint32_t* done, sem_t* sem,
                          uint32_t cycle, const struct timespec* deadline) {
     while (__atomic_load_n(done, __ATOMIC_ACQUIRE) != cycle) {
-        if (thread_exit_flag) return HAL_ERROR_STOPPED;
+        if (__atomic_load_n(&thread_exit_flag, __ATOMIC_ACQUIRE)) return HAL_ERROR_STOPPED;
         if (sem_timedwait(sem, deadline) != 0) {
             if (errno == EINTR) continue;
             if (errno == ETIMEDOUT) {
@@ -478,7 +507,7 @@ static void stop_frame(void) {
     }
 
     if (s_stop_image_valid) {
-        (void)hal_rt_io_flush_outputs(s_ctx, s_stop_image, RT_HAL_IO_MAX);
+        (void)hal_rt_io_flush_outputs(s_ctx, s_stop_image, RT_HAL_IO_IMAGE_MAX);
     } else {
         /* 没配停机映像就不写 Y，已下发的电平保持原状 */
         fprintf(stderr, "[HAL] 停机帧：未配置停机输出映像，本帧不写 Y（计划书 §8）\n");
@@ -528,7 +557,7 @@ static void dump_snapshot_once(uint32_t cycle) {
     }
     if (s_io_ready) {
         printf("  输入映像 X 前 12 字节:");
-        for (uint32_t i = 0; i < 12u && i < RT_HAL_IO_MAX; ++i) printf(" %02x", s_x_image[i]);
+        for (uint32_t i = 0; i < 12u && i < RT_HAL_IO_IMAGE_MAX; ++i) printf(" %02x", s_x_image[i]);
         printf("\n");
     } else {
         printf("  输入映像：本拍没取到\n");
@@ -543,7 +572,7 @@ int rt_hal_pdo_loop(void) {
     uint32_t cycle = 0;
     int32_t rc = HAL_OK;
 
-    while (!thread_exit_flag) {
+    while (!__atomic_load_n(&thread_exit_flag, __ATOMIC_ACQUIRE)) {
         ++cycle;
 
         rc = hal_rt_wait_cycle(s_ctx);            /* 等节拍、收帧 */
@@ -554,7 +583,7 @@ int rt_hal_pdo_loop(void) {
         s_in_cycle = 1;
 
         publish_snapshot();
-        s_io_ready = (hal_rt_io_snapshot_inputs(s_ctx, s_x_image, RT_HAL_IO_MAX) == HAL_OK);
+        s_io_ready = (hal_rt_io_snapshot_inputs(s_ctx, s_x_image, RT_HAL_IO_IMAGE_MAX) == HAL_OK);
 
         /* 周期号先写再放行，业务线程醒来才知道自己算第几拍 */
         __atomic_store_n(&plc_cycle_target, cycle, __ATOMIC_RELEASE);
@@ -573,7 +602,7 @@ int rt_hal_pdo_loop(void) {
 
         take_requests();
 
-        if (s_io_ready && hal_rt_io_flush_outputs(s_ctx, s_y_image, RT_HAL_IO_MAX) != HAL_OK) {
+        if (s_io_ready && hal_rt_io_flush_outputs(s_ctx, s_y_image, RT_HAL_IO_IMAGE_MAX) != HAL_OK) {
             /* IO 下发失败不让整圈失败：commit 会再返回同一个总线错误 */
             s_io_ready = 0;
         }
@@ -585,7 +614,7 @@ int rt_hal_pdo_loop(void) {
         dump_snapshot_once(cycle);
     }
 
-    if (rc && !thread_exit_flag) {
+    if (rc && !__atomic_load_n(&thread_exit_flag, __ATOMIC_ACQUIRE)) {
         /* 记下来给 RT 侧报警用，不能只打一行 stderr */
         s_cycle_error = rc;
         log_hs("周期循环", -1, rc);
@@ -597,8 +626,8 @@ int32_t rt_hal_cycle_error(void) { return s_cycle_error; }
 
 int rt_hal_io_set_stop_image(const uint8_t* y, uint32_t len) {
     if (!y) return HAL_ERROR_ARGUMENT;
-    if (len < RT_HAL_IO_MAX) return HAL_ERROR_ARGUMENT;
-    memcpy(s_stop_image, y, RT_HAL_IO_MAX);
+    if (len < RT_HAL_IO_IMAGE_MAX) return HAL_ERROR_ARGUMENT;
+    memcpy(s_stop_image, y, RT_HAL_IO_IMAGE_MAX);
     s_stop_image_valid = 1;
     return HAL_OK;
 }
@@ -707,12 +736,13 @@ int rt_hal_spindle_request_orient(RtHalAxisSlot slot) {
     return HAL_OK;
 }
 
-/* 只读快照，任意线程可调。 */
+/* 只读快照，任意线程可调 —— **不碰 HalContext**（那是 PDO 线程的东西）。 */
 int rt_hal_spindle_orient_state(RtHalAxisSlot slot, int32_t* out) {
     if (!slot_ok(slot) || !out) return HAL_ERROR_ARGUMENT;
-    if (!s_ctx) return HAL_ERROR_NOT_RUNNING;
-    return hal_rt_spindle_orient_state(s_ctx,
-               (HalAxisId)rt_hal_config_hal_axis(slot), out);
+    if (!rt_hal_config_is_spindle(slot)) return HAL_ERROR_ARGUMENT;
+    if (!s_snap_valid) return HAL_ERROR_NOT_RUNNING;
+    *out = s_snap_orient[slot];
+    return HAL_OK;
 }
 
 int rt_hal_spindle_release_orient(RtHalAxisSlot slot) {
@@ -813,16 +843,16 @@ int rt_hal_request_estop(RtHalAxisSlot slot) {
 
 int rt_hal_io_fetch_inputs(uint8_t* out, uint32_t len) {
     if (!out) return HAL_ERROR_ARGUMENT;
-    if (len < RT_HAL_IO_MAX) return HAL_ERROR_ARGUMENT;
+    if (len < RT_HAL_IO_IMAGE_MAX) return HAL_ERROR_ARGUMENT;
     if (!s_io_ready) return HAL_ERROR_NOT_RUNNING;
-    memcpy(out, s_x_image, RT_HAL_IO_MAX);
+    memcpy(out, s_x_image, RT_HAL_IO_IMAGE_MAX);
     return HAL_OK;
 }
 
 int rt_hal_io_publish_outputs(const uint8_t* y, uint32_t len) {
     if (!y) return HAL_ERROR_ARGUMENT;
-    if (len < RT_HAL_IO_MAX) return HAL_ERROR_ARGUMENT;
+    if (len < RT_HAL_IO_IMAGE_MAX) return HAL_ERROR_ARGUMENT;
     if (!s_ctx) return HAL_ERROR_NOT_RUNNING;
-    memcpy(s_y_image, y, RT_HAL_IO_MAX);
+    memcpy(s_y_image, y, RT_HAL_IO_IMAGE_MAX);
     return HAL_OK;
 }

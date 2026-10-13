@@ -812,9 +812,19 @@ static void spindle_handle_stop(spindle_context_t *context)
         return;
     }
 
-    /* 普通 M5 保持 CSV 并允许驱动器受控减速，不能下使能；只有急停、复位或
-     * 驱动器 Fault 才请求去使能，防止旧目标速度恢复。 */
-    if (!spindle_reset_or_estop_active() &&
+    /* 普通 M5 保持 CSV 并允许驱动器受控减速；急停、复位或驱动器 Fault 一律去使能。
+     *
+     * 另外：**停止握手已完成的那些拍不能再重新使能** —— 否则
+     * spindle_finish_stop_if_ready() 里刚下的去使能会被这里每拍盖回去，
+     * 主轴就一直带着力矩停着（v1.27.1 的契约是停稳后不带力矩）。
+     * 定向窗口（M19）与攻丝窗口（M29 READY）要带力矩，显式排除。 */
+    const bool stop_finished =
+        spl_context.spl_state == SPINDLE_STOP &&
+        spl_context.orient_phase == SPINDLE_ORIENT_IDLE &&
+        spl_context.m29_phase != SPINDLE_M29_READY &&
+        fabs(spl_context.vel_planner.current_vel) <= SPINDLE_SPEED_EPSILON &&
+        fabs((double)spl_drv_actual_vel()) <= SPINDLE_ACTUAL_ZERO_EPSILON;
+    if (!stop_finished && !spindle_reset_or_estop_active() &&
         (spl_drv_status_word() & 0x0008U) == 0U)
     {
         spl_drv_enable();

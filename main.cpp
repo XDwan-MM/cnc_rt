@@ -159,7 +159,7 @@ int main() {
         RT_LOG(ERROR, "创建线程失败");
         LOG(LOG_LEVEL_ERR, "线程创建失败");
         /* 先置退出意图并唤醒所有可能已在跑的线程，再 join，最后停主站。 */
-        thread_exit_flag = 1;
+        __atomic_store_n(&thread_exit_flag, 1, __ATOMIC_RELEASE);
         for (int i = 0; i < 3; i++) post_rt_sem_all();
         threads_joint();
         rt_hal_shutdown();
@@ -184,23 +184,37 @@ int main() {
     LOG(LOG_LEVEL_INFO, "等待实时关闭信号");
     
     // 主循环
+    /* 故障收尾时不要假装成功：依赖退出码的调用方要能区分正常关闭与故障终止。 */
+    int fault_exit = 0;
+
     #ifndef DEBUG_MODE_ENABLED
     while (!main_exit_flag) {
         // 等待实时关闭信号
         getSysCommInt(SYS_CLOSE_RT, &sys_close_rt, 0);
         if(sys_close_rt) break;
+        // PDO 线程意外退出（报警已经由它报过）：这里负责收尾，否则各线程会一直卡住
+        if (__atomic_load_n(&pdo_unexpected_exit, __ATOMIC_ACQUIRE)) {
+            LOG(LOG_LEVEL_ERR, "PDO 意外退出：按故障收尾（停机流程由主线程执行）");
+            fault_exit = 1;
+            break;
+        }
         sleep(1);
     }
     #else
     while (!main_exit_flag) {
+        if (__atomic_load_n(&pdo_unexpected_exit, __ATOMIC_ACQUIRE)) {
+            LOG(LOG_LEVEL_ERR, "PDO 意外退出：按故障收尾（停机流程由主线程执行）");
+            fault_exit = 1;
+            break;
+        }
         sleep(1);
     }
     #endif
     // 16. 开始关闭实时系统
     RT_LOG(INFO, "获取到实时关闭信号");
     LOG(LOG_LEVEL_INFO, "获取到实时关闭信号");
-    // 17. 通知所有线程退出
-    thread_exit_flag = 1;
+    // 17. 通知所有线程退出（原子写：工作线程在别的核上读它）
+    __atomic_store_n(&thread_exit_flag, 1, __ATOMIC_RELEASE);
     RT_LOG(INFO, "关闭线程");
     LOG(LOG_LEVEL_INFO, "关闭线程");
     // 唤醒所有阻塞在信号量上的线程
@@ -241,5 +255,6 @@ int main() {
     RT_LOG(INFO, "********************************************************");
     // 关闭实时日志
     RT_LOG_CLOSE();
-    return 0;
+    /* 故障收尾过 → 非零，正常关闭 → 0。 */
+    return fault_exit ? 1 : 0;
 }
