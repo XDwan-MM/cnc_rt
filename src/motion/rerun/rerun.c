@@ -14,7 +14,7 @@ GNC_RES rerun_data_init(){
     return GNC_OPERATOR_SUCCESS;
 }
 
-/// @brief 复位清除再启动断点信息
+/// @brief 复位清除再启动断点信息（含断点记录）
 void rerun_data_reset(){
     memset(&rerun_data->break_block, 0, sizeof(rerun_data->break_block));
     memset(&rerun_data->breakpoint, 0, sizeof(rerun_data->breakpoint));
@@ -28,6 +28,24 @@ void rerun_data_reset(){
     rerun_mst_reset();
     delAlarm(ALARM_CH, ALARM_WARNING, 3);
     delAlarm(ALARM_CH, ALARM_ERROR, 4);
+    rerun_persist();
+}
+/// @brief 只清运行状态，保留断点记录
+/// @note is_rerun /is_mem_rerun 关掉，要拿记录跳行，后续有页面把rerun_row设成
+///       break_blocj.line_number和置is_rerun为1；
+void rerun_data_reset_keep_breakpoint(){
+    if (rerun_data == NULL) return;
+    rerun_data->is_rerun = 0;
+    rerun_data->is_mem_rerun = 0;
+    rerun_data->rerun_row = 0;
+    rerun_data->is_first_time_click_rerun = true;
+    rerun_mst_reset();
+    delAlarm(ALARM_CH, ALARM_WARNING, 3);
+    delAlarm(ALARM_CH, ALARM_ERROR, 4);
+    // 记忆模式下复位：光标回到程序开头
+    if (rt_data->current_mode == MODE_MEM) {
+        setVarChanInt(0, VAR_CHAN_RUN_ROW, 0, 0);
+    }
     rerun_persist();
 }
 
@@ -167,7 +185,7 @@ void rerun_update_when_switching(){
     case MODE_MEM:
 
         rerun_data->is_rerun = rerun_data->is_mem_rerun && rerun_data->break_block.valid;
-        rerun_data->rerun_row = rerun_data->break_block.line_number;
+        rerun_data->rerun_row = rerun_data->is_rerun ? rerun_data->break_block.line_number : 0;
         rerun_data->is_first_time_click_rerun = true;
         break;
     default:
@@ -202,6 +220,7 @@ bool check_is_program_rerun(){
 /// @brief 切换程序
 void rerun_reset_is_rerun(){
     rerun_data->is_rerun = 0;
+    rerun_data->rerun_row = 0;
 }
 
 /// @brief 界面修改行信息
@@ -212,7 +231,8 @@ void rt_update_rerun_row(){
 /// @brief 记下程序起点
 void rerun_store_program_start(void)
 {
-    if( rerun_data->is_rerun || !rt_data->current_mode == MODE_MEM)
+    if(rerun_data == NULL) return;
+    if( rerun_data->is_rerun || rt_data->current_mode != MODE_MEM)
     {
         return;
     }
@@ -396,7 +416,7 @@ bool rerun_save_unpack(const RERUN_SAVE* in)
     rerun_data->break_end           = in->break_end;
     rerun_data->is_mem_rerun        = (in->is_mem_rerun != 0);
 
-    rerun_data->rerun_row = in->break_block.valid ? in->break_block.line_number : 0;
+    rerun_data->rerun_row = 0;//is_rerun还没设置，所以行号从0，需要页面设置
     return true;
 }
 
@@ -411,7 +431,7 @@ void rerun_persist(void)
 
 void rerun_restore(void)
 {
-    RERUN_SAVE saved;
+    RERUN_SAVE saved={0};
 
     // if (getRerunData(&saved) != 0) return;
 
@@ -422,6 +442,6 @@ void rerun_restore(void)
 
     LOG(LOG_LEVEL_INFO,
         "程序断点记录: 目标行=%d 断点=(%.3f,%.3f,%.3f) 程序起点=%s",
-        rerun_data->rerun_row, rerun_data->breakpoint.x, rerun_data->breakpoint.y,
+        rerun_data->break_block.line_number, rerun_data->breakpoint.x, rerun_data->breakpoint.y,
         rerun_data->breakpoint.z, rerun_data->program_start_valid ? "有" : "无");
 }

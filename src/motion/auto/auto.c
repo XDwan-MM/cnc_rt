@@ -839,6 +839,7 @@ static void auto_update_cur_cmd(){
 // 自动模式初始化
 static void auto_start_run(){
     // 重置队列
+    rerun_store_program_start();
     queue_reset(plan_queue);
     queue_reset(pretreat_queue);
     queue_reset(parser_queue);
@@ -877,7 +878,6 @@ static void auto_restart_run(){
 }
 
 static void auto_reset_run(){
-    rerun_store_program_start();
     queue_reset(plan_queue);
     queue_reset(pretreat_queue);
     queue_reset(parser_queue);

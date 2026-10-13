@@ -58,7 +58,7 @@ typedef struct
 typedef struct
 {
     bool is_rerun;
-    int rerun_row;                     // 再启动行号
+    int rerun_row;                     // 本次运行跳转的行号
     bool is_mem_rerun;
     ROW_STATE row_state;
     // 断点信息
@@ -74,6 +74,8 @@ typedef struct
 
 GNC_RES rerun_data_init();
 void rerun_data_reset();
+void rerun_data_reset_keep_breakpoint();
+
 void rerun_update_when_switching();
 void rerun_data_store(PLAN_BLOCK* break_block);
 void rerun_store_breakpoint(bool is_breakpoint);

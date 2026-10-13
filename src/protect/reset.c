@@ -57,14 +57,14 @@ void nc_set_resetted(){
             if(nc_reset->is_resetting && cycle_tp->exec_state == EXEC_IDLE && IsEqualTo(spindle_driver.actual_vel, 0)){
                 nc_reset->is_resetted = 1;
                 rt_data_reset();
-                rerun_data_reset();
+                rerun_data_reset_keep_breakpoint();
             }
             break;
         case MODE_HOMING: // 回零
             if(nc_reset->is_resetting && !var_chan[0][VAR_CHAN_IS_HOMING].value.i && IsEqualTo(spindle_driver.actual_vel, 0)){
                 nc_reset->is_resetted = 1;
                 rt_data_reset();
-                rerun_data_reset();
+                rerun_data_reset_keep_breakpoint();
             }
             break;
         case MODE_JOG: // 点动
@@ -75,7 +75,7 @@ void nc_set_resetted(){
             if(nc_reset->is_resetting && IsEqualTo(spindle_driver.actual_vel, 0)){
                 nc_reset->is_resetted = 1;
                 rt_data_reset();
-                rerun_data_reset();
+                rerun_data_reset_keep_breakpoint();
             }
             break;
     }
