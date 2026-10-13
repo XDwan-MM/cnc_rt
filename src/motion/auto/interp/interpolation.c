@@ -143,8 +143,8 @@ static POS interpolate_helix(POS current_pos, PLAN_BLOCK* current_block, double 
 /* 刚性攻丝同步（进给 = 转速 × 螺距：F = S × Pitch）
 主轴位置 Z = Pitch × (θ/360°)
 G0 X0 Y0 Z0;
-M29 S1000;
-G84 Z-10 R5 F1000;
+M29 S100;
+G84 Z-10 R5 F100;
 */
 static POS interpolate_tap(PLAN_BLOCK* current_block, double accum_distance, double target_distance){
     // 进给值插补位置
