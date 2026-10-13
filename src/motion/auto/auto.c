@@ -756,7 +756,7 @@ static bool auto_check_program_end(){
 }
 
 static bool auto_is_program_end(){
-    return !rt_get_chan_state(0, CHAN_IS_PARSERING) && queue_is_empty(plan_queue) && queue_is_empty(pretreat_queue) && queue_is_empty(parser_queue);
+    return !rt_get_chan_state(0, CHAN_IS_PARSERING) && queue_is_empty(plan_queue) && queue_is_empty(unif_queue) && queue_is_empty(treat_queue) && queue_is_empty(pretreat_queue) && queue_is_empty(parser_queue);
 }
 
 static void auto_check_error_line(){
@@ -861,11 +861,6 @@ void cycle_tp_add_block(){
         // 如果预处理队列无数据，提前结束
         if(queue_is_empty(unif_queue)) break;
         pretreat_block = queue_peak(unif_queue);
-
-        // if(queue_peak(unif_queue)->line_number>=2641 )
-        // {
-        //     printf("ss\n");
-        // }
         queue_push(plan_queue, pretreat_block);
         queue_pop(unif_queue);  
     }
@@ -881,7 +876,6 @@ static void auto_start_run(){
     queue_reset(treat_queue);
     queue_reset(pretreat_queue);
     queue_reset(parser_queue);
-
     cycle_tp_reset();
     rt_set_zero_vel_params();
     trace_publisher_begin_program(0);
