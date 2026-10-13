@@ -53,6 +53,7 @@ typedef enum
 {
     SPINDLE_M29_IDLE = 0,
     SPINDLE_M29_ORIENTING,
+    SPINDLE_M29_STOPPING_TO_CSP,
     SPINDLE_M29_RELEASING,
     SPINDLE_M29_SWITCHING_CSP,
     SPINDLE_M29_READY,
@@ -118,6 +119,7 @@ bool spindle_velocity_is_ready(void);
 /** 在 F 信号发布之后记录状态变化，cycle 为发布周期编号。 */
 void spindle_trace_status(void);
 void spindle_request_m29(void);
+void spindle_request_m29_stop_to_csp(void);
 bool spindle_m29_is_ready(void);
 void spindle_complete_m29(void);
 

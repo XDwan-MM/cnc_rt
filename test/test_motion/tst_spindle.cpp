@@ -357,6 +357,63 @@ TEST_F(TestSpindle, M29LatchesEarlyFinAndKeepsFixedCspTarget)
     EXPECT_EQ(spindle_driver.target_state, DRV_STATE_OPERATION_ENABLED);
 }
 
+TEST_F(TestSpindle, TapReturnM29StopsWithoutOrientationAndRequestsCsp)
+{
+    rt_data->sys_state[SYS_IS_RIGID_RERTURN] = true;
+    spindle_driver.actual_vel = 3000;
+
+    frame(M29);
+    EXPECT_TRUE(spl_context.m29_active);
+    EXPECT_EQ(spl_context.m29_phase, SPINDLE_M29_STOPPING_TO_CSP);
+    EXPECT_EQ(spindle_driver.orient_state, DRV_ORIENT_IDLE);
+
+    frame();
+    EXPECT_EQ(spl_context.m29_phase, SPINDLE_M29_SWITCHING_CSP);
+    EXPECT_EQ(spindle_driver.mode_switch_target, DRV_MODE_CSP);
+    EXPECT_EQ(spindle_driver.mode_switch_source, DRV_MODE_CSV);
+    EXPECT_EQ(spindle_driver.target_vel, 0);
+    EXPECT_EQ(spindle_driver.orient_state, DRV_ORIENT_IDLE);
+}
+
+TEST_F(TestSpindle, TapReturnM29CompletesCspHandshakeAndWaitsForFin)
+{
+    rt_data->sys_state[SYS_IS_RIGID_RERTURN] = true;
+    spindle_driver.actual_vel = 3000;
+
+    frame(M29);
+    frame();
+    EXPECT_EQ(spindle_driver.mode_switch_target, DRV_MODE_CSP);
+
+    spindle_driver.mode_switch_state = DRV_MODE_SWITCH_DONE;
+    spindle_driver.act_mode = DRV_MODE_CSP;
+    spindle_driver.actual_vel = 0;
+    spindle_driver.actual_pos = 12345;
+    enabled();
+    frame();
+    EXPECT_TRUE(spindle_m29_is_ready());
+    EXPECT_FALSE(cycle_tp->mstb_cmd_data.finished);
+
+    fin(true);
+    waitFinWidth();
+    EXPECT_TRUE(cycle_tp->mstb_cmd_data.finished);
+    EXPECT_FALSE(spl_context.m29_active);
+    EXPECT_EQ(spindle_driver.target_pos, 12345);
+}
+
+TEST_F(TestSpindle, TapReturnM29RejectsMovingExistingCsp)
+{
+    rt_data->sys_state[SYS_IS_RIGID_RERTURN] = true;
+    spindle_driver.act_mode = DRV_MODE_CSP;
+    spindle_driver.req_mode = DRV_MODE_CSP;
+    spindle_driver.actual_vel = 100;
+
+    frame(M29);
+    frame();
+    EXPECT_EQ(spl_context.m29_phase, SPINDLE_M29_ERROR);
+    EXPECT_FALSE(spindle_m29_is_ready());
+    EXPECT_FALSE(cycle_tp->mstb_cmd_data.finished);
+}
+
 TEST_F(TestSpindle, M29NcFirstStillWaitsForQualifiedPlcFin)
 {
     frame(M29);
