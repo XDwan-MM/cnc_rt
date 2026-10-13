@@ -143,17 +143,10 @@ void hal_axis_intent_poll() {
 
 /* 驱动器故障码 0x603F → rt_data[].status.is_error。
  *
- * 基线在 master 周期里做这件事（cnc_rt_last/src/master/master.c:277-320），顺带报
- * 报警 30~33；移植时那段随 master 一起删了，于是 is_error 全树**没人写** ——
- * F0.6（轴无报警）恒 1、F45.0（主轴报警）恒 0、jog 的伺服错误判断永不触发，
- * 驱动器真坏了屏幕也不说。这里把它接回来。
- *
  * **先只置标志 + 打日志，不报报警**：有些驱动器故障清除后 0x603F 还留着码，
- * 直接开 setAlarm 可能现场消不掉。等上机确认口径后再补；报警号就用基线那四个
- * 30/31/32/33（HMI 文本表里正是"X/Y/Z/主轴驱动器报错"）。
- *
- * 读不到快照（未 start 等）当"没有报警"：报不出来总比误报强。
- * 被屏蔽的轴沿用基线口径：不报。 */
+ * 直接开 setAlarm 可能现场消不掉。等上机确认口径后再补；报警号用
+ * 30/31/32/33。
+ */
 static void alarm_poll_drive_errors(void) {
     static const char* const kAxisName[RT_HAL_AXIS_COUNT] = {"X", "Y", "Z", "SP"};
     static int32_t s_last_code[RT_HAL_AXIS_COUNT] = {0, 0, 0, 0};

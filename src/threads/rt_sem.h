@@ -1,6 +1,7 @@
 #ifndef RT_SEM_H
 #define RT_SEM_H
 
+
 #include <semaphore.h>
 #include <stdint.h>
 #include <signal.h>
@@ -9,7 +10,12 @@
 extern "C" {
 #endif
 
-extern volatile sig_atomic_t exit_flag, main_exit_flag, thread_exit_flag;
+extern volatile sig_atomic_t exit_flag, main_exit_flag;
+/* 下面两个是**线程间**同步量，不是信号处理场景：volatile 不构成线程同步。
+ * 约定：读写一律走 __atomic_load_n / __atomic_store_n（C/C++ 通用，不引 stdatomic.h
+ * —— 这个头会被 .cpp 包含，C++ 里没有 _Atomic）。 */
+extern volatile sig_atomic_t thread_exit_flag;
+extern volatile sig_atomic_t pdo_unexpected_exit;
 
 extern sem_t plc_sem, motion_sem, task_sem, path_plan_sem, moton_sem_exec_done;
 

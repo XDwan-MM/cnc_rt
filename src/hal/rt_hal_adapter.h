@@ -356,6 +356,12 @@ int rt_hal_io_publish_outputs(const uint8_t* y, uint32_t len);
  * @param y_size 带出 Y 段长
  * @return int 0 = 成功；HAL_ERROR_NOT_RUNNING = 未 start；HAL_ERROR_ARGUMENT = 出参为空
  */
+/* PLC X/Y 映像上限（字节）。**三处必须一致**：本适配层的收发缓冲、
+ * threads_controller 的本地缓冲、共享内存的 REG_X/REG_Y 长度。
+ * 启动时会拿 HAL 实算的段长和它比，超了直接拒绝启动 —— 因为
+ * 线程层是按 HAL 给的段长循环写自己的缓冲，段长大过它就会越界写。 */
+#define RT_HAL_IO_IMAGE_MAX 512u
+
 int rt_hal_io_image_size(uint32_t* x_size, uint32_t* y_size);
 
 /**
