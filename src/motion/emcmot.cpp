@@ -42,6 +42,7 @@ static void calcul_mac_cmd_pos();
 static void manual_unset_sys_state();
 static void reset_clean_warning();
 static void rebuild_axis_positions_from_feedback();
+static void handle_rigid_return_event();
 
 #ifdef UNIT_TEST
 void emcmot_test_rebuild_axis_positions_from_feedback()
@@ -504,6 +505,7 @@ static void reset_clean_warning()
 /// @brief 所有模式下都统一处理的事件
 static void handle_nc_event(){
     manual_unset_sys_state();
+    handle_rigid_return_event();
     switch (rt_data->nc_event)
     {
     case SYS_EVENT_PROGRAM_RESTART_ON:
@@ -517,6 +519,23 @@ static void handle_nc_event(){
         break;
     case SYS_EVENT_BLOCK_SKIP_OFF:
         rt_set_sys_state(SYS_IS_BLOCK_SKIP, false);
+        break;
+    default:
+        break;
+    }
+}
+
+static void handle_rigid_return_event(){
+    if (rt_data->current_mode == MODE_MDI) return;
+    switch (rt_data->nc_event)
+    {
+    case SYS_EVENT_RIGID_RETURN_ON:
+        rt_data->sys_state[SYS_IS_RIGID_RETURN] = 1;
+        rt_data->sys_state[SYS_IS_RIGID_RETURN_FINISH] = 1;
+        break;
+    case SYS_EVENT_RIGID_RETURN_OFF:
+        rt_data->sys_state[SYS_IS_RIGID_RETURN] = 0;
+        rt_data->sys_state[SYS_IS_RIGID_RETURN_FINISH] = 0;
         break;
     default:
         break;
