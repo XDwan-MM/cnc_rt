@@ -20,7 +20,7 @@
 #include "auto.h"
 #include "ref.h"
 #include "trajectory.h"
-#include "hal_driver.h"
+#include "driver_hal.h"
 #include "hal_io.h"
 #include "jog.h"
 #include "ferror_control.h"
@@ -78,7 +78,7 @@ extern int update_pos_flag;                    // 理论位置读取驱动器位
 extern int rc;
 extern PdoWarn PdoWarnInfo; //pdo警告信息结构体
 extern int slavernum;
-extern uint16_t* statis;
+extern uint16_t* status;
 extern uint32_t* pos;
 extern uint32_t* pos_cmd;
 extern uint16_t* error_code;
@@ -122,11 +122,15 @@ extern ParamUnit *par_table;                                 // 刀具和刀库�
 extern RT_DATA* rt_data;       
 extern RERUN_DATA* rerun_data;
 extern RESET_DATA* nc_reset;
-extern EVENT_QUEUE* event_queue;        // 事件队列         
-extern PLAN_QUEUE *parser_queue;        // 译码队列
-extern PLAN_QUEUE *pretreat_queue;      // 预处理队列
-extern PLAN_QUEUE *plan_queue;          // 插补队列
-extern COORD_TP *cycle_tp;              // 循环轨迹规划
+extern EVENT_QUEUE* event_queue;                // 事件队列         
+extern PLAN_QUEUE *parser_queue;                // 译码队列
+extern PLAN_QUEUE *pretreat_queue;              // 预处理队列
+extern PLAN_QUEUE *treat_queue;                 // 预处理——小线段剔除队列
+extern PLAN_QUEUE *fix_queue;                   // 预处理——逆行修复队列
+extern PLAN_QUEUE *nurbs_temp_queue;            // 拟合——nurbs缓存队列
+extern PLAN_QUEUE *unif_queue;                  // 一致性队列
+extern PLAN_QUEUE *plan_queue;                  // 插补队列
+extern COORD_TP *cycle_tp;                      // 循环轨迹规划
 extern REF_TP *ref_tp;                  // 回零轨迹规划
 
 // 读写共享内存锁

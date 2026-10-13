@@ -33,6 +33,9 @@ GNC_RES rt_data_reset(void){
     pthread_mutex_lock(&rt_data->mutex);
     rt_upate_reset_valid_data();
     setVarChanInt(0, VAR_CHAN_IS_PROGEND, 1, 0);
+    rt_data->sys_state[SYS_IS_RIGID] = 0;
+    rt_data->sys_state[SYS_IS_RIGID_RETURN] = 0;
+    rt_data->sys_state[SYS_IS_RIGID_RETURN_FINISH] = 0;
     pthread_mutex_unlock(&rt_data->mutex);
     return GNC_OPERATOR_SUCCESS;
 }
@@ -118,10 +121,7 @@ static void rt_upate_reset_valid_data(){
 static void rt_reset_ncu_data(){
 }
 
-static void rt_reset_sys_data(){
-    rt_data->sys_state[SYS_IS_RIGID] = 0;
-    rt_data->sys_state[SYS_IS_RIGID_RETURN] = 0;
-    rt_data->sys_state[SYS_IS_RIGID_RETURN_FINISH] = 0;
+static void rt_reset_sys_data(){  
 }
 
 static void rt_reset_chan_data()
@@ -134,6 +134,10 @@ static void rt_reset_chan_data()
         rt_data->chan_data[i].lookahead_num = par_chan[i][PAR_CH_LOOKAHEAD_NUM].value.val_uint;                          // 速度规划前瞻段数
         rt_data->chan_data[i].path_tolerance = par_chan[i][PAR_CH_PATH_TOLERANCE].value.val_real;                        // 轨迹轮廓允差
         rt_data->chan_data[i].corner_dec_factor = par_chan[i][PAR_CH_CONER_DEC_FACTOR].value.val_int;                    // 拐角降速比例因子 ("def": "100", "min": "1", "max": "200")
+        rt_data->chan_data[i].max_fv_arc_radius = par_chan[i][PAR_CH_MAX_FEEDRATE_ARC_RADIUS].value.val_real;            // 与最大进给速度相对应的圆弧半径值
+        rt_data->chan_data[i].radius_r_max_fv = CONV_MM_MIN_TO_MM_S(par_chan[i][PAR_CH_RADIUS_R_MAX_FEEDRATE].value.val_real); // 半径R的圆弧最大进给速度
+        rt_data->chan_data[i].circular_min_vel = CONV_MM_MIN_TO_MM_S(par_chan[i][PAR_CH_CIRCLE_MIN_VEL].value.val_real);       // 基于圆弧插补下减速的下限速度
+        rt_data->chan_data[i].axis_min_vel = CONV_MM_MIN_TO_MM_S(par_chan[i][PAR_CH_AXIS_MIN_VEL].value.val_real);             // 基于每个轴加速度的下限速度
         rt_data->chan_data[i].ex_dec2_enable = par_chan[i][PAR_CH_EX_DEC2_ENABLE].value.val_bool;                        // 是否开启外部减速功能2
         rt_data->chan_data[i].ex_dec3_enable = par_chan[i][PAR_CH_EX_DEC3_ENABLE].value.val_bool;                        // 是否开启外部减速功能3
         rt_data->chan_data[i].ex_dec4_enable = par_chan[i][PAR_CH_EX_DEC4_ENABLE].value.val_bool;                        // 是否开启外部减速功能4
@@ -143,6 +147,17 @@ static void rt_reset_chan_data()
         rt_data->chan_data[i].cut_ex_dec3_vel = CONV_MM_MIN_TO_MM_S(par_chan[i][PAR_CH_CUT_EX_DEC3_VEL].value.val_real); // 外部减速3对切削进给的减速速度(mm/min)
         rt_data->chan_data[i].cut_ex_dec4_vel = CONV_MM_MIN_TO_MM_S(par_chan[i][PAR_CH_CUT_EX_DEC4_VEL].value.val_real); // 外部减速4对切削进给的减速速度(mm/min)
         rt_data->chan_data[i].cut_ex_dec5_vel = CONV_MM_MIN_TO_MM_S(par_chan[i][PAR_CH_CUT_EX_DEC5_VEL].value.val_real); // 外部减速5对切削进给的减速速度(mm/min)
+        rt_data->chan_data[i].l_min_thre = par_chan[i][PAR_CH_L_MIN_THR].value.val_real;                                 //  小线段剔除
+        rt_data->chan_data[i].l_theta_thre = par_chan[i][PAR_CH_L_THETA_THR].value.val_real;                             //  逆行修复：线段长度阈值（小于该值的才修复）
+        rt_data->chan_data[i].theta_thre = par_chan[i][PAR_CH_THETA_THR].value.val_real;                                 //  逆行修复：线段间角度阈值（连续角度判定）  
+        rt_data->chan_data[i].kappa_thre = par_chan[i][PAR_CH_KAPPA_THR].value.val_real;                                 //  逆行修复：线段间曲率阈值 未使用
+        rt_data->chan_data[i].seg_theta_thre = par_chan[i][PAR_CH_SEG_THETA_THR].value.val_real;                         //  角度分段    
+        rt_data->chan_data[i].kratio = par_chan[i][PAR_CH_KRATIO].value.val_real;                                        //  曲率分段 未使用
+        rt_data->chan_data[i].nurbs_fiterror = par_chan[i][PAR_CH_NURBS_FIT_ERROR].value.val_real;                       //  拟合误差
+        rt_data->chan_data[i].nurbs_sagittaerror = par_chan[i][PAR_CH_NURBS_SAGITTA_ERROR].value.val_real;               //  弓高误差
+        rt_data->chan_data[i].nurbs_enable = par_chan[i][PAR_CH_NURBS_ENABLE].value.val_int;                             //  1 开启nurbs  0 关闭nurbs
+        rt_data->chan_data[i].unif_type = par_chan[i][PAR_CH_UNIF_TYPE].value.val_int;                                   //  选择一致性类型
+        // LOG(LOG_LEVEL_DEBUG, "nurbs_enable %d, unif_type %d", rt_data->chan_data[i].nurbs_enable, rt_data->chan_data[i].unif_type);
     }
 }
 
@@ -174,6 +189,7 @@ static void rt_reset_axis_data()
         rt_data->axis_data[i].nlmt = par_axis[i][PAR_AX_NLMT].value.val_real;                                            // 轴负软极限
         rt_data->axis_data[i].plmt2 = par_axis[i][PAR_AX_PLMT2].value.val_real;                                          // 轴第二级正软极限
         rt_data->axis_data[i].nlmt2 = par_axis[i][PAR_AX_NLMT2].value.val_real;                                          // 轴第二级负软极限
+        rt_data->axis_data[i].spl_default_speed = par_axis[i][PAR_AX_DEFAULT_S].value.val_real;                          // 主轴缺省S速度
         rt_data->axis_data[i].spdl_max_speed = par_axis[i][PAR_SPDL_MAX_SPEED].value.val_real;                           // 主轴最大转速 (HMI unit: r/min)
         rt_data->axis_data[i].ex_dec_enable_pos_cut = par_axis[i][PAR_AX_EX_DEC_ENABLE_POS_CUT].value.val_bool;          // 外部减速信号对正向切削进给是否生效
         rt_data->axis_data[i].ex_dec_enable_neg_cut = par_axis[i][PAR_AX_EX_DEC_ENABLE_NEG_CUT].value.val_bool;          // 外部减速信号对负向切削进给是否生效

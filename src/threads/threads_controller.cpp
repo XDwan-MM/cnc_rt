@@ -2,7 +2,7 @@
 #include "debug_mode.h"
 #include "rt_sem.h"
 #include <stdio.h>
-#include "hal_driver.h"
+#include "driver_hal.h"
 #include "hal_io.h"
 #include "regapi.h"
 #include "global.h"
@@ -15,7 +15,7 @@
 #include "plc_g_signal_scanner.h"
 #include "plc_x_signal_scanner.h"
 #include "plc_f_signal_handler.h"
-#include "master.h"
+#include "master_wcf.h"
 #include <hmisysapi.h>
 #include <stdio.h>
 #include <time.h>
@@ -44,13 +44,14 @@ thread_config_t motion_config = {.core_id = 2, .policy = SCHED_FIFO, .priority =
 thread_config_t path_plan_config = {.core_id = 2, .policy = SCHED_RR, .priority = 30, .thread_name = "解释器线程"};
 #endif
 
+#define OVERTIME_THR 10
+
 // 线程首末时间
 static long long start = 0;
 static long long end = 0;
-static int rt_overtime_count = 0;
-static int plc_overtime_count = 0;
 
-#define OVERTIME_THR 10
+static int plc_overtime_count = 0;
+static int rt_overtime_count = 0;
 
 // 获取单调时间（纳秒）
 static inline long long get_ns() {
@@ -134,14 +135,14 @@ void* motion_controller_thread_func(void*) {
         if (thread_exit_flag) break;
         // printf("motion_controller_thread_func");
         start = get_ns();
-        Hal_Driver_Update_All(true, false);
+        // 驱动器反馈由 Master_Receive() 在 PDO 线程中统一读取。
         hmi_events_scan();
         // plc_x_signal_scan_cycle();
         task_mq_proc();
         emcmotTrajPlan();
         plc_f_signal_handler_cycle();
         ServoSampleSampler::instance().execute();
-        Hal_Driver_Update_All(false, true);
+        // 驱动器目标值由 Master_Send() 在 PDO 线程中统一写入。
         end = get_ns();
         #ifndef DEBUG_MODE_ENABLED
         if(IsGreaterThan((end - start) / 1e6, 0.9)){
@@ -173,7 +174,14 @@ void* path_plan_thread_func(void*) {
     return NULL;
 }
 
-// PDO线程的具体实现
+// 任务控制器线程的具体实现
+// void* task_controller_thread_func(void*) {
+//     while (!thread_exit_flag) {
+//         // todo：修改此处写法    
+//     }
+//     return NULL;
+// }
+
 void* pdo_thread_func(void*) {
     #ifdef DEBUG_MODE_ENABLED
         Master_Run_Simulated();  // 调试模式使用模拟主站

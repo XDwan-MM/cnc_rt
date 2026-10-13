@@ -8,13 +8,20 @@
                 "/usr/include/x86_64-linux-gnu/qt5/QtCore",
                 "/usr/include/x86_64-linux-gnu/qt5/QtGui",
                 "/usr/include/x86_64-linux-gnu/qt5/QtWidgets",
-                "/usr/include/x86_64-linux-gnu/qt5/QtNetwork", 
+                "/usr/include/x86_64-linux-gnu/qt5/QtNetwork",
+                "/usr/include/c++/9", 
                 "/usr/include/x86_64-linux-gnu",
+                "/home/wcf/QtLib/Qt5.15.16/5.15.16/gcc_64/include",
+                "/home/wcf/QtLib/Qt5.15.16/5.15.16/gcc_64/include/QtCore",
                 "/opt/Qt5.15.16/5.15.16/gcc_64/include",
-                "/opt/Qt5.15.16/5.15.16/gcc_64/include/QtCore"
+                "/opt/Qt5.15.16/5.15.16/gcc_64/include/QtCore",
+                "/usr/include/x86_64-linux-gnu",
+                "/Qt5.15.16/5.15.16/gcc_64/include/QtCore",
+                "/Qt5.15.16/5.15.16/gcc_64/include",
+                "/Qt5.15.16/5.15.16/gcc_64/bin"
             ],
             "defines": [
-                "DEBUG_MODE_ENABLED",
+                // "DEBUG_MODE_ENABLED",
                 "QT_CORE_LIB",
                 "QT_GUI_LIB",
                 "QT_WIDGETS_LIB"

@@ -4,6 +4,7 @@
 #include "regapi.h"
 #include "regdata.h"
 #include "spl_control.h"
+#include "spl_orient.h"
 #include <hmisysapi.h>
 #include "alarmapi.h"
 #include "reset.h"
@@ -16,6 +17,7 @@ static void plc_output_auto();
 static void plc_output_reset();
 static void plc_output_axis_status();
 static void plc_output_spl_vel_status();
+static void plc_output_spl_orient_status();
 static void plc_output_spl_vel();
 static void plc_output_rigid();
 
@@ -28,8 +30,10 @@ void plc_f_signal_handler_cycle()
     plc_output_reset();
     plc_output_axis_status();
     plc_output_spl_vel_status();
+    plc_output_spl_orient_status();
     plc_output_spl_vel();
     plc_output_rigid();
+    spindle_trace_status();
 }
 
 static void plc_output_alarm()
@@ -339,6 +343,7 @@ static void plc_output_axis_status()
     {
         setRegBit(REG_F, 0, 6);
     }
+    //　主轴报警信号F45.0
     if (rt_data->axis_data[3].status.is_error)
     {
         setRegBit(REG_F, 45, 0);
@@ -351,7 +356,8 @@ static void plc_output_axis_status()
 
 static void plc_output_spl_vel_status()
 {
-    if (spl_data.spl_vel_state == SPINDLE_VEL_ARRIVED)
+    // 发布控制层统一判定，不反向修改主轴状态。
+    if (spindle_velocity_is_ready())
     {
         setRegBit(REG_F, 45, 3);
     }
@@ -359,18 +365,10 @@ static void plc_output_spl_vel_status()
     {
         clearRegBit(REG_F, 45, 3);
     }
-//    if(spl_data.spl_vel_state == SPINDLE_VEL_ZERO)
-//    {
-//        setRegBit(REG_F, 45, 1);
-//    }
-//    else
-//    {
-//        clearRegBit(REG_F, 45, 1);
-//    }
-    if(abs(spindle.actual_vel) < 5)
+    //　主轴零速信号F45.1
+    if(abs(spindle_driver.actual_vel) < 5)
     {
         setRegBit(REG_F, 45, 1);
-        spl_data.spl_vel_state = SPINDLE_VEL_ZERO;
     }
     else
     {
@@ -378,10 +376,35 @@ static void plc_output_spl_vel_status()
     }
 }
 
+static void plc_output_spl_orient_status()
+{
+    /* F45.7 is the ordinary M19 orientation-complete signal.
+     * M29 completion is joined with PLC FIN in auto_mst.c. */
+    if (spl_orient_is_done() && !spl_context.m29_active)
+    {
+        setRegBit(REG_F, 45, 7);
+    }
+    else
+    {
+        clearRegBit(REG_F, 45, 7);
+    }
+}
+
 static void plc_output_spl_vel()
 {
     uint8_t bytes[4];
-    uint32_t vel = (uint32_t)spl_data.mcp_target_speed;
+    double command_speed;
+    uint32_t vel;
+
+    if (spl_context.speed_source == SPINDLE_SPEED_SOURCE_PLC)
+    {
+        command_speed = spl_context.plc_speed;
+    }
+    else
+    {
+        command_speed = spl_context.command_speed;
+    }
+    vel = (uint32_t)fabs(command_speed);
 
     bytes[0] = (uint8_t)(vel & 0xff);
     bytes[1] = (uint8_t)((vel >> 8) & 0xff);

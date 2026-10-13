@@ -89,7 +89,7 @@ void rerun_store_breakpoint(bool is_breakpoint){
 }
 
 /// @brief 切换模式
-void rerun_update_when_swithing(){
+void rerun_update_when_switching(){
     delAlarm(ALARM_CH, ALARM_WARNING, 3);
     switch (rt_data->target_mode)
     {
@@ -186,6 +186,10 @@ bool check_rerun_row_is_valid(){
         case SPLINE:
             res = setAlarm(ALARM_CH, ALARM_ERROR, 4);
             if(res != -8) LOG(LOG_LEVEL_ERR, "样条不可以执行程序再启动");
+            return false;
+        case NURBS:
+            res = setAlarm(ALARM_CH, ALARM_ERROR, 4);
+            if(res != -8) LOG(LOG_LEVEL_ERR, "NURBS样条不可以执行程序再启动");
             return false;
         default:
             break;

@@ -64,8 +64,6 @@ bool tapreturn_page_speed_ok(int page_speed);
 void tapreturn_clear_alarms(void);
 double cal_rigid_pos_sync_error();
 
-/*! }*/
-
 #ifdef __cplusplus
 }
 #endif

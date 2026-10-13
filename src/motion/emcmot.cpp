@@ -4,6 +4,7 @@
 #include "backlash_comp.h"
 #include "comp_data.h"
 #include "debug_mode.h"
+#include "driver.h"
 #include "egear_ratio.h"
 #include "ferror_control.h"
 #include "global.h"
@@ -11,7 +12,7 @@
 #include "hmisysapi.h"
 #include "ref.h"
 #include "jog.h"
-#include "master.h"
+#include "master_wcf.h"
 #include "parser.h"
 #include "pathplan.h"
 #include "pitch_comp.h"
@@ -31,7 +32,6 @@ static void smx_do_period();
 static void axis_write_out();
 static void check_for_fault();
 static void set_operating_mode();
-static void spindle_control();
 static void handle_nc_event();
 static void get_cmd_pos();
 static void update_status();
@@ -42,6 +42,7 @@ static void calcul_mac_cmd_pos();
 static void manual_unset_sys_state();
 static void reset_clean_warning();
 static void rebuild_axis_positions_from_feedback();
+static void handle_rigid_return_event();
 
 #ifdef UNIT_TEST
 void emcmot_test_rebuild_axis_positions_from_feedback()
@@ -59,7 +60,7 @@ const char *mode_names[] = {"编辑", "AUTO", "MDI", "DNC", "手轮", "手动", 
 // 轨迹规划
 void emcmotTrajPlan()
 {
-    // todo：什么时候op_flag=0，为0应统一关闭线程，报错退出系统
+    // 主站未进入OP或当前周期通信失败时，跳过本周期运动计算。
     if (op_flag == 0)
     {
         return;
@@ -92,9 +93,9 @@ void emcmotPathPlan()
         // 添加block
         chan_add_block();
         // 预处理
-        // pretreat_block();
+        pretreat_block();
         // 一致性处理
-        // unif_block();
+        unif_block();
     }
 }
 
@@ -119,7 +120,7 @@ static void chan_do_period()
         // 处理系统事件
         handle_nc_event();
         // 主轴控制
-        spindle_control();
+        spindle_control_update();
         // 根据运动模式计算运动位置
         get_cmd_pos();
     }
@@ -167,11 +168,13 @@ static void set_operating_mode()
     {
     case MODE_IDLE:
         rt_data->current_mode = rt_data->target_mode;
+        rt_data->sys_state[SYS_IS_SWITCHING_MODE] = false;
         break;
     case MODE_MPG:
         rt_data->current_mode = rt_data->target_mode;
+        rt_data->sys_state[SYS_IS_SWITCHING_MODE] = false;
         LOG(LOG_LEVEL_INFO, "系统模式切换为 %s", mode_names[rt_data->current_mode]);
-        rerun_update_when_swithing();
+        rerun_update_when_switching();
         break;
     case MODE_JOG:
         // 当前点动速度为零,才能切模式成功
@@ -182,7 +185,7 @@ static void set_operating_mode()
             rt_data->current_mode = rt_data->target_mode;
             rt_data->sys_state[SYS_IS_SWITCHING_MODE] = false;
             LOG(LOG_LEVEL_INFO, "系统模式切换为 %s", mode_names[rt_data->current_mode]);
-            rerun_update_when_swithing();
+            rerun_update_when_switching();
         }
         break;
     case MODE_HOMING:
@@ -191,7 +194,7 @@ static void set_operating_mode()
             rt_data->current_mode = rt_data->target_mode;
             rt_data->sys_state[SYS_IS_SWITCHING_MODE] = false;
             LOG(LOG_LEVEL_INFO, "系统模式切换为 %s", mode_names[rt_data->current_mode]);
-            rerun_update_when_swithing();
+            rerun_update_when_switching();
         }
         break;
     case MODE_MDI:
@@ -202,7 +205,7 @@ static void set_operating_mode()
             rt_data->current_mode = rt_data->target_mode;
             rt_data->sys_state[SYS_IS_SWITCHING_MODE] = false;
             LOG(LOG_LEVEL_INFO, "系统模式切换为 %s", mode_names[rt_data->current_mode]);
-            rerun_update_when_swithing();
+            rerun_update_when_switching();
         }
         break;
     case MODE_EDIT:
@@ -212,21 +215,6 @@ static void set_operating_mode()
     default:
         break;
     }
-}
-
-// 主轴控制
-static void spindle_control()
-{
-    spindle_set_state();
-    if (spindle.mode != DRV_MODE_DISABLED)
-    {
-        spindle_cal_speed();
-    }
-#ifdef DEBUG_MODE_ENABLED
-    setVarChanInt(0, VAR_CHAN_S_CODE, (int32_t)spl_data.current_speed, 0);
-#else
-    setVarChanInt(0, VAR_CHAN_S_CODE, spindle.actual_vel, 0);
-#endif
 }
 
 // 不同加工模式的运动控制
@@ -327,7 +315,7 @@ static void read_from_hal()
     Hal_Driver_Get_Actual_Pos(&z_axis_driver, &z_act_pulse_pos);
     rt_data->axis_data[AXIS_Z].motor_act_pos = pulses_to_position(&rt_data->axis_data[AXIS_Z], z_act_pulse_pos);
     // todo：计算旋转轴角度
-    Hal_Driver_Get_Actual_Pos(&spindle, &sp_act_pulse_pos);
+    Hal_Driver_Get_Actual_Pos(&spindle_driver, &sp_act_pulse_pos);
     // rt_data->axis_data[AXIS_SP].motor_act_pos = pulses_to_position(&rt_data->axis_data[AXIS_SP], sp_act_pulse_pos);
 #endif
     // 电机脉冲
@@ -339,7 +327,7 @@ static void read_from_hal()
     rt_data->axis_data[AXIS_X].act_vel = x_axis_driver.actual_vel;
     rt_data->axis_data[AXIS_Y].act_vel = y_axis_driver.actual_vel;
     rt_data->axis_data[AXIS_Z].act_vel = z_axis_driver.actual_vel;
-    rt_data->axis_data[AXIS_SP].act_vel = spindle.actual_vel;
+    rt_data->axis_data[AXIS_SP].act_vel = spindle_driver.actual_vel;
     // 进给值实际合成速度，不包含主轴
     rt_data->chan_data[0].act_vel = sqrt(pow(x_axis_driver.actual_vel, 2) + pow(y_axis_driver.actual_vel, 2) +
                                          pow(z_axis_driver.actual_vel, 2));
@@ -501,7 +489,7 @@ static void reset_clean_warning()
     {
         // 4.按下MDI上的RESET键
         nc_set_resetting(HMI_RESET);
-        // 复位生效参数
+        // 复位生效存储型限位功能的参数参数
         Axis_Limit_Manager_Init();
         // 清除警告提示
         cleanAllAlarm(ALARM_SY, ALARM_WARNING);
@@ -518,6 +506,7 @@ static void reset_clean_warning()
 /// @brief 所有模式下都统一处理的事件
 static void handle_nc_event(){
     manual_unset_sys_state();
+    handle_rigid_return_event();
     switch (rt_data->nc_event)
     {
     case SYS_EVENT_PROGRAM_RESTART_ON:
@@ -531,6 +520,23 @@ static void handle_nc_event(){
         break;
     case SYS_EVENT_BLOCK_SKIP_OFF:
         rt_set_sys_state(SYS_IS_BLOCK_SKIP, false);
+        break;
+    default:
+        break;
+    }
+}
+
+static void handle_rigid_return_event(){
+    if (rt_data->current_mode == MODE_MDI) return;
+    switch (rt_data->nc_event)
+    {
+    case SYS_EVENT_RIGID_RETURN_ON:
+        rt_data->sys_state[SYS_IS_RIGID_RETURN] = 1;
+        rt_data->sys_state[SYS_IS_RIGID_RETURN_FINISH] = 1;
+        break;
+    case SYS_EVENT_RIGID_RETURN_OFF:
+        rt_data->sys_state[SYS_IS_RIGID_RETURN] = 0;
+        rt_data->sys_state[SYS_IS_RIGID_RETURN_FINISH] = 0;
         break;
     default:
         break;

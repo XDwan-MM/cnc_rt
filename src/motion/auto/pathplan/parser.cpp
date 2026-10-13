@@ -183,9 +183,7 @@ static GNC_RES parser_take_hmi_request(char *buf, int buf_len, bool *handled)
             }
             break;
         case HMI_REQUEST_ACTION_TAP_RETRACT:
-            // 页面给的螺距/转向只作**交叉校验**（真正交给译码器的是记录，见
-            // tapreturn_refresh_return_param）—— 不一致就拒绝，且**不静默改用记录值**：
-            // 页面上输了什么就按什么判，悄悄换掉会让现场以为参数没生效。
+   
             len = hmi_tapret_build_program(&hmiSnap.params.tapret, buf, buf_len);
             if (len == HMI_TAPRET_REJECT_PARAM) {
                 hmi_request_ack(hmiSnap.seq, HMI_REQUEST_STATE_REJECTED,

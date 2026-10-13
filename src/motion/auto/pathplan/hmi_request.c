@@ -31,11 +31,12 @@ static uint64_t hmi_request_monotonic_ms(void)
     return (uint64_t)ts.tv_sec * 1000U + (uint64_t)(ts.tv_nsec / 1000000);
 }
 
-/*! 本版 RT 认识的动作：MST 下发、攻丝回退。其它非 0 动作一律拒绝 */
+/*! 本版 RT 认识的动作：MST 下发、攻丝回退、对刀启动。其它非 0 动作一律拒绝 */
 static bool hmi_request_action_known(uint32_t action)
 {
     return action == HMI_REQUEST_ACTION_MST_DISPATCH
-           || action == HMI_REQUEST_ACTION_TAP_RETRACT;
+           || action == HMI_REQUEST_ACTION_TAP_RETRACT
+           || action == HMI_REQUEST_ACTION_TOOL_MEASURE;
 }
 
 int hmi_request_take(HmiRequestSnapshot *snap, int32_t *errOut)
@@ -85,9 +86,11 @@ int hmi_request_take(HmiRequestSnapshot *snap, int32_t *errOut)
         return -2;
     }
 
-    // 5、参数合法性：按动作分派。两个动作的参数在同一个联合体里但布局不同，
-    //    拿一个动作的判据去看另一个动作的字节毫无意义（float 的字节几乎不会全 0）
-    if (action == HMI_REQUEST_ACTION_MST_DISPATCH) {
+    // 5、参数合法性：按动作分派。各动作的参数在同一个联合体里但布局不同，
+    //    拿一个动作的判据去看另一个动作的字节毫无意义（float 的字节几乎不会全 0）。
+    //    注意：这里加动作时要与 hmi_request_action_known() 一起改
+    switch (action) {
+    case HMI_REQUEST_ACTION_MST_DISPATCH:
         // 全 0 生成不出程序
         if (snap->params.mst.tValue == 0
                 && snap->params.mst.sValue == 0
@@ -97,7 +100,8 @@ int hmi_request_take(HmiRequestSnapshot *snap, int32_t *errOut)
             }
             return -2;
         }
-    } else {    // HMI_REQUEST_ACTION_TAP_RETRACT
+        break;
+    case HMI_REQUEST_ACTION_TAP_RETRACT: {
         const float pitch = snap->params.tapret.pitchMm;
         // !(pitch > 0.0f) 同时挡掉 NaN；isfinite 再挡 ±inf
         if (!(pitch > 0.0f) || !isfinite(pitch)
@@ -108,6 +112,20 @@ int hmi_request_take(HmiRequestSnapshot *snap, int32_t *errOut)
             }
             return -2;
         }
+        break;
+    }
+    case HMI_REQUEST_ACTION_TOOL_MEASURE:
+        // 刀号必须有效；补偿号 0 合法（0 = 把刀长写入外部坐标系 EXT）
+        if (snap->params.toolMeasure.toolNo <= 0
+                || snap->params.toolMeasure.offsetNo < 0) {
+            if (errOut) {
+                *errOut = HMI_REQUEST_ERROR_PARAM_INVALID;
+            }
+            return -2;
+        }
+        break;
+    default:
+        break;
     }
 
     return 1;
@@ -171,6 +189,8 @@ int hmi_mst_build_program(const HmiRequestMstParams *mst, char *out, int outLen)
  * --------------------------------------------------------------------------- */
 int hmi_tapret_build_program(const HmiRequestTapRetParams *tapret, char *out, int outLen)
 {
+    tapreturn_clear_alarms();
+
     if (tapret == NULL || out == NULL || outLen <= 0) {
         return 0;
     }
@@ -207,6 +227,22 @@ int hmi_tapret_build_program(const HmiRequestTapRetParams *tapret, char *out, in
     if (len <= 0 || len >= outLen) {
         return 0;   // 调用方缓冲不足（与 hmi_mst_build_program 同一约定）
     }
-    tapreturn_clear_alarms();
     return len;
+}
+
+/* ---------------------------------------------------------------------------
+ * todo：对刀启动的测量动作：**空桩，待实现**
+ *
+ * 当前固定返回 0，调用方（parser.cpp 的 MODE_MDI 分支）据此回执
+ * REJECTED + HMI_REQUEST_ERROR_PROGRAM，界面提示"对刀启动被拒绝（错误码 5）"，
+ * 机床不动作。测量动作与写刀补由实现者补齐（线索见 HMI 侧文档 12.5）；
+ * 若实现时不是"生成程序串"而是直接合成运动，本函数签名与 parser.cpp 的分派要一起改。
+ * --------------------------------------------------------------------------- */
+int hmi_toolmeasure_build_program(const HmiRequestToolMeasureParams *toolMeasure, char *out,
+                                  int outLen)
+{
+    (void)toolMeasure;
+    (void)out;
+    (void)outLen;
+    return 0;   /* 空桩：待实现 */
 }

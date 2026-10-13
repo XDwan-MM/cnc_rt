@@ -30,18 +30,6 @@ void Master_Run_Simulated(void);
  */
 void simulate_hal_data(void);
 
-/**
- * @brief Return the simulated spindle feedback angle in degrees.
- *
- * The value is normalized to the interval [0, 360).
- */
-double get_simulated_spindle_angle_deg(void);
-
-/**
- * @brief Reset the simulated spindle feedback angle to zero.
- */
-void reset_simulated_spindle_angle(void);
-
 #ifdef __cplusplus
 }
 #endif
