@@ -130,7 +130,7 @@ typedef struct
     double nurbs_fiterror;
     double nurbs_sagittaerror;
     int nurbs_enable;       // 开启nurbs拟合
-    UNIF_TYPE unif_type;    // 一致性处理方式
+    UNIF_TYPE unif_type;
 } RT_CHAN;
 
 // 目前仅轨迹线程使用

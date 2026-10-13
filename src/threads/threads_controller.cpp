@@ -44,13 +44,14 @@ thread_config_t motion_config = {.core_id = 2, .policy = SCHED_FIFO, .priority =
 thread_config_t path_plan_config = {.core_id = 2, .policy = SCHED_RR, .priority = 30, .thread_name = "解释器线程"};
 #endif
 
+#define OVERTIME_THR 10
+
 // 线程首末时间
 static long long start = 0;
 static long long end = 0;
-static int rt_overtime_count = 0;
-static int plc_overtime_count = 0;
 
-#define OVERTIME_THR 10
+static int plc_overtime_count = 0;
+static int rt_overtime_count = 0;
 
 // 获取单调时间（纳秒）
 static inline long long get_ns() {
@@ -173,7 +174,14 @@ void* path_plan_thread_func(void*) {
     return NULL;
 }
 
-// PDO线程的具体实现
+// 任务控制器线程的具体实现
+// void* task_controller_thread_func(void*) {
+//     while (!thread_exit_flag) {
+//         // todo：修改此处写法    
+//     }
+//     return NULL;
+// }
+
 void* pdo_thread_func(void*) {
     #ifdef DEBUG_MODE_ENABLED
         Master_Run_Simulated();  // 调试模式使用模拟主站

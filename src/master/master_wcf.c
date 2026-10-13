@@ -114,7 +114,8 @@ int Master_Start(void)
     Driver_Request_Mode(&x_axis_driver, DRV_MODE_CSP);
     Driver_Request_Mode(&y_axis_driver, DRV_MODE_CSP);
     Driver_Request_Mode(&z_axis_driver, DRV_MODE_CSP);
-    Driver_Request_Mode(&spindle_driver, DRV_MODE_CSV);
+    // Driver_Request_Mode(&spindle_driver, DRV_MODE_CSV);
+    Ethercat_Driver_Write_Mode(&spindle_driver, DRV_MODE_CSV);
     Driver_Disable(&spindle_driver);
 
     g_master.initialized = true;
