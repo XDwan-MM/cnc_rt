@@ -33,6 +33,7 @@ void plc_f_signal_handler_cycle()
     plc_output_spl_orient_status();
     plc_output_spl_vel();
     plc_output_rigid();
+    spindle_trace_status();
 }
 
 static void plc_output_alarm()
@@ -355,28 +356,8 @@ static void plc_output_axis_status()
 
 static void plc_output_spl_vel_status()
 {
-    const bool spindle_orienting =
-        spl_context.orient_phase == SPINDLE_ORIENT_RUNNING ||
-        spl_context.orient_phase == SPINDLE_ORIENT_DONE ||
-        spl_context.orient_phase == SPINDLE_ORIENT_RELEASING;
-    const bool spindle_safety_stop =
-        rt_data->sys_state[SYS_IS_ESTOP_ACTIVE] ||
-        spindle_driver.state == DRV_STATE_FAULT ||
-        (spindle_driver.status_word & 0x0008U) != 0U;
-
-    /* 停止目标已归零时，即使控制周期错过了 ARRIVED 状态，也要发布到速。 */
-    if (!spindle_safety_stop &&
-        !spindle_orienting &&
-        spl_context.spl_state == SPINDLE_STOP &&
-        fabs(spl_context.vel_planner.current_vel) <= 1e-6 &&
-        abs(spindle_driver.actual_vel) < 5)
-    {
-        spl_context.spl_vel_state = SPINDLE_VEL_ARRIVED;
-    }
-
-    //　主轴速度到达信号F45.3
-    if (spl_context.spl_vel_state == SPINDLE_VEL_ARRIVED &&
-        !spindle_orienting)
+    // 发布控制层统一判定，不反向修改主轴状态。
+    if (spindle_velocity_is_ready())
     {
         setRegBit(REG_F, 45, 3);
     }
@@ -388,11 +369,6 @@ static void plc_output_spl_vel_status()
     if(abs(spindle_driver.actual_vel) < 5)
     {
         setRegBit(REG_F, 45, 1);
-        /* 停止到零时保留 ARRIVED，保证 F45.3 至少保持到 M 代码读到 FIN。 */
-        if (spl_context.spl_vel_state != SPINDLE_VEL_ARRIVED)
-        {
-            spl_context.spl_vel_state = SPINDLE_VEL_ZERO;
-        }
     }
     else
     {
@@ -403,7 +379,7 @@ static void plc_output_spl_vel_status()
 static void plc_output_spl_orient_status()
 {
     /* F45.7 is the ordinary M19 orientation-complete signal.
-     * M29 uses the dedicated NC feedback F76.3 instead. */
+     * M29 completion is joined with PLC FIN in auto_mst.c. */
     if (spl_orient_is_done() && !spl_context.m29_active)
     {
         setRegBit(REG_F, 45, 7);

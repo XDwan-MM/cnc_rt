@@ -63,7 +63,6 @@ hal_retcode_t Ethercat_Driver_Read_Feedback(hal_driver_t *drv)
      * Error Code（从总线读取）
      * ----------------------------------------------------- */
 
-    // todo 测试平台1需清除以下注释内容
     ret = GM_TxPdoEntry_Read(drv->pdo.error_code, &drv->error_code, sizeof(drv->error_code));
 
     if (ret < 0){
