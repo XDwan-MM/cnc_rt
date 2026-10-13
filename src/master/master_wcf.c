@@ -112,16 +112,17 @@ int Master_Start(void)
 
     // todo 待删除
     // 蓝海华腾平台暂时读不了驱动器错误码，启动前清一下驱动器报错
-    Driver_Fault_Reset(&x_axis_driver);
-    Driver_Fault_Reset(&y_axis_driver);
-    Driver_Fault_Reset(&z_axis_driver);
-    Driver_Fault_Reset(&spindle_driver);
+    // Driver_Fault_Reset(&x_axis_driver);
+    // Driver_Fault_Reset(&y_axis_driver);
+    // Driver_Fault_Reset(&z_axis_driver);
+    // Driver_Fault_Reset(&spindle_driver);
 
     /* 进给轴使用 CSP；主轴使用 CSV，但主轴首次启动保持下使能。 */
     Driver_Request_Mode(&x_axis_driver, DRV_MODE_CSP);
     Driver_Request_Mode(&y_axis_driver, DRV_MODE_CSP);
     Driver_Request_Mode(&z_axis_driver, DRV_MODE_CSP);
-    Driver_Request_Mode(&spindle_driver, DRV_MODE_CSV);
+    // Driver_Request_Mode(&spindle_driver, DRV_MODE_CSV);
+    Ethercat_Driver_Write_Mode(&spindle_driver, DRV_MODE_CSV);
     Driver_Disable(&spindle_driver);
 
     g_master.initialized = true;

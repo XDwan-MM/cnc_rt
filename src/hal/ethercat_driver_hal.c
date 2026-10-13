@@ -64,13 +64,13 @@ hal_retcode_t Ethercat_Driver_Read_Feedback(hal_driver_t *drv)
      * ----------------------------------------------------- */
 
     // todo 0928
-    // ret = GM_TxPdoEntry_Read(drv->pdo.error_code, &drv->error_code, sizeof(drv->error_code));
+    ret = GM_TxPdoEntry_Read(drv->pdo.error_code, &drv->error_code, sizeof(drv->error_code));
 
-    // if (ret < 0){
-    //     printf("ret = GM_TxPdoEntry_Read(drv->pdo.error_code, &drv->error_code, sizeof(drv->error_code));\n");
-    //     printf("drv->pdo.error_code.index) %d\n", (drv->pdo.error_code.index));
-    //     return HAL_DRIVER_ERROR;
-    // }
+    if (ret < 0){
+        printf("ret = GM_TxPdoEntry_Read(drv->pdo.error_code, &drv->error_code, sizeof(drv->error_code));\n");
+        printf("drv->pdo.error_code.index) %d\n", (drv->pdo.error_code.index));
+        return HAL_DRIVER_ERROR;
+    }
 
     /* -----------------------------------------------------
      * 6061 Modes of Operation Display（从总线读取）
