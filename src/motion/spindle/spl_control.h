@@ -114,7 +114,31 @@ void spindle_control_update(void);
 void spl_context_init(spindle_context_t* spl_ctx);
 void spindle_request_m29(void);
 bool spindle_m29_is_ready(void);
+void spindle_clear_velocity_arrival(void);   /* 新指令/复位/定向/M29 入口调用 */
+bool spindle_velocity_is_ready(void);        /* F45.3 的唯一查询入口（只读） */
 void spindle_complete_m29(void);
+
+/* M29 等待 PLC FIN 的超时报警 id（只提示，不改控制流程）。
+ * 注意：HMI 侧需要同 id 的报警文本，否则会显示成未知报警。 */
+#define SPINDLE_ALARM_M29_FIN_TIMEOUT  (2101)
+
+/** M29 卡住诊断的只读快照：只观察，不改变任何控制状态。 */
+typedef struct
+{
+    int m29_phase;        /**< 当前 M29 阶段。 */
+    int m29_active;       /**< M29 是否仍挂在本段上。 */
+    int orient_phase;     /**< CNC/PLC 层定向阶段。 */
+    int orient_state;     /**< HAL 定向状态（NONE/RUNNING/DONE）。 */
+    int ms_state;         /**< 模式切换闩锁：0 IDLE / 1 SWITCHING / 2 DONE / 3 ERROR。 */
+    int ms_result;        /**< 最近一次模式切换请求返回值。 */
+    int ms_req_mode;      /**< 期望模式（HAL_SPINDLE_*）。 */
+    int act_mode;         /**< 实际 6061；< 0 表示读不到。 */
+    int enabled;          /**< 驱动器使能。 */
+    uint16_t status_word; /**< PDO 状态字。 */
+    bool ready;           /**< spindle_m29_is_ready() 的结果。 */
+} spindle_m29_diag_t;
+
+void spindle_m29_diag_info(spindle_m29_diag_t *out);
 
 #ifdef __cplusplus
 }

@@ -73,6 +73,7 @@ static uint32_t   s_panel_out[SIM_PANEL_OUT];
 static uint32_t   s_cycle_us = 1000u;
 static int        s_opened;
 static int        s_fail_bus;    /* 非零 = 所有驱动读都失败，用来验证总线故障路径 */
+static int        s_csv_reached; /* CNC_RT_SIM_CSV_REACHED: start in CSV with speed-reached bit10 */
 /* 驱动层的停止标志，与真实 main_demo.c 里那个对应。hal_context_request_stop()
  * 会调 Master_RequestStop() 置它，Master_WaitCycle() 前后查它。 */
 static atomic_int s_stop_requested;
@@ -164,6 +165,8 @@ static uint16_t s_err_code[SIM_SLOT_COUNT];
 
 int ethercat_init(const MasterConfig* cfg) {
     if (!cfg) return -1;
+    const char* reached = getenv("CNC_RT_SIM_CSV_REACHED");
+    s_csv_reached = reached && atoi(reached);
     memset(s_servo, 0, sizeof(s_servo));
     memset(s_io_in, 0, sizeof(s_io_in));
     memset(s_io_out, 0, sizeof(s_io_out));
@@ -177,6 +180,7 @@ int ethercat_init(const MasterConfig* cfg) {
     build_panel_slot(0, SIM_SLAVE_PANEL);
     build_io_slot(1, SIM_SLAVE_IO);
     build_servo_slot(2, SIM_SLAVE_SPINDLE, SERVO_TYPE, 1);
+    if (s_csv_reached) s_servo[2].op_mode = DS402_MODE_CSV;
     build_servo_slot(3, SIM_SLAVE_X, SERVO_TYPE, 0);
     build_servo_slot(4, SIM_SLAVE_Y, SERVO_TYPE, 0);
     build_servo_slot(5, SIM_SLAVE_Z, SERVO_TYPE, 0);
@@ -335,6 +339,10 @@ int Master_ServoRead(int slot, DevDictRole role, uint32_t* out) {
             return 0;
         }
         *out = sim_status_from_ctrl(v->control_word);
+        /* CSV bit10 is speed reached, including a stationary zero target. */
+        if (s_csv_reached && v->op_mode == DS402_MODE_CSV &&
+            v->actual_speed == v->target_speed)
+            *out |= RT_PLACEHOLDER_ORIENT_DONE;
         return 0;
     /* 位置与速度即时跟随指令：写什么读回什么。旧 master_sim.c 也是这么做的
      * （actual_pos = target_pos、actual_vel = target_vel）。 */
