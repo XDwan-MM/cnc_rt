@@ -31,6 +31,7 @@ static void ref_tp_cal_ref_block(AXIS_TYPE axis_type);
 static void ref_tp_axis_reset(AXIS_TYPE axis_type);
 static void ref_tp_axis_pause(AXIS_TYPE axis_type);
 static bool check_axis_ref_arrive(AXIS_TYPE axis_type);
+static void abs_ref_update_state_by_event(AXIS_TYPE axis_type);
 
 void handle_ref_cmd(){
     ref_handle_alarm();
@@ -243,17 +244,90 @@ static void abs_ref_check_event(AXIS_TYPE axis_type){
         {
         case REF_ABS_EXEC_MOVING:
             LOG(LOG_LEVEL_INFO, "回零处理快速进给倍率改变");
-            switch (ref_tp[axis_type].current_stage)
-            {
-            case REF_MOVING:
-                ref_tp[axis_type].current_stage = REF_BREAKPOINT;
-                break;
-            case REF_PAUSED:
-                ref_tp[axis_type].current_stage = REF_START;
-                break;
-            default:
-                break;
-            }
+            abs_ref_update_state_by_event(axis_type);
+            break;
+        default:
+            break;
+        }
+        break;
+    case SYS_EVENT_MAC_LOCK_ON:
+        LOG(LOG_LEVEL_INFO, "回零模式处理开启机械锁住");
+        // TODO: 回零模式机械锁住
+        break;
+    case SYS_EVENT_MAC_LOCK_OFF:
+        LOG(LOG_LEVEL_INFO, "回零模式处理关闭机械锁住");
+        break;    
+    case SYS_EVENT_STLK_ON:
+    case SYS_EVENT_IT_ON:
+        LOG(LOG_LEVEL_INFO, "回零模式处理开启所有轴互锁");
+        abs_ref_update_state_by_event(axis_type);
+        break;
+    case SYS_EVENT_IT1_ON:
+        switch (axis_type)
+        {
+        case AXIS_X:
+            LOG(LOG_LEVEL_INFO, "回零模式处理开启轴1锁");
+            abs_ref_update_state_by_event(axis_type);
+            break;
+        default:
+            break;
+        }
+        break;
+    case SYS_EVENT_IT2_ON:
+        switch (axis_type)
+        {
+        case AXIS_Y:
+            LOG(LOG_LEVEL_INFO, "回零模式处理开启轴2锁");
+            abs_ref_update_state_by_event(axis_type);
+            break;
+        default:
+            break;
+        }
+        break;
+    case SYS_EVENT_IT3_ON:
+        switch (axis_type)
+        {
+        case AXIS_Z:
+            LOG(LOG_LEVEL_INFO, "回零模式处理开启轴3锁");
+            abs_ref_update_state_by_event(axis_type);
+            break;
+        default:
+            break;
+        }
+        break;
+    case SYS_EVENT_STLK_OFF:
+    case SYS_EVENT_IT_OFF:
+        LOG(LOG_LEVEL_INFO, "回零模式处理关闭所有轴互锁");
+        abs_ref_update_state_by_event(axis_type);
+        break;
+    case SYS_EVENT_IT1_OFF:
+        switch (axis_type)
+        {
+        case AXIS_X:
+            LOG(LOG_LEVEL_INFO, "回零模式处理关闭轴1锁");
+            abs_ref_update_state_by_event(axis_type);
+            break;
+        default:
+            break;
+        }
+        break;
+    case SYS_EVENT_IT2_OFF:
+        switch (axis_type)
+        {
+        case AXIS_Y:
+            LOG(LOG_LEVEL_INFO, "回零模式处理关闭轴2锁");
+            abs_ref_update_state_by_event(axis_type);
+            break;
+        default:
+            break;
+        }
+        break;
+    case SYS_EVENT_IT3_OFF:
+        switch (axis_type)
+        {
+        case AXIS_Z:
+            LOG(LOG_LEVEL_INFO, "回零模式处理关闭轴3锁");
+            abs_ref_update_state_by_event(axis_type);
             break;
         default:
             break;
@@ -408,7 +482,7 @@ static void abs_ref_tp_update_cmd(AXIS_TYPE axis_type){
 static void abs_ref_tp_cal_target_vel(AXIS_TYPE axis_type){
     switch (ref_tp[axis_type].ref_state){
         case REF_ABS_EXEC_MOVING:
-            ref_tp[axis_type].ref_data.target_vel = MIN(ref_tp[axis_type].ref_block.feed_vel * var_chan[0][VAR_CHAN_RAPID_OVERRIDE].value.f / OVERRIDE_PERCENT, rt_data->axis_data[axis_type].max_feed_vel);
+            ref_tp[axis_type].ref_data.target_vel = MIN(ref_tp[axis_type].ref_block.feed_vel * var_chan[0][VAR_CHAN_RAPID_OVERRIDE].value.f / OVERRIDE_PERCENT, ref_tp[axis_type].ref_block.param_vel);
             break;
         case REF_ABS_EXEC_PAUSING:
         case REF_ABS_EXEC_RESETTING:
@@ -416,6 +490,11 @@ static void abs_ref_tp_cal_target_vel(AXIS_TYPE axis_type){
             ref_tp[axis_type].ref_data.target_vel = 0;
             break;
     }
+    if(rt_data->sys_state[SYS_IS_MAC_LOCK_READY] != rt_data->sys_state[SYS_IS_MAC_LOCK]) ref_tp[axis_type].ref_data.target_vel = 0;
+    if(rt_data->sys_state[SYS_IS_IT_LOCK]) ref_tp[axis_type].ref_data.target_vel = 0;
+    if(rt_data->sys_state[SYS_IS_IT1_LOCK]) ref_tp[AXIS_X].ref_data.target_vel = 0;
+    if(rt_data->sys_state[SYS_IS_IT2_LOCK]) ref_tp[AXIS_Y].ref_data.target_vel = 0;
+    if(rt_data->sys_state[SYS_IS_IT3_LOCK]) ref_tp[AXIS_Z].ref_data.target_vel = 0;
 }
 
 static void abs_ref_tp_execute_move_cmd(AXIS_TYPE axis_type){
@@ -509,7 +588,7 @@ static GNC_RES vp_val_decline_profile(AXIS_TYPE axis_type){
         ref_tp[axis_type].ref_data.traj_data->v = ref_tp[axis_type].ref_data.target_vel;
         if(IsEqualTo(ve, 0)) ref_tp[axis_type].target_stage = REF_PAUSED;
         else ref_tp[axis_type].target_stage = REF_BREAKPOINT;
-        LOG(LOG_LEVEL_DEBUG, "轴%d减速距离极小:%f,当前速度:%f,目标速度:%f", axis_type, ref_tp[axis_type].ref_block.length, vs, ve);\
+        LOG(LOG_LEVEL_DEBUG, "轴%d减速距离极小:%f,当前速度:%f,目标速度:%f", axis_type, ref_tp[axis_type].ref_block.length, vs, ve);
         return res;
     }
     else if(IsEqualTo(ref_tp[axis_type].ref_block.length, remain_length)){
@@ -607,13 +686,32 @@ static void ref_tp_cal_ref_block(AXIS_TYPE axis_type){
     ref_tp[axis_type].ref_block.end_vel  = 0.0;
     ref_tp[axis_type].ref_block.mode = PMC_MODE_ARRIVE_CHECK;
     ref_tp[axis_type].ref_block.type = LINE;
-    ref_tp[axis_type].ref_block.feed_vel = MIN(rt_data->axis_data[axis_type].jog_lowspd, rt_data->axis_data[axis_type].max_feed_vel);
-    ref_tp[axis_type].ref_block.max_vel = MIN(ref_tp[axis_type].ref_block.feed_vel * var_chan[0][VAR_CHAN_RAPID_OVERRIDE].value.f / OVERRIDE_PERCENT, rt_data->axis_data[axis_type].max_feed_vel);
+    ref_tp[axis_type].ref_block.feed_vel = rt_data->axis_data[axis_type].jog_lowspd;
+    ref_tp[axis_type].ref_block.param_vel = rt_data->axis_data[axis_type].max_feed_vel;
+    if(rt_data->sys_state[SYS_IS_IT_LOCK]) ref_tp[axis_type].ref_block.param_vel = 0;
+    if(rt_data->sys_state[SYS_IS_IT1_LOCK]) ref_tp[AXIS_X].ref_block.param_vel = 0;
+    if(rt_data->sys_state[SYS_IS_IT2_LOCK]) ref_tp[AXIS_Y].ref_block.param_vel = 0;
+    if(rt_data->sys_state[SYS_IS_IT3_LOCK]) ref_tp[AXIS_Z].ref_block.param_vel = 0;
+    ref_tp[axis_type].ref_block.max_vel = MIN(ref_tp[axis_type].ref_block.feed_vel * var_chan[0][VAR_CHAN_RAPID_OVERRIDE].value.f / OVERRIDE_PERCENT, ref_tp[axis_type].ref_block.param_vel);
     if(IsGreaterThan(ref_tp[axis_type].ref_block.start_vel, ref_tp[axis_type].ref_block.max_vel)) ref_tp[axis_type].ref_block.max_vel = ref_tp[axis_type].ref_block.start_vel;
     ref_tp[axis_type].ref_block.max_acc = rt_data->axis_data[axis_type].max_feed_acc;
     ref_tp[axis_type].ref_block.max_jerk = rt_data->axis_data[axis_type].max_feed_jk;
     if(rt_data->axis_data[axis_type].home_crds > rt_data->axis_data[axis_type].mac_cmd_pos) ref_tp[axis_type].ref_data.direction = 1;
     else ref_tp[axis_type].ref_data.direction = 0;
+}
+
+static void abs_ref_update_state_by_event(AXIS_TYPE axis_type){
+    switch (ref_tp[axis_type].current_stage)
+    {
+    case REF_MOVING:
+        ref_tp[axis_type].current_stage = REF_BREAKPOINT;
+        break;
+    case REF_PAUSED:
+        ref_tp[axis_type].current_stage = REF_START;
+        break;
+    default:
+        break;
+    }
 }
 
 /// @brief 设置回参考点完成信号

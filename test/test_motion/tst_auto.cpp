@@ -403,7 +403,7 @@ TEST_F(TestAuto, MachineLockSuppressesMotionUntilDisabled)
 
     send_event(SYS_EVENT_MAC_LOCK_ON);
 
-    EXPECT_TRUE(rt_get_sys_state(SYS_IS_MAC_LOCK_ON));
+    EXPECT_TRUE(rt_get_sys_state(SYS_IS_MAC_LOCK));
     EXPECT_EQ(cycle_tp->trigger_event, MAC_LOCK_ENABLE);
     EXPECT_EQ(cycle_tp->exec_cmd, DO_CHOP_CMD);
     EXPECT_DOUBLE_EQ(cycle_tp->pos_cmd_data.target_vel, 0.0);
@@ -416,7 +416,7 @@ TEST_F(TestAuto, MachineLockSuppressesMotionUntilDisabled)
 
     send_event(SYS_EVENT_MAC_LOCK_OFF);
 
-    EXPECT_FALSE(rt_get_sys_state(SYS_IS_MAC_LOCK_ON));
+    EXPECT_FALSE(rt_get_sys_state(SYS_IS_MAC_LOCK));
     EXPECT_EQ(cycle_tp->trigger_event, NONE_EVENT);
     EXPECT_FALSE(rt_get_sys_state(SYS_IS_MAC_LOCK_READY));
 

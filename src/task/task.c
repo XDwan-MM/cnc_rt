@@ -466,11 +466,13 @@ static void task_handle_enable_event(PLC_EVENT *event_data)
         if (event_data->enable_payload.enable_state)
         {
             rt_data->nc_event = SYS_EVENT_PROGRAM_RESTART_ON;
+            rt_set_sys_state(SYS_IS_PROG_RESTAR, true);
             LOG(LOG_LEVEL_INFO, "处理程序再启动开启事件");
         }
         else
         {
             rt_data->nc_event = SYS_EVENT_PROGRAM_RESTART_OFF;
+            rt_set_sys_state(SYS_IS_PROG_RESTAR, false);
             LOG(LOG_LEVEL_INFO, "处理程序再启动关闭事件");
         }
         break;
@@ -478,11 +480,13 @@ static void task_handle_enable_event(PLC_EVENT *event_data)
         if (event_data->enable_payload.enable_state)
         {
             rt_data->nc_event = SYS_EVENT_BLOCK_SKIP_ON;
+            rt_set_sys_state(SYS_IS_BLOCK_SKIP, true);
             LOG(LOG_LEVEL_INFO, "处理跳段开启事件");
         }
         else
         {
             rt_data->nc_event = SYS_EVENT_BLOCK_SKIP_OFF;
+            rt_set_sys_state(SYS_IS_BLOCK_SKIP, false);
             LOG(LOG_LEVEL_INFO, "处理跳段关闭事件");
         }
         break;
@@ -490,11 +494,13 @@ static void task_handle_enable_event(PLC_EVENT *event_data)
         if (event_data->enable_payload.enable_state)
         {
             rt_data->nc_event = SYS_EVENT_DRY_RUN_ON;
+            rt_set_sys_state(SYS_IS_DRY_RUN, true);
             LOG(LOG_LEVEL_INFO, "处理空运行开启事件");
         }
         else
         {
             rt_data->nc_event = SYS_EVENT_DRY_RUN_OFF;
+            rt_set_sys_state(SYS_IS_DRY_RUN, false);
             LOG(LOG_LEVEL_INFO, "处理空运行关闭事件");
         }
         break;
@@ -502,11 +508,13 @@ static void task_handle_enable_event(PLC_EVENT *event_data)
         if (event_data->enable_payload.enable_state)
         {
             rt_data->nc_event = SYS_EVENT_MAC_LOCK_ON;
+            rt_set_sys_state(SYS_IS_MAC_LOCK, true);
             LOG(LOG_LEVEL_INFO, "处理机床锁住开启事件");
         }
         else
         {
             rt_data->nc_event = SYS_EVENT_MAC_LOCK_OFF;
+            rt_set_sys_state(SYS_IS_MAC_LOCK, false);
             LOG(LOG_LEVEL_INFO, "处理机床锁住关闭事件");
         }
         break;
@@ -514,11 +522,13 @@ static void task_handle_enable_event(PLC_EVENT *event_data)
         if (event_data->enable_payload.enable_state)
         {
             rt_data->nc_event = SYS_EVENT_IT_ON;
+            rt_set_sys_state(SYS_IS_IT_LOCK, true);
             LOG(LOG_LEVEL_INFO, "处理所有轴互锁开启事件");
         }
         else
         {
             rt_data->nc_event = SYS_EVENT_IT_OFF;
+            rt_set_sys_state(SYS_IS_IT_LOCK, false);
             LOG(LOG_LEVEL_INFO, "处理所有轴互锁关闭事件");
         }
         break;
@@ -538,11 +548,13 @@ static void task_handle_enable_event(PLC_EVENT *event_data)
         if (event_data->enable_payload.enable_state)
         {
             rt_data->nc_event = SYS_EVENT_BSL_ON;
+            rt_set_sys_state(SYS_IS_BSL_LOCK, true);
             LOG(LOG_LEVEL_INFO, "处理程序段开始互锁开启事件");
         }
         else
         {
             rt_data->nc_event = SYS_EVENT_BSL_OFF;
+            rt_set_sys_state(SYS_IS_BSL_LOCK, false);
             LOG(LOG_LEVEL_INFO, "处理程序段开始互锁关闭事件");
         }
         break;
@@ -550,11 +562,13 @@ static void task_handle_enable_event(PLC_EVENT *event_data)
         if (event_data->enable_payload.enable_state)
         {
             rt_data->nc_event = SYS_EVENT_CSL_ON;
+            rt_set_sys_state(SYS_IS_CSL_LOCK, true);
             LOG(LOG_LEVEL_INFO, "处理切削程序段开始互锁开启事件");
         }
         else
         {
             rt_data->nc_event = SYS_EVENT_CSL_OFF;
+            rt_set_sys_state(SYS_IS_CSL_LOCK, false);
             LOG(LOG_LEVEL_INFO, "处理切削程序段开始互锁关闭事件");
         }
         break;
@@ -562,11 +576,13 @@ static void task_handle_enable_event(PLC_EVENT *event_data)
         if (event_data->enable_payload.enable_state)
         {
             rt_data->nc_event = SYS_EVENT_IT1_ON;
+            rt_set_sys_state(SYS_IS_IT1_LOCK, true);
             LOG(LOG_LEVEL_INFO, "处理轴1互锁开启事件");
         }
         else
         {
             rt_data->nc_event = SYS_EVENT_IT1_OFF;
+            rt_set_sys_state(SYS_IS_IT1_LOCK, false);
             LOG(LOG_LEVEL_INFO, "处理轴1互锁关闭事件");
         }
         break;
@@ -574,11 +590,13 @@ static void task_handle_enable_event(PLC_EVENT *event_data)
         if (event_data->enable_payload.enable_state)
         {
             rt_data->nc_event = SYS_EVENT_IT2_ON;
+            rt_set_sys_state(SYS_IS_IT2_LOCK, true);
             LOG(LOG_LEVEL_INFO, "处理轴2互锁开启事件");
         }
         else
         {
             rt_data->nc_event = SYS_EVENT_IT2_OFF;
+            rt_set_sys_state(SYS_IS_IT2_LOCK, false);
             LOG(LOG_LEVEL_INFO, "处理轴2互锁关闭事件");
         }
         break;
@@ -586,11 +604,13 @@ static void task_handle_enable_event(PLC_EVENT *event_data)
         if (event_data->enable_payload.enable_state)
         {
             rt_data->nc_event = SYS_EVENT_IT3_ON;
+            rt_set_sys_state(SYS_IS_IT3_LOCK, true);
             LOG(LOG_LEVEL_INFO, "处理轴3互锁开启事件");
         }
         else
         {
             rt_data->nc_event = SYS_EVENT_IT3_OFF;
+            rt_set_sys_state(SYS_IS_IT3_LOCK, false);
             LOG(LOG_LEVEL_INFO, "处理轴3互锁关闭事件");
         }
         break;
@@ -746,11 +766,13 @@ static void task_handle_enable_event(PLC_EVENT *event_data)
         if (event_data->enable_payload.enable_state)
         {
             rt_data->nc_event = SYS_EVENT_SINGLE_BLOCK_ON;
+            rt_set_sys_state(SYS_IS_SINGLE_BLOCK, true);
             LOG(LOG_LEVEL_INFO, "处理单段开启事件");
         }
         else
         {
             rt_data->nc_event = SYS_EVENT_SINGLE_BLOCK_OFF;
+            rt_set_sys_state(SYS_IS_SINGLE_BLOCK, false);
             LOG(LOG_LEVEL_INFO, "处理单段关闭事件");
         }
         break;
@@ -758,11 +780,13 @@ static void task_handle_enable_event(PLC_EVENT *event_data)
         if (event_data->enable_payload.enable_state)
         {
             rt_data->nc_event = SYS_EVENT_STOP_SKIP_ON;
+            rt_set_sys_state(SYS_IS_STOP_SKIP, true);
             LOG(LOG_LEVEL_INFO, "处理跳转信号开启事件");
         }
         else
         {
             rt_data->nc_event = SYS_EVENT_STOP_SKIP_OFF;
+            rt_set_sys_state(SYS_IS_STOP_SKIP, false);
             LOG(LOG_LEVEL_INFO, "处理跳转信号关闭事件");
         }
         break;

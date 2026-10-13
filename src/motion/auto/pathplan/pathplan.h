@@ -30,6 +30,8 @@ GNC_RES unif_block();
 
 void block_cal_length(PLAN_BLOCK* current_block);
 void block_cal_vector(PLAN_BLOCK* current_block);
+void block_cal_angle(PLAN_BLOCK* current_block, VECTOR* pre_end_vector);
+void block_cal_max_vel(PLAN_BLOCK* current_block);
 
 #ifdef __cplusplus
 }

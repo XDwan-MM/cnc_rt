@@ -103,12 +103,6 @@ typedef struct{
 typedef struct{
     // 加工参数
     VELPLAN_TYPE velplan_mode;
-    double max_feed_vel;
-    double max_rapid_vel;
-    double max_feed_acc;
-    double max_rapid_acc;
-    double max_feed_jerk;
-    double max_rapid_jerk;
     double ncu_cycle;
     double tfin_cycle;
     double tmf_cycle;
