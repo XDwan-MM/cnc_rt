@@ -244,7 +244,6 @@ static void block_deal_outlier(PLAN_BLOCK* pretreat_block, PLAN_BLOCK* treat_blo
 }
 
 /// @brief nurbs拟合
-
 static GNC_RES block_fixturnning_point()
 {
     // 逆行点修复：
