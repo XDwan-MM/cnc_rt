@@ -15,6 +15,7 @@
 #include "plan_queue.h"
 #include <stdbool.h>
 #include "hmisysapi.h"
+#include "rerunsaveapi.h"
 
 #ifdef __cplusplus
 extern "C"
@@ -98,25 +99,25 @@ void rerun_mst_reset(void);
 void rerun_make_mst_block(const MST_RESTORE* r, int index,
                           const PLAN_BLOCK* target, PLAN_BLOCK* out);
 
-typedef struct {
-    bool    valid;
-    int     line_number; /* 目标段行号 */
-    int     mode;        /* PMC_MODE_*（ TAP / TAP_RETURE / STOPSKIP / M_CMD） */
-    int     type;        /* LINE / CIRCLE_* / RIGID_TAP / TAP_RETURN / SPLINE… */
-    int     m_code;      /* 判 M06 / M19 */
-} RERUN_SAVE_BLOCK;
+// typedef struct {
+//     bool    valid;
+//     int     line_number; /* 目标段行号 */
+//     int     mode;        /* PMC_MODE_*（ TAP / TAP_RETURE / STOPSKIP / M_CMD） */
+//     int     type;        /* LINE / CIRCLE_* / RIGID_TAP / TAP_RETURN / SPLINE… */
+//     int     m_code;      /* 判 M06 / M19 */
+// } RERUN_SAVE_BLOCK;
 
-typedef struct
-{
-    char        parser_file_path[NCFILEPATH_CHAR_LEN];  /*!< 程序标识（路径） */
-    POS         program_start;                          /*!< 程序起点（机床坐标 XYZ） */
-    bool        program_start_valid;
-    POS         breakpoint;                             /*!< 断点位置（机床坐标 XYZ） */
-    int         rerun_row;                              /*!< 目标段行号 */
-    RERUN_SAVE_BLOCK break_block;                            /*!< 目标段（行号 + 留档字段） */
-    POS         break_end;                              /*!< 目标段那行第一个包的译码终点（绝对） */
-    bool        is_mem_rerun;                           /*!< 这一轮记忆模式被打断过 */
-} RERUN_SAVE;
+// typedef struct
+// {
+//     char        parser_file_path[NCFILEPATH_CHAR_LEN];  /*!< 程序标识（路径） */
+//     POS         program_start;                          /*!< 程序起点（机床坐标 XYZ） */
+//     bool        program_start_valid;
+//     POS         breakpoint;                             /*!< 断点位置（机床坐标 XYZ） */
+//     int         rerun_row;                              /*!< 目标段行号 */
+//     RERUN_SAVE_BLOCK break_block;                            /*!< 目标段（行号 + 留档字段） */
+//     POS         break_end;                              /*!< 目标段那行第一个包的译码终点（绝对） */
+//     bool        is_mem_rerun;                           /*!< 这一轮记忆模式被打断过 */
+// } RERUN_SAVE;
 
 void rerun_save_pack(RERUN_SAVE* out);
 

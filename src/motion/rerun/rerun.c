@@ -365,20 +365,19 @@ void rerun_save_pack(RERUN_SAVE* out)
 
     memcpy(out->parser_file_path, rerun_data->parser_file_path, sizeof(out->parser_file_path));
     out->program_start_valid = rerun_data->program_start_valid ? 1 : 0;
-    out->program_start       = rerun_data->program_start;
-    out->breakpoint          = rerun_data->breakpoint;
+    memcpy(&out->program_start, &rerun_data->program_start, sizeof(POS));
+    memcpy(&out->breakpoint,    &rerun_data->breakpoint,    sizeof(POS));
     out->rerun_row           = rerun_data->rerun_row;
     out->break_block.valid       = rerun_data->break_block.valid ? 1 : 0;
     out->break_block.line_number = rerun_data->break_block.line_number;
     out->break_block.mode        = (int)rerun_data->break_block.mode;
     out->break_block.type        = (int)rerun_data->break_block.type;
-    out->break_block.m_code      = rerun_data->break_block.m_code;
-    out->break_end           = rerun_data->break_end;
+    memcpy(&out->break_end,     &rerun_data->break_end,     sizeof(POS));
     out->is_mem_rerun        = rerun_data->is_mem_rerun ? 1 : 0;
 }
 
 /// 坐标是否是有限值
-static bool rerun_pos_is_finite(const POS* p)
+static bool rerun_pos_is_finite(const RERUN_POS* p)
 {
     return isfinite(p->x) && isfinite(p->y) && isfinite(p->z);
 }
@@ -409,15 +408,17 @@ bool rerun_save_unpack(const RERUN_SAVE* in)
     if (!in->is_mem_rerun && !in->program_start_valid) return false;
 
     memcpy(rerun_data->parser_file_path, in->parser_file_path, sizeof(rerun_data->parser_file_path));
-    rerun_data->program_start       = in->program_start;
+    memcpy(&rerun_data->program_start, &in->program_start, sizeof(POS));
+
     rerun_data->program_start_valid = (in->program_start_valid != 0);
-    rerun_data->breakpoint          = in->breakpoint;
+    memcpy(&rerun_data->breakpoint, &in->breakpoint, sizeof(POS));
     rerun_data->break_block.valid       = (in->break_block.valid != 0);
     rerun_data->break_block.line_number = in->break_block.line_number;
     rerun_data->break_block.mode        = (pmc_mode)in->break_block.mode;      // 还原（已自检）
     rerun_data->break_block.type        = (INTERP_TYPE)in->break_block.type;
     rerun_data->break_block.m_code      = in->break_block.m_code;
-    rerun_data->break_end           = in->break_end;
+    memcpy(&rerun_data->break_end, &in->break_end, sizeof(POS));
+
     rerun_data->is_mem_rerun        = (in->is_mem_rerun != 0);
 
     rerun_data->rerun_row = 0;//is_rerun还没设置，所以行号从0，需要页面设置
@@ -429,15 +430,18 @@ void rerun_persist(void)
     if (rerun_data == NULL) return;
     RERUN_SAVE save;
     rerun_save_pack(&save);
-
-    // (void)setRerunData(&save);
+    if (setRerunSave(&save) != 0)
+    {
+        LOG(LOG_LEVEL_WARN, "程序断电块写入失败");
+        return;
+    }
 }
 
 void rerun_restore(void)
 {
     RERUN_SAVE saved={0};
 
-    // if (getRerunData(&saved) != 0) return;
+    if (getRerunSave(&saved) != 0) return;
 
     if (!rerun_save_unpack(&saved)) {
         // LOG(LOG_LEVEL_INFO, "断电块里没有可用的断点记录");
