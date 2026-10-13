@@ -235,7 +235,7 @@ static void auto_deal_mstb(){
             spl_context.mcode_feedback = false;
             auto_set_tcode_signal(i);
             break;    
-        case M19: // 主轴定位
+        case M19: // 主轴定向
             setRegValue8(REG_F, 10, 0x13); 
             spindle_clear_velocity_arrival();
             spl_context.m19_active = true;

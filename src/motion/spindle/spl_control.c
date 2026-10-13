@@ -271,6 +271,7 @@ void spindle_trace_status(void)
     static bool initialized;
     static unsigned last_flags;
     static double last_target;
+    const char *mode_name;
     bool mf = false, fin = false;
     getRegBit(REG_F, 7, 0, &mf);
     getRegBit(REG_G, 4, 3, &fin);
@@ -285,18 +286,48 @@ void spindle_trace_status(void)
         ((unsigned)spl_context.start_request_pending << 6) |
         ((unsigned)spl_context.deferred_start_pending << 7) |
         ((unsigned)ready << 8) | ((unsigned)mf << 9) | ((unsigned)fin << 10);
+    switch (spindle_driver.act_mode)
+    {
+    case DRV_MODE_CSV:
+        mode_name = "CSV";
+        break;
+    case DRV_MODE_CSP:
+        mode_name = "CSP";
+        break;
+    default:
+        mode_name = "NONE";
+        break;
+    }
     ++cycle;
     if (!initialized || flags != last_flags || target != last_target)
     {
-        LOG(LOG_LEVEL_INFO,
-            "主轴状态 cycle=%llu effective=%.3f planned=%.3f actual=%d "
-            "orient=%d start=%d deferred=%d F45.3=%d F7.0=%d G4.3=%d "
-            "M29=%d position_error=%.0f",
-            (unsigned long long)cycle, target, spl_context.vel_planner.current_vel,
-            spindle_driver.actual_vel, spl_context.orient_phase,
-            spl_context.start_request_pending, spl_context.deferred_start_pending,
-            ready, mf, fin, spl_context.m29_phase,
-            (double)spindle_driver.target_pos - spindle_driver.actual_pos);
+        if (spindle_driver.act_mode == DRV_MODE_CSP)
+        {
+            LOG(LOG_LEVEL_INFO,
+                "主轴状态[%llu] mode=%s target_rpm=%.3f planned_rpm=%.3f "
+                "actual_rpm=%d target_pos=%d actual_pos=%d position_error=%d "
+                "orient=%d start_pending=%d deferred_start=%d "
+                "F45.3_ready=%d F7.0_MF=%d G4.3_FIN=%d M29_phase=%d",
+                (unsigned long long)cycle, mode_name, target,
+                spl_context.vel_planner.current_vel, spindle_driver.actual_vel,
+                spindle_driver.target_pos, spindle_driver.actual_pos,
+                spindle_driver.target_pos - spindle_driver.actual_pos,
+                spl_context.orient_phase, spl_context.start_request_pending,
+                spl_context.deferred_start_pending, ready, mf, fin,
+                spl_context.m29_phase);
+        }
+        else
+        {
+            LOG(LOG_LEVEL_INFO,
+                "主轴状态[%llu] mode=%s target_rpm=%.3f planned_rpm=%.3f "
+                "actual_rpm=%d orient=%d start_pending=%d deferred_start=%d "
+                "F45.3_ready=%d F7.0_MF=%d G4.3_FIN=%d M29_phase=%d",
+                (unsigned long long)cycle, mode_name, target,
+                spl_context.vel_planner.current_vel, spindle_driver.actual_vel,
+                spl_context.orient_phase, spl_context.start_request_pending,
+                spl_context.deferred_start_pending, ready, mf, fin,
+                spl_context.m29_phase);
+        }
     }
     initialized = true;
     last_flags = flags;
