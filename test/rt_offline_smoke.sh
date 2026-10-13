@@ -136,7 +136,7 @@ RT_ENV=("CNC_RT_DUMP=1")   # 让 RT 打一次只读快照，C 阶段验收要看
 [[ "$FAULT"   == "1" ]] && RT_ENV+=("CNC_RT_SIM_FAULT=2")   # 主轴（从站 2）上电即 Fault
 # estopmid：故障一直不消失（把复位按在 PENDING，窗口从几拍拉成 5 秒），
 # 快照取**按压前/后各一拍**，用来判断急停有没有真的到驱动层。
-[[ "$ESTOPMID" == "1" ]] && RT_ENV=("CNC_RT_DUMP=2500,5500" "CNC_RT_SIM_FAULT=2" "CNC_RT_SIM_FAULT_STUCK=1")
+[[ "$ESTOPMID" == "1" ]] && RT_ENV=("CNC_RT_DUMP=1200,2500,4000,5000,5500,6000,6500,7000" "CNC_RT_SIM_FAULT=2" "CNC_RT_SIM_FAULT_STUCK=1")
 [[ "$DRVERR"   == "1" ]] && RT_ENV+=("CNC_RT_SIM_ERR=2,0x1234")   # 主轴（从站 2）报故障码
 [[ "$DRVERRF"  == "1" ]] && RT_ENV+=("CNC_RT_SIM_ERR=3,0x1234")   # 只 X 轴（从站 3）报故障码
 [[ "$BUSFAIL" == "1" ]] && RT_ENV+=("CNC_RT_SIM_FAIL=1")    # 所有驱动读失败
@@ -185,14 +185,45 @@ if [[ "$ESTOPMID" == "1" ]]; then
     #   按压前：复位等待期，进给轴是普通去使能        → 0x0040（Switch on disabled）
     #   按压后：急停的控制字 0x07 真下发到驱动        → 0x0023（Switched on）且仍未使能
     # 普通去使能只会给 0x0040/0x0021，给不出 0x0023 —— 这就是"急停到了驱动层"的证据。
-    # （管道里的 grep 可能不匹配，加 || true 免得 set -e 把脚本掐掉。）
-    pre_sw=$( grep -a -A5 '只读快照 @第 2500 拍' /tmp/rt.out | grep -a 'HAL轴0' | grep -aoE '状态字=0x[0-9A-Fa-f]+' | cut -d= -f2 || true )
-    post_sw=$( grep -a -A5 '只读快照 @第 5500 拍' /tmp/rt.out | grep -a 'HAL轴0' | grep -aoE '状态字=0x[0-9A-Fa-f]+' | cut -d= -f2 || true )
-    post_en=$( grep -a -A5 '只读快照 @第 5500 拍' /tmp/rt.out | grep -a 'HAL轴0' | grep -aoE '使能=-?[0-9]+' | cut -d= -f2 || true )
-    if [[ "$pre_sw" == "0x0040" && "$post_sw" == "0x0023" && "$post_en" == "0" ]]; then
-        echo "  PASS  急停到了驱动层：进给轴 状态字 $pre_sw -> $post_sw（Switched on，且未使能）"
+    # 判据不变（按压前 0x0040、按压后 0x0023 且未使能），但抽样从"精确命中第
+    # 2500/5500 拍"改成**窗口内第一个 / 最后一个可用样本**：只读快照是按精确拍号
+    # 命中的，而 8 秒窗口里 RT 实际只跑到约 5500~6000 拍（1ms 节拍 + 每拍开销），
+    # 固定取第 5500 拍是刀尖判据——实测基线也只能到 5500 拍，换个负载就会假失败。
+    # 取按压后最后一个样本同样能证明"急停到了驱动层"：真没到的话，按压后任何
+    # 样本都还是 0x0040。
+    # 判据不变（复位等待期 0x0040 → 按压后 0x0023 且未使能），但抽样不再绑死
+    # 拍号：只读快照按精确拍号命中，而 RT 相对辅助端的启动时间会漂移（辅助端
+    # 是固定 sleep 释放/按压），8 秒窗口里 RT 实际只跑到约 5500~6000 拍。
+    # 改为**按样本序列**判定：出现过 0x0040（复位等待、普通去使能）之后，
+    # 再出现 0x0023 且使能=0（急停控制字真下发到驱动）。真没到驱动层时，
+    # 按压后所有样本都还是 0x0040；急停一直按着则根本没有 0x0040。
+    pre_seen=0; post_ok=0; snap_n=0; in_snap=0
+    pre_sw=""; post_sw=""; post_en=""
+    while IFS= read -r line; do
+        case "$line" in
+            *"只读快照 @第"*)
+                snap_n=$((snap_n + 1))
+                in_snap=1
+                ;;
+            *"HAL轴0"*)
+                if [[ "$in_snap" == "1" ]]; then
+                    sw=$( printf '%s\n' "$line" | grep -aoE '状态字=0x[0-9A-Fa-f]+' | cut -d= -f2 || true )
+                    en=$( printf '%s\n' "$line" | grep -aoE '使能=-?[0-9]+' | head -1 | cut -d= -f2 || true )
+                    if [[ "$pre_seen" == "0" ]]; then
+                        if [[ "$sw" == "0x0040" ]]; then pre_seen=1; pre_sw="$sw"; fi
+                    else
+                        if [[ "$sw" == "0x0023" && "$en" == "0" ]]; then post_ok=1; fi
+                        post_sw="$sw"; post_en="$en"
+                    fi
+                    in_snap=0
+                fi
+                ;;
+        esac
+    done < /tmp/rt.out
+    if [[ "$pre_seen" == "1" && "$post_ok" == "1" ]]; then
+        echo "  PASS  急停到了驱动层：进给轴 状态字 $pre_sw -> $post_sw（Switched on，且未使能；窗口内 $snap_n 个样本）"
     else
-        echo "  FAIL  急停没到驱动层：状态字 ${pre_sw:-无} -> ${post_sw:-无}，使能=${post_en:-无}（期望 0x0040 -> 0x0023，使能=0）"
+        echo "  FAIL  急停没到驱动层：状态字 ${pre_sw:-无} -> ${post_sw:-无}，使能=${post_en:-无}（期望 0x0040 之后出现 0x0023 且使能=0；窗口内 $snap_n 个样本）"
     fi
     # 反向：复位是被"放弃"的，不该收口（既不该报完成，也不该报超时）。
     if grep -aq -e '故障复位完成' -e '故障复位超时' /tmp/rt.out; then

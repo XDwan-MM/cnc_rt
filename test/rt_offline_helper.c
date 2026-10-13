@@ -12,6 +12,7 @@
  *                                          [--drive-err] [--drive-err-feed]
  *
  * --spindle 跑一段主轴回归：M3 -> M5 -> M19 -> 释放 -> 再 M19。
+ * --cold-orient: simulation-only M19 from rest, without a preceding M3.
  * 走的是真路径：往共享内存的 G 寄存器写边沿，PLC 扫描器翻译成主轴事件，
  * 再从 F 寄存器读回主轴自己的判断（F45.1 转速、F45.3 到速、F45.7 定向完成）。
  * 不接界面、不接硬件，纯粹验"移植后的主轴逻辑 + HAL"这条链。
@@ -164,6 +165,9 @@ static int run_spindle_sequence(void) {
     clearRegBit(REG_G, 29, 6);
     sleep(4);
     expect("M5 后 F45.1（转速<5，应为1）", read_f(45, 1), 1);
+    /* 停止完成（F45.3）必须由主轴控制层在确认零速后置位：PLC 发布层已改成
+     * 只读查询，这条断言端到端保证“删掉发布层反向写状态”之后停止完成照样发布。 */
+    expect("M5 后 F45.3（停止完成）", read_f(45, 3), 1);
 
     printf("-> M19（G70.6 上升沿）\n"); fflush(stdout);
     setRegBit(REG_G, 70, 6);
@@ -186,14 +190,35 @@ static int run_spindle_sequence(void) {
     return spl_failed;
 }
 
+/* Simulation only: cold M19, release, then M19 again without an M3. */
+static int run_cold_orient_sequence(void) {
+    setRegBit(REG_G, 8, 4);
+    sleep(3);
+    expect("cold: stopped", read_f(45, 1), 1);
+    expect("cold: no orientation", read_f(45, 7), 0);
+    for (int i = 0; i < 2; ++i) {
+        printf("[SPL] cold M19 attempt %d\n", i + 1);
+        fflush(stdout);
+        setRegBit(REG_G, 70, 6);
+        sleep(12);
+        expect("cold M19 completed", read_f(45, 7), 1);
+        clearRegBit(REG_G, 70, 6);
+        sleep(2);
+        expect("cold M19 released", read_f(45, 7), 0);
+    }
+    return spl_failed;
+}
+
 int main(int argc, char** argv) {
     int hold = 5;
     int with_params = 0, with_reset = 0, with_spindle = 0, with_estop_mid_reset = 0;
     int with_drive_err = 0, with_drive_err_feed = 0;
+    int with_cold_orient = 0;
     for (int i = 1; i < argc; ++i) {
         if (!strcmp(argv[i], "--params")) with_params = 1;
         else if (!strcmp(argv[i], "--reset")) with_reset = 1;
         else if (!strcmp(argv[i], "--spindle")) { with_spindle = 1; with_params = 1; }
+        else if (!strcmp(argv[i], "--cold-orient")) { with_cold_orient = 1; with_params = 1; }
         else if (!strcmp(argv[i], "--estop-mid-reset")) with_estop_mid_reset = 1;
         else if (!strcmp(argv[i], "--s") && i + 1 < argc) spl_test_speed = atof(argv[++i]);
         else if (!strcmp(argv[i], "--drive-err")) { with_drive_err = 1; with_params = 1; }
@@ -205,15 +230,16 @@ int main(int argc, char** argv) {
     printf("shmInit ok\n"); fflush(stdout);
 
     if (with_params) write_bench_params();
-    if (with_spindle) write_spindle_params();
+    if (with_spindle || with_cold_orient) write_spindle_params();
 
     printf("-> 置 SYS_START_RT\n"); fflush(stdout);
     setSysCommInt(SYS_START_RT, 1, 0);
 
-    if (with_spindle) {
+    if (with_spindle || with_cold_orient) {
         sleep(3);              /* 等 RT 起完 HAL 与各线程 */
         spl_set_override();
-        run_spindle_sequence();
+        if (with_cold_orient) run_cold_orient_sequence();
+        else run_spindle_sequence();
         printf("-> 置 SYS_CLOSE_RT\n"); fflush(stdout);
         setSysCommInt(SYS_CLOSE_RT, 1, 0);
         sleep(3);

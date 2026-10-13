@@ -348,32 +348,13 @@ static void plc_output_axis_status()
 
 static void plc_output_spl_vel_status()
 {
-    const bool spindle_orienting =
-        spl_context.orient_phase == SPINDLE_ORIENT_RUNNING ||
-        spl_context.orient_phase == SPINDLE_ORIENT_DONE ||
-        spl_context.orient_phase == SPINDLE_ORIENT_RELEASING;
-    HalCAxisStatus ax_status;
-    double spl_actual_rpm = 0.0;
-    const bool spindle_faulted =
-        rt_hal_axis_status(RT_HAL_AXIS_SP, &ax_status) == HAL_OK &&
-        (ax_status.raw_status & 0x0008U) != 0U;
-    const bool spindle_safety_stop =
-        rt_data->sys_state[SYS_IS_ESTOP_ACTIVE] || spindle_faulted;
-
-    /* 停止目标已归零时，即使控制周期错过了 ARRIVED 状态，也要发布到速。 */
-    if (!spindle_safety_stop &&
-        !spindle_orienting &&
-        spl_context.spl_state == SPINDLE_STOP &&
-        fabs(spl_context.vel_planner.current_vel) <= 1e-6 &&
-        (rt_hal_spindle_speed(RT_HAL_AXIS_SP, &spl_actual_rpm) != HAL_OK ||
-         fabs(spl_actual_rpm) < 5.0))
-    {
-        spl_context.spl_vel_state = SPINDLE_VEL_ARRIVED;
-    }
-
     //　主轴速度到达信号F45.3
-    if (spl_context.spl_vel_state == SPINDLE_VEL_ARRIVED &&
-        !spindle_orienting)
+    /* 只查询，不反向改任何主轴控制状态：到速/完成反馈完全由主轴控制层判定
+     * （停止完成、复位/急停、定向窗口、M29、模式切换、待启动请求都在
+     * spindle_velocity_is_ready() 里统一屏蔽）。以前这里会强制置
+     * SPINDLE_VEL_ARRIVED —— 还把速度读取失败也当成满足停止条件，结果
+     * F45.3 依赖发布顺序，并可能早于主轴真正停稳。 */
+    if (spindle_velocity_is_ready())
     {
         setRegBit(REG_F, 45, 3);
     }
@@ -389,14 +370,10 @@ static void plc_output_spl_vel_status()
 //    {
 //        clearRegBit(REG_F, 45, 1);
 //    }
+    //　主轴零速信号F45.1：独立反映实际零速，不参与完成状态
     if (fabs(rt_hal_spindle_rpm()) < 5.0)
     {
         setRegBit(REG_F, 45, 1);
-        /* 停止到零时保留 ARRIVED，保证 F45.3 至少保持到 M 代码读到 FIN。 */
-        if (spl_context.spl_vel_state != SPINDLE_VEL_ARRIVED)
-        {
-            spl_context.spl_vel_state = SPINDLE_VEL_ZERO;
-        }
     }
     else
     {
@@ -406,8 +383,8 @@ static void plc_output_spl_vel_status()
 
 static void plc_output_spl_orient_status()
 {
-    /* F45.7 is the ordinary M19 orientation-complete signal.
-     * M29 uses the dedicated NC feedback F76.3 instead. */
+    /* F45.7 是普通 M19 定向完成信号；M29 的完成由 auto_mst.c 用
+     * PLC FIN + NC CSP 就绪的双条件握手判定，不在这里发布。 */
     if (spl_orient_is_done() && !spl_context.m29_active)
     {
         setRegBit(REG_F, 45, 7);
