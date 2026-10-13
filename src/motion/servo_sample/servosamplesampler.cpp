@@ -6,6 +6,7 @@
 
 #include "global.h"
 #include "servosampleapi.h"
+#include "tapreturn.h"
 
 namespace {
 constexpr double kMinVelocity = 1.0e-9;
@@ -54,8 +55,8 @@ void ServoSampleSampler::ensureShared()
     const uint32_t version = __atomic_load_n(&_shared->protocolVersion, __ATOMIC_ACQUIRE);
     if (version == CNC_SERVO_SAMPLE_PROTOCOL_VERSION) return;
 
-    // The HMI and realtime process must use the same ABI. Reset once on startup
-    // instead of interpreting a stale v1 layout as a live capture session.
+    // HMI 与实时进程必须使用相同的 ABI。启动时只复位一次，
+    // 避免把残留的 v1 布局误认为正在进行的采样会话。
     std::memset(_shared, 0, sizeof(*_shared));
     __atomic_store_n(&_shared->protocolVersion, CNC_SERVO_SAMPLE_PROTOCOL_VERSION,
                      __ATOMIC_RELEASE);
@@ -83,9 +84,8 @@ void ServoSampleSampler::execute()
             (cycle_tp->plan_block->type == RIGID_TAP || cycle_tp->plan_block->type == TAP_RETURN);
         _tapMotionActive = tapMotion;
         if (isRigidTapConfig(_config)) {
-            // Sampling starts immediately after the HMI START request.  The
-            // tap block only gates synchronization-error integration; basic
-            // velocity/RPM/angle feedback is collected before G74/G84 too.
+            // HMI 发出开始请求后立即采样。攻丝程序块只控制同步误差积分，
+            // 基本的速度、转速和角度反馈在进入 G74/G84 前也会采集。
             __atomic_store_n(&_shared->samplePhase,
                              tapMotion
                                  ? (cycle_tp->plan_block->type == TAP_RETURN
@@ -95,9 +95,8 @@ void ServoSampleSampler::execute()
                              __ATOMIC_RELEASE);
         }
         if (isExternalMotionConfig(_config) && !_circleCaptureStarted) {
-            /* The generated circle program contains a straight-line
-             * pre-position move.  Do not put that move into the circle fit;
-             * open the capture window only after the planner enters an arc. */
+            /* 生成的圆度程序包含直线预定位移动。不要把该移动纳入圆拟合，
+             * 只有规划器进入圆弧后才打开采样窗口。 */
             if (!isCircleMotionActive()) return;
             _circleCaptureStarted = true;
             _circleArcBlockCount = 1;
@@ -109,10 +108,8 @@ void ServoSampleSampler::execute()
             _actualCompositeVelocityMmPerMin = 0.0;
         } else if (isExternalMotionConfig(_config)) {
             if (!isCircleMotionActive()) {
-                /* The generated test contains exactly two semicircles.  End
-                 * the external session as soon as the second arc is left so
-                 * M30 and any following idle cycles cannot contaminate the
-                 * fit with stationary samples. */
+                /* 生成的测试程序恰好包含两段半圆。离开第二段圆弧后立即结束
+                 * 外部会话，避免 M30 及后续空闲周期产生的静止采样污染拟合结果。 */
                 if (_circleArcBlockCount >= 2) {
                     finish(CNC_SERVO_STATE_COMPLETED, CNC_SERVO_STOP_PROGRAM_END,
                            CNC_SERVO_ERROR_NONE);
@@ -143,7 +140,10 @@ void ServoSampleSampler::execute()
             const double feedDirection = std::fabs(feedCommand) > kMinVelocity
                 ? (feedCommand < 0.0 ? -1.0 : 1.0) : 1.0;
             const double expected = feedDirection * std::fabs(rpm * _config.tapPitchMm);
-            if (_tapMotionActive && _tapSyncSampleCount > 10U && std::fabs(rpm) < 1.0e-6) {
+            // 启动、暂停和换向时转速为零是正常现象。只有确认进给轴确实运动后，
+            // 才判定为缺少主轴反馈。
+            if (_tapMotionActive && _tapSyncSampleCount > 10U &&
+                std::fabs(feed) > 1.0 && std::fabs(rpm) < 1.0e-6) {
                 finish(CNC_SERVO_STATE_ERROR, CNC_SERVO_STOP_SAFETY,
                        CNC_SERVO_ERROR_TAP_NO_SPINDLE_FEEDBACK);
                 return;
@@ -164,8 +164,8 @@ void ServoSampleSampler::execute()
             }
         }
 
-        /* External sessions do not use generic program-state completion;
-         * circle completion is handled by the two-arc capture gate above. */
+        /* 外部会话不使用通用的程序状态结束条件；圆度测试由上面的两段圆弧
+         * 采样门控逻辑负责结束。 */
         if (isExternalMotionConfig(_config)) {
             return;
         }
@@ -224,9 +224,8 @@ void ServoSampleSampler::handleCommand()
         } else if (state == CNC_SERVO_STATE_RUNNING || state == CNC_SERVO_STATE_DRAINING) {
             __atomic_store_n(&_shared->errorCode, CNC_SERVO_ERROR_BUSY, __ATOMIC_RELEASE);
         } else if (isExternalMotionConfig(_config)) {
-            // Circle tests are armed first so the pre-position move cannot
-            // enter the capture window.  Rigid tapping follows the ordinary
-            // sample-start path and waits inside RUNNING for a tap block.
+            // 圆度测试先进入待命状态，避免预定位移动进入采样窗口。
+            // 刚性攻丝沿用普通的采样开始流程，在 RUNNING 状态等待攻丝程序块。
             __atomic_store_n(&_shared->state, CNC_SERVO_STATE_ARMED, __ATOMIC_RELEASE);
             __atomic_store_n(&_shared->errorCode, CNC_SERVO_ERROR_NONE, __ATOMIC_RELEASE);
         } else {
@@ -241,7 +240,7 @@ void ServoSampleSampler::handleCommand()
             _drainRequested = 1;
             __atomic_store_n(&_shared->state, CNC_SERVO_STATE_DRAINING, __ATOMIC_RELEASE);
         } else if (state == CNC_SERVO_STATE_DRAINING) {
-            // The pending final sample will complete the stop request.
+            // 等待中的最后一个采样点会完成停止请求。
         } else if (state != CNC_SERVO_STATE_IDLE) {
             finish(CNC_SERVO_STATE_COMPLETED, CNC_SERVO_STOP_MANUAL,
                    CNC_SERVO_ERROR_NONE);
@@ -296,9 +295,8 @@ void ServoSampleSampler::handleReset()
     __atomic_store_n(&_shared->programSequence, 0U, __ATOMIC_RELEASE);
     __atomic_store_n(&_shared->stopReason, CNC_SERVO_STOP_RESET, __ATOMIC_RELEASE);
     __atomic_store_n(&_shared->errorCode, CNC_SERVO_ERROR_NONE, __ATOMIC_RELEASE);
-    // Reset clears the previous capture and returns every session to the
-    // registration/program-ready state.  An external circle/tap capture is
-    // armed only by the subsequent explicit HMI start request.
+    // 复位会清除上一次采样，并将所有会话恢复到注册/程序就绪状态。
+    // 外部圆度或攻丝采样只有在 HMI 随后明确发出开始请求后才进入待命状态。
     __atomic_store_n(&_shared->state, CNC_SERVO_STATE_WAITING_PROGRAM,
                      __ATOMIC_RELEASE);
 }
@@ -358,9 +356,8 @@ bool ServoSampleSampler::registerConfig(const CncServoSampleConfig& config,
                      __ATOMIC_RELEASE);
     __atomic_store_n(&_shared->stopReason, CNC_SERVO_STOP_NONE, __ATOMIC_RELEASE);
     __atomic_store_n(&_shared->errorCode, CNC_SERVO_ERROR_NONE, __ATOMIC_RELEASE);
-    // Registration only installs the configuration.  Loading an NC file is
-    // handled by the normal HMI path; the explicit start request arms an
-    // external circle or tap session.
+    // 注册只负责写入配置。NC 文件由 HMI 的常规流程加载；明确的开始请求
+    // 才会使外部圆度或攻丝会话进入待命状态。
     __atomic_store_n(&_shared->state,
                      CNC_SERVO_STATE_WAITING_PROGRAM,
                      __ATOMIC_RELEASE);
@@ -371,8 +368,7 @@ bool ServoSampleSampler::registerConfig(const CncServoSampleConfig& config,
 void ServoSampleSampler::acknowledgeProgram(uint32_t sequence)
 {
     if (isExternalMotionConfig(_config)) {
-        /* External mode intentionally never switches target mode to MDI or
-         * requires a program sequence handshake. */
+        /* 外部模式不会切换目标模式到 MDI，也不需要程序序列握手。 */
         __atomic_store_n(&_shared->errorCode, CNC_SERVO_ERROR_NONE,
                          __ATOMIC_RELEASE);
         __atomic_store_n(&_shared->acknowledgedSequence, sequence,
@@ -393,8 +389,8 @@ void ServoSampleSampler::acknowledgeProgram(uint32_t sequence)
         return;
     }
 
-    // Keep the operator-selected mode. AUTO, MDI and manual motion can all
-    // feed the sampler; the mode is interpreted by the motion controller.
+    // 保留操作员选择的模式。AUTO、MDI 和手动运动都可以向采样器提供数据，
+    // 具体模式由运动控制器解释。
     __atomic_store_n(&_shared->programSequence, requested, __ATOMIC_RELEASE);
     __atomic_store_n(&_shared->errorCode, CNC_SERVO_ERROR_NONE, __ATOMIC_RELEASE);
     __atomic_store_n(&_shared->state, CNC_SERVO_STATE_ARMED, __ATOMIC_RELEASE);
@@ -502,7 +498,7 @@ bool ServoSampleSampler::validateConfig(const CncServoSampleConfig& config,
         const CncServoSampleChannel& channel = config.channels[i];
         if (!channel.enabled) continue;
         if (channel.signalId < CNC_SERVO_SIGNAL_CMD_POS ||
-            channel.signalId > CNC_SERVO_SIGNAL_CMD_SPINDLE_ANGLE) {
+            channel.signalId > CNC_SERVO_SIGNAL_RIGID_POS_SYNC_ERROR) {
             if (error) *error = CNC_SERVO_ERROR_INVALID_CONFIG;
             return false;
         }
@@ -523,8 +519,7 @@ bool ServoSampleSampler::validateConfig(const CncServoSampleConfig& config,
         return false;
     }
     if (config.mode == CNC_SERVO_SAMPLE_MODE_EXTERNAL) {
-        /* Circle/external sessions require four position channels with
-         * channel-local horizontal/vertical axes. */
+        /* 圆度/外部会话必须包含四个位置通道，并为每个通道指定横轴/纵轴。 */
         if (config.loopType != CNC_SERVO_LOOP_POSITION || hasCompositeSignal ||
             config.channelMask != 0x0FU ||
             config.channels[0].signalId != CNC_SERVO_SIGNAL_ACT_POS ||
@@ -547,15 +542,10 @@ bool ServoSampleSampler::validateConfig(const CncServoSampleConfig& config,
             return false;
         }
         if (config.loopType != CNC_SERVO_LOOP_VELOCITY || config.tapSyncSource != CNC_SERVO_SYNC_SOURCE_SPINDLE ||
-            config.channelMask != 0x0FU || config.channels[0].signalId != CNC_SERVO_SIGNAL_ACT_VEL ||
-            config.channels[1].signalId != CNC_SERVO_SIGNAL_ACT_SPINDLE_RPM ||
-            config.channels[2].signalId != CNC_SERVO_SIGNAL_ACT_SPINDLE_ANGLE ||
-            config.channels[3].signalId != CNC_SERVO_SIGNAL_CMD_VEL || config.tapPlane > 2U ||
-            config.tapCycle > 1U || config.tapSpindleMCode < 3U || config.tapSpindleMCode > 4U ||
-            config.tapSpindleStopMCode != 5U ||
-            config.tapRPointMm < 0.0 || config.tapDwellMs < 0.0 ||
-            config.tapRotaryAxis < -1 || config.tapRotaryAxis > 5 ||
-            !std::isfinite(config.tapRotaryParameter)) {
+            config.channelMask != 0x03U || config.channels[0].signalId != CNC_SERVO_SIGNAL_RIGID_POS_SYNC_ERROR ||
+            config.channels[1].signalId != CNC_SERVO_SIGNAL_ACT_VEL || config.channels[0].axis != AXIS_Z ||
+            config.channels[1].axis != AXIS_Z || config.tapPlane > 2U ||
+            config.tapCycle > 1U || config.tapRPointMm < 0.0 || config.tapDwellMs < 0.0) {
             if (error) *error = CNC_SERVO_ERROR_INVALID_CONFIG;
             return false;
         }
@@ -697,19 +687,16 @@ void ServoSampleSampler::sampleOne()
     const double cmdCompositeVel = var_chan[0][VAR_CHAN_CMD_FEEDRATE].value.f;
     for (uint32_t i = 0; i < CNC_SERVO_SAMPLE_CHANNEL_COUNT; ++i) {
         if (!_config.channels[i].enabled) continue;
-        // A channel may override the session axis.  Axis zero is also the
-        // compatibility value for the session's X axis, so existing
-        // single-axis configurations remain unchanged while dual-axis tap
-        // sessions can sample the synchronizing axis explicitly.
+        // 通道可以覆盖会话轴。轴 0 同时是会话 X 轴的兼容值，因此既有单轴配置
+        // 保持不变，而双轴攻丝会话可以明确采集同步轴。
         const uint32_t axis = _config.channels[i].axis;
         const bool spindleSignal = isSpindleSignal(_config.channels[i].signalId);
         const double channelCmdPos = spindleSignal ? rt_data->axis_data[AXIS_SP].motor_cmd_pos
                                                     : rt_data->axis_data[axis].mac_cmd_pos;
         const double channelActPos = spindleSignal ? rt_data->axis_data[AXIS_SP].motor_act_pos
                                                     : rt_data->axis_data[axis].motor_act_pos;
-        // Sample the realtime values directly.  This avoids a one-cycle
-        // dependency on the shared-variable mirror and makes debug feedback
-        // use the same source as the realtime motion controller.
+        // 直接采集实时值，避免依赖共享变量镜像造成一个周期的延迟，
+        // 并使调试反馈与实时运动控制器使用相同的数据源。
         const double channelCmdVel = rt_data->axis_data[axis].cmd_vel * TIME_MINUS_2_S;
         const double channelActVel = rt_data->axis_data[axis].act_vel * TIME_MINUS_2_S;
         const double channelFollowErrUm = (channelCmdPos - channelActPos) * 1000.0;
@@ -732,18 +719,40 @@ void ServoSampleSampler::sampleOne()
         case CNC_SERVO_SIGNAL_CMD_SPINDLE_ANGLE:
             frame.values[i] = rt_data->axis_data[AXIS_SP].motor_cmd_pos;
             break;
+        case CNC_SERVO_SIGNAL_RIGID_POS_SYNC_ERROR:
+            frame.values[i] = (_tapMotionActive && _config.tapPitchMm > 0.0)
+                ? cal_rigid_pos_sync_error() * _config.tapPitchMm * 1000.0 : 0.0;
+            break;
         default: break;
         }
     }
     _shared->samples[count] = frame;
     __atomic_store_n(&_shared->sampleCount, count + 1U, __ATOMIC_RELEASE);
     if (isRigidTapConfig(_config) && _tapMotionActive) {
+        const double syncErrorMm = cal_rigid_pos_sync_error() * _config.tapPitchMm;
+        if (_tapSyncSampleCount == 0) {
+            _tapSyncMinimumMm = _tapSyncMaximumMm = syncErrorMm;
+        } else {
+            _tapSyncMinimumMm = std::min(_tapSyncMinimumMm, syncErrorMm);
+            _tapSyncMaximumMm = std::max(_tapSyncMaximumMm, syncErrorMm);
+        }
+        _tapSyncErrorSumMm += syncErrorMm;
+        ++_tapSyncSampleCount;
+        _shared->tapSyncMaxMm = std::max(std::fabs(_tapSyncMinimumMm),
+                                         std::fabs(_tapSyncMaximumMm));
+        _shared->tapSyncMinMm = _tapSyncMinimumMm;
+        _shared->tapSyncAverageMm = _tapSyncErrorSumMm /
+            static_cast<double>(_tapSyncSampleCount);
+        __atomic_store_n(&_shared->tapSyncSampleCount, _tapSyncSampleCount, __ATOMIC_RELEASE);
+    }
+    /* 安全检查始终基于直接反馈，与上面选择的显示通道无关。 */
+    if (isRigidTapConfig(_config) && _tapMotionActive) {
         const double rpm = static_cast<double>(spindle.actual_vel);
         const double feed = rt_data->axis_data[_config.axis].act_vel * TIME_MINUS_2_S;
         const double feedCommand = rt_data->axis_data[_config.axis].cmd_vel * TIME_MINUS_2_S;
         const double feedDirection = std::fabs(feedCommand) > kMinVelocity
             ? (feedCommand < 0.0 ? -1.0 : 1.0) : 1.0;
-        const double spindleAngle = frame.values[2];
+        const double spindleAngle = rt_data->axis_data[AXIS_SP].motor_act_pos;
         const double tapAxisPosition = rt_data->axis_data[_config.axis].motor_act_pos;
         if (!std::isfinite(spindleAngle) || !std::isfinite(tapAxisPosition) ||
             !std::isfinite(rpm) || !std::isfinite(feed)) {
@@ -756,9 +765,8 @@ void ServoSampleSampler::sampleOne()
             _lastTapSpindleAngle = spindleAngle;
             _lastTapAxisPosition = tapAxisPosition;
         } else {
-            // The rigid-tap error is tied to the measured spindle phase, not
-            // the commanded RPM.  Normalize one sample's angle increment so
-            // encoder wraparound does not create a false full-turn jump.
+            // 刚性攻丝误差与测得的主轴相位相关，而不是与指令转速相关。
+            // 对单个采样点的角度增量归一化，避免编码器回绕造成虚假的整圈跳变。
             double angleDelta = spindleAngle - _lastTapSpindleAngle;
             while (angleDelta > 180.0) angleDelta -= 360.0;
             while (angleDelta < -180.0) angleDelta += 360.0;
@@ -769,19 +777,6 @@ void ServoSampleSampler::sampleOne()
             _lastTapSpindleAngle = spindleAngle;
             _lastTapAxisPosition = tapAxisPosition;
         }
-        _tapSyncErrorSumMm += _tapSyncIntegralMm;
-        if (_tapSyncSampleCount == 0) {
-            _tapSyncMinimumMm = _tapSyncMaximumMm = _tapSyncIntegralMm;
-        } else {
-            _tapSyncMinimumMm = std::min(_tapSyncMinimumMm, _tapSyncIntegralMm);
-            _tapSyncMaximumMm = std::max(_tapSyncMaximumMm, _tapSyncIntegralMm);
-        }
-        ++_tapSyncSampleCount;
-        _shared->tapSyncMaxMm = _tapSyncMaximumMm;
-        _shared->tapSyncMinMm = _tapSyncMinimumMm;
-        _shared->tapSyncAverageMm =
-            _tapSyncErrorSumMm / static_cast<double>(_tapSyncSampleCount);
-        __atomic_store_n(&_shared->tapSyncSampleCount, _tapSyncSampleCount, __ATOMIC_RELEASE);
     }
 }
 

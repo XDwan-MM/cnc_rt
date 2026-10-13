@@ -120,6 +120,7 @@ void PlcTask::initDispatchTable() {
     _dispatchTable[OP_ALT] = &PlcTask::handleALT;
     // 旋转操作
     _dispatchTable[OP_ROT] = &PlcTask::handleROT;
+    // 数据获取
     _dispatchTable[OP_PARGET] = &PlcTask::handlePARGET;
     _dispatchTable[OP_SPGET] = &PlcTask::handleSPGET;
     _dispatchTable[OP_AXGET] = &PlcTask::handleAXGET;

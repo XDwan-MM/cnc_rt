@@ -308,9 +308,10 @@ static void check_for_fault()
 static void read_from_hal()
 {
     // 记录上周期
-    rt_data->axis_data[AXIS_X].wcs_cmd_pos_pre = rt_data->axis_data[AXIS_X].motor_act_pos;
-    rt_data->axis_data[AXIS_Y].wcs_cmd_pos_pre = rt_data->axis_data[AXIS_Y].motor_act_pos;
-    rt_data->axis_data[AXIS_Z].wcs_cmd_pos_pre = rt_data->axis_data[AXIS_Z].motor_act_pos;
+    rt_data->axis_data[AXIS_X].motor_act_pos_pre = rt_data->axis_data[AXIS_X].motor_act_pos;
+    rt_data->axis_data[AXIS_Y].motor_act_pos_pre = rt_data->axis_data[AXIS_Y].motor_act_pos;
+    rt_data->axis_data[AXIS_Z].motor_act_pos_pre = rt_data->axis_data[AXIS_Z].motor_act_pos;
+    rt_data->axis_data[AXIS_SP].motor_act_pos_pre = rt_data->axis_data[AXIS_SP].motor_cmd_pos;
     // 读取实际位置
 #ifdef DEBUG_MODE_ENABLED
     rt_data->axis_data[AXIS_X].motor_act_pos = rt_data->axis_data[AXIS_X].motor_cmd_pos;

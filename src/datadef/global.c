@@ -13,6 +13,7 @@
 #include <hmisysapi.h>
 #include <pthread.h>
 #include "tapreturn.h"
+#include "debug_mode.h"
 
 // ==============全局变量定义===============
 sem_t exit_sem;                         // 退出信号
@@ -306,8 +307,12 @@ void shm_var_update(){
         setVarAxisDouble(i, VAR_AXIS_CMD_POS_RCS_EX, real, 0);
         // 机械坐标 = 机床指令位置
         setVarAxisDouble(i, VAR_AXIS_CMD_POS_EX, rt_data->axis_data[i].mac_cmd_pos, 0);
-        // 机床实际位置
+        // 机床实际位置。仿真反馈包含误差补偿，显示机械坐标时去除补偿。
+#ifdef DEBUG_MODE_ENABLED
+        setVarAxisDouble(i, VAR_AXIS_ACT_POS_EX, rt_data->axis_data[i].fb_pos_no_comp, 0);
+#else
         setVarAxisDouble(i, VAR_AXIS_ACT_POS_EX, rt_data->axis_data[i].motor_act_pos, 0);
+#endif
         // 电机脉冲
         setVarAxisInt(i, VAR_AXIS_ENC_CNTR, rt_data->axis_data[i].enc_cntr, 0);
         // 实际轴速度
