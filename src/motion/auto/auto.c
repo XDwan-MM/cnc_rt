@@ -746,6 +746,9 @@ static void auto_update_stage(){
 // 检查程序是否结束
 static bool auto_check_program_end(){
     if(auto_is_program_end()) {
+
+        if(cycle_tp->running_stage !=PROGRAM_END ) 
+            rerun_data_reset();
         // 检查程序是否结束
         cycle_tp->running_stage = PROGRAM_END;
         // 检查译码错误
