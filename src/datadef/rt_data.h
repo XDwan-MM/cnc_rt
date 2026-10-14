@@ -165,6 +165,11 @@ typedef struct
     double nlmt;                        // 负软极限
     double plmt2;                       // 第二级正软极限
     double nlmt2;                       // 第二级负软极限
+    double plmt3;                       // 第三级正软极限
+    double nlmt3;                       // 第三级负软极限
+    int lmt2_type;                      // 第二级正软极限类型
+    int lmt2_enable;                    // 第二级正软极限开启
+    int lmt3_enable;                    // 第三级负软极限开启
     double spl_default_speed;           // 主轴缺省速度
     double spdl_max_speed;              // 主轴最大转速(r/min)
     bool ex_dec_enable_pos_cut;         // 外部减速信号对正向切削进给是否生效
