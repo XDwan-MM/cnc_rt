@@ -7,6 +7,7 @@
 #include <math.h>
 #include <parapi.h>
 #include <regapi.h>
+#include <string.h>
 
 #define SPINDLE_CONTROL_PERIOD_SECONDS (0.001)
 #define SPINDLE_SPEED_EPSILON          (1e-6)
@@ -47,15 +48,9 @@ static bool spindle_validate_start_request(const spindle_context_t *context);
 static bool spindle_report_missing_speed_alarm(const char *message);
 static double spindle_get_selected_speed(const spindle_context_t *context);
 
-/* ---- HAL 访问器（方案 B）--------------------------------------------------
- * 他们的主轴逻辑直接读 driver_hal_t 的字段（共 155 处）。换成 HAL 之后不再有那份
- * 句柄，所以这里给一组**按需查询**的访问器：每次调用现查 HAL 快照，不留持久镜像，
- * 免得镜像和 HAL 脱节。
- *
- * HAL 没有的（target_vel / target_pos / req_mode）才是 RT 本地量，见下面 s_spl_*。
- * 状态机内部的（DS402 状态、控制字、模式切换进度）**HAL 独占**，上层不该看 ——
- * 原来读它们的逻辑要改成"看结果不看过程"（如 enabled / mode）。
- * -------------------------------------------------------------------------- */
+/* ---- HAL 访问器（方案 B）：按需现查 HAL 快照，不留持久镜像 ----
+ * HAL 没有的（target_vel / target_pos / req_mode）才是 RT 本地量（s_spl_*）；
+ * 状态机内部的（DS402 状态、控制字、模式切换进度）由 HAL 独占，上层只看结果。 */
 static int spl_drv_enabled(void) {
     HalCAxisStatus st;
     return rt_hal_axis_status(RT_HAL_AXIS_SP, &st) == HAL_OK ? st.enabled : 0;
@@ -84,8 +79,8 @@ static int spl_drv_orient_state(void) {
 static int spl_drv_switch_on_disabled(void) {
     return (spl_drv_status_word() & 0x006FU) == 0x0021U;
 }
-/* HAL 的释放是把控制字交回状态机并重新使能，不是退回 0x21，
- * 所以"释放完成"看的是定向状态已经退回 NONE。 */
+/* HAL 的释放是把控制字交回状态机并重新使能（不是退回 0x21），
+ * 故"释放完成"看定向状态是否退回 NONE。 */
 static int spl_drv_orient_inactive(void) {
     return spl_drv_orient_state() == HAL_ORIENT_NONE;
 }
@@ -95,10 +90,88 @@ static double s_spl_target_vel;
 static double s_spl_target_pos;
 static int    s_spl_req_mode = HAL_SPINDLE_CSV;
 
-/* ---- 模式切换 ----
- * HAL 自己走完"减速 -> 去使能 -> 写 6060 -> 等 6061 -> 重新使能"，
- * 上层不再有中间状态，只留一个完成闩锁，表达"请求下去了没有、跟上没有"。
- * 同事那套 DECELERATING/WAIT_READY/WAIT_MODE/... 由 HAL 内部取代。 */
+/* M29 交回 M3/M5/复位后继续观察 PLC 清理过程 */
+static unsigned s_m29_trace_tail;
+static bool s_m29_trace_start;
+
+void spindle_m29_plc_trace_tick(void)
+{
+    static const struct { RegType type; int idx; int bit; } channels[] = {
+        {REG_F,76,3}, {REG_G,61,0}, {REG_R,560,0}, {REG_R,560,1},
+        {REG_R,560,2}, {REG_R,500,3}, {REG_G,70,5}, {REG_G,70,4},
+        {REG_R,1,0}, {REG_G,4,3}, {REG_F,7,0}, {REG_R,643,5},
+        {REG_K,1,3}, {REG_R,284,0}, {REG_R,284,1}, {REG_R,1000,3},
+        {REG_R,108,4}, {REG_A,0,5}, {REG_R,212,4}, {REG_F,1,1},
+        {REG_F,45,0}, {REG_F,0,6}, {REG_R,500,5}, {REG_R,500,7},
+        {REG_R,999,5}, {REG_R,282,0}, {REG_R,282,1}, {REG_R,640,4},
+        {REG_X,0,3}
+    };
+    static int previous[sizeof(channels) / sizeof(channels[0])];
+    static bool initialized;
+    static int previous_phase;
+    static bool previous_active;
+    static uint32_t sample;
+    int values[sizeof(channels) / sizeof(channels[0])];
+    ++sample;
+    if (!spl_context.m29_active && !s_m29_trace_tail) return;
+    for (unsigned i = 0; i < sizeof(channels) / sizeof(channels[0]); ++i) {
+        bool value = false;
+        values[i] = getRegBit(channels[i].type, channels[i].idx,
+                             channels[i].bit, &value) == 0 ? (int)value : -1;
+    }
+    if (spl_context.m29_active) s_m29_trace_tail = 2000;
+    if (s_m29_trace_tail && (s_m29_trace_start || !initialized ||
+        previous_phase != (int)spl_context.m29_phase ||
+        previous_active != spl_context.m29_active ||
+        memcmp(previous, values, sizeof(values)))) {
+        LOG(LOG_LEVEL_INFO,
+            "M29 PLC变化 sample=%u phase=%d active=%d "
+            "F76.3=%d G61.0=%d R560.0=%d R560.1=%d R560.2=%d R500.3=%d "
+            "G70.5=%d G70.4=%d R1.0=%d G4.3=%d F7.0=%d R643.5=%d "
+            "K1.3=%d R284.0=%d R284.1=%d R1000.3=%d R108.4=%d A0.5=%d "
+            "R212.4=%d F1.1=%d F45.0=%d F0.6=%d R500.5=%d R500.7=%d "
+            "R999.5=%d R282.0=%d R282.1=%d R640.4=%d X0.3=%d",
+            (unsigned)sample, spl_context.m29_phase, spl_context.m29_active,
+            values[0], values[1], values[2], values[3], values[4], values[5],
+            values[6], values[7], values[8], values[9], values[10], values[11],
+            values[12], values[13], values[14], values[15], values[16], values[17],
+            values[18], values[19], values[20], values[21], values[22], values[23],
+            values[24], values[25], values[26], values[27], values[28]);
+    }
+    /* M29 入口补打一次持久驱动故障（首次报警可能早于本次采集） */
+    static int last_axis[RT_HAL_AXIS_COUNT][6];
+    static bool axes_initialized;
+    for (int slot = 0; slot < RT_HAL_AXIS_COUNT; ++slot) {
+        HalCAxisStatus status = {0};
+        const int rc = rt_hal_axis_status((RtHalAxisSlot)slot, &status);
+        const int current[6] = {
+            rt_data->axis_data[slot].status.is_error,
+            rt_data->axis_data[slot].status.is_disable,
+            rc, rc == HAL_OK ? status.raw_status : -1,
+            rc == HAL_OK ? status.error_code_valid : -1,
+            rc == HAL_OK ? status.error_code : -1
+        };
+        if (s_m29_trace_start || !axes_initialized ||
+            memcmp(last_axis[slot], current, sizeof(current))) {
+            LOG(LOG_LEVEL_INFO,
+                "M29故障源 sample=%u slot=%d is_error=%d disabled=%d rc=%d "
+                "status_word=%d error_valid=%d error_code=%d F0.6=%d F45.0=%d",
+                (unsigned)sample, slot, current[0], current[1], current[2],
+                current[3], current[4], current[5], values[21], values[20]);
+            memcpy(last_axis[slot], current, sizeof(current));
+        }
+    }
+    axes_initialized = true;
+    if (s_m29_trace_tail) --s_m29_trace_tail;
+    s_m29_trace_start = false;
+    memcpy(previous, values, sizeof(values));
+    previous_phase = spl_context.m29_phase;
+    previous_active = spl_context.m29_active;
+    initialized = true;
+}
+
+/* ---- 模式切换：HAL 内部走完"减速 -> 去使能 -> 写 6060 -> 等 6061 -> 重新使能"，
+ * 上层只留一个完成闩锁，表达"请求下去了没有、跟上没有"。 ---- */
 #define SPL_MS_IDLE      0
 #define SPL_MS_SWITCHING 1
 #define SPL_MS_DONE      2
@@ -118,28 +191,21 @@ static int32_t spl_ms_result(void) { return s_spl_ms_rc; }
 static void spl_ms_reset(void) { s_spl_ms = SPL_MS_IDLE; s_spl_ms_rc = HAL_OK; }
 
 static int spl_ms_request(HalSpindleMode mode) {
-    if (spl_drv_mode() == (int)mode) {   /* 已经在这个模式，不用切 */
-        s_spl_req_mode = mode;
-        s_spl_ms = SPL_MS_DONE;
-        s_spl_ms_rc = HAL_OK;
-        return HAL_OK;
-    }
+    /* 反馈可能已匹配，但 HAL 里还排着反向请求，所以每次都往下发 */
     s_spl_ms_rc = rt_hal_request_spindle_mode(RT_HAL_AXIS_SP, mode);
     if (s_spl_ms_rc == HAL_OK) {
         s_spl_req_mode = mode;
-        s_spl_ms = SPL_MS_SWITCHING;
+        s_spl_ms = spl_drv_mode() == (int)mode ? SPL_MS_DONE : SPL_MS_SWITCHING;
     } else {
         s_spl_ms = SPL_MS_ERROR;
     }
     return s_spl_ms_rc;
 }
 
-/* 使能声明。**这里只设"意愿位"，不直接写 HAL。**
- *
- * 主轴若自己写 HAL，就和 hal_axis_intent_poll() 抢同一个字段，而后者每拍无条件
- * enable(1)、后写赢——结果就是主轴所有去使能全部失效（M5 停稳后仍带力矩、
- * CSP/CSV 切换失败也不下使能），而且复位在飞时还会把待复位取消掉。
- * 现在统一由 poll 表达：它把这里的意愿合并进去，急停与轴屏蔽永远优先。 */
+/* 使能声明：这里只设"意愿位"，不直接写 HAL。
+ * 主轴若自己写 HAL 会与 hal_axis_intent_poll() 抢同一字段，后者每拍无条件 enable(1)、
+ * 后写赢，会导致主轴的去使能全部失效（M5 停稳仍带力矩、切换失败也不下使能，且会取消在飞复位）。
+ * 统一由 poll 合并，急停与轴屏蔽永远优先。 */
 static void spl_drv_enable(void)  { rt_data->axis_data[AXIS_SP].status.spindle_wants_torque = true; }
 static void spl_drv_disable(void) { rt_data->axis_data[AXIS_SP].status.spindle_wants_torque = false; }
 
@@ -157,6 +223,7 @@ static bool spindle_is_rotating(void);
 static void spindle_publish_status(void);
 static void spindle_report_mcode_complete(void);
 static void spindle_update_orient_state(void);
+static void spindle_sync_planner_to_actual(void);
 static void spindle_publish_rigid_state(void);
 static void spindle_apply_deferred_start(void);
 static void spindle_update_m29(void);
@@ -192,7 +259,7 @@ void spindle_control_update(void)
         // printg("85\n");
         /* 急停解除后必须等待新的 M3/M4，不能恢复急停前的旧速度。 */
         spl_context.reset_requires_start = true;
-        spindle_clear_velocity_arrival();   /* 新指令/安全事件：先清上一条的到速完成 */
+        spindle_clear_velocity_arrival();   /* 新指令/安全事件：清旧到速完成 */
         spl_context.start_request_pending = false;
         spl_context.orient_request_pending = false;
         spl_context.orient_release_pending = false;
@@ -213,7 +280,7 @@ void spindle_control_update(void)
         (nc_reset != NULL && nc_reset->is_resetting))
     {
         spl_context.reset_requires_start = true;
-        spindle_clear_velocity_arrival();   /* 新指令/安全事件：先清上一条的到速完成 */
+        spindle_clear_velocity_arrival();   /* 新指令/安全事件：清旧到速完成 */
         // printg("103\n");
         spl_context.start_request_pending = false;
         spl_context.deferred_start_pending = false;
@@ -230,7 +297,7 @@ void spindle_control_update(void)
         {
             // printg("115\n");
             spl_context.spl_event = SPINDLE_EVENT_RELEASE_ORIENT;
-            spindle_clear_velocity_arrival();   /* 新指令/安全事件：先清上一条的到速完成 */
+            spindle_clear_velocity_arrival();   /* 新指令/安全事件：清旧到速完成 */
             release_orient_event = true;
         }
         /* 复位结束当前 M19 握手，新的 M3/M4 可以重新取得主轴控制权。 */
@@ -280,13 +347,10 @@ void spindle_control_update(void)
     spindle_publish_rigid_state();
 }
 
-/* 「刚性攻丝方式中」的状态来源：M29 接管主轴起置起，直到 M03/M04/M05、复位/急停
- * 或 M29 出错把它落下（这些路径都会把 m29_phase 清回 IDLE/ERROR）。
- *
- * 这里只维护**状态**，F76.3 这个位仍由 plc_f_signal_handler 发布（SYS_IS_RIGID）。
- * 旧树是在 M29 的 M 代码分支里置 1 且**从不复位**（换 M 指令后仍然是 1），移植时
- * 那一行整个丢了 -> SYS_IS_RIGID 全工程没人写、F76.3 恒 0；现在改成跟随 M29 阶段，
- * 进出都自然对齐，HMI 的 VAR_CHAN_IS_RIGID（global.c 同源）也一起恢复。 */
+/* 「刚性攻丝方式中」的状态来源：M29 接管主轴起置起，M03/M04/M05、复位/急停或 M29
+ * 出错时落下（这些路径都会把 m29_phase 清回 IDLE/ERROR）。
+ * 这里只维护状态；F76.3 由 plc_f_signal_handler 发布（SYS_IS_RIGID）。
+ * 必须跟随 M29 阶段，否则 SYS_IS_RIGID 无人写、F76.3 恒 0。 */
 static void spindle_publish_rigid_state(void)
 {
     rt_data->sys_state[SYS_IS_RIGID] =
@@ -307,7 +371,9 @@ void spl_context_init(spindle_context_t* spl_ctx)
 
 void spindle_request_m29(void)
 {
-    spindle_clear_velocity_arrival();   /* 新 M29：先清上一条的到速完成 */
+    s_m29_trace_tail = 2000;
+    s_m29_trace_start = true;
+    spindle_clear_velocity_arrival();   /* 新 M29：清旧到速完成 */
     /* M29 本身是复位后的新主轴操作请求，允许重新取得驱动器使能。 */
     spl_context.reset_requires_start = false;
     spl_context.start_request_pending = true;
@@ -319,7 +385,7 @@ void spindle_request_m29(void)
     /* M29 是新的主轴操作请求，取消排队中的 M3/M4。 */
     spl_context.deferred_start_pending = false;
     spl_context.spl_event = SPINDLE_EVENT_ORIENT;
-    spindle_clear_velocity_arrival();   /* 新指令/安全事件：先清上一条的到速完成 */
+    spindle_clear_velocity_arrival();   /* 新指令/安全事件：清旧到速完成 */
     spl_context.command_speed = 0.0;
     spl_context.command_state = SPINDLE_STOP;
     spl_context.start_request_pending = false;
@@ -327,10 +393,8 @@ void spindle_request_m29(void)
 
 bool spindle_m29_is_ready(void)
 {
-    /* 只看 READY 枚举不够：READY 只是本地状态机到位，必须再核对
-     * 实际模式切换结果、实际 CSP、使能状态和 PDO 状态字。
-     * （参考版用 Driver_Is_Mode_Switch_Done + spindle_driver.*；这里映射到
-     * 我们的 HAL 访问器：模式切换闩锁仍用本地结果，但**必须结合 HAL 实际反馈**。） */
+    /* 只看 READY 枚举不够（那只是本地状态机到位）：必须再核对实际模式切换结果、
+     * 实际 CSP、使能状态与 PDO 状态字。 */
     if (spindle_stop_is_required(&spl_context))
         return false;
     if (!spl_context.m29_active || spl_context.reset_requires_start)
@@ -365,6 +429,11 @@ void spindle_m29_diag_info(spindle_m29_diag_t *out)
     out->enabled = spl_drv_enabled();
     out->status_word = spl_drv_status_word();
     out->ready = spindle_m29_is_ready();
+    out->planned_rpm = spl_context.vel_planner.current_vel;
+    out->target_rpm = s_spl_target_vel;
+    out->actual_rpm = spl_drv_actual_vel();
+    out->target_deg = s_spl_target_pos;
+    out->actual_deg = spl_drv_actual_pos();
 }
 
 void spindle_complete_m29(void)
@@ -421,14 +490,10 @@ static void spindle_update_command_event(void)
         return;
     }
 
-    /*
-     * 显式启动请求必须被消费，即使目标速度没有变化（重复同转速 M3/M4、或
-     * M3/M4 S0 等价停止）：命令入口已经清掉完成反馈，如果这里直接返回，请求会
-     * 一直挂着，而反馈屏蔽条件（start_request_pending）又会一直挡住 F45.3 ——
-     * 主轴明明已经在正常转速上，PLC 却永远拿不到到速信号。
-     * 这里只清请求，**不恢复旧完成位**：清掉之后由 spindle_update_planner_state()
-     * 按当前 PDO 实际反馈重新确认到速。
-     */
+    /* 显式启动请求必须被消费，即使目标速度没变（重复同转速 M3/M4、M3/M4 S0）：
+     * 命令入口已清完成反馈，这里若直接返回，请求会一直挂着，而 start_request_pending
+     * 会一直挡住 F45.3 —— 主轴已在正常转速，PLC 却拿不到到速信号。
+     * 只清请求、不恢复旧完成位；之后由 spindle_update_planner_state() 按实际反馈重新确认。 */
     if (spl_context.start_request_pending)
     {
         if (target_speed <= SPINDLE_SPEED_EPSILON)
@@ -473,9 +538,9 @@ static void spindle_process_event(spindle_context_t *context)
     switch (context->spl_event)
     {
     case SPINDLE_EVENT_STOP:
-        /* G29.6 的停止边沿可能紧跟 G70.6 定向上升沿到达。定向已经接管主轴后，
-         * 普通 STOP 不能撤销使能，否则 HAL 永远等不到完成位，表现为定向超时。
-         * 释放定向或复位走专用 RELEASE_ORIENT 路径。 */
+        /* G29.6 的停止边沿可能紧跟 G70.6 定向上升沿：定向已接管主轴后普通 STOP
+         * 不能撤销使能，否则 HAL 等不到完成位（表现为定向超时）；释放/复位走
+         * 专用 RELEASE_ORIENT 路径。 */
         if (context->orient_phase != SPINDLE_ORIENT_IDLE ||
             context->orient_request_pending ||
             spl_drv_orient_state() != HAL_ORIENT_NONE ||
@@ -521,10 +586,10 @@ static void spindle_process_event(spindle_context_t *context)
          * 完成定位。因此这里立即提交定向请求，不等待软件速度规划器
          * 归零；否则高速主轴可能永远等不到本地“零速”条件。
          */
-        /* 定向接管主轴：清掉遗留的启动/排队请求，命令字段归位到 STOP。
-         * 旧的“等待新启动”锁由下面的 reset_requires_start=false 显式解除，
-         * 不能再靠 start_request_pending 兜底（否则会挡住定向自己的完成判定）。 */
-        spindle_clear_velocity_arrival();   /* 新指令：先清上一条的到速完成 */
+        /* 定向接管主轴：清遗留启动/排队请求，命令字段归位到 STOP；"等待新启动"锁由
+         * reset_requires_start=false 显式解除，不能靠 start_request_pending 兜底
+         * （会挡住定向自己的完成判定）。 */
+        spindle_clear_velocity_arrival();   /* 新指令：清旧到速完成 */
         context->start_request_pending = false;
         context->deferred_start_pending = false;
         context->command_state = SPINDLE_STOP;
@@ -616,7 +681,8 @@ static void spindle_update_driver_control(void)
         /* CSP 下没有速度目标可用，复位/急停先把期望模式扳回 CSV，
          * 免得下次 M3 还要再切一次。HAL 只记期望模式，急停中的轴不会因此被使能。 */
         if (spindle_reset_or_estop_active() &&
-            spl_drv_mode() == HAL_SPINDLE_CSP &&
+            (spl_drv_mode() == HAL_SPINDLE_CSP ||
+             s_spl_req_mode == HAL_SPINDLE_CSP) &&
             !(s_spl_req_mode == HAL_SPINDLE_CSV && spl_ms_done()))
         {
             if (spl_ms_request(HAL_SPINDLE_CSV) != HAL_OK)
@@ -627,6 +693,17 @@ static void spindle_update_driver_control(void)
             }
         }
         spl_drv_disable();
+        return;
+    }
+
+    /* 定向已经由驱动器减速，释放等待不能再次从旧规划速度执行 M5 斜坡。 */
+    if (spl_context.m29_phase == SPINDLE_M29_RELEASING)
+    {
+        spl_context.vel_planner.enable = false;
+        spl_context.vel_planner.target_vel = 0.0;
+        s_spl_target_vel = 0;
+        (void)rt_hal_request_spindle_speed(RT_HAL_AXIS_SP, 0.0, 0);
+        spl_drv_enable();
         return;
     }
 
@@ -728,6 +805,7 @@ static void spindle_update_driver_control(void)
 
         if (spl_ms_done() && spl_drv_mode() == HAL_SPINDLE_CSV)
         {
+            spindle_sync_planner_to_actual();
             spl_context.csv_switch_pending = false;
             if (spl_context.command_state == SPINDLE_STOP)
             {
@@ -824,6 +902,11 @@ static bool spindle_stop_is_required(const spindle_context_t *context)
     /* 汇总所有必须停止主轴的原因，供周期入口统一仲裁。 */
     bool stop_required = false;
 
+    if ((spl_drv_status_word() & 0x0008U) != 0U)
+    {
+        return true;
+    }
+
     if (rt_data->sys_state[SYS_IS_ESTOP_ACTIVE])
     {
         stop_required = true;
@@ -851,10 +934,9 @@ static bool spindle_stop_is_required(const spindle_context_t *context)
 
 static void spindle_handle_stop(spindle_context_t *context)
 {
-    spindle_clear_velocity_arrival();   /* 新指令：先清上一条的到速完成 */
-    /* M05 入口必须清掉遗留的启动请求：否则定向释放交接时会把停止前排队的
-     * 旧 M3/M4 重新启动起来。命令字段也要归位到 STOP，停止完成判定依赖
-     * command_state == spl_state 这一条。 */
+    spindle_clear_velocity_arrival();   /* 新指令：清旧到速完成 */
+    /* M05 入口必须清掉遗留启动请求，否则定向释放交接时会把停止前排队的旧 M3/M4
+     * 重新启动；命令字段也要归位到 STOP（停止完成判定依赖 command_state == spl_state）。 */
     context->start_request_pending = false;
     context->deferred_start_pending = false;
     context->command_state = SPINDLE_STOP;
@@ -915,12 +997,9 @@ static void spindle_handle_stop(spindle_context_t *context)
         return;
     }
 
-    /* 普通 M5 保持 CSV 并允许驱动器受控减速；急停、复位或驱动器 Fault 一律去使能。
-     *
-     * 另外：**停止握手已完成的那些拍不能再重新使能** —— 否则
-     * spindle_finish_stop_if_ready() 里刚下的去使能会被这里每拍盖回去，
-     * 主轴就一直带着力矩停着（v1.27.1 的契约是停稳后不带力矩）。
-     * 定向窗口（M19）与攻丝窗口（M29 READY）要带力矩，显式排除。 */
+    /* 普通 M5 保持 CSV、允许驱动器受控减速；急停/复位/驱动器 Fault 一律去使能。
+     * 停止握手已完成的拍不能再重新使能（否则会把 spindle_finish_stop_if_ready() 刚下的
+     * 去使能每拍盖回，主轴带力矩停着）；定向窗口 M19 与攻丝窗口 M29 READY 要带力矩。 */
     const bool stop_finished =
         spl_context.spl_state == SPINDLE_STOP &&
         spl_context.orient_phase == SPINDLE_ORIENT_IDLE &&
@@ -953,7 +1032,7 @@ static bool spindle_reset_or_estop_active(void)
 static void spindle_handle_rotation(spindle_context_t *context,
                                     spindle_state_t state)
 {
-    spindle_clear_velocity_arrival();   /* 新指令（M3/M4）：先清上一条的到速完成 */
+    spindle_clear_velocity_arrival();   /* 新指令（M3/M4）：清旧到速完成 */
     if (spl_drv_mode() == HAL_SPINDLE_CSP && !spl_ms_switching())
     {
         context->m29_active = false;
@@ -1009,8 +1088,8 @@ static void spindle_handle_rotation(spindle_context_t *context,
     context->deferred_start_pending = false;
     spindle_clear_velocity_arrival();   /* 清旧到速反馈 + F45.3 */
     context->spl_vel_state = SPINDLE_VEL_RAMP;
-    /* HAL 只认实际模式（0x6061），所以这里真的请求一次 CSV，不能像以前那样
-     * 只改本地镜像。请求被拒说明台账未清，返回值有意忽略。 */
+    /* HAL 只认实际模式（0x6061），故这里真的请求一次 CSV（不能只改本地镜像）；
+     * 请求被拒 = 台账未清，返回值有意忽略。 */
     (void)spl_ms_request(HAL_SPINDLE_CSV);
     spl_drv_enable();
 
@@ -1146,6 +1225,17 @@ static bool spindle_is_velocity_arrived(void)
     return fabs(actual - target) <= tolerance;
 }
 
+/* 驱动器交还速度控制权时只同步一次，普通规划周期不追写反馈。 */
+static void spindle_sync_planner_to_actual(void)
+{
+    spl_context.vel_planner.current_vel = spl_drv_actual_vel();
+    spl_context.vel_planner.target_vel = 0.0;
+    spl_context.vel_planner.enable = false;
+    spl_context.vel_planner.active =
+        fabs(spl_context.vel_planner.current_vel) > SPINDLE_SPEED_EPSILON;
+    spindle_clear_velocity_arrival();
+}
+
 static void spindle_update_orient_state(void)
 {
     static bool release_status_log_active;
@@ -1155,11 +1245,10 @@ static void spindle_update_orient_state(void)
 
     /*
      * 把 HAL 的定向进展映射到本文件的阶段状态，并在 M19 完成时产生代码握手。
-     * HAL 那边只有 NONE / RUNNING / DONE 三态；RELEASING 是这边为了等
-     * "控制字真的交回状态机"而加的本地阶段。
+     * HAL 只有 NONE / RUNNING / DONE 三态；RELEASING 是本地加的"等控制字真的交回"阶段。
      */
 
-    /*是否被接受是由 HAL 给出的，而不是直接看原始 bit10 */
+    /* 是否被接受由 HAL 给出，不直接看原始 bit10 */
     if (spl_context.orient_request_pending &&
         spl_context.orient_phase != SPINDLE_ORIENT_RELEASING)
     {
@@ -1186,7 +1275,7 @@ static void spindle_update_orient_state(void)
                 spl_context.m19_active = false;
                 spl_context.orient_hold_stop = true;
                 spl_context.reset_requires_start = true;
-                spindle_clear_velocity_arrival();   /* 新指令/安全事件：先清上一条的到速完成 */
+                spindle_clear_velocity_arrival();   /* 新指令/安全事件：清旧到速完成 */
                 spl_context.start_request_pending = false;
                 spl_context.command_speed = 0.0;
             }
@@ -1237,6 +1326,7 @@ static void spindle_update_orient_state(void)
         } else {
             spl_context.orient_phase = SPINDLE_ORIENT_IDLE;
             spl_context.orient_hold_stop = false;
+            spindle_sync_planner_to_actual();
             spindle_apply_deferred_start();
         }
     }
@@ -1274,7 +1364,7 @@ static void spindle_update_orient_state(void)
             spl_context.orient_phase = SPINDLE_ORIENT_IDLE;
             spl_context.orient_hold_stop = true;
             spl_context.reset_requires_start = true;
-            spindle_clear_velocity_arrival();   /* 新指令/安全事件：先清上一条的到速完成 */
+            spindle_clear_velocity_arrival();   /* 新指令/安全事件：清旧到速完成 */
             spl_context.start_request_pending = false;
             spl_context.orient_elapsed_cycles = 0U;
         }
@@ -1302,12 +1392,12 @@ static void spindle_update_m29(void)
     {
         LOG(LOG_LEVEL_ERR,
             "M29主轴定向失败：orient_phase=%d status_word=0x%04X "
-            "actual_vel=%d",
+            "actual_vel=%.0f",
             spl_context.orient_phase, spl_drv_status_word(),
             spl_drv_actual_vel());
         spl_context.m29_phase = SPINDLE_M29_ERROR;
         spl_context.reset_requires_start = true;
-        spindle_clear_velocity_arrival();   /* 新指令/安全事件：先清上一条的到速完成 */
+        spindle_clear_velocity_arrival();   /* 新指令/安全事件：清旧到速完成 */
         spl_context.start_request_pending = false;
         spl_context.orient_hold_stop = true;
         spl_context.command_speed = 0.0;
@@ -1327,18 +1417,18 @@ static void spindle_update_m29(void)
         {
             spl_context.m29_phase = SPINDLE_M29_ERROR;
             spl_context.reset_requires_start = true;
-            spindle_clear_velocity_arrival();   /* 新指令/安全事件：先清上一条的到速完成 */
+            spindle_clear_velocity_arrival();   /* 新指令/安全事件：清旧到速完成 */
             spl_context.orient_hold_stop = true;
         }
     }
 
-    /* 释放后 HAL 会重新使能，所以判据是"定向已交回 + 主轴真的停了"，
-     * 而不是同事那侧的 Switch On Disabled。位置目标等 CSP 到位后再写
-     * （CSV 下的位置写会被 HAL 以 MODE_MISMATCH 拒收）。 */
+    /* 释放后 HAL 会重新使能，故判据是"定向已交回 + 主轴真的停了"，不是 Switch On Disabled；
+     * 位置目标等 CSP 到位后再写（CSV 下的位置写会被 HAL 以 MODE_MISMATCH 拒收）。 */
     if (spl_context.m29_phase == SPINDLE_M29_RELEASING &&
         spl_drv_orient_inactive() &&
         fabs((double)spl_drv_actual_vel()) <= SPINDLE_ACTUAL_ZERO_EPSILON)
     {
+        spindle_sync_planner_to_actual();
         s_spl_target_pos = spl_drv_actual_pos();
         LOG(LOG_LEVEL_INFO,
             "M29定向停止确认，切换CSP保持：actual_pos=%.0f actual_vel=%.0f "
@@ -1355,7 +1445,7 @@ static void spindle_update_m29(void)
         {
             spl_context.m29_phase = SPINDLE_M29_ERROR;
             spl_context.reset_requires_start = true;
-            spindle_clear_velocity_arrival();   /* 新指令/安全事件：先清上一条的到速完成 */
+            spindle_clear_velocity_arrival();   /* 新指令/安全事件：清旧到速完成 */
             spl_context.orient_hold_stop = true;
         }
     }
@@ -1365,11 +1455,9 @@ static void spindle_update_m29(void)
         if (spl_drv_mode() == HAL_SPINDLE_CSP && spl_drv_enabled())
         {
             spl_context.m29_phase = SPINDLE_M29_READY;
-            /* 攻丝起点：把"现在这个角度"定为 0°。插补里算的角度是**从本段起点
-             * 算起**的绝对累计角（acc/螺距×360），必须与这里的零点对齐，否则
-             * 第一个目标角会让主轴先跳回旧零点。
-             * 先设零、再写 0° 保持（适配层同一拍内按此顺序消费），此后角度由插补
-             * 每拍下发（见 emcmot 的 output_to_hal）。 */
+            /* 攻丝起点：把当前角度定为 0 度（插补算的是从本段起点起的绝对累计角
+             * acc/螺距*360，必须与这里的零点对齐，否则第一个目标角会先跳回旧零点）。
+             * 先设零、再写 0 度保持（适配层同拍按此顺序消费），此后角度由插补每拍下发。 */
             rt_data->axis_data[AXIS_SP].wcs_cmd_pos_cur = 0.0;
             s_spl_target_pos = 0.0;
             (void)rt_hal_axis_set_pos(RT_HAL_AXIS_SP, 0.0);
@@ -1382,7 +1470,7 @@ static void spindle_update_m29(void)
                 spl_drv_status_word(), spl_drv_enabled());
             spl_context.m29_phase = SPINDLE_M29_ERROR;
             spl_context.reset_requires_start = true;
-            spindle_clear_velocity_arrival();   /* 新指令/安全事件：先清上一条的到速完成 */
+            spindle_clear_velocity_arrival();   /* 新指令/安全事件：清旧到速完成 */
             spl_context.start_request_pending = false;
             spl_context.orient_hold_stop = true;
             spl_context.command_speed = 0.0;
@@ -1397,7 +1485,7 @@ static void spindle_update_m29(void)
             setAlarm(ALARM_AX, ALARM_ERROR, SPINDLE_ALARM_ORIENT_TIMEOUT);
             spl_context.m29_phase = SPINDLE_M29_ERROR;
             spl_context.reset_requires_start = true;
-            spindle_clear_velocity_arrival();   /* 新指令/安全事件：先清上一条的到速完成 */
+            spindle_clear_velocity_arrival();   /* 新指令/安全事件：清旧到速完成 */
             spl_context.start_request_pending = false;
             spl_context.orient_hold_stop = true;
             spl_context.command_speed = 0.0;
@@ -1471,9 +1559,8 @@ static void spindle_update_m29_feedback(void)
     }
 }
 
-/* 统一的“到速反馈屏蔽”条件：只要主轴控制权还没稳定交接，F45.3 就必须保持
- * 低电平，即使 spl_vel_state 里残留 ARRIVED 也不能发布，也不能据此完成停止握手。
- * 这些条件只读，与发布顺序无关，所以 PLC 发布层不需要再反向改控制状态兜底。 */
+/* 到速反馈的屏蔽条件：只要主轴控制权还没稳定交接，F45.3 必须保持低电平（spl_vel_state
+ * 里残留 ARRIVED 也不能发布、不能据此完成停止握手）。条件只读，与发布顺序无关。 */
 static bool spindle_velocity_feedback_blocked(void)
 {
     if (spindle_stop_is_required(&spl_context) || spl_context.reset_requires_start)
@@ -1542,11 +1629,8 @@ static bool spindle_stop_is_complete(void)
 static void spindle_finish_stop_if_ready(void)
 {
     /* 只有规划器速度和驱动器实际速度都为零，才允许完成停止握手。 */
-    /*
-     * 停止完成必须同时满足软件规划速度和驱动器实际速度都为零。
-     * 仅清零 60FF 不代表电机已经停止，尤其在驱动器下使能或反馈延迟时。
-     * 此外：待启动、定向窗口、模式切换、M29 期间一律不算停止完成。
-     */
+    /* 停止完成要求软件规划速度与驱动器实际速度都为零（仅清 60FF 不代表已停，尤其在下使能
+     * 或反馈延迟时）；待启动、定向窗口、模式切换、M29 期间一律不算。 */
     if (!spindle_stop_is_complete())
     {
         return;
@@ -1564,9 +1648,8 @@ static void spindle_finish_stop_if_ready(void)
     spindle_report_mcode_complete();
 }
 
-/* 清除上一条指令的到速/完成反馈。新指令、相关 PLC 主轴事件、复位、定向与 M29
- * 入口都要调用它：否则 F45.3 会沿用上一条指令的到达位（到速完成是"M 指令已完成"
- * 的意思，新指令一来就必须先归零）。只清完成反馈，不动规划器目标。 */
+/* 清除上一条指令的到速/完成反馈；新指令、相关 PLC 主轴事件、复位、定向与 M29 入口
+ * 都要调用（否则 F45.3 会沿用上一条的到达位）。只清完成反馈，不动规划器目标。 */
 void spindle_clear_velocity_arrival(void)
 {
     spl_context.mcode_feedback = false;
@@ -1574,9 +1657,8 @@ void spindle_clear_velocity_arrival(void)
     clearRegBit(REG_F, 45, 3);
 }
 
-/* F45.3 的唯一查询入口：**只读**，不反向修改任何控制状态。
- * 内部完成标志只是必要条件——发布前重新核对当前控制权与实时反馈，
- * 防止新指令在主状态更新之后、F 信号发布之前到达时沿用上一条 ARRIVED。
+/* F45.3 的唯一查询入口：只读，不反向修改控制状态。内部完成标志只是必要条件——发布前
+ * 重新核对当前控制权与实时反馈（防新指令在主状态更新后、F 发布前到达时沿用上一条 ARRIVED）。
  * 复位/急停/Fault、定向窗口、M29 未就绪一律不算到速。 */
 bool spindle_velocity_is_ready(void)
 {
@@ -1593,8 +1675,8 @@ bool spindle_velocity_is_ready(void)
     {
         return false;
     }
-    /* 停止：ARRIVED 是 spindle_finish_stop_if_ready 在确认零速后置位的，
-     * 这里再按停止完成判据复核一次，不再只看 spl_state == STOP 就直接放行。 */
+    /* 停止：ARRIVED 由 spindle_finish_stop_if_ready 在确认零速后置位，这里再按停止
+     * 完成判据复核一次，不只凭 spl_state == STOP 放行。 */
     if (spl_context.spl_state == SPINDLE_STOP)
     {
         return spindle_stop_is_complete();
@@ -1602,16 +1684,13 @@ bool spindle_velocity_is_ready(void)
     return spindle_is_velocity_arrived();
 }
 
-/* 定向释放确认后，在同一周期接管排队的 M03/M04 请求。
- *
- * 交接不能无条件把老请求写回命令字段，必须自己判优先级与安全条件：
- *  1) 安全条件（有停机要求/复位等待新启动）优先，遗留请求直接丢弃；
- *  2) M29 正在接管主轴时保留请求，交给 M29 自己的交接流程处理；
- *  3) 后到的启动命令（start_request_pending）优先于先排队的老请求；
- *  4) 最新命令是停止时绝不启动（M03/M05 入口已清 deferred，这里是兜底）；
- *  5) 一旦决定启动，当拍就调用 spindle_handle_rotation 接管运行状态 ——
- *     否则本拍 spl_state 仍是 STOP，会被普通 M5 收尾撤使能并提前报
- *     ARRIVED/FIN，PLC 会在主轴尚未启动时收到 F45.3。 */
+/* 定向释放确认后，在同一周期接管排队的 M03/M04 请求。交接必须自己判优先级与安全：
+ *  1) 安全条件（停机要求/复位等待新启动）优先，遗留请求丢弃；
+ *  2) M29 正在接管主轴时保留请求，交 M29 自己的交接流程；
+ *  3) 后到的启动命令优先于先排队的老请求；
+ *  4) 最新命令是停止时绝不启动（兜底，M03/M05 入口已清 deferred）；
+ *  5) 决定启动就当拍调 spindle_handle_rotation 接管运行状态，否则本拍 spl_state 仍是 STOP，
+ *     会被普通 M5 收尾撤使能并提前报 ARRIVED/FIN。 */
 static void spindle_apply_deferred_start(void)
 {
     if (spindle_stop_is_required(&spl_context) || spl_context.reset_requires_start)
@@ -1656,8 +1735,8 @@ static void spindle_disable_driver_before_operation(void)
 
 static void spindle_disable_driver(void)
 {
-    /* 停止只撤销使能，不清除期望模式：HAL 那边期望模式仍是 CSV，
-     * 6060/6061 保持 0x09，后续收到 M3/M4 直接重新使能即可。 */
+    /* 停止只撤销使能、不清期望模式：HAL 侧期望模式仍是 CSV（6060/6061 = 0x09），
+     * 后续 M3/M4 直接重新使能即可。 */
     spl_drv_disable();
 }
 

@@ -49,10 +49,7 @@ void emcmot_test_rebuild_axis_positions_from_feedback()
 }
 #endif
 
-/* 原先这里是 x/y/z/sp 的指令与反馈脉冲静态量。接了 HAL 之后全部删除：
- * 换算（脉冲 ↔ 用户单位）由 HAL 按机床参数当量完成，RT 这边只在用户单位
- * （mm / 度 / rpm）上工作，中间不再落地任何原始计数。
- * 原代码里 sp_cmd_pulse_pos 从未被赋值（读取前恒为 0），一并消失。 */
+
 
 const char *mode_names[] = {"编辑", "AUTO", "MDI", "DNC", "手轮", "手动", "回零", "空闲"};
 
@@ -301,10 +298,7 @@ static void read_from_hal()
         rt_data->axis_data[AXIS_Y].motor_act_pos = pos;
     if (rt_hal_axis_pos(RT_HAL_AXIS_Z, &pos) == HAL_OK)
         rt_data->axis_data[AXIS_Z].motor_act_pos = pos;
-    /* 主轴：旧路径这里取完脉冲就把换算那行注释掉了（原 emcmot.cpp:326 的
-     * "todo：计算旋转轴角度"），motor_act_pos 从来没被写过。保持不写——
-     * HAL 的 actual_pos 对主轴是累计转角（度），与 motor_act_pos 的"电机端位置"
-     * 不是一回事，不能凭一个可用的值就塞进去。 */
+
 
     /* enc_cntr：HAL 不提供原始反馈计数，置 0。仅用于显示，不参与保护判断。 */
     rt_data->axis_data[AXIS_X].enc_cntr = 0;

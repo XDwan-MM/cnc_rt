@@ -3,8 +3,7 @@
 #include <string.h>
 #include <hmisysapi.h>
 
-/* 走真实事件入口 task_handle_spl_event()：验证"定向/M29 期间的停止事件仍要取消
- * 排队中的 M3/M4"。只保留这条链：LOG 关掉，其余外部依赖给桩，不接共享内存。 */
+/* 停止事件回归：编入 task.c 真实入口 task_handle_spl_event()，不接共享内存；验定向/M29 期间的停止事件仍取消排队 M3/M4。 */
 #undef LOG
 #define LOG(...) ((void)0)
 #include "../src/task/task.c"
@@ -23,7 +22,7 @@ static void prepare_stop_event(void)
     clear_calls = 0;
 }
 
-/* 1) 定向运行中：排队 CCW500 + 真实停止事件（复查复现的时序） */
+/* 1) 定向运行中（排队 CCW500）*/
 static void test_stop_during_orient_cancels_deferred(void)
 {
     prepare_stop_event();
@@ -38,7 +37,7 @@ static void test_stop_during_orient_cancels_deferred(void)
     task_handle_spl_event(&ev);
 
     assert(clear_calls == 1);
-    assert(!spl_context.deferred_start_pending);        /* 关键：提前返回也要清 */
+    assert(!spl_context.deferred_start_pending);        /* 提前返回路径也要清 */
     assert(!spl_context.start_request_pending);
     assert(spl_context.command_speed == 0.0);
     assert(spl_context.command_state == SPINDLE_STOP);
@@ -46,7 +45,7 @@ static void test_stop_during_orient_cancels_deferred(void)
     puts("PASS: 定向运行中收到停止事件 -> 取消排队启动且不打断定向");
 }
 
-/* 2) 定向释放中（还有待处理释放请求）同样要清 */
+/* 2) 定向释放中（有未处理释放请求）*/
 static void test_stop_during_release_cancels_deferred(void)
 {
     prepare_stop_event();
@@ -79,7 +78,7 @@ static void test_stop_does_not_override_pending_orient(void)
     puts("PASS: 待处理定向请求不被停止边沿覆盖，排队启动仍被取消");
 }
 
-/* 4) M29 进行中：不打断，但排队启动同样取消 */
+/* 4) M29 进行中：不打断，取消排队启动 */
 static void test_stop_during_m29_cancels_deferred(void)
 {
     prepare_stop_event();
@@ -96,7 +95,7 @@ static void test_stop_during_m29_cancels_deferred(void)
     puts("PASS: M29 进行中收到停止事件 -> 取消排队启动且不打断 M29");
 }
 
-/* 5) 普通停止（无定向/M29）：照旧产生停止事件并归位命令字段 */
+/* 5) 普通停止（无定向/M29）：照旧产生停止事件 */
 static void test_plain_stop_still_creates_event(void)
 {
     prepare_stop_event();

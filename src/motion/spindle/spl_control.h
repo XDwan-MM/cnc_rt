@@ -118,8 +118,8 @@ void spindle_clear_velocity_arrival(void);   /* 新指令/复位/定向/M29 入�
 bool spindle_velocity_is_ready(void);        /* F45.3 的唯一查询入口（只读） */
 void spindle_complete_m29(void);
 
-/* M29 等待 PLC FIN 的超时报警 id（只提示，不改控制流程）。
- * 注意：HMI 侧需要同 id 的报警文本，否则会显示成未知报警。 */
+/* M29 握手超时报警 id（错误报警会触发自动运行停止）；HMI 侧需同 id 的报警文本，
+ * 否则显示为未知报警。 */
 #define SPINDLE_ALARM_M29_FIN_TIMEOUT  (2101)
 
 /** M29 卡住诊断的只读快照：只观察，不改变任何控制状态。 */
@@ -136,9 +136,16 @@ typedef struct
     int enabled;          /**< 驱动器使能。 */
     uint16_t status_word; /**< PDO 状态字。 */
     bool ready;           /**< spindle_m29_is_ready() 的结果。 */
+    double planned_rpm;
+    double target_rpm;
+    double actual_rpm;
+    double target_deg;
+    double actual_deg;
 } spindle_m29_diag_t;
 
 void spindle_m29_diag_info(spindle_m29_diag_t *out);
+/* 在 F 发布之后采样；记录 M29 期间/之后变化的 PLC 联锁 */
+void spindle_m29_plc_trace_tick(void);
 
 #ifdef __cplusplus
 }

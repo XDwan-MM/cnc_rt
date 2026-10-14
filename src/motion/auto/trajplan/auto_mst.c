@@ -87,7 +87,7 @@ void auto_execute_mstb_cmd(){
     if (cycle_tp->plan_block->mst_data.m_code == M29)
     {
         const bool m29_complete = auto_m29_handshake_complete(selected_before_cycle);
-        /* 只诊断：不影响上面的判定结果。 */
+
         auto_m29_diag_tick(m29_complete);
         if (m29_complete)
         {
@@ -421,9 +421,7 @@ static void auto_set_tcode_signal(int index){
 
 
 
-/* M29 卡住诊断：M29 等不到握手时程序会一直停在这一段，所以每秒打一行说明卡在
- * 哪一侧（PLC 侧 FIN / NC 侧就绪），30 秒还没等到就报一次超时报警。
- * **只观察，不参与握手判定、不改变控制流程。** */
+
 #define M29_DIAG_PERIOD_CYCLES   (1000)    /* 每 1s 一行 */
 #define M29_DIAG_TIMEOUT_CYCLES  (30000)   /* 30s 报一次超时 */
 
@@ -435,7 +433,7 @@ static void auto_m29_diag_tick(bool complete)
         spl_context.m29_phase == SPINDLE_M29_IDLE ||
         spl_context.m29_phase == SPINDLE_M29_ERROR)
     {
-        /* 已推进、或 NC 侧自己已经收尾/报错：诊断计数归零。 */
+
         cmd->m29_wait_cycles = 0;
         cmd->m29_wait_alarmed = false;
         return;
@@ -448,6 +446,8 @@ static void auto_m29_diag_tick(bool complete)
     }
 
     bool g43 = false, f70 = false, f457 = false, f763 = false;
+    bool f451 = false, f453 = false;
+    char m_code = 0, g70 = 0, g29 = 0;
     spindle_m29_diag_t diag;
 
     spindle_m29_diag_info(&diag);
@@ -455,6 +455,11 @@ static void auto_m29_diag_tick(bool complete)
     getRegBit(REG_F, 7, 0, &f70);      /* MF 选通（本次指令） */
     getRegBit(REG_F, 45, 7, &f457);    /* 主轴定向完成 */
     getRegBit(REG_F, 76, 3, &f763);    /* 刚性攻丝方式中 */
+    getRegBit(REG_F, 45, 1, &f451);
+    getRegBit(REG_F, 45, 3, &f453);
+    const int m_code_ok = getRegValue8(REG_F, 10, &m_code) == 0;
+    const int g70_ok = getRegValue8(REG_G, 70, &g70) == 0;
+    const int g29_ok = getRegValue8(REG_G, 29, &g29) == 0;
 
     LOG(LOG_LEVEL_WARN,
         "M29等待握手 %ds：PLC侧 FIN锁存=%d 低电平见过=%d 宽度=%d/%d G4.3=%d "
@@ -467,14 +472,23 @@ static void auto_m29_diag_tick(bool complete)
         diag.m29_phase, diag.ready ? 1 : 0, diag.orient_phase, diag.orient_state,
         diag.ms_state, diag.ms_result, diag.ms_req_mode, diag.act_mode,
         diag.enabled, (unsigned)diag.status_word, f457 ? 1 : 0, f763 ? 1 : 0);
+    LOG(LOG_LEVEL_WARN,
+        "M29运动及PLC信号：planned_rpm=%.3f target_rpm=%.3f actual_rpm=%.3f "
+        "target_deg=%.3f actual_deg=%.3f F45.1=%d F45.3=%d F10=%d G70=%d G29=%d "
+        "command_state=%d command_speed=%.3f start_pending=%d deferred_pending=%d",
+        diag.planned_rpm, diag.target_rpm, diag.actual_rpm, diag.target_deg, diag.actual_deg,
+        f451, f453, m_code_ok ? (int)(unsigned char)m_code : -1,
+        g70_ok ? (int)(unsigned char)g70 : -1, g29_ok ? (int)(unsigned char)g29 : -1,
+        spl_context.command_state, spl_context.command_speed,
+        spl_context.start_request_pending, spl_context.deferred_start_pending);
 
     if (cmd->m29_wait_cycles >= M29_DIAG_TIMEOUT_CYCLES && !cmd->m29_wait_alarmed)
     {
         cmd->m29_wait_alarmed = true;
         LOG(LOG_LEVEL_ERR,
-            "M29等待PLC FIN超时（%ds）：程序停在本段。看上一行即可判断是 PLC 侧没回 "
-            "FIN 还是 NC 侧未就绪（本报警只提示，不改变控制流程）。",
-            M29_DIAG_TIMEOUT_CYCLES / M29_DIAG_PERIOD_CYCLES);
+              "M29握手超时（%ds）：PLC FIN锁存=%d NC就绪=%d，触发错误报警停止程序。",
+              M29_DIAG_TIMEOUT_CYCLES / M29_DIAG_PERIOD_CYCLES,
+              cmd->m29_fin_latched, diag.ready);
         setAlarm(ALARM_AX, ALARM_ERROR, SPINDLE_ALARM_M29_FIN_TIMEOUT);
     }
 }
