@@ -84,6 +84,8 @@ void rerun_store_breakpoint(const PLAN_BLOCK* block);
 void rerun_track_current_row(const PLAN_BLOCK* block);
 void rerun_data_clear_breakpoint(void);
 
+void rerun_mark_interrupted(void);
+void rerun_record_if_interrupted(const PLAN_BLOCK* block);
 
 bool check_is_program_rerun();
 void rerun_reset_is_rerun();

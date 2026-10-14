@@ -932,7 +932,7 @@ static void auto_reset_run(){
     setVarChanInt(0, VAR_CHAN_CYCLE, 0, 0);
     setVarChanInt(0, VAR_CHAN_HOLD, 0, 0);
     rt_set_zero_vel_params();
-    rerun_store_breakpoint(cycle_tp->plan_block);
+    rerun_record_if_interrupted(cycle_tp->plan_block);
 }
 
 static void auto_update_var(){
@@ -1018,6 +1018,7 @@ GNC_RES cycle_tp_init(){
 static void auto_handle_alarm(){
     if(cycle_tp->exec_state == EXEC_IDLE) return;
     cycle_tp->exec_state = EXEC_RESET;
+    rerun_mark_interrupted();
     switch (cycle_tp->running_stage)
     {
     case PROGRAM_START:
@@ -1036,6 +1037,7 @@ static void auto_handle_alarm(){
 }
 
 void auto_handle_estop(){
+    rerun_mark_interrupted();
     auto_reset_run();
 }
 

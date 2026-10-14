@@ -4,6 +4,9 @@
 #include "alarmapi.h"
 #include "cnc_math.h"        
 
+// 停止是否记断点标志（急停、报警、切换模式停止）需要置1
+// 复位、程序跑完不置位
+static bool rerun_interrupted =false; 
 GNC_RES rerun_data_init(){
     rerun_data = (RERUN_DATA*)calloc(sizeof(RERUN_DATA), 1);
     if(rerun_data == NULL) return GNC_DATA_NULL;
@@ -15,7 +18,7 @@ GNC_RES rerun_data_init(){
     return GNC_OPERATOR_SUCCESS;
 }
 
-/// @brief 复位清除再启动断点信息（含断点记录）
+/// @brief 换程序运行：清除再启动断点信息（含断点记录）
 void rerun_data_reset(){
     memset(&rerun_data->break_block, 0, sizeof(rerun_data->break_block));
     memset(&rerun_data->breakpoint, 0, sizeof(rerun_data->breakpoint));
@@ -27,13 +30,13 @@ void rerun_data_reset(){
     rerun_data->rerun_row = 0;
     rerun_data->is_first_time_click_rerun = true;
     rerun_data->cur_row_line = -1;
-
+    rerun_interrupted =false;
     rerun_mst_reset();
     delAlarm(ALARM_CH, ALARM_WARNING, 3);
     delAlarm(ALARM_CH, ALARM_ERROR, 4);
     rerun_persist();
 }
-/// @brief 只清运行状态，保留断点记录
+/// @brief 复位：只清运行状态，保留断点记录
 /// @note is_rerun /is_mem_rerun 关掉，要拿记录跳行，后续有页面把rerun_row设成
 ///       break_blocj.line_number和置is_rerun为1；
 void rerun_data_reset_keep_breakpoint(){
@@ -42,6 +45,7 @@ void rerun_data_reset_keep_breakpoint(){
     rerun_data->is_mem_rerun = 0;
     rerun_data->rerun_row = 0;
     rerun_data->is_first_time_click_rerun = true;
+    rerun_interrupted =false;
     rerun_mst_reset();
     delAlarm(ALARM_CH, ALARM_WARNING, 3);
     delAlarm(ALARM_CH, ALARM_ERROR, 4);
@@ -147,6 +151,7 @@ void rerun_data_clear_breakpoint(void)
     rerun_data->is_mem_rerun = 0;
     rerun_data->rerun_row = 0;
     rerun_data->is_first_time_click_rerun = true;
+    rerun_interrupted =false;
     rerun_mst_reset();
     delAlarm(ALARM_CH, ALARM_WARNING, 3);
     delAlarm(ALARM_CH, ALARM_ERROR, 4);
@@ -186,6 +191,19 @@ void rerun_store_breakpoint(const PLAN_BLOCK* block){
     rerun_persist();
 }
 
+/// @brief 标记这次停止是被打断的（急停 / 报警停 / 切模式停调用）
+void rerun_mark_interrupted(void)
+{
+    rerun_interrupted = true;
+}
+
+/// @brief rerun_interrupted被标记过就记一份断点快照
+void rerun_record_if_interrupted(const PLAN_BLOCK* block)
+{
+    if (!rerun_interrupted) return;
+    rerun_interrupted = false;
+    rerun_store_breakpoint(block);
+}
 /// @brief 切换模式
 void rerun_update_when_switching(){
     delAlarm(ALARM_CH, ALARM_WARNING, 3);
@@ -212,7 +230,7 @@ bool check_is_program_rerun(){
     char parser_file_path[NCFILEPATH_CHAR_LEN];
     getNcFilePath(parser_file_path);
     // 切换程序时重置断点
-    if(strcmp(parser_file_path, rerun_data->parser_file_path)){
+    if(parser_file_path[0] != '\0'&& strcmp(parser_file_path, rerun_data->parser_file_path)){
         rerun_data_reset();
         strcpy(rerun_data->parser_file_path, parser_file_path);
     }
@@ -445,23 +463,35 @@ bool rerun_save_unpack(const RERUN_SAVE* in)
 void rerun_persist(void)
 {
     if (rerun_data == NULL) return;
-    RERUN_SAVE save;
+    static RERUN_SAVE last; 
+    static bool last_valid = false;
+
+    RERUN_SAVE save ;
     rerun_save_pack(&save);
+
+    if (last_valid && memcmp(&last, &save, sizeof(save)) == 0) return;
     if (setRerunSave(&save) != 0)
     {
         LOG(LOG_LEVEL_WARN, "程序断电块写入失败");
         return;
     }
+    last =save;
+    last_valid = true;// 防止程序暂停每周器写一次存储块
 }
 
 void rerun_restore(void)
 {
     RERUN_SAVE saved={0};
 
-    if (getRerunSave(&saved) != 0) return;
+    if (getRerunSave(&saved) != 0) 
+    {
+        LOG(LOG_LEVEL_WARN, "断点记录读取失败");
+
+        return;
+    }
 
     if (!rerun_save_unpack(&saved)) {
-        // LOG(LOG_LEVEL_INFO, "断电块里没有可用的断点记录");
+        LOG(LOG_LEVEL_WARN, "没有可用的断点记录");
         return;
     }
 
