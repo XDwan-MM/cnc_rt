@@ -39,11 +39,16 @@ SysData* sys_data = NULL;
 RT_DATA* rt_data;               // 实时数据
 RERUN_DATA* rerun_data;
 RESET_DATA* nc_reset;
-EVENT_QUEUE* event_queue;       // 事件队列
-PLAN_QUEUE *parser_queue;       // 译码队列
-PLAN_QUEUE *pretreat_queue;     // 预处理队列
-PLAN_QUEUE *plan_queue;         // 插补队列
-COORD_TP *cycle_tp;             // 循环轨迹规划
+EVENT_QUEUE* event_queue;           // 事件队列
+PLAN_QUEUE *parser_queue;           // 译码队列
+PLAN_QUEUE *pretreat_queue;         // 预处理队列
+PLAN_QUEUE *treat_queue;            // 预处理——小线段剔除队列
+PLAN_QUEUE *fix_queue;              // 预处理——逆行修复队列
+PLAN_QUEUE *nurbs_temp_queue;       // 拟合——nurbs缓存队列
+PLAN_QUEUE *circle_smooth_temp_queue;// 圆弧平滑队列
+PLAN_QUEUE *unif_queue;             // 一致性队列
+PLAN_QUEUE *plan_queue;             // 插补队列
+COORD_TP *cycle_tp;                 // 循环轨迹规划
 REF_TP *ref_tp;                 // 回零轨迹规划
 
 // 读写共享内存锁（路径规划读时加锁）
@@ -117,17 +122,42 @@ static GNC_RES tp_init(){
     if(res != GNC_OPERATOR_SUCCESS) return res;
     res = cycle_tp_init();
     if(res != GNC_OPERATOR_SUCCESS) return res;
+    
     parser_queue = (PLAN_QUEUE*)calloc(sizeof(PLAN_QUEUE), 1);
     if(parser_queue == NULL) return GNC_DATA_NULL;
     res = queue_init(parser_queue);
+    if(res != GNC_OPERATOR_SUCCESS) return res;
+
     pretreat_queue = (PLAN_QUEUE*)calloc(sizeof(PLAN_QUEUE), 1);
     if(pretreat_queue == NULL) return GNC_DATA_NULL;
     res = queue_init(pretreat_queue);
     if(res != GNC_OPERATOR_SUCCESS) return res;
+    
+    treat_queue = (PLAN_QUEUE*)calloc(sizeof(PLAN_QUEUE), 1);
+    if(treat_queue == NULL) return GNC_DATA_NULL;
+    res = queue_init(treat_queue);
+    if(res != GNC_OPERATOR_SUCCESS) return res;
+ 
+    fix_queue = (PLAN_QUEUE*)calloc(sizeof(PLAN_QUEUE), 1);
+    if(fix_queue == NULL) return GNC_DATA_NULL;
+    res = queue_init(fix_queue);
+    if(res != GNC_OPERATOR_SUCCESS) return res;
+
+    nurbs_temp_queue = (PLAN_QUEUE*)calloc(sizeof(PLAN_QUEUE), 1);
+    if(nurbs_temp_queue == NULL) return GNC_DATA_NULL;
+    res = queue_init(nurbs_temp_queue);
+    if(res != GNC_OPERATOR_SUCCESS) return res;
+
+    unif_queue = (PLAN_QUEUE*)calloc(sizeof(PLAN_QUEUE), 1);
+    if(unif_queue == NULL) return GNC_DATA_NULL;
+    res = queue_init(unif_queue);
+    if(res != GNC_OPERATOR_SUCCESS) return res;
+    
     plan_queue = (PLAN_QUEUE*)calloc(sizeof(PLAN_QUEUE), 1);
     if(plan_queue == NULL) return GNC_DATA_NULL;
     res = queue_init(plan_queue);
     if(res != GNC_OPERATOR_SUCCESS) return res;
+    
     return GNC_OPERATOR_SUCCESS;
 }
 
@@ -136,6 +166,10 @@ GNC_RES tp_reset(){
     cycle_tp_reset();
     queue_reset(parser_queue);
     queue_reset(pretreat_queue);
+    queue_reset(treat_queue);
+    queue_reset(fix_queue);
+    queue_reset(nurbs_temp_queue);
+    queue_reset(unif_queue);
     queue_reset(plan_queue);
     return GNC_OPERATOR_SUCCESS;
 }
@@ -194,6 +228,26 @@ GNC_RES rt_global_delete(){
         queue_delete(pretreat_queue);
         free(pretreat_queue);
         pretreat_queue = NULL;
+    }
+    if(treat_queue != NULL){
+        queue_delete(treat_queue);
+        free(treat_queue);
+        treat_queue = NULL;
+    }
+    if(fix_queue != NULL){
+        queue_delete(fix_queue);
+        free(fix_queue);
+        fix_queue = NULL;
+    }
+    if(nurbs_temp_queue!= NULL){
+        queue_delete(nurbs_temp_queue);
+        free(nurbs_temp_queue);
+        nurbs_temp_queue = NULL;
+    }
+    if(unif_queue != NULL){
+        queue_delete(unif_queue);
+        free(unif_queue);
+        unif_queue = NULL;
     }
     if(plan_queue != NULL){
         queue_delete(plan_queue);

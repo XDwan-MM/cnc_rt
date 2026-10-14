@@ -73,6 +73,8 @@ typedef struct{
     double target_distance;         // 单个插补周期目标距离 target_distance = accum_distance - current_distance
     double accum_distance;          // 速度曲线累计插补距离
     double remain_distance;         // 速度曲线剩余插补距离
+    double u_current;               // 当前节点
+    double u_next;                  // 下一个节点
 } POS_CMD_DATA;
 
 typedef struct{
@@ -126,6 +128,7 @@ typedef struct{
 GNC_RES cycle_tp_init();
 void cycle_tp_delete();
 void cycle_tp_reset();
+void cycle_tp_add_block();
 void handle_auto_cmd();
 void handle_edit_cmd();
 void auto_handle_estop();

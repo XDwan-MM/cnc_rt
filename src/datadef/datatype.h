@@ -121,6 +121,7 @@ typedef enum {
     TAP_RETURN,     // 攻丝回退
     SPLINE,         // 样条
     PROBE,          // 探针
+    NURBS,          
 } INTERP_TYPE;
 
 typedef enum {
@@ -128,7 +129,8 @@ typedef enum {
     UNIF_ARC,
     UNIF_BESIER,
     UNIF_HERMIT,
-    UNIF_NURBS,          
+    UNIF_NURBS,     
+    UNIF_CIRCLE,         
 } UNIF_TYPE;
 
 // NC 运行模式
@@ -232,6 +234,7 @@ double POS_Norm(POS p);
 double POS_Dot(POS p1, POS p2);
 VECTOR VECTOR_Unit(POS* p1, POS* p2);
 void POS_COPY(POS* dest, POS* src);
+double CrossVector(POS* AB,POS* BC );
 
 #ifdef __cplusplus
 }

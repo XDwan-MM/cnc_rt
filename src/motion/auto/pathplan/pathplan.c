@@ -8,21 +8,35 @@
 #include "rt_data.h"
 #include "rerun.h"
 #include <alarmapi.h>
+#include "nurbsfit.h"
+#include "circle_smooth.h"
 
 static void block_cal_pos(PLAN_BLOCK* parser_block, PLAN_BLOCK* current_block, POS* start_pos);
 static void block_cal_vel(PLAN_BLOCK* current_block);
-static void block_cal_angle(PLAN_BLOCK* current_block, VECTOR* pre_end_vector, VECTOR* cur_start_vector);
+static void block_cal_angle(PLAN_BLOCK* current_block, VECTOR* pre_end_vector);
 static void block_cal_circle_vector(PLAN_BLOCK* current_block);
 static double block_cal_circle_length(PLAN_BLOCK* current_block);
+static double block_cal_nurbs_length(PLAN_BLOCK* current_block);
 static void block_deal_run_row(PLAN_BLOCK* parser_block, PLAN_BLOCK* pretreat_block);
 static void block_deal_parser_block(PLAN_BLOCK* parser_block, PLAN_BLOCK* pretreat_block);
+static void block_deal_outlier(PLAN_BLOCK* pretreat_block, PLAN_BLOCK* treat_block);
+static GNC_RES block_unif_by_nurbs();
+static GNC_RES block_unif_by_treat();
+static GNC_RES block_fixturnning_point();
+// 圆弧平滑入口，使用明确的无参数函数原型。
+static GNC_RES block_unif_by_circle_smooth(void);
+//cy 异常点处理
+static void block_cal_curvature(PLAN_BLOCK* current_block, POS* pre_start_pos, POS* pre_end_pos, POS* current_pos);
+static int block_cal_segment(PLAN_BLOCK* pretreat_block, double seg_theta_thre,PLAN_QUEUE* temp);
+static void block_fix_pos(PLAN_BLOCK* pretreat_block, double l_theta_thre ,double theta_thre, PLAN_QUEUE* temp);
+static bool is_length_valid(PLAN_BLOCK* parser_block);
+static void block_deal_nurbs_enable(PLAN_BLOCK* pretreat_block,PLAN_QUEUE* temp);
+static int blocknum = 1;//未复位
 
-// 将译码数据转换成段
+/// @brief 将译码结果转换成插补段
 GNC_RES chan_add_block(){
     PLAN_BLOCK* pretreat_block;
     PLAN_BLOCK* parser_block;
-
-    if(queue_is_empty(parser_queue)) return GNC_DATA_EMPTY;
 
     // 每次最多处理 PRE_TREAT_SIZE
     for(int i = 0; i < PRE_TREAT_SIZE; i++){
@@ -40,7 +54,64 @@ GNC_RES chan_add_block(){
     }
     return GNC_CAL_SUCCESS;
 }
-   
+
+/// @brief 预处理：剔除异常点、滤波等
+GNC_RES pretreat_block()
+{
+    PLAN_BLOCK* pretreat_block;
+    PLAN_BLOCK* treat_block;
+
+    //结束逻辑：
+    if ((rt_data->chan_state[0][CHAN_IS_PARSERING] == false)&&queue_is_empty(parser_queue))
+    {
+        if(queue_get_size(pretreat_queue)==1)
+        {
+            treat_block = queue_peak(pretreat_queue);
+            queue_push(treat_queue, treat_block);
+            queue_pop(pretreat_queue);
+            return GNC_OPERATOR_SUCCESS;
+        }
+    }
+
+    // 每次最多处理 PRE_TREAT_SIZE
+    for(int i = 0; i < PRE_TREAT_SIZE; i++){
+        // 如果一致性队列已满，提前结束
+        if(queue_is_full(treat_queue)) return GNC_DATA_FULL;
+        // 如果预处理队列无数据，提前结束
+        if(queue_get_size(pretreat_queue)<=1) return GNC_DATA_EMPTY;
+
+        pretreat_block = queue_peak(pretreat_queue);
+        if(pretreat_block == NULL) return GNC_DATA_NULL;
+        treat_block = queue_peak_tail(treat_queue);
+        if(treat_block == NULL) return GNC_DATA_NULL;
+        memcpy(treat_block, pretreat_block, sizeof(PLAN_BLOCK));
+        // 处理异常点
+        block_deal_outlier(pretreat_block, treat_block);
+    }
+    return GNC_CAL_SUCCESS;
+}
+
+/// @brief 一致性处理：nubrs、贝塞尔、hermit、圆弧过渡等平滑处理
+GNC_RES unif_block()
+{   
+    GNC_RES res = GNC_CAL_SUCCESS;
+    // 根据类型选择拟合方案
+    switch (rt_data->chan_data[0].unif_type)
+    {
+    case UNIF_NURBS:
+        res = block_fixturnning_point();
+        res = block_unif_by_nurbs();         // nurbs拟合
+        break;
+    case UNIF_CIRCLE:
+        res = block_unif_by_circle_smooth();
+        break;
+    default:
+        res = block_unif_by_treat();         // 不做处理，treat传到unif队列
+        break;
+    }
+    return res;
+}
+
 static void block_deal_run_row(PLAN_BLOCK* parser_block, PLAN_BLOCK* pretreat_block){
     if(rerun_data->is_rerun){
         if(parser_block->line_number < rerun_data->rerun_row) rerun_data->row_state = BEFORE_THE_RERUN_ROW;
@@ -123,18 +194,421 @@ static void block_deal_parser_block(PLAN_BLOCK* parser_block, PLAN_BLOCK* pretre
         // 构造成段
         pretreat_block->max_vel = pretreat_block->feed_vel = parser_block->feed_vel;
         block_cal_pos(parser_block, pretreat_block, &pretreat_queue->pre_pos);
+        // 计算长度
+        block_cal_length(pretreat_block);
         // 计算速度
         block_cal_vel(pretreat_block);
         // 计算切矢
         block_cal_vector(pretreat_block);
-        // 计算长度
-        block_cal_length(pretreat_block);
         // 计算两段衔接夹角
-        block_cal_angle(pretreat_block, &pretreat_queue->pre_vec, &pretreat_block->start_vec);
-        // 更新上一段终点
+        block_cal_angle(pretreat_block, &pretreat_queue->pre_vec);
+        // 计算起点曲率
+        block_cal_curvature(pretreat_block, &pretreat_queue->pre_startpos, &pretreat_queue->pre_pos,&pretreat_block->end_pos);
+        // 保存信息
         pretreat_queue->pre_pos = pretreat_block->end_pos;
         pretreat_queue->pre_vec = pretreat_block->end_vec;
+        pretreat_queue->pre_startpos = pretreat_block->start_pos;
         break;
+    }
+}
+
+/// @brief 处理异常点
+static void block_deal_outlier(PLAN_BLOCK* pretreat_block, PLAN_BLOCK* treat_block){
+    switch (pretreat_block->mode)
+    {
+    // 处理空包和非移动指令
+    case PMC_MODE_NULL:
+    case PMC_MODE_M_CMD:
+    case PMC_MODE_PAUSE:
+        queue_pop(pretreat_queue);
+        queue_soft_push(treat_queue);
+        break;
+    // 处理移动指令 
+    default:
+        // 长度小于阈值不放入队列
+        if(!is_length_valid(pretreat_block)){
+            queue_pop(pretreat_queue);
+            // 更新下一段起点，起始方向，终点方向，长度
+            PLAN_BLOCK* next_block;
+            next_block=queue_peak(pretreat_queue);
+            next_block->start_pos=pretreat_block->end_pos;
+            next_block->start_vec= next_block->end_vec = VECTOR_Unit(&next_block->start_pos, &next_block->end_pos);
+            block_cal_length(next_block);
+        }else{
+            queue_pop(pretreat_queue);
+            queue_soft_push(treat_queue);
+
+        }
+        break;
+    }
+}
+
+/// @brief nurbs拟合
+static GNC_RES block_fixturnning_point()
+{
+    // 逆行点修复：
+    PLAN_BLOCK *treat_block;
+    PLAN_BLOCK *fix_block;
+    PLAN_QUEUE *fix_queue_temp;
+    fix_queue_temp = fix_queue;
+    for (int i = 0; i < PRE_TREAT_SIZE; i++)
+    {
+        // 如果一致性队列已满，提前结束
+        if (queue_is_full(fix_queue))
+            return GNC_DATA_FULL;
+        // 如果处理队列无数据，提前结束
+        if (queue_is_empty(treat_queue))
+            return GNC_DATA_EMPTY;
+        
+        treat_block = queue_peak(treat_queue);
+        if(treat_block == NULL) return GNC_DATA_NULL;
+
+        switch (treat_block->mode)
+        {
+        // 处理空包和非移动指令
+        case PMC_MODE_NULL:
+        case PMC_MODE_M_CMD:
+        case PMC_MODE_PAUSE:
+            fix_block = queue_peak_tail(fix_queue);
+            if(fix_block == NULL) return GNC_DATA_NULL;
+            memcpy(fix_block, treat_block, sizeof(PLAN_BLOCK));
+            queue_pop(treat_queue);
+            queue_soft_push(fix_queue);
+            break;
+        // 处理移动指令
+        default:
+            fix_block = queue_peak_tail(fix_queue);
+            if(fix_block == NULL) return GNC_DATA_NULL;
+            memcpy(fix_block, treat_block, sizeof(PLAN_BLOCK));
+            // 判断是否分段
+            block_cal_segment(fix_block, rt_data->chan_data[0].seg_theta_thre,fix_queue_temp);
+            // 处理nurbs拟合
+            block_deal_nurbs_enable(fix_block,fix_queue_temp);
+
+            queue_pop(treat_queue);
+            queue_soft_push(fix_queue);
+            fix_queue->pre_pos = fix_block->end_pos;
+            fix_queue->pre_vec = fix_block->end_vec;
+            fix_queue->pre_startpos = fix_block->start_pos;
+            blocknum++;
+        }
+    }
+    return GNC_CAL_SUCCESS;
+}
+
+static GNC_RES block_unif_by_nurbs()
+{
+    PLAN_BLOCK *treat_block;
+
+    // 未处理其译码结束时，nurbs队列还在等待新block
+    // static int startflag = 1;
+
+    if ((queue_is_empty(fix_queue)))
+        return GNC_OPERATOR_SUCCESS;
+
+    // 如果前瞻队列已满，提前结束
+    if (queue_is_full(unif_queue))
+        return GNC_OPERATOR_SUCCESS;
+    
+    //结束逻辑：
+    if ((rt_data->chan_state[0][CHAN_IS_PARSERING] == false)&&queue_is_empty(treat_queue))
+    {
+        if(queue_get_size(fix_queue)==1)
+        {
+            treat_block = queue_peak(fix_queue);
+            queue_push(unif_queue, treat_block);
+            queue_pop(fix_queue);
+            return GNC_OPERATOR_SUCCESS;
+        }
+    }
+
+    treat_block = queue_peak(fix_queue);
+    if (treat_block == NULL)
+        return GNC_DATA_NULL;
+
+    switch (treat_block->mode)
+    {
+    // 处理空包和非移动指令
+    case PMC_MODE_NULL:
+    case PMC_MODE_M_CMD:
+    case PMC_MODE_PAUSE:
+        // 如果前瞻队列已满，提前结束
+        if (queue_is_full(unif_queue))
+            break;
+        queue_push(unif_queue, treat_block);
+        queue_pop(fix_queue);
+        break;
+    // 处理移动指令
+    default:
+        // 处理遗留未入队的nurbs队列， 防止treat队列满了导致两段nurbs和为一起。
+        if (queue_peak(fix_queue)->type != NURBS)
+        {
+            if (!(queue_is_empty(nurbs_temp_queue)))
+            {
+                if (queue_peak(nurbs_temp_queue)->type == LINE)
+                {
+                    for (int i = 0; i < PRE_TREAT_SIZE; i++)
+                    {
+                        // 如果预处理队列无数据，提前结束
+                        if (queue_is_empty(nurbs_temp_queue))
+                            break;
+                        // 如果前瞻队列已满，提前结束
+                        if (queue_is_full(unif_queue))
+                            break;
+                        treat_block = queue_peak(nurbs_temp_queue);
+                        treat_block->type = LINE;
+                        queue_push(unif_queue, treat_block);
+                        queue_pop(nurbs_temp_queue);
+                    }
+                    return GNC_OPERATOR_SUCCESS;
+                }
+                else
+                {
+                    treat_block = queue_peak(nurbs_temp_queue);
+                    int nurbs_queue_size = queue_get_size(nurbs_temp_queue);
+                    if (nurbs_queue_size >= segmentnum)
+                    {
+                        if (cal_nurbs_controlpoint(nurbs_temp_queue, treat_block, rt_data->chan_data[0].nurbs_fiterror, rt_data->chan_data[0].nurbs_sagittaerror))
+                        {
+                            LOG(LOG_LEVEL_INFO, "nurbs拟合/拟合失败，在%d段出现", treat_block->line_number);
+                            return GNC_OPERATOR_SUCCESS;
+                        }
+                        // nurbs段重算速度与长度
+                        treat_block->length = treat_block->nurbs_data.length;
+                        double min_feed = MIN3(rt_data->axis_data[0].max_feed_vel, rt_data->axis_data[1].max_feed_vel, rt_data->axis_data[2].max_feed_vel);
+                        double vn = vp_cal_nurbs_max_vel(treat_block, rt_data->chan_data[0].path_tolerance, rt_data->ncu_data.cycle);
+                        treat_block->max_vel = treat_block->feed_vel = MIN3(treat_block->feed_vel, min_feed, vn);
+                        // nurbs段重算切矢与上一段连接角度
+                        block_cal_vector(treat_block);
+                        block_cal_angle(treat_block, &queue_peak_pre_tail(unif_queue)->end_vec);  
+                        // nurbs段重算与下一段连接角度
+                        block_cal_angle(queue_peak(fix_queue), &treat_block->end_vec);  
+                        queue_push(unif_queue, treat_block);
+                        return GNC_OPERATOR_SUCCESS;
+                    }
+                    else
+                    {
+                        for (int i = 0; i < PRE_TREAT_SIZE; i++)
+                        {
+                            if (queue_is_empty(nurbs_temp_queue))
+                                break;
+                            treat_block = queue_peak(nurbs_temp_queue);
+                            treat_block->type = LINE;
+                            if (queue_is_full(unif_queue))
+                                break;
+                            queue_push(unif_queue, treat_block);
+                            queue_pop(nurbs_temp_queue);
+                        }
+                        return GNC_OPERATOR_SUCCESS;
+                    }
+                }
+            }
+            else
+            {
+                // 拷贝 fix_queue 的数据
+                for (int i = 0; i < PRE_TREAT_SIZE; i++)
+                {
+                    if (queue_is_full(unif_queue))
+                        break;
+                    if (queue_get_size(fix_queue) <= 1)
+                        break;
+                    treat_block = queue_peak(fix_queue);
+                    if (treat_block->type == NURBS)
+                    {
+                        break;
+                    }
+                    queue_push(unif_queue, treat_block);
+                    queue_pop(fix_queue);
+                }
+                return GNC_OPERATOR_SUCCESS;
+            }
+        }
+        else
+        {
+            if (!(queue_is_empty(nurbs_temp_queue)))
+            {
+                if (queue_peak(nurbs_temp_queue)->type == LINE)
+                {
+                    for (int i = 0; i < PRE_TREAT_SIZE; i++)
+                    {
+                        // 如果预处理队列无数据，提前结束
+                        if (queue_is_empty(nurbs_temp_queue))
+                            break;
+                        // 如果前瞻队列已满，提前结束
+                        if (queue_is_full(unif_queue))
+                            break;
+                        treat_block = queue_peak(nurbs_temp_queue);
+                        treat_block->type = LINE;
+                        queue_push(unif_queue, treat_block);
+                        queue_pop(nurbs_temp_queue);
+                    }
+                    return GNC_OPERATOR_SUCCESS;
+                }
+                else
+                {
+                    treat_block = queue_peak(nurbs_temp_queue);
+                    int nurbs_queue_size = queue_get_size(nurbs_temp_queue);
+                    if (nurbs_queue_size >= maxsegmentnum)
+                    {
+                        if (cal_nurbs_controlpoint(nurbs_temp_queue, treat_block, rt_data->chan_data[0].nurbs_fiterror, rt_data->chan_data[0].nurbs_sagittaerror))
+                        {
+                            LOG(LOG_LEVEL_INFO, "nurbs拟合/拟合失败，在%d段出现", treat_block->line_number);
+                            return GNC_OPERATOR_SUCCESS;
+                        }
+                         // nurbs段重算速度与长度
+                        treat_block->length = treat_block->nurbs_data.length;
+                        double min_feed = MIN3(rt_data->axis_data[0].max_feed_vel, rt_data->axis_data[1].max_feed_vel, rt_data->axis_data[2].max_feed_vel);
+                        double vn = vp_cal_nurbs_max_vel(treat_block, rt_data->chan_data[0].path_tolerance, rt_data->ncu_data.cycle);
+                        treat_block->max_vel = treat_block->feed_vel = MIN3(treat_block->feed_vel, min_feed, vn);
+                        // nurbs段重算切矢与上一段连接角度
+                        block_cal_vector(treat_block);
+                        block_cal_angle(treat_block, &queue_peak_pre_tail(unif_queue)->end_vec);  
+                        // nurbs段重算与下一段连接角度
+                        block_cal_angle(queue_peak(fix_queue), &treat_block->end_vec);  
+
+                        queue_push(unif_queue, treat_block);
+                        return GNC_OPERATOR_SUCCESS;
+                    }
+                }
+            }
+            for (int i = 0; i < PRE_TREAT_SIZE; i++)
+            {
+                if (queue_is_full(unif_queue))
+                    break;
+                if (queue_get_size(fix_queue) <= 1)
+                    break;
+
+                treat_block = queue_peak(fix_queue);
+
+                // 到了不是nurbs队列的段，看nurbs缓存，大于分段点则拟合，否则将缓存转换为line
+                if (treat_block->isContinue == 0)
+                {
+                    int nurbs_queue_size = queue_get_size(nurbs_temp_queue);
+                    if (nurbs_queue_size >= segmentnum)
+                    {
+                        PLAN_BLOCK *nurbs_temp_block = queue_peak(nurbs_temp_queue);
+                        if (cal_nurbs_controlpoint(nurbs_temp_queue, nurbs_temp_block, rt_data->chan_data[0].nurbs_fiterror, rt_data->chan_data[0].nurbs_sagittaerror))
+                        {
+                            LOG(LOG_LEVEL_INFO, "nurbs拟合/拟合失败，在%d段出现", nurbs_temp_block->line_number);
+                            return GNC_OPERATOR_SUCCESS;
+                        }
+                         // nurbs段重算速度与长度
+                        nurbs_temp_block->length = nurbs_temp_block->nurbs_data.length;
+                        double min_feed = MIN3(rt_data->axis_data[0].max_feed_vel, rt_data->axis_data[1].max_feed_vel, rt_data->axis_data[2].max_feed_vel);
+                        double vn = vp_cal_nurbs_max_vel(nurbs_temp_block, rt_data->chan_data[0].path_tolerance, rt_data->ncu_data.cycle);
+                        nurbs_temp_block->max_vel = nurbs_temp_block->feed_vel = MIN3(nurbs_temp_block->feed_vel, min_feed, vn);
+                        // nurbs段重算切矢与上一段连接角度
+                        block_cal_vector(nurbs_temp_block);
+                        block_cal_angle(nurbs_temp_block, &queue_peak_pre_tail(unif_queue)->end_vec);  
+                        // nurbs段重算与下一段连接角度
+                        block_cal_angle(queue_peak(fix_queue), &nurbs_temp_block->end_vec);  
+                       
+                        queue_push(unif_queue, nurbs_temp_block);
+                        // 如果前瞻队列已满，提前结束
+                        if (queue_is_full(unif_queue))
+                            break;
+                        queue_push(unif_queue, treat_block);
+                        queue_pop(fix_queue);
+                        break;
+                    }
+                    else
+                    {
+                        for (int i = 0; i < PRE_TREAT_SIZE; i++)
+                        {
+                            // 如果预处理队列无数据，提前结束
+                            if (queue_is_empty(nurbs_temp_queue))
+                                break;
+                            treat_block = queue_peak(nurbs_temp_queue);
+                            treat_block->type = LINE;
+                            // 如果前瞻队列已满，提前结束
+                            if (queue_is_full(unif_queue))
+                                break;
+                            queue_push(unif_queue, treat_block);
+                            queue_pop(nurbs_temp_queue);
+                        }
+                        return GNC_OPERATOR_SUCCESS;
+                    }
+                }
+
+                queue_push(nurbs_temp_queue, treat_block);
+                queue_pop(fix_queue);
+            }
+            return GNC_OPERATOR_SUCCESS;
+        }
+    }
+}
+
+// 对相邻直线进行圆弧平滑。
+// 只有译码结束且上游队列全部排空，才允许提交最后一段。
+// 队列复位、删除及平滑模式切换，必须与本规划任务串行执行。
+static GNC_RES block_unif_by_circle_smooth(void)
+{
+    CORNER_SMOOTH_CONFIG cfg;
+    CORNER_SMOOTH_CONTROLLER_MAP map;
+
+    // 初始化几何参数，并使用通道配置的路径允许偏差。
+    circle_smooth_default_config(&cfg);
+    circle_smooth_default_map(&map);
+    cfg.path_tolerance = rt_data->chan_data[0].path_tolerance;
+
+    for (int i = 0; i < PRE_TREAT_SIZE; ++i)
+    {
+        // 需同时检查两个上游队列。
+        bool flush = !rt_data->chan_state[0][CHAN_IS_PARSERING] && queue_is_empty(parser_queue) && queue_is_empty(pretreat_queue);
+
+        // 每次处理一对相邻段，仅进行几何平滑和队列传递。
+        GNC_RES res = circle_smooth_queue_step(treat_queue, unif_queue, flush, &cfg, &map);
+        if (res != GNC_OPERATOR_SUCCESS)
+        {
+            // 等待后继段、输出空间不足或参数错误时，保留未提交的数据。
+            return res;
+        }
+    }
+
+    return GNC_CAL_SUCCESS;
+}
+
+static GNC_RES block_unif_by_treat()
+{
+    PLAN_BLOCK* treat_block;
+    PLAN_BLOCK* unif_block;
+
+    for(int i = 0; i < PRE_TREAT_SIZE; i++){
+        // 如果一致性队列已满，提前结束
+        if(queue_is_full(unif_queue)) return GNC_DATA_FULL;
+        // 如果处理队列无数据，提前结束
+        if(queue_is_empty(treat_queue)) return GNC_DATA_EMPTY;
+
+        treat_block = queue_peak(treat_queue);
+        if(treat_block == NULL) return GNC_DATA_NULL;
+        unif_block = queue_peak_tail(unif_queue);
+        if(unif_block == NULL) return GNC_DATA_NULL;
+
+        memcpy(unif_block, treat_block, sizeof(PLAN_BLOCK));
+        queue_pop(treat_queue);
+        queue_soft_push(unif_queue);
+    }
+    return GNC_CAL_SUCCESS;
+}
+
+
+static bool is_length_valid(PLAN_BLOCK* parser_block){
+    if((parser_block->length != 0) && (parser_block->length <= rt_data->chan_data[0].l_min_thre))
+    {
+        return false;
+    }
+    return true;
+} 
+
+static void block_deal_nurbs_enable(PLAN_BLOCK* pretreat_block, PLAN_QUEUE *temp){
+    if (rt_data->chan_data[0].nurbs_enable)
+    {
+        // 逆行点修复
+        if(blocknum > 3){
+            block_fix_pos(pretreat_block, rt_data->chan_data[0].l_theta_thre, rt_data->chan_data[0].theta_thre, temp);
+        }
+        // 修改为nurbs类型
+        if(pretreat_block->isContinue && pretreat_block->type == LINE) pretreat_block->type = NURBS;  
     }
 }
 
@@ -218,8 +692,15 @@ static void block_cal_vel(PLAN_BLOCK* current_block){
         case HELIX_CCW:
             current_block->max_acc = MIN3(rt_data->axis_data[0].max_feed_acc, rt_data->axis_data[1].max_feed_acc, rt_data->axis_data[2].max_feed_acc);
             current_block->max_jerk = MIN3(rt_data->axis_data[0].max_feed_jk, rt_data->axis_data[1].max_feed_jk, rt_data->axis_data[2].max_feed_jk);
-            double vc = vp_cal_circular_max_vel(current_block, rt_data->chan_data[0].path_tolerance, rt_data->ncu_data.cycle);
+            double vc = vp_cal_circular_max_vel(current_block, rt_data->chan_data[0].path_tolerance, rt_data->chan_data[0].max_fv_arc_radius, rt_data->chan_data[0].radius_r_max_fv, rt_data->chan_data[0].circular_min_vel, rt_data->ncu_data.cycle);
             current_block->max_vel = current_block->feed_vel = MIN3(current_block->feed_vel, min_feed, vc);   // G02G03最大速度
+            break;
+        case NURBS:
+            current_block->max_acc = MIN3(rt_data->axis_data[0].max_feed_acc, rt_data->axis_data[1].max_feed_acc, rt_data->axis_data[2].max_feed_acc);
+            current_block->max_jerk = MIN3(rt_data->axis_data[0].max_feed_jk, rt_data->axis_data[1].max_feed_jk, rt_data->axis_data[2].max_feed_jk);
+            // nurbs曲线最大速度计算
+            double vn = vp_cal_nurbs_max_vel(current_block, rt_data->chan_data[0].path_tolerance, rt_data->ncu_data.cycle);
+            current_block->max_vel = current_block->feed_vel = MIN3(current_block->feed_vel, min_feed, vn);
             break;
         default:
             break;
@@ -239,21 +720,92 @@ static double cal_two_vectors_angle(VECTOR* vector1, VECTOR* vector2){
 }
 
 // 根据切失计算两段之间的衔接角度
-static void block_cal_angle(PLAN_BLOCK* current_block, VECTOR* pre_end_vector, VECTOR* cur_start_vector){
+static void block_cal_angle(PLAN_BLOCK* current_block, VECTOR* pre_end_vector){
     switch(current_block->type){
-        case RAPID:
-        case LINE:
         case CIRCLE_CCW:
         case CIRCLE_CW:
         case HELIX_CW:
         case HELIX_CCW:
+            double angle_rad_start = cal_two_vectors_angle(pre_end_vector, &current_block->start_vec);
+            double angle_rad_end = cal_two_vectors_angle(pre_end_vector, &current_block->end_vec);
+            current_block->angle_rad = fmax(angle_rad_start, angle_rad_end);
+            // LOG(LOG_LEVEL_DEBUG, "no %d, angle:%f", current_block->line_number, current_block->angle_rad);
+            break;
+        case NURBS:
+        case RAPID:
+        case LINE:
         case RIGID_TAP:
         case TAP_RETURN:
         case PROBE:
-            current_block->angle_rad = cal_two_vectors_angle(pre_end_vector, cur_start_vector);
-            break;
         default:
+            current_block->angle_rad = cal_two_vectors_angle(pre_end_vector, &current_block->start_vec);
             break;
+    }
+}
+
+// 根据位置计算起点曲率
+static void block_cal_curvature(PLAN_BLOCK* current_block, POS* pre_start_pos, POS* pre_end_pos, POS* current_pos)
+{
+    VECTOR AB = POS_VECTOR(pre_start_pos, pre_end_pos);
+    VECTOR BC = POS_VECTOR(pre_end_pos, current_pos);
+    VECTOR AC = POS_VECTOR(pre_start_pos, current_pos);
+    double denominator = POS_Norm(AB)*POS_Norm(BC)*POS_Norm(AC);
+    if (denominator < 1e-8)
+    {
+        current_block->curvature = 0;
+    }
+    else
+    {
+        double curvature = 2 * CrossVector(&AB, &BC) / denominator;
+        current_block->curvature = curvature;
+    }
+}
+
+//新增长度比
+static int block_cal_segment(PLAN_BLOCK* pretreat_block, double seg_theta_thre,PLAN_QUEUE *temp){
+    if ((pretreat_block->angle_rad>(seg_theta_thre*PI/180.0))||(pretreat_block->angle_rad==0))
+    {   
+        pretreat_block->isContinue=0;
+        return 0;
+    }
+    if(blocknum>1)
+    if (fabs((queue_peak_pre_tail(temp)->length)/pretreat_block->length)>20|| fabs((queue_peak_pre_tail(temp)->length)/pretreat_block->length)<0.05)
+    {
+        pretreat_block->isContinue=0;
+        return 0;
+    }
+    if(pretreat_block->type==LINE)
+    {    
+        pretreat_block->isContinue=1;
+        return 1;
+    }
+    else 
+    {
+        pretreat_block->isContinue=0;
+        return 0;
+    }
+}
+
+static void block_fix_pos(PLAN_BLOCK* pretreat_block, double l_theta_thre, double theta_thre, PLAN_QUEUE *temp){
+    PLAN_BLOCK* last_pretreat_block=queue_peak_pre_tail(temp);
+    PLAN_BLOCK* lastlast_pretreat_block=queue_peak_prepre_tail(temp);
+    if((last_pretreat_block->angle_rad!=0)&&(pretreat_block->angle_rad!=0))
+    if((last_pretreat_block->length<l_theta_thre)&&(last_pretreat_block->angle_rad>(theta_thre*PI/180))&&(pretreat_block->angle_rad>(theta_thre*PI/180)))
+    {
+        VECTOR v24= VECTOR_Unit(&last_pretreat_block->start_pos,&pretreat_block->end_pos);//24
+        VECTOR v12= VECTOR_Unit(&lastlast_pretreat_block->start_pos,&last_pretreat_block->start_pos);//12
+        double angle124=cal_two_vectors_angle(&v12,&v24);
+        if(angle124<last_pretreat_block->angle_rad)
+        {
+            last_pretreat_block->end_pos.x=(pretreat_block->end_pos.x+ last_pretreat_block->start_pos.x)/2;
+            last_pretreat_block->end_pos.y=(pretreat_block->end_pos.y+ last_pretreat_block->start_pos.y)/2;
+            last_pretreat_block->end_pos.z=(pretreat_block->end_pos.z+ last_pretreat_block->start_pos.z)/2;
+            pretreat_block->start_pos=last_pretreat_block->end_pos;
+        }
+        block_cal_vector(last_pretreat_block);
+        block_cal_vector(pretreat_block);
+        block_cal_length(last_pretreat_block);
+        block_cal_length(pretreat_block);
     }
 }
 
@@ -371,11 +923,30 @@ static double block_cal_circle_length(PLAN_BLOCK* current_block){
         case CIRCLE_CCW:
             return current_block->circular_data.rad * current_block->circular_data.radius;
         case HELIX_CW:
-        case HELIX_CCW:
+        case HELIX_CCW:block_cal_circle_length(current_block);
             current_block->helical_data.screw_rad = atan2(current_block->helical_data.screw_offset, current_block->circular_data.rad * current_block->circular_data.radius);
             return sqrt(pow(current_block->circular_data.rad * current_block->circular_data.radius, 2) + pow(current_block->helical_data.screw_offset, 2));
         default:
             return 0;
+    }
+}
+
+static double block_cal_nurbs_length(PLAN_BLOCK *current_block)
+{
+    if (current_block->nurbs_data.control_point != 0)
+    {
+        int num_samples = 1000;
+        double u_vals[1000];
+        for (int i = 0; i < num_samples; i++)
+        {
+            u_vals[i] = (double)i / (num_samples - 1);
+        }
+        current_block->length  = getlength(u_vals, num_samples,current_block->nurbs_data.control_point, 3, current_block->nurbs_data.U, current_block->nurbs_data.num,current_block->nurbs_data.w);
+    }
+    else
+    {
+        setAlarm(ALARM_CH, ALARM_ERROR, 2);
+        LOG(LOG_LEVEL_ERR, "尚未进行nurbs拟合/拟合失败，在%d段出现", current_block->line_number);
     }
 }
 
@@ -394,6 +965,9 @@ void block_cal_length(PLAN_BLOCK* current_block){
         case HELIX_CW:
         case HELIX_CCW:
             current_block->length = block_cal_circle_length(current_block);
+            break;
+        case NURBS:
+            current_block->length = block_cal_nurbs_length(current_block);
             break;
         default:
             break;
@@ -414,10 +988,18 @@ void block_cal_vector(PLAN_BLOCK* current_block){
         case CIRCLE_CW:
         case HELIX_CW:
         case HELIX_CCW:
-            // 计算圆弧的切失，指向圆心
             block_cal_circle_vector(current_block);
-            return;
+            break;
+        case NURBS:
+            POS start_vec, end_vec;
+            nurbs_curve_derivative(1, current_block->nurbs_data.control_point, current_block->nurbs_data.w, current_block->nurbs_data.U,current_block->nurbs_data.num, current_block->nurbs_data.k, &end_vec);
+            nurbs_curve_derivative(0, current_block->nurbs_data.control_point, current_block->nurbs_data.w, current_block->nurbs_data.U,current_block->nurbs_data.num, current_block->nurbs_data.k, &end_vec);
+            POS_Divide(&end_vec, POS_Norm(end_vec));
+            POS_Divide(&start_vec, POS_Norm(start_vec));
+            current_block->end_vec = end_vec;
+            current_block->start_vec = start_vec;
+            break;
         default:
-            return;
+            break;
     }
 }

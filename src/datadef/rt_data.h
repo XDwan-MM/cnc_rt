@@ -97,30 +97,34 @@ typedef struct{
 // 目前仅轨迹线程使用
 typedef struct
 {
-    double act_vel;         // 通道实际合成速度 
-    double act_acc;         // 通道实际合成加速度 
-    double act_jk;          // 通道实际合成加加速度 
-    double cmd_vel;         // 通道指令合成速度 
-    double cmd_acc;         // 通道指令合成加速度 
-    double cmd_jk;          // 通道指令合成加加速度
-    // 重启生效
-    bool ex_dec_enable;     // 是否开启外部减速功能
-    // 复位生效
-    bool ex_dec2_enable;    // 是否开启外部减速功能2
-    bool ex_dec3_enable;    // 是否开启外部减速功能3
-    bool ex_dec4_enable;    // 是否开启外部减速功能4
-    bool ex_dec5_enable;    // 是否开启外部减速功能5
-    double cut_ex_dec1_vel; // 外部减速1对切削进给的减速速度
-    double cut_ex_dec2_vel; // 外部减速2对切削进给的减速速度
-    double cut_ex_dec3_vel; // 外部减速3对切削进给的减速速度
-    double cut_ex_dec4_vel; // 外部减速4对切削进给的减速速度
-    double cut_ex_dec5_vel; // 外部减速5对切削进给的减速速度
-    double dryrun_spd;      // 空运行速度
-    double max_tang_acc;    // 最大向心加速度
-    int vplan_mode;         // 速度规划模式
-    int lookahead_num;      // 速度规划前瞻段数
-    double path_tolerance;  // 轨迹轮廓允差
-    int corner_dec_factor;  // 拐角降速比例因子
+    double act_vel;             // 通道实际合成速度 
+    double act_acc;             // 通道实际合成加速度 
+    double act_jk;              // 通道实际合成加加速度 
+    double cmd_vel;             // 通道指令合成速度 
+    double cmd_acc;             // 通道指令合成加速度 
+    double cmd_jk;              // 通道指令合成加加速度
+    // 重启生效 
+    bool ex_dec_enable;         // 是否开启外部减速功能
+    // 复位生效 
+    bool ex_dec2_enable;        // 是否开启外部减速功能2
+    bool ex_dec3_enable;        // 是否开启外部减速功能3
+    bool ex_dec4_enable;        // 是否开启外部减速功能4
+    bool ex_dec5_enable;        // 是否开启外部减速功能5
+    double cut_ex_dec1_vel;     // 外部减速1对切削进给的减速速度
+    double cut_ex_dec2_vel;     // 外部减速2对切削进给的减速速度
+    double cut_ex_dec3_vel;     // 外部减速3对切削进给的减速速度
+    double cut_ex_dec4_vel;     // 外部减速4对切削进给的减速速度
+    double cut_ex_dec5_vel;     // 外部减速5对切削进给的减速速度
+    double dryrun_spd;          // 空运行速度
+    double max_tang_acc;        // 最大向心加速度
+    int vplan_mode;             // 速度规划模式
+    int lookahead_num;          // 速度规划前瞻段数
+    double path_tolerance;      // 轨迹轮廓允差
+    int corner_dec_factor;      // 拐角降速比例因子
+    double max_fv_arc_radius;   // 与最大进给速度相对应的圆弧半径值
+    double radius_r_max_fv;     // 半径R的圆弧最大进给速度
+    double circular_min_vel;    // 基于圆弧插补下减速的下限速度
+    double axis_min_vel;        // 基于每个轴加速度的下限速度
     double l_min_thre;
     double l_theta_thre;
     double theta_thre;
@@ -130,7 +134,7 @@ typedef struct
     double nurbs_fiterror;
     double nurbs_sagittaerror;
     int nurbs_enable;       // 开启nurbs拟合
-    UNIF_TYPE unif_type;    // 一致性处理方式
+    UNIF_TYPE unif_type;
 } RT_CHAN;
 
 // 目前仅轨迹线程使用

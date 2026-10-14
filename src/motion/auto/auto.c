@@ -163,6 +163,21 @@ static void auto_update_state(){
             break;
         case SYS_EVENT_RERUN:
             LOG(LOG_LEVEL_INFO, "自动模式处理循环启动");
+            switch(cycle_tp->exec_cmd){
+            case DO_CHOP_CMD:
+                switch (cycle_tp->plan_block->type)
+                {
+                case NURBS: // nurbs暂停后不可恢复
+                    setAlarm(ALARM_CH, ALARM_ERROR, 5);
+                    LOG(LOG_LEVEL_ERR, "NURBS暂停后不可恢复,请重新运行");
+                    return;
+                default:
+                    break;
+                }
+                break;
+            default:
+                break;
+            }
             cycle_tp->exec_state = EXEC_RUNNING;
             auto_restart_run();
             switch (cycle_tp->running_stage)
@@ -741,7 +756,7 @@ static bool auto_check_program_end(){
 }
 
 static bool auto_is_program_end(){
-    return !rt_get_chan_state(0, CHAN_IS_PARSERING) && queue_is_empty(plan_queue) && queue_is_empty(pretreat_queue) && queue_is_empty(parser_queue);
+    return !rt_get_chan_state(0, CHAN_IS_PARSERING) && queue_is_empty(plan_queue) && queue_is_empty(unif_queue) && queue_is_empty(treat_queue) && queue_is_empty(pretreat_queue) && queue_is_empty(parser_queue);
 }
 
 static void auto_check_error_line(){
@@ -836,10 +851,29 @@ static void auto_update_cur_cmd(){
     auto_update_var();
 }
 
+void cycle_tp_add_block(){
+    PLAN_BLOCK* pretreat_block;
+    PLAN_BLOCK* plan_block;
+    // 拷贝 pretreat_queue 的数据
+    for(int i = 0; i < LOOK_AHEAD_SIZE; i++){
+        // 如果前瞻队列已满，提前结束
+        if(queue_is_full(plan_queue)) break;
+        // 如果预处理队列无数据，提前结束
+        if(queue_is_empty(unif_queue)) break;
+        pretreat_block = queue_peak(unif_queue);
+        queue_push(plan_queue, pretreat_block);
+        queue_pop(unif_queue);  
+    }
+}
+
 // 自动模式初始化
 static void auto_start_run(){
     // 重置队列
     queue_reset(plan_queue);
+    queue_reset(unif_queue);
+    queue_reset(nurbs_temp_queue);
+    queue_reset(fix_queue);
+    queue_reset(treat_queue);
     queue_reset(pretreat_queue);
     queue_reset(parser_queue);
     cycle_tp_reset();
@@ -906,7 +940,7 @@ static void auto_update_var(){
     }
     // 运行行号
     setVarChanInt(0, VAR_CHAN_RUN_ROW, cycle_tp->plan_block->line_number, 0);
-    // LOG(LOG_LEVEL_DEBUG, "line number:%d", cycle_tp->plan_block->line_number);
+    // LOG(LOG_LEVEL_DEBUG, "line number:%d type:%d", cycle_tp->plan_block->line_number, cycle_tp->plan_block->type);
     // 速度
     switch (cycle_tp->plan_block->mode)
     {
