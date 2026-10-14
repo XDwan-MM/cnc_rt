@@ -19,7 +19,7 @@ extern "C" {
 #include "ncitpdatadef.h"
 
 // 循环队列长度
-#define PLAN_QUEUE_SIZE 200
+#define PLAN_QUEUE_SIZE 500
 
 typedef enum{
     CLOCK = 0,    // 顺时针
@@ -74,6 +74,7 @@ typedef struct
     int k;
     int num;
     double length;
+    double curvature;   // 最大曲率
     //段信息
     int startlineno;
     int endlineno;
@@ -102,6 +103,8 @@ typedef struct
     double max_vel;     // 最大速度，随着进给倍率改变而改变
     double max_acc;
     double max_jerk;
+    double curvature;   // 曲率
+    int isContinue;     // 0,与上一block不处于一段；1,与上一block处于一段
     POS start_pos;      // 起始位置
     POS end_pos;        // 终点位置
     VECTOR start_vec;   // 起始矢量
@@ -118,7 +121,11 @@ typedef struct
     int size;
     // 前一段信息
     POS pre_pos;                 // 前一段终点位置
+    POS pre_startpos;            // 前一段起点位置
+    POS prepre_startpos;         // 前前一段起点位置
     VECTOR pre_vec;              // 前一段终点切失
+    double pre_angle;
+    double pre_length;           // 前一段长度
     double next_vel;             // 后一段初速度
     bool isFirstRUN;             // 是否为程序起点
     // 前首段信息
@@ -140,6 +147,10 @@ GNC_RES queue_push(PLAN_QUEUE* queue, const PLAN_BLOCK* block);
 PLAN_BLOCK* queue_peak(const PLAN_QUEUE* queue);
 
 PLAN_BLOCK* queue_peak_tail(const PLAN_QUEUE* queue);
+
+PLAN_BLOCK* queue_peak_pre_tail(const PLAN_QUEUE* queue);
+
+PLAN_BLOCK* queue_peak_prepre_tail(const PLAN_QUEUE* queue);
 
 // 以head为起始，向后偏移为index
 PLAN_BLOCK* queue_get_block(const PLAN_QUEUE* queue, int index);

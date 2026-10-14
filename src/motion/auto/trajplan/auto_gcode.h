@@ -28,7 +28,6 @@ void auto_execute_dwell_cmd();
 void auto_get_null_cmd();
 void auto_update_null_cmd();
 void auto_execute_null_cmd();
-void cycle_tp_add_block();
 bool auto_pos_cmd_is_finished();
 bool auto_dwell_cmd_is_finished();
 void cycle_tp_reset_pos_cmd_data();

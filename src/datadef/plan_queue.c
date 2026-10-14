@@ -21,7 +21,11 @@ GNC_RES queue_init(PLAN_QUEUE* queue){
     queue->pre_head_type = RAPID;
     queue->next_vel = 0;
     queue->pre_pos = (POS){.x=0, .y=0, .z=0};
+    queue->pre_startpos = (POS){.x=0, .y=0, .z=0};
+    queue->prepre_startpos = (POS){.x=0, .y=0, .z=0};
     queue->pre_vec = (VECTOR){.x=0, .y=0, .z=0};
+    queue->pre_angle = 0;
+    queue->pre_length = 0;
     pthread_mutex_init(&queue->mutex, NULL);
     return GNC_OPERATOR_SUCCESS;
 }
@@ -37,7 +41,11 @@ GNC_RES queue_reset(PLAN_QUEUE* queue){
     queue->pre_head_type = RAPID;
     queue->next_vel = 0;
     queue->pre_pos = (POS){.x=0, .y=0, .z=0};
+    queue->pre_startpos = (POS){.x=0, .y=0, .z=0};
+    queue->prepre_startpos = (POS){.x=0, .y=0, .z=0};
     queue->pre_vec = (VECTOR){.x=0, .y=0, .z=0};
+    queue->pre_angle = 0;
+    queue->pre_length = 0;
     pthread_mutex_unlock(&queue->mutex);
     return GNC_OPERATOR_SUCCESS;
 }
@@ -89,6 +97,27 @@ PLAN_BLOCK* queue_peak_tail(const PLAN_QUEUE* queue){
     if(queue == NULL || queue->block == NULL) return NULL;
     if(queue->size == PLAN_QUEUE_SIZE) return NULL;
     return &queue->block[queue->tail];
+}
+
+PLAN_BLOCK* queue_peak_pre_tail(const PLAN_QUEUE* queue){
+    if(queue == NULL || queue->block == NULL) return NULL;
+    if(queue->size == PLAN_QUEUE_SIZE) return NULL;
+    if(queue->tail!=0)
+    return &queue->block[queue->tail-1];
+    else
+    return &queue->block[PLAN_QUEUE_SIZE-1];
+
+}
+
+PLAN_BLOCK* queue_peak_prepre_tail(const PLAN_QUEUE* queue){
+    if(queue == NULL || queue->block == NULL) return NULL;
+    if(queue->size == PLAN_QUEUE_SIZE) return NULL;
+    if(queue->tail==1)
+    return &queue->block[PLAN_QUEUE_SIZE-1];
+    else if(queue->tail==0)
+    return &queue->block[PLAN_QUEUE_SIZE-2];
+    else 
+    return &queue->block[queue->tail-2];
 }
 
 PLAN_BLOCK* queue_get_block(const PLAN_QUEUE* queue, int index){

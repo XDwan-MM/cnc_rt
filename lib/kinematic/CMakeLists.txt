@@ -3,8 +3,6 @@ project(kinematic C CXX)
 
 # set(CMAKE_BUILD_TYPE Debug)
 
-# set(VERSION "1.11.0")
-
 set(CNC_RT_ROOT "" CACHE PATH "Path to cnc_rt root")
 if(NOT CNC_RT_ROOT)
     if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/../../src/utils/math/cnc_math.c")
@@ -12,7 +10,7 @@ if(NOT CNC_RT_ROOT)
     elseif(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/../cnc_rt/src/utils/math/cnc_math.c")
         get_filename_component(CNC_RT_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../cnc_rt" ABSOLUTE)
     else()
-        message(FATAL_ERROR "Cannot locate cnc_rt root. Set CNC_RT_ROOT to the cnc_rt directory.")
+        message(FATAL_ERROR "找不到cnc_rt路径")
     endif()
 endif()
 
@@ -47,7 +45,7 @@ set_target_properties(kinematic PROPERTIES
     OUTPUT_NAME "kinematic"
 )
 
-option(BUILD_TRAJECTORY_TESTS "Build trajectory unit tests" OFF)
+option(BUILD_TRAJECTORY_TESTS "Build trajectory unit tests" ON)
 if(BUILD_TRAJECTORY_TESTS)
     enable_testing()
 

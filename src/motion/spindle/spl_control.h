@@ -112,6 +112,7 @@ extern spindle_context_t spl_context;
 void spindle_control_update(void);
 
 void spl_context_init(spindle_context_t* spl_ctx);
+/** 在 F 信号发布之后记录状态变化，cycle 为发布周期编号。 */
 void spindle_request_m29(void);
 bool spindle_m29_is_ready(void);
 void spindle_clear_velocity_arrival(void);   /* 新指令/复位/定向/M29 入口调用 */

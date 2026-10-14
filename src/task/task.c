@@ -376,6 +376,7 @@ static void task_handle_spd_ori_event(PLC_EVENT *event_data)
     // 推送主轴定向释放事件
     if (event_data->spd_ori_payload.p1 == -1)
     {
+        spindle_clear_velocity_arrival();
         spl_context.spl_event = SPINDLE_EVENT_RELEASE_ORIENT;
     }
 }

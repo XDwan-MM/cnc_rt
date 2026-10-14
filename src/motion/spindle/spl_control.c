@@ -1197,7 +1197,7 @@ static void spindle_update_planner_state(spindle_context_t *context)
 
 static bool spindle_is_velocity_arrived(void)
 {
-    /* 到速必须同时满足 CSV、Operation Enabled、非零和误差带条件。 */
+    /* 到速必须同时满足 CSV、Operation Enabled（状态字 0x27）、非零和误差带条件。 */
     if (spindle_velocity_feedback_blocked() || !spindle_is_rotating())
     {
         return false;
@@ -1210,8 +1210,15 @@ static bool spindle_is_velocity_arrived(void)
     /*
      * 606C 实际速度和 60FF 目标速度必须来自同一 CSV 单位。除误差带外
      * 还要求实际速度非零，避免驱动器未使能或电机未转时误发 M3 FIN。
+     * 状态字 0x006F == 0x0027（Operation Enabled）与 enabled 双查，
+     * 避免 HAL 使能镜像滞后时用旧反馈误判到速。
      */
-    if (spl_drv_mode() != HAL_SPINDLE_CSV || !spl_drv_enabled())
+    if (!isfinite(target))
+    {
+        return false;
+    }
+    if (spl_drv_mode() != HAL_SPINDLE_CSV || !spl_drv_enabled() ||
+        (spl_drv_status_word() & 0x006FU) != 0x0027U)
     {
         return false;
     }

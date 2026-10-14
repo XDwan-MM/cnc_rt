@@ -1,0 +1,11 @@
+远程触发:
+  stage: build
+  tags:
+    - hmi_v3
+  script:
+    - bash build.sh
+    - tar -cf kinematic.tar include bin .git version.sh
+    - curl -uly_35b717:AP38qFMP2jfnFYm5gav4KV2EyXV -T kinematic.tar "http://10.2.30.32:8081/artifactory/source/ly/CNC-Lib/MOTION/"
+    - ls
+  only:
+    - triggers
