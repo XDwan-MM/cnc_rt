@@ -69,6 +69,8 @@ typedef struct
     bool program_start_valid;
     BREAK_POINT break_block;           // 目标段（行号 + 留档字段）
     POS break_end;                     // 目标段译码终点
+    int cur_row_line;                  // 当前的行号，-1 = 没有指纹，判读程序是否改过
+    POS cur_row_first_end;              // 当前行第一个包的译码终点
     MST_RESTORE mst;                   // 辅助功能恢复（扫描时现收，见上）
     bool is_first_time_click_rerun;
 } RERUN_DATA;
@@ -78,8 +80,11 @@ void rerun_data_reset();
 void rerun_data_reset_keep_breakpoint();
 
 void rerun_update_when_switching();
-void rerun_data_store(PLAN_BLOCK* break_block);
-void rerun_store_breakpoint(bool is_breakpoint);
+void rerun_store_breakpoint(const PLAN_BLOCK* block);
+void rerun_track_current_row(const PLAN_BLOCK* block);
+void rerun_data_clear_breakpoint(void);
+
+
 bool check_is_program_rerun();
 void rerun_reset_is_rerun();
 

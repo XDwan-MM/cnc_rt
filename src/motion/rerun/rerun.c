@@ -11,6 +11,7 @@ GNC_RES rerun_data_init(){
     rerun_data->is_mem_rerun = 0;
     rerun_data->rerun_row = 0;
     rerun_data->is_first_time_click_rerun = true;
+    rerun_data->cur_row_line = -1;
     return GNC_OPERATOR_SUCCESS;
 }
 
@@ -25,6 +26,8 @@ void rerun_data_reset(){
     rerun_data->is_mem_rerun = 0;
     rerun_data->rerun_row = 0;
     rerun_data->is_first_time_click_rerun = true;
+    rerun_data->cur_row_line = -1;
+
     rerun_mst_reset();
     delAlarm(ALARM_CH, ALARM_WARNING, 3);
     delAlarm(ALARM_CH, ALARM_ERROR, 4);
@@ -131,46 +134,56 @@ void rerun_make_mst_block(const MST_RESTORE* r, int index,
     }
 }
 
-/// @brief 自动加工过程中记录当前行信息
-void rerun_data_store(PLAN_BLOCK* break_block){
-    if (rt_data->current_mode != MODE_MEM) return;
-    if (break_block->is_breakpoint) return;
+/// @brief 清掉断点快照（恢复运行 / 从头跑时调用）
 
-    rerun_data->is_mem_rerun = 1;
-
-    const bool first_packet_of_a_row =
-        (!rerun_data->break_block.valid) ||
-        (break_block->line_number != rerun_data->break_block.line_number);
-
-    rerun_data->break_block.valid       = true;
-    rerun_data->break_block.line_number = break_block->line_number;
-    rerun_data->break_block.mode        = break_block->mode;
-    rerun_data->break_block.type        = break_block->type;
-    rerun_data->break_block.m_code      = break_block->mst_data.m_code;
-
-    if (first_packet_of_a_row) {
-        memcpy(&rerun_data->break_end, &break_block->end_pos, sizeof(POS)); //记录断点程序段终点
-    }
-
-    // 断电块保存
+void rerun_data_clear_breakpoint(void)
+{
+    if (rerun_data == NULL) return;
+    if (rerun_data->is_rerun) return; //跳行依据
+    memset(&rerun_data->break_block, 0, sizeof(rerun_data->break_block));
+    memset(&rerun_data->breakpoint, 0, sizeof(rerun_data->breakpoint));
+    memset(&rerun_data->break_end, 0, sizeof(rerun_data->break_end));
+    rerun_data->is_rerun = 0;
+    rerun_data->is_mem_rerun = 0;
+    rerun_data->rerun_row = 0;
+    rerun_data->is_first_time_click_rerun = true;
+    rerun_mst_reset();
+    delAlarm(ALARM_CH, ALARM_WARNING, 3);
+    delAlarm(ALARM_CH, ALARM_ERROR, 4);
     rerun_persist();
 }
 
-/// @brief 自动加工过程中记录断点位置
-void rerun_store_breakpoint(bool is_breakpoint){
-    switch (rt_data->current_mode)
-    {
-    case MODE_MEM:
-        // 回断点时不记录
-        if(is_breakpoint) return;
-        rerun_data->breakpoint.x = rt_data->axis_data[AXIS_X].wcs_cmd_pos_cur;
-        rerun_data->breakpoint.y = rt_data->axis_data[AXIS_Y].wcs_cmd_pos_cur;
-        rerun_data->breakpoint.z = rt_data->axis_data[AXIS_Z].wcs_cmd_pos_cur;
-        rerun_persist();
-        break;
-    default:
-        break;
-    }
+/// @brief 维护"当前行"的指纹（每段流过时调，只在换行时更新,启动时能判断"这一行还是不是原来那一行）
+void rerun_track_current_row(const PLAN_BLOCK* block)
+{
+    if (rerun_data == NULL || block == NULL) return;
+    if (rt_data->current_mode != MODE_MEM) return;
+    if (block->is_breakpoint) return;
+    if (block->line_number == rerun_data->cur_row_line) return;   // 同一行的后续包，不动
+
+    rerun_data->cur_row_line = block->line_number;
+    memcpy(&rerun_data->cur_row_first_end, &block->end_pos, sizeof(POS));
+}
+
+/// @brief 被打断时记一份断点快照
+void rerun_store_breakpoint(const PLAN_BLOCK* block){
+    if (rerun_data == NULL || block == NULL) return;
+    if (rt_data->current_mode != MODE_MEM) return;
+    if (block->is_breakpoint) return;
+
+    rerun_data->break_block.valid       = true;
+    rerun_data->break_block.line_number = block->line_number;
+    rerun_data->break_block.mode        = block->mode;
+    rerun_data->break_block.type        = block->type;
+    rerun_data->break_block.m_code      = block->mst_data.m_code;
+    memcpy(&rerun_data->break_end, &rerun_data->cur_row_first_end, sizeof(POS));
+
+    rerun_data->breakpoint.x = rt_data->axis_data[AXIS_X].wcs_cmd_pos_cur;
+    rerun_data->breakpoint.y = rt_data->axis_data[AXIS_Y].wcs_cmd_pos_cur;
+    rerun_data->breakpoint.z = rt_data->axis_data[AXIS_Z].wcs_cmd_pos_cur;
+
+    rerun_data->is_mem_rerun = 1;   // 这一轮记忆运行被打断过（切模式武装的判据）
+    rerun_persist();
 }
 
 /// @brief 切换模式
@@ -221,6 +234,8 @@ bool check_is_program_rerun(){
 void rerun_reset_is_rerun(){
     rerun_data->is_rerun = 0;
     rerun_data->rerun_row = 0;
+    rerun_data_clear_breakpoint();
+
 }
 
 /// @brief 界面修改行信息
@@ -338,6 +353,8 @@ bool check_rerun_row_is_valid(const PLAN_BLOCK* target){
 bool rerun_program_changed(const PLAN_BLOCK* target)
 {
     if (rerun_data == NULL || target == NULL) return false;
+
+    if(rerun_data->cur_row_line <0) return false; 
 
     const bool same = IsEqualTo(target->end_pos.x, rerun_data->break_end.x)
                    && IsEqualTo(target->end_pos.y, rerun_data->break_end.y)

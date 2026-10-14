@@ -814,7 +814,7 @@ static void auto_get_next_cmd(){
                              cycle_tp->exec_cmd == DO_CHOP_CMD ||
                              cycle_tp->exec_cmd == DO_TAP_CMD);
     auto_update_var();
-    rerun_data_store(cycle_tp->plan_block);
+    rerun_track_current_row(cycle_tp->plan_block);
 }
 
 static void auto_update_cur_cmd(){
@@ -872,6 +872,7 @@ void cycle_tp_add_block(){
 // 自动模式初始化
 static void auto_start_run(){
     // 重置队列
+    rerun_data_clear_breakpoint();
     rerun_store_program_start();
     queue_reset(plan_queue);
     queue_reset(unif_queue);
@@ -904,7 +905,7 @@ static void auto_pause_run(){
     setVarChanInt(0, VAR_CHAN_CYCLE, 0, 0);
     setVarChanInt(0, VAR_CHAN_HOLD, 1, 0);
     rt_set_zero_vel_params();
-    rerun_store_breakpoint(cycle_tp->plan_block->is_breakpoint);
+    rerun_store_breakpoint(cycle_tp->plan_block);
 }
 
 static void auto_restart_run(){
@@ -912,6 +913,7 @@ static void auto_restart_run(){
     setVarChanInt(0, VAR_CHAN_IS_MOVING, 1, 0);
     setVarChanInt(0, VAR_CHAN_CYCLE, 1, 0);
     setVarChanInt(0, VAR_CHAN_HOLD, 0, 0);
+    rerun_data_clear_breakpoint();
 }
 
 static void auto_reset_run(){
@@ -930,7 +932,7 @@ static void auto_reset_run(){
     setVarChanInt(0, VAR_CHAN_CYCLE, 0, 0);
     setVarChanInt(0, VAR_CHAN_HOLD, 0, 0);
     rt_set_zero_vel_params();
-    rerun_store_breakpoint(cycle_tp->plan_block->is_breakpoint);
+    rerun_store_breakpoint(cycle_tp->plan_block);
 }
 
 static void auto_update_var(){
