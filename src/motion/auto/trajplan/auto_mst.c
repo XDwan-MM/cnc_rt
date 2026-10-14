@@ -248,9 +248,9 @@ static void auto_deal_mstb(){
             break;
         case M29: // 将主轴定向，并且到CSP模式上使能
             setRegValue8(REG_F, 10, 0x1d);
-            if (rt_data->sys_state[SYS_IS_RIGID_RERTURN])
-                spindle_request_m29_stop_to_csp();
-            else
+            // // if (rt_data->sys_state[SYS_IS_RIGID_RERTURN])
+            //     spindle_request_m29_stop_to_csp();
+            // // else
                 spindle_request_m29();
             break;
         default:

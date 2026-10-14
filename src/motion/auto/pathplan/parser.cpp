@@ -460,6 +460,7 @@ static GNC_RES parser_handle_mcode(pmc_data* motion_data, NcItpState *itp_state,
     // 刀号
     plan_block.mst_data.tool_number = motion_data->tool_number; 
     // 子程序或宏程序
+    // printf("motion_data->m_code=%d \n", motion_data->m_code);
     plan_block.mst_data.sub_program = motion_data->sub_program;
     // 预留
     plan_block.mst_data.size = 1;
