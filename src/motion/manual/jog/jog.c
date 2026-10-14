@@ -6,7 +6,8 @@
 #include <string.h>
 
 /*
- * JOG 的公共入口只有周期处理、急停和速度查询；外部减速状态保存在 AxisStatus。
+ * JOG 的公共入口只有周期处理、急停和速度查询和机械锁住解除后的位置重同步；
+ * 外部减速状态保存在 AxisStatus。
  * 本文件把输入锁存、保护判断、状态迁移、速度计算、规划器和输出
  * 按阶段分开；新增停止条件时优先扩展 stop_reason 或保护判断，
  * 不要再为每一种原因增加一个运动状态。
@@ -36,6 +37,7 @@ typedef enum
     JOG_STOP_REASON_MODE,
     JOG_STOP_REASON_ALARM,
     JOG_STOP_REASON_RESET,
+    JOG_STOP_REASON_LOCK, // 机械锁住状态切换中，先停止手动运动
 } jog_stop_reason_t;
 
 typedef struct
@@ -83,6 +85,7 @@ static void jog_sync_on_mode_entry(void);
 static void jog_update_key_latches(SYS_EVENT event);
 static jog_direction_t jog_get_requested_direction(const jog_axis_t *axis);
 static bool jog_is_global_fatal_alarm(void);
+static bool jog_is_mac_lock_switching(void);
 static double jog_get_axis_acceleration(int axis, bool is_rapid);
 static bool jog_is_hard_limit_active(int axis, jog_direction_t direction);
 static bool jog_is_direction_blocked(int axis, jog_direction_t direction, double max_acc);
@@ -198,6 +201,26 @@ double jog_get_axis_velocity(int axis)
     return jog_context.axis[axis].planner.curr_vel;
 }
 
+void jog_resync_position(void)
+{
+    /*
+     * 机械锁住解除后，锁住期间 JOG 只在界面上“走过”坐标而机床没动，
+     * 因此这里把规划位置重新对齐到实时数据里的机床基准（锁住解除时
+     * emcmot 已按驱动器反馈重建该基准），虚拟位移不再保留。
+     * jog_sync_on_mode_entry() 复用本函数完成进入 JOG 时的位置对齐。
+     */
+    for (int i = 0; i < JOG_AXIS_COUNT; i++)
+    {
+        bool alarm_latched;
+
+        /* 位置对齐不能绕过非限位报警的 RESET 解锁要求。 */
+        alarm_latched = (jog_context.axis[i].stop_reason == JOG_STOP_REASON_ALARM);
+        jog_reset_axis(&jog_context.axis[i], rt_data->axis_data[i].wcs_cmd_pos_cur, true);
+        if (alarm_latched)
+            jog_context.axis[i].stop_reason = JOG_STOP_REASON_ALARM;
+    }
+}
+
 /* 内部函数定义 */
 
 /* 清除一轴运动状态；sync_position 只在模式进入时用于对齐当前位置。 */
@@ -220,16 +243,7 @@ static void jog_reset_axis(jog_axis_t *axis, double position, bool sync_position
 static void jog_sync_on_mode_entry(void)
 {
     /* 进入 JOG 时从当前指令位置重新开始，避免继承其他模式的规划器状态。 */
-    for (int i = 0; i < JOG_AXIS_COUNT; i++)
-    {
-        bool alarm_latched;
-
-        /* 模式切换只重置规划器，不能绕过非限位报警的 RESET 解锁要求。 */
-        alarm_latched = (jog_context.axis[i].stop_reason == JOG_STOP_REASON_ALARM);
-        jog_reset_axis(&jog_context.axis[i], rt_data->axis_data[i].wcs_cmd_pos_cur, true);
-        if (alarm_latched)
-            jog_context.axis[i].stop_reason = JOG_STOP_REASON_ALARM;
-    }
+    jog_resync_position();
     jog_context.last_sys_mode = MODE_JOG;
 }
 
@@ -283,6 +297,16 @@ static bool jog_is_global_fatal_alarm(void)
     if (has_limit_alarm)
         return false;
     return true;
+}
+
+/*
+ * 机械锁住请求与实际生效状态不一致：正在锁住或正在解除。
+ * 与 auto_gcode.c 中自动模式的处理保持一致——两者不一致期间不允许手动运动，
+ * 先把轴停下来，等停稳后 emcmot 才切换生效状态，避免锁住切换过程中机床还在动。
+ */
+static bool jog_is_mac_lock_switching(void)
+{
+    return rt_data->sys_state[SYS_IS_MAC_LOCK_ON] != rt_data->sys_state[SYS_IS_MAC_LOCK_READY];
 }
 
 /* 读取当前 JOG 模式的加速度，并将无效参数钳制为 0。 */
@@ -364,7 +388,7 @@ static void jog_transition_axis(jog_axis_t *axis, int axis_index, jog_direction_
     direction_blocked = jog_is_direction_blocked(axis_index, desired_direction, axis->planner.max_acc);
     same_direction_limit_stop = (axis->stop_reason == JOG_STOP_REASON_LIMIT && desired_direction == axis->direction);
 
-    /* 优先级：复位、全局报警、报警复位锁存，然后才处理模式/按键/限位。 */
+    /* 优先级：复位、全局报警、报警复位锁存，然后才处理模式/机械锁住/按键/限位。 */
     if (reset_requested)
     {
         axis->key.positive = false;
@@ -393,6 +417,23 @@ static void jog_transition_axis(jog_axis_t *axis, int axis_index, jog_direction_
     {
         axis->stop_reason = JOG_STOP_REASON_MODE;
         axis->state = JOG_AXIS_STATE_STOPPING;
+        return;
+    }
+
+    /*
+     * 机械锁住状态切换：释放按键并减速停止，锁住状态由 emcmot 在停稳后切换。
+     * 锁住已经生效（请求与实际一致）时不进入本分支，此时手动运动只走界面坐标，
+     * 机床不动，见 calcul_mac_cmd_pos()。
+     */
+    if (jog_is_mac_lock_switching())
+    {
+        axis->key.positive = false;
+        axis->key.negative = false;
+        if (axis->state != JOG_AXIS_STATE_IDLE)
+        {
+            axis->stop_reason = JOG_STOP_REASON_LOCK;
+            axis->state = JOG_AXIS_STATE_STOPPING;
+        }
         return;
     }
 

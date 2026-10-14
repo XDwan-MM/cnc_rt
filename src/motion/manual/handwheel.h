@@ -61,6 +61,16 @@ int Get_Axis_Switch(int output);
 void handle_mpg_cmd();
 void handwheel_handle_estop();
 
+/* 当前轴选对应规划器的速度；无有效轴选时返回 0。用于模式切换和机械锁住停稳判定。 */
+double handwheel_get_axis_velocity(void);
+
+/*
+ * 重建手轮位置基准：丢弃规划器里尚未输出的位移，下一周期按实时数据中的
+ * wcs_cmd_pos_cur 重新对齐并从当前硬件计数重新开始（first_pass）。
+ * 机械锁住解除和重新进入手轮模式时调用。
+ */
+void handwheel_resync_position(void);
+
 #ifdef __cplusplus
 }
 #endif

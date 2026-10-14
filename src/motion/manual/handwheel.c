@@ -59,6 +59,30 @@ void handwheel_handle_estop()
     mpg_initialized = false;
 }
 
+double handwheel_get_axis_velocity(void)
+{
+    /*
+     * 只查询当前轴选对应的规划器：换轴后旧轴的规划器不会再被更新，
+     * 其残留速度不代表手轮当前还在输出运动。
+     */
+    if (!mpg_initialized || valid_axis < 0 || valid_axis >= 5)
+        return 0.0;
+    return simple_tp[valid_axis].curr_vel;
+}
+
+void handwheel_resync_position(void)
+{
+    /*
+     * 清掉轴选/倍率的历史状态，使下一次 handle_mpg_cmd() 走“选择变化”分支：
+     * 以实时数据中的 wcs_cmd_pos_cur 重建目标位置和规划位置、速度清零，
+     * 并把 first_pass 置 1，从而丢弃未选择期间的累计计数。
+     */
+    valid_axis = -1;
+    valid_rate = -1;
+    mpg_enable = false;
+    mpg_initialized = false;
+}
+
 void Handlewheels_Motion(simple_tp_t_handwheel *tp)
 {
     uint32_t new_hw_counts;
@@ -168,13 +192,31 @@ void Simple_Tp_Update(simple_tp_t_handwheel *tp)
     tp->curr_pos += tp->curr_vel * ncu_cycle;
 }
 
+/*
+ * 机械锁住请求与实际生效状态不一致：正在锁住或正在解除。
+ * 与 auto_gcode.c 中自动模式的处理保持一致——两者不一致期间不接收新的手轮位移，
+ * 先把轴停下来，等停稳后 emcmot 才切换生效状态。
+ */
+static bool handwheel_is_mac_lock_switching(void)
+{
+    return rt_data->sys_state[SYS_IS_MAC_LOCK_ON] != rt_data->sys_state[SYS_IS_MAC_LOCK_READY];
+}
+
+/* 锁住状态切换期间停止追赶已有目标：目标位置对齐当前规划位置，由规划器按斜坡停稳。 */
+static void handwheel_stop_chasing(simple_tp_t_handwheel *tp)
+{
+    tp->pos_cmd = tp->curr_pos;
+}
+
 void handle_mpg_cmd() {
     bool valid_selection;
     bool selection_changed;
+    bool lock_switching;
     int previous_axis;
 
     // 急停不执行
     if (rt_data->sys_state[SYS_IS_ESTOP_ACTIVE]) return;
+    lock_switching = handwheel_is_mac_lock_switching();
     HW_Get_Count(&current_count);
     HW_Get_Axis_And_Rate(&axisandrate);
     rate = axisandrate & 0b111;
@@ -189,6 +231,8 @@ void handle_mpg_cmd() {
         if (mpg_initialized && valid_axis >= 0 && valid_axis < 5)
         {
             simple_tp[valid_axis].joint.old_counts = current_count;
+            if (lock_switching)
+                handwheel_stop_chasing(&simple_tp[valid_axis]);
             Simple_Tp_Update(&simple_tp[valid_axis]);
             simple_tp[valid_axis].joint.pos_cmd = simple_tp[valid_axis].curr_pos;
             rt_data->axis_data[valid_axis].wcs_cmd_pos_cur = simple_tp[valid_axis].joint.pos_cmd;
@@ -231,7 +275,16 @@ void handle_mpg_cmd() {
     simple_tp[axis].max_vel = simple_tp[axis].joint.vel_limit;
     simple_tp[axis].max_acc = simple_tp[axis].joint.jaccel_limit;
 
-    Handlewheels_Motion(&simple_tp[axis]);
+    if (lock_switching)
+    {
+        /* 锁住状态切换期间不接收新位移，并丢弃本周期计数，避免切换结束后补发 */
+        simple_tp[axis].joint.old_counts = current_count;
+        handwheel_stop_chasing(&simple_tp[axis]);
+    }
+    else
+    {
+        Handlewheels_Motion(&simple_tp[axis]);
+    }
     Simple_Tp_Update(&simple_tp[axis]);
     simple_tp[axis].joint.pos_cmd = simple_tp[axis].curr_pos;
     rt_data->axis_data[axis].wcs_cmd_pos_cur = simple_tp[axis].joint.pos_cmd;
