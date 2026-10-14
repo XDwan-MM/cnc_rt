@@ -1,4 +1,4 @@
-/* 适配层实现。线程契约见 rt_hal_adapter.h 头部那张表，改之前先读它。 */
+/* 适配层实现；线程契约见 rt_hal_adapter.h 头部。 */
 
 /* 严格 ISO 模式下不声明 clock_gettime/sem_timedwait，必须显式要，且必须在 include 前 */
 #define _POSIX_C_SOURCE 200809L
@@ -50,15 +50,13 @@ static int32_t s_snap_orient[RT_HAL_AXIS_COUNT];  /* 主轴定向状态快照 */
 static int32_t s_cycle_error;                     /* 周期循环异常退出的原因；0 = 无 */
 static HalSpindleMode s_req_mode[RT_HAL_AXIS_COUNT];      /* 期望的 CSV / CSP */
 static int    s_req_mode_dirty[RT_HAL_AXIS_COUNT];        /* 同上：只有变了才下发 */
-/* 定向请求/释放也是按拍意图：运动线程写，PDO 线程在相位 2 里调 HAL。
- * 一次性，消费即清（不像使能那样重试）。 */
+/* 定向请求/释放也是按拍意图（运动线程写、PDO 线程在相位 2 调 HAL）；一次性，消费即清。 */
 static int    s_req_orient[RT_HAL_AXIS_COUNT];       /* 1 = 请求定向 */
 static int    s_req_orient_dirty[RT_HAL_AXIS_COUNT];
 static int    s_req_orient_rel[RT_HAL_AXIS_COUNT];   /* 1 = 释放定向 */
 static int    s_req_orient_rel_dirty[RT_HAL_AXIS_COUNT];
-/* 模式切换握手：请求下发后连续多少拍驱动器实际模式（0x6061）还没变成我们要的。
- * 超过上限报一次——HAL 是按拍推进的（模式不对不上使能），没有握手就只能看到
- * 一堆被丢掉的返回值，分不清"正在切"和"永远切不过去"。 */
+/* 模式切换握手：请求下发后连续多少拍驱动器实际模式（0x6061）还没变成我们要的；
+ * 超过上限报一次，用来区分"正在切"和"永远切不过去"。 */
 #define RT_HAL_MODE_WAIT_CYCLES 1000u
 /* "轴尚未使能"等多久才值得报：使能只是请求，DS402 要几拍才生效 */
 #define RT_HAL_NOT_ENABLED_WAIT_CYCLES 1000u
@@ -83,10 +81,8 @@ static int slot_ok(int slot) {
     return slot >= 0 && slot < (int)RT_HAL_AXIS_COUNT;
 }
 
-/* 台账挡住运动请求时提示一次。被挡的请求是**静默丢弃**的——软件侧一切正常
- * （主轴斜坡照爬、日志照打"速度到达"），只有驱动器收不到、HMI 显示露馅。
- * 2026-10-09 查"S 显示恒 0"花了十几轮就栽在这上面，所以必须让它出声。
- * 台账清掉之后重新允许提示。 */
+/* 台账挡住运动请求时提示一次：被挡的请求是静默丢弃的（软件侧照跑、只有驱动器收不到），
+ * 必须出声；台账清掉后重新允许提示。 */
 static int s_ledger_warned;
 static void warn_ledger_blocked(const char* what, int slot) {
     if (rt_hal_config_motion_allowed()) { s_ledger_warned = 0; return; }
@@ -97,8 +93,7 @@ static void warn_ledger_blocked(const char* what, int slot) {
     fflush(stderr);
 }
 
-/* HAL 的错误码是正数，不能沿用旧 RT 的 <0 判断。
- * 带上轴槽：不带的话四根轴同一个码失败，日志里看起来只报了一次。 */
+/* HAL 错误码是正数（不能沿用旧 RT 的 <0 判断）；带上轴槽，否则四轴同码看起来只报了一次。 */
 static void log_hs(const char* what, int slot, int32_t rc) {
     char text[96];
     hal_error_text(rc, text, sizeof(text));
@@ -109,13 +104,10 @@ static void log_hs(const char* what, int slot, int32_t rc) {
         fprintf(stderr, "[HAL] %s 失败: rc=%d (%s)\n", what, rc, text);
 }
 
-/* 每轴每类只报一次，避免逐拍刷屏。原来是 (void) 丢返回值，失败了没人知道。
- * 去掉某个轴的失败记录只靠它自己成功，别的轴不影响它。
- *
- * 例外：HAL_ERROR_NOT_ENABLED（"轴尚未使能"）是**预期内**的过渡态 —— 使能只是请求，
- * DS402 要几拍才走到 Operation Enabled，紧挨着使能请求发出的那几拍（定向、转速、
- * 位置）都会被拒，上层下一拍重发就过了。所以它先不吭声，**连着失败到第 N 拍才报一行**
- * —— 那才是真的使不上能。其它错误码不会自己好，照旧当场报一次。 */
+/* 每轴每类只报一次，避免逐拍刷屏；某个轴的失败记录只由它自己成功来清。
+ * 例外 HAL_ERROR_NOT_ENABLED（"轴尚未使能"）是预期内过渡态（DS402 要几拍才走到
+ * Operation Enabled，紧挨使能请求发出的几拍都会被拒），故连着失败到第 N 拍才报一行；
+ * 其它错误码不会自己好，当场报一次。 */
 static void report_req(const char* what, int slot, int kind, int32_t rc) {
     if (rc == HAL_OK) {
         s_req_fail_rc[slot][kind] = 0;
@@ -129,11 +121,9 @@ static void report_req(const char* what, int slot, int kind, int32_t rc) {
     }
 
     if (rc == HAL_ERROR_NOT_ENABLED) {
-        /* 什么情况下"轴尚未使能"是**预期内**的（不报也不计数）：
-         *   - 本轴没在请求使能：没使能就是不能写位置/转速/定向，上层下一拍重发；
-         *   - 故障复位在飞：使能本来就被我们压着不发（见上面 enable 那段的闸门），
-         *     这几秒写不进去是设计使然（estopmid 那 3 条就是这么来的）。
-         * 反过来才值得说：请求了使能、也没复位在飞，连着 N 拍还被同一个码拒。 */
+        /* "轴尚未使能"算预期内的两种情况（不报也不计数）：本轴没在请求使能；
+         * 或故障复位在飞（使能本就被压着不发）。反之——请求了使能且无复位在飞，
+         * 连着 N 拍被同一个码拒——才值得报。 */
         if (!s_req_enable[slot] || s_snap_reset[slot] == HAL_RESET_PENDING) {
             s_req_fail_age[slot][kind] = 0;
             return;
@@ -163,7 +153,7 @@ int rt_hal_create(const RtHalAxisParams* params, char* err, uint32_t err_len) {
     int rc = rt_hal_config_build(&cfg, err, err_len);
     if (rc) return rc;
 
-    /* 2. 逐轴换成机床真值。缺参数的轴不调用 set_scaling：保持占位值并挂台账 */
+    /* 2. 逐轴换成机床真值；缺参数的轴不调 set_scaling，保持占位值并挂台账 */
     for (int i = 0; i < RT_HAL_AXIS_COUNT; ++i) {
         if (!params[i].loaded) continue;
         rc = rt_hal_config_set_scaling(&cfg, (RtHalAxisSlot)i, &params[i].scaling);
@@ -174,8 +164,7 @@ int rt_hal_create(const RtHalAxisParams* params, char* err, uint32_t err_len) {
         }
     }
 
-    /* 2b. 主轴转速上限：同上，缺参数就保持占位值（print 里能看出来）。
-     * 不接这一步的后果是"S 超过占位上限时 HAL 拒收"，而 RT 侧只有一行 stderr。 */
+    /* 2b. 主轴转速上限：缺参数保持占位值；漏了会让 S 超过占位上限时被 HAL 拒收 */
     if (params[RT_HAL_AXIS_SP].loaded && params[RT_HAL_AXIS_SP].max_speed > 0.0) {
         rc = rt_hal_config_set_spindle_max(&cfg, params[RT_HAL_AXIS_SP].max_speed);
         if (rc) {
@@ -189,7 +178,7 @@ int rt_hal_create(const RtHalAxisParams* params, char* err, uint32_t err_len) {
                "超过占位上限的转速会被 HAL 拒收\n");
     }
 
-    /* 3. 校验 + 打印。打印放 create 里，没硬件时也能先看配置对不对 */
+    /* 3. 校验 + 打印（放 create 里，没硬件也能先看配置对不对） */
     rc = rt_hal_config_finish(&cfg, err, err_len);
     if (rc) return rc;
 
@@ -237,16 +226,14 @@ int rt_hal_start(char* err, uint32_t err_len) {
     const int32_t rc = hal_context_start(s_ctx, err, err_len);
     if (rc) { log_hs("hal_context_start", -1, rc); return rc; }
 
-    /* 问一次映像段长并缓存。失败不致命：周期里按 0 处理，等于不下发 IO。 */
+    /* 问一次映像段长并缓存；失败不致命（周期里按 0 处理 = 不下发 IO） */
     s_x_size = s_y_size = 0;
     (void)hal_io_image_size(s_ctx, &s_x_size, &s_y_size);
     printf("映像段长（按设备 Entry 实算）：X=%u 字节, Y=%u 字节\n",
            (unsigned)s_x_size, (unsigned)s_y_size);
-    /* 段长超过本适配层缓冲就必须在这里挡住，不能往下跑：
-     *   - HAL 侧只会在"缓冲太短"时返回 ARGUMENT，而周期里那两处把结果
-     *     当成"没就绪" —— IO 会**无声失效**（输入恒 0、输出不下发）；
-     *   - 线程层按 HAL 给的段长循环写自己的 512 字节缓冲 → **越界写**。
-     * 这两条都比"启动失败"糟得多。改大就得三处一起改（见头文件的注释）。 */
+    /* 段长超过本适配层缓冲必须在这里挡住：否则 IO 无声失效（周期里把 ARGUMENT 当成
+     * "没就绪"，输入恒 0、输出不下发），且线程层按 HAL 段长写自己的 512 字节缓冲会越界写。
+     * 改大要三处一起改（见头文件）。 */
     if (s_x_size > RT_HAL_IO_IMAGE_MAX || s_y_size > RT_HAL_IO_IMAGE_MAX) {
         if (err && err_len)
             snprintf(err, err_len,
@@ -258,7 +245,7 @@ int rt_hal_start(char* err, uint32_t err_len) {
     }
 
     s_running = 1;
-    /* emcmotTrajPlan() 拿 op_flag 当门控，"主站已进 OP"这个事实只有这里知道。 */
+    /* emcmotTrajPlan() 拿 op_flag 当门控；"主站已进 OP"只有这里知道 */
     op_flag = 1;
     return HAL_OK;
 }
@@ -313,8 +300,7 @@ static void publish_snapshot(void) {
         if (hal_rt_axis_fault_reset_state(s_ctx, (HalAxisId)hal_axis, &rst) != HAL_OK)
             rst = HAL_RESET_NONE;
         s_snap_reset[i] = rst;
-        /* 定向状态也进快照：这个查询是公开接口，别的线程会调，
-         * 不能从它们那儿碰 context（契约：只有 PDO 线程碰）。 */
+        /* 定向状态进快照：公开查询接口，别的线程会调，但不能碰 context */
         int32_t ori = HAL_ORIENT_NONE;
         if (hal_rt_spindle_orient_state(s_ctx, (HalAxisId)hal_axis, &ori) != HAL_OK)
             ori = HAL_ORIENT_NONE;
@@ -324,7 +310,7 @@ static void publish_snapshot(void) {
 }
 
 /* 取走本拍命令下发给 HAL，须在 begin 之后 commit 之前调用。
- * 急停优先且排他：有急停意图时该轴普通请求一条都不下发，不靠 HAL 逐个拒。 */
+ * 急停优先且排他：有急停意图时该轴普通请求一条都不下发。 */
 static void take_requests(void) {
     const int motion_ok = rt_hal_config_motion_allowed();
 
@@ -332,9 +318,8 @@ static void take_requests(void) {
         const int hal_axis = rt_hal_config_hal_axis((RtHalAxisSlot)i);
         if (hal_axis < 0) continue;
 
-        /* 设坐标零点：只平移软件基准，**不写驱动器、不动电机** —— 所以不受台账阻挡，
-         * 也放在急停分支之前（急停中设零同样安全）。必须在位置写之前消费：同一拍里
-         * 后面的 write_pos 要按新零点来算。 */
+        /* 设坐标零点：只平移软件基准，不写驱动器/不动电机，故不受台账阻挡，也放在急停
+         * 分支之前；必须在位置写之前消费（同拍后面的 write_pos 要按新零点算）。 */
         if (s_req_setpos_dirty[i]) {
             s_req_setpos_dirty[i] = 0;
             report_req("hal_rt_axis_set_pos", i, RT_REQ_SETPOS,
@@ -347,13 +332,12 @@ static void take_requests(void) {
             report_req("hal_rt_axis_estop", i, RT_REQ_ESTOP,
                        hal_rt_axis_estop(s_ctx, (HalAxisId)hal_axis));
             s_req_reset[i] = 0;   /* 急停覆盖同拍的复位请求 */
-            /* 急停 = 不再请求使能。不清的话 s_req_enable 会留着旧值 1，
-             * 之后每拍被拒的"轴尚未使能"看起来就像失败（report_req 用的就是它）。 */
+            /* 急停 = 不再请求使能（不清则 s_req_enable 留旧值 1，之后每拍被拒的
+             * "轴尚未使能"会被 report_req 当成失败）。 */
             s_req_enable[i] = 0;
             s_req_enable_dirty[i] = 0;
-            /* 光 continue 不够：暂存的位置/转速/模式/刻度会留到**下一拍**
-             * （急停解除后）被当成新意图消费掉。这几类都是一次性意图，
-             * 作废就是丢 dirty —— 上层要继续运动自然会重发。 */
+            /* 光 continue 不够：暂存的位置/转速/模式/刻度会留到下一拍被当新意图消费；
+             * 它们都是一次性意图，作废即丢 dirty，上层要继续运动会重发。 */
             s_req_pos_dirty[i] = s_req_speed_dirty[i] = 0;
             s_req_mode_dirty[i] = s_req_turn_dirty[i] = 0;
             continue;             /* 本拍该轴的其余请求全部作废 */
@@ -370,24 +354,21 @@ static void take_requests(void) {
             continue;   /* 复位与运动互斥，本拍不再下发运动指令 */
         }
 
-        /* 使能/去使能不受台账阻挡，台账只管位置、转速、模式。
-         * 它是状态不是事件，失败保留 dirty 下一拍重试。 */
-        /* **复位在飞时要忍住**：HAL 的契约是"急停/去使能会取消待复位"
-         * （见 hal_rt_api.h 的 hal_rt_axis_fault_reset 注释），而下发去使能的
-         * 恰恰是 RT 自己的停车路径（spl_drv_disable 每拍一次）。漏下去就等于每拍
-         * 把复位取消掉 —— 复位永远收不了口，上层（alarm.c 的 s_reset_waiting）
-         * 也就永远不放开，四轴再也上不了力矩。
-         * 判据看快照里 HAL 自己的复位状态，不看请求意图；dirty 保留，收口后照常下发。 */
+        /* 使能/去使能不受台账阻挡（台账只管位置、转速、模式）；它是状态不是事件，
+         * 失败保留 dirty 下一拍重试。 */
+        /* 复位在飞时要忍住：HAL 契约是"急停/去使能会取消待复位"，而下发去使能的正是
+         * RT 自己的停车路径（spl_drv_disable 每拍一次），漏下去等于每拍取消复位——
+         * 复位收不了口，alarm.c 的 s_reset_waiting 永不放开，四轴再也上不了力矩。
+         * 判据看快照里 HAL 的复位状态而非请求意图；dirty 保留，收口后照常下发。 */
         if (s_req_enable_dirty[i] && s_snap_reset[i] != HAL_RESET_PENDING) {
             const int32_t erc = hal_rt_axis_enable(s_ctx, (HalAxisId)hal_axis, s_req_enable[i]);
             report_req("hal_rt_axis_enable", i, RT_REQ_ENABLE, erc);
             if (erc == HAL_OK) s_req_enable_dirty[i] = 0;   /* 失败保留，下一拍重试 */
         }
 
-        /* 定向的请求与释放：**放在运动台账闸门之前**。
-         * 定向不产生位移（只是让驱动器对准），不受"运动范围未批准"拦；
-         * 放在闸门后面的话，台账没清时定向请求永远走不到，M19 表现为毫无反应。
-         * 一次性，失败也清；释放放在请求前面，同拍两个都置时以释放为准。 */
+        /* 定向的请求与释放放在运动台账闸门之前：定向不产生位移，不该被"运动范围未批准"
+         * 拦住；放闸门后面则台账没清时定向永远走不到，M19 表现为毫无反应。
+         * 一次性、失败也清；释放放在请求之前，同拍都置时以释放为准。 */
         if (s_req_orient_rel_dirty[i]) {
             s_req_orient_rel_dirty[i] = 0;
             s_req_orient_dirty[i] = 0;
@@ -401,15 +382,15 @@ static void take_requests(void) {
 
         if (!motion_ok) continue;
 
-        /* 位置/转速/模式是一次性意图：报失败但不重试。上层每拍会重发，
-         * 留着 dirty 反而会在急停后、轴重新使能时把过期目标下下去。 */
+        /* 位置/转速/模式是一次性意图：报失败但不重试（留着 dirty 会在急停后、轴重新
+         * 使能时把过期目标下下去）。 */
         if (s_req_pos_dirty[i]) {
             s_req_pos_dirty[i] = 0;
             report_req("hal_rt_axis_write_pos", i, RT_REQ_POS,
                        hal_rt_axis_write_pos(s_ctx, (HalAxisId)hal_axis, s_req_pos[i]));
         }
-        /* 刻度命令放在普通位置写**之后**：同拍两者都置时以刻度为准（HAL 那边
-         * 后写覆盖先写）。与 axis_pos 一样是一次性意图，失败也清。 */
+        /* 刻度命令放在普通位置写之后：同拍都置时以刻度为准（HAL 后写覆盖先写）；
+         * 与 axis_pos 一样是一次性意图，失败也清。 */
         if (s_req_turn_dirty[i]) {
             s_req_turn_dirty[i] = 0;
             report_req("hal_rt_spindle_write_pos", i, RT_REQ_POS,
@@ -431,15 +412,11 @@ static void take_requests(void) {
             s_mode_warned[i] = 0;
         }
 
-        /* 模式切换握手。看驱动器实际模式（快照的 mode 来自 0x6061）有没有变成
-         * 最近一次请求的那个。别在这里读 desired_mode——HAL 不对外暴露它。
-         *
-         * 两个前提不满足就**不握手**，否则是假警报（启动时那条
-         * "主轴模式切换超时"就是这么来的：主轴还没使能、压根没下发过模式，
-         * 拿 s_req_mode 的初值 CSV 去比驱动器当前模式，永远对不上）：
-         *   ① 真的发过一次模式请求；
-         *   ② 这根轴当前被请求使能——驱动器不会在未使能时切模式。
-         * 一旦被去使能就清掉"发过请求"的记号：下次要握手得重新发请求。 */
+        /* 模式切换握手：比驱动器实际模式（快照 mode 来自 0x6061）与最近一次请求的那个
+         * （不读 desired_mode，HAL 不暴露）。两个前提不满足就不握手，否则是假警报
+         * （启动时主轴还没使能、没下发过模式，拿 s_req_mode 初值去比永远对不上）：
+         *   ① 真的发过一次模式请求；② 该轴当前被请求使能（未使能时驱动器不切模式）。
+         * 被去使能就清掉"发过请求"的记号，下次要握手须重新发请求。 */
         {
             const int want_enable = s_req_enable[i] != 0;
             if (!want_enable) s_mode_requested[i] = 0;
@@ -517,8 +494,7 @@ static void stop_frame(void) {
     s_in_cycle = 0;
 }
 
-/* 只读快照转储，CNC_RT_DUMP=1 打第 100 拍、=N 打第 N 拍，也支持逗号列表
- * （如 "9500,14000"）——一次运行里抓两个窗口，省得为了看力矩状态跑两遍。
+/* 只读快照转储：CNC_RT_DUMP=1 打第 100 拍、=N 打第 N 拍，支持逗号列表（如 "9500,14000"）；
  * 不参与控制。 */
 static void dump_snapshot_once(uint32_t cycle) {
     const char* on = getenv("CNC_RT_DUMP");
@@ -650,7 +626,7 @@ int rt_hal_axis_status(RtHalAxisSlot slot, HalCAxisStatus* out) {
     return HAL_OK;
 }
 
-/* speed_valid 为 0 时返回 UNSUPPORTED 而不是 0：要让上层区分"没速度 PDO"和"停着" */
+/* speed_valid=0 时返回 UNSUPPORTED 而非 0：让上层区分"没速度 PDO"和"停着" */
 int rt_hal_axis_speed(RtHalAxisSlot slot, double* out) {
     if (!slot_ok(slot) || !out) return HAL_ERROR_ARGUMENT;
     if (!s_snap_valid) return HAL_ERROR_NOT_RUNNING;
@@ -679,7 +655,7 @@ int rt_hal_spindle_status(RtHalAxisSlot slot, HalCSpindleStatus* out) {
 
 int rt_hal_spindle_speed(RtHalAxisSlot slot, double* out) {
     if (!slot_ok(slot) || !out) return HAL_ERROR_ARGUMENT;
-    /* 判断是不是主轴*/
+    /* 判断是不是主轴 */
     if (!rt_hal_config_is_spindle(slot)) return HAL_ERROR_ARGUMENT;
     if (!s_snap_valid) return HAL_ERROR_NOT_RUNNING;
     *out = s_snap_spindle[slot].actual_speed;
@@ -753,7 +729,7 @@ int rt_hal_spindle_release_orient(RtHalAxisSlot slot) {
     return HAL_OK;
 }
 
-/* 主轴单圈刻度。与 axis_pos 同一条台账闸门——它同样会让轴动。 */
+/* 主轴单圈刻度：与 axis_pos 同一条台账闸门（它同样会让轴动） */
 int rt_hal_request_spindle_turn(RtHalAxisSlot slot, double deg) {
     if (!slot_ok(slot)) return HAL_ERROR_ARGUMENT;
     if (!s_ctx) return HAL_ERROR_NOT_RUNNING;
@@ -766,8 +742,8 @@ int rt_hal_request_spindle_turn(RtHalAxisSlot slot, double deg) {
     return HAL_OK;
 }
 
-/* 把该轴的当前位置重新定义为 pos（用户单位）。攻丝起点要以"当前角度"为 0°；
- * 回零/对刀也要用。**不写驱动器、不动电机**，所以不过台账闸门。 */
+/* 把该轴当前位置重新定义为 pos（用户单位）；攻丝起点以"当前角度"为 0 度，回零/对刀也用。
+ * 不写驱动器、不动电机，故不过台账闸门。 */
 int rt_hal_axis_set_pos(RtHalAxisSlot slot, double pos) {
     if (!slot_ok(slot)) return HAL_ERROR_ARGUMENT;
     if (!s_ctx) return HAL_ERROR_NOT_RUNNING;
@@ -817,8 +793,8 @@ int rt_hal_request_spindle_mode(RtHalAxisSlot slot, HalSpindleMode mode) {
     return HAL_OK;
 }
 
-/* 期望使能状态。有意不做台账检查：台账关的是位置/转速/模式，不管使能。
- * 主轴也用这一个（HAL 的通用轴使能路径覆盖主轴）。值没变就不重复下发。 */
+/* 期望使能状态；有意不做台账检查（台账只关位置/转速/模式）。主轴也用这一个，
+ * 值没变就不重复下发。 */
 int rt_hal_request_axis_enable(RtHalAxisSlot slot, int on) {
     if (!slot_ok(slot)) return HAL_ERROR_ARGUMENT;
     if (on != 0 && on != 1) return HAL_ERROR_ARGUMENT;

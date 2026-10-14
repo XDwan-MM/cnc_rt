@@ -3,7 +3,7 @@
 volatile sig_atomic_t exit_flag = 0;
 volatile sig_atomic_t main_exit_flag = 0;
 volatile sig_atomic_t thread_exit_flag = 0;
-/* 下面这个由 PDO 线程置位、主线程读走：写用 RELEASE、读用 ACQUIRE。 */
+/* 由 PDO 线程置位、主线程读走；写用 RELEASE、读用 ACQUIRE。 */
 volatile sig_atomic_t pdo_unexpected_exit = 0;
 volatile int op_flag = 0;
 
@@ -33,9 +33,8 @@ void post_rt_sem_all() {
     sem_post(&motion_sem);
     sem_post(&path_plan_sem);
     sem_post(&moton_sem_exec_done);
-    /* 退出路径也要唤醒等 PLC 完成屏障的人，否则关机时 PDO 线程会一直卡在
-     * sem_timedwait 上直到超时。置一个不可能追上的周期号没有意义，所以这里
-     * 只放行信号量——等的人必须自己检查 thread_exit_flag 才能退出。 */
+    /* 退出时也要放行等 PLC 完成屏障的人，否则关机会卡在 sem_timedwait 上直到超时。
+     * 这里只放行信号量，不置周期号：等的人必须自己检查 thread_exit_flag 才能退出。 */
     sem_post(&plc_done_sem);
 }
 

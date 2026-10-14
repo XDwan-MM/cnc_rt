@@ -68,19 +68,7 @@
 extern "C" {
 #endif
 
-/* 这里曾有一批旧驱动层遗留的全局量：exit_sem / op_sem / InterruptFlag / rc /
- * PdoWarnInfo / slavernum / statis / pos / pos_cmd / error_code，以及 14 个 PDO 条目
- * 数组（DI0/DO0/StatusWord/CurPos/ControlWord/PurPos…）和 MCPDI/MCPDO。
- *
- * 它们随 HAL 接入全部退休：
- *   - PDO 条目数组在 A 阶段就已查明是**死代码**（除定义与声明外全仓库零命中，
- *     连填充它们的 GM_*PdoEntry_Get_By_* 都零调用）；
- *   - PdoWarnInfo / slavernum / statis / pos / pos_cmd / error_code 是 master.c 用的，
- *     而 master.c 已被 HAL 整体取代；
- *   - exit_sem / op_sem / InterruptFlag 同样零引用。
- *
- * 顺带去掉了一个隐患：全局 `int rc`。它与每个函数里的局部 rc 同名，
- * 任何一处漏写声明都会静默用上全局变量。 */
+
 
 extern int update_pos_flag;                    // 理论位置读取驱动器位置
 

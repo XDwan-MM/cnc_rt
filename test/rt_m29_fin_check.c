@@ -4,17 +4,18 @@
 #include <string.h>
 #include <hmisysapi.h>
 
-/* M29 FIN 时序自查：直接驱动生产代码 auto_mst.c 的辅助功能握手，
- * 不接共享内存、不接总线。覆盖“双条件”里 PLC FIN 一侧的全部时序条件。
- * LOG 不丢弃而是抓最后一行：这样能把“M29 等待握手”那条诊断日志的真实
- * 内容打出来并锁住字段（现场靠它判断卡在 PLC 侧还是 NC 侧）。 */
+/* M29 FIN 时序自查：直接驱动生产代码 auto_mst.c 的辅助功能握手，不接共享内存/总线，
+ * 覆盖"双条件"里 PLC FIN 一侧的时序。LOG 抓最后一行以锁住诊断日志字段。 */
 #undef LOG
 static char log_line[1024];
+static char motion_log_line[1024];
 static void log_capture(const char *fmt, ...)
 {
     va_list ap;
     va_start(ap, fmt);
-    vsnprintf(log_line, sizeof(log_line), fmt, ap);
+    char *dest = strncmp(fmt, "M29运动及PLC信号", strlen("M29运动及PLC信号")) == 0
+        ? motion_log_line : log_line;
+    vsnprintf(dest, sizeof(log_line), fmt, ap);
     va_end(ap);
 }
 #define LOG(level, fmt, ...) log_capture(fmt, ##__VA_ARGS__)
@@ -38,8 +39,11 @@ static unsigned alarm_calls;
 
 bool spindle_m29_is_ready(void) { return m29_ready; }
 void spindle_complete_m29(void) { ++complete_calls; }
-/* 卡住诊断只读快照：本自查不关心内容，给个空实现即可。 */
+/* 卡住诊断只读快照：本自查不校验内容 */
 void spindle_m29_diag_info(spindle_m29_diag_t *out) { memset(out, 0, sizeof(*out)); }
+
+int getRegValue8(RegType type, int idx, char *value)
+{ (void)type; (void)idx; *value = 0; return 0; }
 
 int getRegBit(RegType type, int idx, int bit, bool *value)
 {
@@ -74,7 +78,7 @@ static void prepare(int m_code)
     cycle_tp = &cycle_store;
     cycle_tp->plan_block = &plan_store;
     cycle_tp->plan_block->mst_data.m_code = m_code;
-    /* 已过 MF 选通延时：signal_mf 已置位，选通脉冲属于当前指令。 */
+    /* 已过 MF 选通延时：选通脉冲属当前指令 */
     cycle_tp->mstb_cmd_data.signal_den = false;
     cycle_tp->mstb_cmd_data.signal_mf = true;
     par_chan[0][PAR_CH_TFIN_DELEY].value.val_int = 2;   /* FIN 宽度 2 拍 */
@@ -120,8 +124,8 @@ static void test_pre_strobe_high_level_rejected(void)
 {
     /* 2a) F7.0 未选通 */
     prepare(M29);
-    fin_high = false; run(1);            /* 先见到低电平 */
-    fin_high = true; mf_strobe = false;  /* 但 F7.0 还没选通当前指令 */
+    fin_high = false; run(1);            /* 先见低电平 */
+    fin_high = true; mf_strobe = false;  /* F7.0 未选通当前指令 */
     run(20);
     assert(!snapshot().latched);
     assert(!snapshot().low_seen);
@@ -174,21 +178,21 @@ static void test_dual_condition(void)
 static void test_latch_is_per_command(void)
 {
     prepare(M29);
-    m29_ready = false;                   /* 只锁存、不完成，便于验证清除 */
+    m29_ready = false;                   /* 只锁存不完成，便于验证清除 */
     fin_high = false; run(1);
     fin_high = true;
     run(5);
     assert(snapshot().latched);
     assert(!cycle_tp->mstb_cmd_data.finished);
 
-    /* 5a) M29 结束（不再 active）→ 清锁存且不推进 */
+    /* 5a) M29 结束 */
     spl_context.m29_active = false;
     run(1);
     assert(!snapshot().latched && !snapshot().low_seen);
     assert(snapshot().tfin == 0);
     assert(!cycle_tp->mstb_cmd_data.finished);
 
-    /* 5b) M29 出错 → 清锁存且不推进 */
+    /* 5b) M29 出错 */
     prepare(M29);
     m29_ready = false;
     fin_high = false; run(1);
@@ -210,17 +214,16 @@ static void test_latch_is_per_command(void)
     puts("PASS: M29 FIN 锁存属当前指令（结束/出错/换指令都清）");
 }
 
-/* 7) 卡住诊断与超时报警：只观察，不影响握手判定。
- *    每秒打一行（本自查 LOG 是空实现，只看计数与报警），30s 报一次且不重复刷。 */
+/* 7) 卡住诊断与超时报警：只观察，不影响握手判定；每 1000 拍一行、30s 报一次且不重复刷。 */
 static void test_stuck_diag_and_timeout(void)
 {
     prepare(M29);
-    m29_ready = false;                   /* NC 侧未就绪 -> 一直不推进 */
+    m29_ready = false;                   /* NC 侧未就绪 */
     fin_high = false; run(1);            /* 见低电平 */
     fin_high = true;
     assert(cycle_tp->mstb_cmd_data.m29_wait_cycles == 1);
 
-    /* 到第 1000 拍：应当打出第 1 行诊断（现场靠它判断卡在哪一侧） */
+    /* 到诊断周期：打第 1 行 */
     log_line[0] = '\0';
     run(M29_DIAG_PERIOD_CYCLES - 1);
     assert(cycle_tp->mstb_cmd_data.m29_wait_cycles == M29_DIAG_PERIOD_CYCLES);
@@ -239,8 +242,17 @@ static void test_stuck_diag_and_timeout(void)
     assert(strstr(log_line, "F45.7=") != NULL);
     assert(strstr(log_line, "F76.3=") != NULL);
     printf("  诊断样例: %s\n", log_line);
+    assert(strstr(motion_log_line, "target_rpm=") != NULL);
+    assert(strstr(motion_log_line, "actual_rpm=") != NULL);
+    assert(strstr(motion_log_line, "target_deg=") != NULL);
+    assert(strstr(motion_log_line, "F45.1=") != NULL);
+    assert(strstr(motion_log_line, "F45.3=") != NULL);
+    assert(strstr(motion_log_line, "F10=") != NULL);
+    assert(strstr(motion_log_line, "G70=") != NULL);
+    assert(strstr(motion_log_line, "G29=") != NULL);
+    printf("  运动及信号样例: %s\n", motion_log_line);
 
-    /* 30s 之前不报警；到点报一次且不重复刷 */
+    /* 到 30s 才报一次 */
     run(M29_DIAG_TIMEOUT_CYCLES - M29_DIAG_PERIOD_CYCLES - 1);
     assert(cycle_tp->mstb_cmd_data.m29_wait_cycles == M29_DIAG_TIMEOUT_CYCLES - 1);
     assert(alarm_calls == 0);
@@ -253,7 +265,7 @@ static void test_stuck_diag_and_timeout(void)
     run(2000);
     assert(alarm_calls == 1);                    /* 不重复刷 */
 
-    m29_ready = true;                            /* NC 就绪后仍能正常推进 */
+    m29_ready = true;                            /* NC 就绪 */
     run(1);
     assert(cycle_tp->mstb_cmd_data.finished);
     assert(cycle_tp->mstb_cmd_data.m29_wait_cycles == 0);
@@ -265,7 +277,7 @@ static void test_stuck_diag_and_timeout(void)
 static void test_generic_path_unchanged(void)
 {
     prepare(M03);
-    m29_ready = false;                   /* NC 就绪与普通 M 指令无关 */
+    m29_ready = false;                   /* 与普通 M 指令无关 */
     fin_high = true;
     run(5);
     assert(cycle_tp->mstb_cmd_data.finished);

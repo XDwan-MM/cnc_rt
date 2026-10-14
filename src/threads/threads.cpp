@@ -43,7 +43,7 @@ int threads_start() {
     pdo.function = pdo_thread_func;
 
     // 7. 依次创建并启动所有线程。
-    //    每成功一个就记 created——中途失败时后面的没建，退出路径要据此挑着 join。
+    //    每成功一个就记 created，退出路径据此挑着 join 真正建过的线程。
     if (create_managed_thread(&pdo) != 0) return EXIT_FAILURE;
     pdo.created = 1;
     RT_LOG(INFO, "创建pdo线程成功");
@@ -65,8 +65,7 @@ int threads_start() {
 }
 
 void threads_joint() {
-    // 只 join 真的创建成功的线程。join 未创建的 pthread_t 是未定义行为，
-    // 而这在"threads_start 中途失败"的路径上必然发生。
+    // 只 join 创建成功的线程：join 未创建的 pthread_t 是未定义行为。
     // join 完清标志，使本函数可重复调用（重复停机幂等）。
     if (motion_controller.created) {
         pthread_join(motion_controller.id, NULL);

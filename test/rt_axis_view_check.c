@@ -1,6 +1,4 @@
-/* 轴量接口的离线自检：给一份假的 rt_data，验换算与拒绝路径。
- * 不连总线、不跑周期 —— 只验"算得对不对、该拒的拒没拒"。
- * 用法： ./test/build_axis_view_check.sh  */
+/* 轴量接口离线自检：假 rt_data + 真实现，验换算与拒绝路径；不连总线、不跑周期。 */
 #include <math.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -9,13 +7,12 @@
 #include "rt_data.h"
 #include "datatype.h"
 #include "rt_axis_view.h"
-#include "rt_hal_adapter.h"   /* 主轴角度接口读的是 HAL 快照（本测试给桩）*/
+#include "rt_hal_adapter.h"   /* 主轴角度读 HAL 快照（本测试给桩）*/
 
-/* 自己的实例顶掉 RT 的全局（本测试不链接 rt_data.c） */
+/* 本测试不链接 rt_data.c：自身实例顶掉 RT 全局 */
 static RT_DATA g;
 RT_DATA* rt_data = &g;
 
-/* 本测试不链接适配层：给主轴角度接口一个桩，等价于 HAL 快照里的 position_deg。 */
 static double g_stub_deg;
 int rt_hal_spindle_status(RtHalAxisSlot slot, HalCSpindleStatus* out) {
     if (!out) return HAL_ERROR_ARGUMENT;
@@ -25,7 +22,7 @@ int rt_hal_spindle_status(RtHalAxisSlot slot, HalCSpindleStatus* out) {
     return HAL_OK;
 }
 
-/* 直接编进真实现：测的是 RT 用的那份，不是复刻一份假的 */
+/* 直接编进 rt_axis_view.c 真实现 */
 #include "rt_axis_view.c"
 
 static int fails = 0;
@@ -40,7 +37,6 @@ int main(void) {
     double v = 0.0;
 
     memset(&g, 0, sizeof(g));
-    /* X 轴：每转 10mm、每转 10000 指令脉冲 → 当量 0.001mm/计数；enc_off 150mm */
     g.axis_data[AXIS_X].pm_munit = 10.0;
     g.axis_data[AXIS_X].pm_pulse = 10000;
     g.axis_data[AXIS_X].enc_off = 150.0;
@@ -57,7 +53,7 @@ int main(void) {
     expect(rt_axis_view_speed_rpm(AXIS_X, &v) == RT_AXIS_VIEW_OK && fabs(v - 600.0) < 1e-9,
            "rpm = mm/min ÷ 每转位移（6000/10）");
 
-    /* 负当量（分子为负=反向）时，每转位移取绝对值 */
+    /* 负当量 = 反向：每转位移取绝对值 */
     g.axis_data[AXIS_Y].pm_munit = -5.0;
     g.axis_data[AXIS_Y].pm_pulse = 5000;
     g.axis_data[AXIS_Y].enc_off = 0.0;
@@ -68,7 +64,7 @@ int main(void) {
     expect(rt_axis_view_speed_rpm(AXIS_Y, &v) == RT_AXIS_VIEW_OK && fabs(v - 200.0) < 1e-9,
            "反向轴 rpm = 1000/5");
 
-    /* Z 轴：参数没给 → 报 PARAM，不能静默给 0 */
+    /* Z 轴：缺参数报 PARAM，不能静默给 0 */
     g.axis_data[AXIS_Z].pm_munit = 0.0;
     g.axis_data[AXIS_Z].pm_pulse = 0;
     expect(rt_axis_view_cmd_counts(AXIS_Z, &c) == RT_AXIS_VIEW_ERR_PARAM,
@@ -80,7 +76,7 @@ int main(void) {
     expect(rt_axis_view_speed_mm_min(AXIS_Z, &v) == RT_AXIS_VIEW_OK,
            "缺参数不影响 mm/min（那是 emcmot 给的现成值）");
 
-    /* 主轴：没有脉冲计数、没有 mm/min；rpm 就是自己的转速 */
+    /* 主轴：无脉冲计数/mm/min，rpm 即自身转速 */
     g.axis_data[AXIS_SP].act_vel = 1200.0;
     expect(rt_axis_view_cmd_counts(AXIS_SP, &c) == RT_AXIS_VIEW_ERR_UNSUPPORTED,
            "主轴没有指令脉冲");
@@ -91,7 +87,7 @@ int main(void) {
     expect(rt_axis_view_speed_rpm(AXIS_SP, &v) == RT_AXIS_VIEW_OK && v == 1200.0,
            "主轴 rpm 原样带出");
 
-    /* 主轴角度反馈（位置模式走过的角度）：走 HAL 快照，不落 rt_data */
+    /* 主轴角度：走 HAL 快照，不落 rt_data */
     g_stub_deg = 1234.5;
     expect(rt_axis_view_pos_deg(AXIS_SP, &v) == RT_AXIS_VIEW_OK && v == 1234.5,
            "主轴角度原样带出（累计、不取模）");

@@ -144,7 +144,7 @@ int main() {
         if (rt_hal_start(hal_err, sizeof(hal_err)) != HAL_OK) {
             RT_LOG(ERROR, "EtherCAT主站启动失败: %s", hal_err);
             LOG(LOG_LEVEL_ERR, "EtherCAT主站启动失败: %s", hal_err);
-            /* 失败回收已经创建的资源。*/
+    
             rt_hal_shutdown();
             return -1;
         }
@@ -152,13 +152,13 @@ int main() {
     
     RT_LOG(INFO, "启动EtherCAT主站");
     LOG(LOG_LEVEL_INFO, "启动EtherCAT主站");
-    // 创建信号量
+
     init_rt_sem();
     // 启动各个线程，pdo线程跑 HAL 周期循环，并给各实时线程发送信号量
     if (threads_start()) {
         RT_LOG(ERROR, "创建线程失败");
         LOG(LOG_LEVEL_ERR, "线程创建失败");
-        /* 先置退出意图并唤醒所有可能已在跑的线程，再 join，最后停主站。 */
+
         __atomic_store_n(&thread_exit_flag, 1, __ATOMIC_RELEASE);
         for (int i = 0; i < 3; i++) post_rt_sem_all();
         threads_joint();
@@ -184,7 +184,7 @@ int main() {
     LOG(LOG_LEVEL_INFO, "等待实时关闭信号");
     
     // 主循环
-    /* 故障收尾时不要假装成功：依赖退出码的调用方要能区分正常关闭与故障终止。 */
+
     int fault_exit = 0;
 
     #ifndef DEBUG_MODE_ENABLED
@@ -192,7 +192,7 @@ int main() {
         // 等待实时关闭信号
         getSysCommInt(SYS_CLOSE_RT, &sys_close_rt, 0);
         if(sys_close_rt) break;
-        // PDO 线程意外退出（报警已经由它报过）：这里负责收尾，否则各线程会一直卡住
+
         if (__atomic_load_n(&pdo_unexpected_exit, __ATOMIC_ACQUIRE)) {
             LOG(LOG_LEVEL_ERR, "PDO 意外退出：按故障收尾（停机流程由主线程执行）");
             fault_exit = 1;
@@ -224,8 +224,7 @@ int main() {
     // 释放线程
     threads_joint();
 #ifndef DEBUG_MODE_ENABLED
-    /* 主站归 HAL 所有，下面第 219 行的 rt_hal_shutdown() 负责停掉并销毁 context，
-     * 这里不再单独调 Master_Close()。 */
+
     RT_LOG(INFO, "关闭主站");
     LOG(LOG_LEVEL_INFO, "关闭主站");
 #endif
@@ -237,7 +236,7 @@ int main() {
     }
     // 21. 销毁实时信号量
     destroy_rt_sem();
-    // 停止并销毁 HAL context。
+
     rt_hal_shutdown();
     RT_LOG(INFO, "关闭主站");
     LOG(LOG_LEVEL_INFO, "关闭主站");

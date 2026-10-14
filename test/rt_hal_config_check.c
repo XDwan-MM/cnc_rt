@@ -1,16 +1,5 @@
-/* 台架 profile 的离线校验程序。
- *
- * 为什么单独一个可执行文件而不是并入 cnc_rt：本阶段（B 第一块）cnc_rt 主程序
- * 里还留着旧的 libethercat + master.c 路径，而它们与 HAL 静态库有 31 个重名
- * 符号（ethercat_init/ethercat_close/g_device_data 等）。两者**不能同时进一次
- * 链接**——谁在前谁赢，另一个的调用会绑到签名不同的版本上，是静默的灾难。
- * 所以本目标只链 HAL 静态库，不碰旧路径，先把配置这一层单独验证干净。
- *
- * 覆盖两件事：
- *   1. 正向：profile 能装配、能过 hal_config_validate、能打印
- *   2. 反向：几个关键闸门确实会拒绝（ABI、struct_size、指纹、重复逻辑轴）
- * 退出码 0 = 全部通过。
- */
+/* 台架 profile 离线校验：只链 HAL 静态库（与旧 libethercat/master.c 有 31 个重名符号，
+ * 不能同时进一次链接）。正向装配/校验/打印 + 反向闸门拒绝；退出码 0 = 全部通过。 */
 
 #include <math.h>
 #include <stdio.h>
@@ -27,7 +16,7 @@ static void expect(int ok, const char* what) {
     else    { ++g_fail; printf("  FAIL  %s\n", what); }
 }
 
-/* 把 HAL 错误码印成人话，校验失败时能直接看出是配置问题还是 ABI 问题。 */
+/* HAL 错误码转文本：便于区分配置问题与 ABI 问题 */
 static void print_rc(const char* tag, int rc) {
     char text[96];
     hal_error_text(rc, text, sizeof(text));
@@ -70,11 +59,11 @@ int main(void) {
     /* ---- 4b. 从机床参数装载换算量 ---- */
     printf("\n[4b] rt_hal_config_set_scaling\n");
     {
-        /* 先记下占位值，用于证明非法输入不会改动任何字段。 */
+        /* 记下占位值：证明非法输入不改动任何字段 */
         const double before_units = cfg.axes[0].command_units_per_count;
         const double before_off   = cfg.axes[0].enc_off;
 
-        /* 非法值：当量为 0 —— 必须整体拒绝，不能留下半套换算 */
+        /* 非法值：当量 0 必须整体拒绝，不留半套换算 */
         RtHalAxisScaling bad = {0.0, 12.0, 0, 0, 10000};
         expect(rt_hal_config_set_scaling(&cfg, RT_HAL_AXIS_X, &bad) == RT_HAL_ERR_PARAM,
                "当量为 0 被拒 (RT_HAL_ERR_PARAM)");
@@ -96,8 +85,7 @@ int main(void) {
         expect(rt_hal_config_set_scaling(&cfg, (RtHalAxisSlot)99, &bad) == RT_HAL_ERR_SLOT,
                "轴槽越界被拒");
 
-        /* 合法值：模拟从 par_axis 算出来的真值。取 1mm/转、10000 脉冲/转
-         * → 当量 = 1.0/10000 = 0.0001 mm/count */
+        /* 合法值：当量 = 1mm/转 ÷ 10000 脉冲/转 = 0.0001 mm/count */
         const RtHalAxisScaling feed = {0.0001, 150.0, 0, 0, 100000};
         expect(rt_hal_config_set_scaling(&cfg, RT_HAL_AXIS_X, &feed) == 0, "X 装载成功");
         expect(cfg.axes[0].command_units_per_count == 0.0001 &&
@@ -107,19 +95,18 @@ int main(void) {
         expect(rt_hal_config_scaling_loaded(RT_HAL_AXIS_X), "X 标记为已装载");
         expect(!rt_hal_config_scaling_loaded(RT_HAL_AXIS_Y), "Y 仍未装载");
 
-        /* 主轴：带符号 rpm 的伺服，每转计数未知（传 0） */
+        /* 主轴：带符号 rpm，每转计数未知（传 0） */
         const RtHalAxisScaling sp = {0.16, 0.0, 0, 0, 0};
         expect(rt_hal_config_set_scaling(&cfg, RT_HAL_AXIS_SP, &sp) == 0, "SP 装载成功");
         expect(!rt_hal_config_scaling_loaded(RT_HAL_AXIS_SP),
                "SP 每转计数未知 → 仍算未装载");
 
-        /* 只装了 X 和 SP，Y/Z 还没有参数 —— 台账必须**仍然**置起 SCALING。
-         * 这是有意的保守行为：一根轴没参数就挡住整机运动，而不是放它自己动。 */
+        /* 只装 X/SP 时台账仍置 SCALING：一根轴没参数就挡住整机运动（有意保守） */
         const uint32_t t2 = rt_hal_config_todo();
         expect((t2 & RT_HAL_TODO_SCALING) != 0,
                "只装 2/4 根轴时 SCALING 仍置起（保守挡住整机）");
 
-        /* 补齐 Y/Z 的当量，ENCODER 仍因缺每转计数而留着 */
+        /* 补 Y/Z 当量；ENCODER 因缺每转计数仍留着 */
         const RtHalAxisScaling y = {0.0001, 150.0, 0, 0, 100000};
         const RtHalAxisScaling z = {0.0001, 150.0, 0, 0, 100000};
         expect(rt_hal_config_set_scaling(&cfg, RT_HAL_AXIS_Y, &y) == 0, "Y 装载成功");
@@ -133,10 +120,7 @@ int main(void) {
                "剩余台账正好是 ENCODER（主轴每转计数还未知）");
         expect(rt_hal_config_motion_allowed() == 0, "仍有未确认项，运动继续被阻止");
 
-        /* 补上主轴的每转计数（RT 现在的做法：取参数域的 pm_pulse）→ ENCODER 位应当清掉。
-         * 这是 RT 的真实终态：参数域给全 → 台账清空、运动放开。
-         * （曾经还有 IO_MAP / MOTION 两个"现场确认"手工门，已按拍板删掉 —— 那是
-         *  电气/工艺的职责，不该由这段代码卡着不让动。） */
+        /* 补上主轴每转计数（取参数域 pm_pulse）→ ENCODER 清空：参数域给全即台账清空、运动放开 */
         const RtHalAxisScaling sp2 = {0.16, 0.0, 0, 0, 120000};
         expect(rt_hal_config_set_scaling(&cfg, RT_HAL_AXIS_SP, &sp2) == 0,
                "SP 补上每转计数后重新装载成功");
@@ -180,12 +164,12 @@ int main(void) {
     rc = hal_config_validate(&bad, err, sizeof(err));
     expect(rc == HAL_ERROR_CONFIG, "周期低于 250us 被拒");
 
-    /* 重复逻辑轴号：把 X 的逻辑轴改成与 Y 相同 */
+    /* 重复逻辑轴号 */
     bad = cfg; bad.axes[0].logical_axis = bad.axes[1].logical_axis;
     rc = hal_config_validate(&bad, err, sizeof(err));
     expect(rc == HAL_ERROR_CONFIG, "逻辑轴号重复被拒");
 
-    /* 进给轴配成速度模式：HAL 强制进给必须是位置模式 */
+    /* 进给只能位置模式（CSP） */
     bad = cfg; bad.axes[0].work_mode = HAL_WORK_VELOCITY;
     rc = hal_config_validate(&bad, err, sizeof(err));
     expect(rc == HAL_ERROR_CONFIG, "进给轴配 CSV 被拒（进给只能 CSP）");
