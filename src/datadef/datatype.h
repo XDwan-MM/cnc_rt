@@ -70,6 +70,7 @@ typedef enum result {
     VP_VP_LESS_THAN_VE,
 } GNC_RES;
 
+// 轴类型
 typedef enum {
     AXIS_X = 0,
     AXIS_Y,
@@ -77,6 +78,7 @@ typedef enum {
     AXIS_SP
 } AXIS_TYPE;
 
+// 位置
 typedef struct pos {
     double x;
     double y;
@@ -124,13 +126,14 @@ typedef enum {
     NURBS,          
 } INTERP_TYPE;
 
+// 一致性处理类型
 typedef enum {
     NONE = 0,
-    UNIF_ARC,
-    UNIF_BESIER,
-    UNIF_HERMIT,
-    UNIF_NURBS,     
-    UNIF_CIRCLE,         
+    UNIF_ARC,       
+    UNIF_BESIER,    // 贝塞尔
+    UNIF_HERMIT,    // hermit
+    UNIF_NURBS,     // NURBS
+    UNIF_CIRCLE,    // 圆弧过渡     
 } UNIF_TYPE;
 
 // NC 运行模式
@@ -148,85 +151,85 @@ typedef enum {
 // NC 事件
 typedef enum {
     SYS_EVENT_NONE = 0,
-    SYS_EVENT_RERUN,
-    SYS_EVENT_PAUSE,
-    SYS_EVENT_FEED_OVERRIDE,
-    SYS_EVENT_RAPID_OVERRIDE,
-    SYS_EVENT_SPDL_OVERRIDE,
-    SYS_EVENT_X_POS_PRESS,
-    SYS_EVENT_X_POS_RELEASE,
-    SYS_EVENT_X_NEG_PRESS,
-    SYS_EVENT_X_NEG_RELEASE,
-    SYS_EVENT_Y_POS_PRESS,
-    SYS_EVENT_Y_POS_RELEASE,
-    SYS_EVENT_Y_NEG_PRESS,
-    SYS_EVENT_Y_NEG_RELEASE,
-    SYS_EVENT_Z_POS_PRESS,
-    SYS_EVENT_Z_POS_RELEASE,
-    SYS_EVENT_Z_NEG_PRESS,
-    SYS_EVENT_Z_NEG_RELEASE,
-    SYS_EVENT_HMI_RESET,
-    SYS_EVENT_OUTSIDE_RESET,
-    SYS_EVENT_SINGLE_BLOCK_ON,
-    SYS_EVENT_SINGLE_BLOCK_OFF,
-    SYS_EVENT_MAC_LOCK_ON,
-    SYS_EVENT_MAC_LOCK_OFF,
-    SYS_EVENT_IT_ON,
-    SYS_EVENT_IT_OFF,
-    SYS_EVENT_STLK_ON,
-    SYS_EVENT_STLK_OFF,
-    SYS_EVENT_BSL_ON,
-    SYS_EVENT_BSL_OFF,
-    SYS_EVENT_CSL_ON,
-    SYS_EVENT_CSL_OFF,
-    SYS_EVENT_IT1_ON,
-    SYS_EVENT_IT1_OFF,
-    SYS_EVENT_IT2_ON,
-    SYS_EVENT_IT2_OFF,
-    SYS_EVENT_IT3_ON,
-    SYS_EVENT_IT3_OFF,
-    SYS_EVENT_IT4_ON,
-    SYS_EVENT_IT4_OFF,
-    SYS_EVENT_IT5_ON,
-    SYS_EVENT_IT5_OFF,
-    SYS_EVENT_PMIT1_ON,
-    SYS_EVENT_PMIT1_OFF,
-    SYS_EVENT_PMIT2_ON,
-    SYS_EVENT_PMIT2_OFF,
-    SYS_EVENT_PMIT3_ON,
-    SYS_EVENT_PMIT3_OFF,
-    SYS_EVENT_PMIT4_ON,
-    SYS_EVENT_PMIT4_OFF,
-    SYS_EVENT_PMIT5_ON,
-    SYS_EVENT_PMIT5_OFF,
-    SYS_EVENT_NMIT1_ON,
-    SYS_EVENT_NMIT1_OFF,
-    SYS_EVENT_NMIT2_ON,
-    SYS_EVENT_NMIT2_OFF,
-    SYS_EVENT_NMIT3_ON,
-    SYS_EVENT_NMIT3_OFF,
-    SYS_EVENT_NMIT4_ON,
-    SYS_EVENT_NMIT4_OFF,
-    SYS_EVENT_NMIT5_ON,
-    SYS_EVENT_NMIT5_OFF,
-    SYS_EVENT_DRY_RUN_ON,
-    SYS_EVENT_DRY_RUN_OFF,
-    SYS_EVENT_PROGRAM_RESTART_ON,
-    SYS_EVENT_PROGRAM_RESTART_OFF,
-    SYS_EVENT_BLOCK_SKIP_ON,
-    SYS_EVENT_BLOCK_SKIP_OFF,
-    SYS_EVENT_STOP_SKIP_ON,
-    SYS_EVENT_STOP_SKIP_OFF,
-    SYS_EVENT_RIGID_RETURN_ON,
+    // 操作面板事件
+    SYS_EVENT_RERUN,                    // 循环启动
+    SYS_EVENT_PAUSE,                    // 进给保持
+    SYS_EVENT_FEED_OVERRIDE,            // 切换进给倍率
+    SYS_EVENT_RAPID_OVERRIDE,           // 切换快移倍率
+    SYS_EVENT_SPDL_OVERRIDE,            // 切换主轴倍率
+    SYS_EVENT_X_POS_PRESS,              // 按下X+
+    SYS_EVENT_X_POS_RELEASE,            // 松开X+
+    SYS_EVENT_X_NEG_PRESS,              // 按下X-
+    SYS_EVENT_X_NEG_RELEASE,            // 松开X-
+    SYS_EVENT_Y_POS_PRESS,              // 按下Y+
+    SYS_EVENT_Y_POS_RELEASE,            // 松开Y+
+    SYS_EVENT_Y_NEG_PRESS,              // 按下Y-
+    SYS_EVENT_Y_NEG_RELEASE,            // 松开Y-
+    SYS_EVENT_Z_POS_PRESS,              // 按下Z+
+    SYS_EVENT_Z_POS_RELEASE,            // 松开Z+
+    SYS_EVENT_Z_NEG_PRESS,              // 按下Z-
+    SYS_EVENT_Z_NEG_RELEASE,            // 松开Z-
+    SYS_EVENT_OUTSIDE_RESET,            // 外部复位
+    SYS_EVENT_SINGLE_BLOCK_ON,          // 开启单程序段
+    SYS_EVENT_SINGLE_BLOCK_OFF,         
+    SYS_EVENT_MAC_LOCK_ON,              // 开启机械锁住
+    SYS_EVENT_MAC_LOCK_OFF,             
+    SYS_EVENT_IT_ON,                    // 开启所有轴互锁
+    SYS_EVENT_IT_OFF,                   
+    SYS_EVENT_STLK_ON,                  // 开启启停锁停
+    SYS_EVENT_STLK_OFF,                 
+    SYS_EVENT_BSL_ON,                   // 开启程序段开始互锁
+    SYS_EVENT_BSL_OFF,  
+    SYS_EVENT_CSL_ON,                   // 开启切削程序段开始互锁
+    SYS_EVENT_CSL_OFF,  
+    SYS_EVENT_IT1_ON,                   // 开启轴1互锁
+    SYS_EVENT_IT1_OFF,  
+    SYS_EVENT_IT2_ON,                   // 开启轴2互锁
+    SYS_EVENT_IT2_OFF,  
+    SYS_EVENT_IT3_ON,                   // 开启轴3互锁
+    SYS_EVENT_IT3_OFF,  
+    SYS_EVENT_IT4_ON,                   // 开启轴4互锁
+    SYS_EVENT_IT4_OFF,  
+    SYS_EVENT_IT5_ON,                   // 开启轴5互锁
+    SYS_EVENT_IT5_OFF,  
+    SYS_EVENT_PMIT1_ON,                 // 开启轴1正向互锁
+    SYS_EVENT_PMIT1_OFF,    
+    SYS_EVENT_PMIT2_ON,                 // 开启轴2正向互锁
+    SYS_EVENT_PMIT2_OFF,    
+    SYS_EVENT_PMIT3_ON,                 // 开启轴3正向互锁
+    SYS_EVENT_PMIT3_OFF,    
+    SYS_EVENT_PMIT4_ON,                 // 开启轴4正向互锁
+    SYS_EVENT_PMIT4_OFF,    
+    SYS_EVENT_PMIT5_ON,                 // 开启轴5正向互锁
+    SYS_EVENT_PMIT5_OFF,    
+    SYS_EVENT_NMIT1_ON,                 // 开启轴1负向互锁
+    SYS_EVENT_NMIT1_OFF,    
+    SYS_EVENT_NMIT2_ON,                 // 开启轴2负向互锁
+    SYS_EVENT_NMIT2_OFF,    
+    SYS_EVENT_NMIT3_ON,                 // 开启轴3负向互锁
+    SYS_EVENT_NMIT3_OFF,    
+    SYS_EVENT_NMIT4_ON,                 // 开启轴4负向互锁
+    SYS_EVENT_NMIT4_OFF,    
+    SYS_EVENT_NMIT5_ON,                 // 开启轴5负向互锁
+    SYS_EVENT_NMIT5_OFF,    
+    SYS_EVENT_DRY_RUN_ON,               // 开启空运行
+    SYS_EVENT_DRY_RUN_OFF,  
+    SYS_EVENT_PROGRAM_RESTART_ON,       // 开启程序段重启
+    SYS_EVENT_PROGRAM_RESTART_OFF,  
+    SYS_EVENT_BLOCK_SKIP_ON,            // 开启跳段
+    SYS_EVENT_BLOCK_SKIP_OFF,   
+    SYS_EVENT_STOP_SKIP_ON,             // 开启跳过
+    SYS_EVENT_STOP_SKIP_OFF,    
+    SYS_EVENT_RIGID_RETURN_ON,          // 开启攻丝回退
     SYS_EVENT_RIGID_RETURN_OFF,
-
-    SYS_EVENT_COMP_PARAM_CHANGED,   /* 误差补偿参数变更（需 sync + on_params_synced） */
-    SYS_EVENT_COMP_TABLE_CHANGED,   /* 数据表参数变更（需重建表 + on_params_synced） */
-    SYS_EVENT_EXTERNAL_DECEL_POS_ON,   /* 外部减速正向生效 */
-    SYS_EVENT_EXTERNAL_DECEL_POS_OFF,  /* 外部减速正向解除 */
-    SYS_EVENT_EXTERNAL_DECEL_NEG_ON,   /* 外部减速负向生效 */
-    SYS_EVENT_EXTERNAL_DECEL_NEG_OFF,  /* 外部减速负向解除 */
-
+    SYS_EVENT_EXTERNAL_DECEL_POS_ON,    /* 外部减速正向生效 */
+    SYS_EVENT_EXTERNAL_DECEL_POS_OFF,   /* 外部减速正向解除 */
+    SYS_EVENT_EXTERNAL_DECEL_NEG_ON,    /* 外部减速负向生效 */
+    SYS_EVENT_EXTERNAL_DECEL_NEG_OFF,   /* 外部减速负向解除 */
+    // MDI事件
+    SYS_EVENT_HMI_RESET,                // 按下reset
+    SYS_EVENT_COMP_PARAM_CHANGED,       /* 误差补偿参数变更（需 sync + on_params_synced） */
+    SYS_EVENT_COMP_TABLE_CHANGED,       /* 数据表参数变更（需重建表 + on_params_synced） */
 } SYS_EVENT;
 
 double POS_Distance(POS* p1, POS* p2);
