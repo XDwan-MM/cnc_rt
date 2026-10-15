@@ -1040,6 +1040,12 @@ void block_cal_max_vel(PLAN_BLOCK* current_block){
             {
             case MOVING_AXIS_X:
                 current_block->param_vel = rt_data->axis_data[0].max_rapid_vel;
+                if (rt_get_sys_state(SYS_IS_EXTERNAL_DECLINE1_AXIS1_POS) || rt_get_sys_state(SYS_IS_EXTERNAL_DECLINE1_AXIS1_NEG)) {
+                    current_block->param_vel = MIN(current_block->param_vel, rt_data->chan_data[0].cut_ex_dec1_vel);
+                }
+                if (rt_get_sys_state(SYS_IS_EXTERNAL_DECLINE2_AXIS1_POS) || rt_get_sys_state(SYS_IS_EXTERNAL_DECLINE2_AXIS1_NEG)) {
+                    current_block->param_vel = MIN(current_block->param_vel, rt_data->chan_data[0].cut_ex_dec2_vel);
+                }
                 current_block->feed_vel = rt_data->axis_data[0].jog_lowspd;
                 current_block->max_vel = MIN(current_block->feed_vel, current_block->param_vel);
                 current_block->max_acc = rt_data->axis_data[0].max_rapid_acc;

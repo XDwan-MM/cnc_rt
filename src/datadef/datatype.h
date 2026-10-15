@@ -226,6 +226,14 @@ typedef enum {
     SYS_EVENT_EXTERNAL_DECEL_POS_OFF,   /* 外部减速正向解除 */
     SYS_EVENT_EXTERNAL_DECEL_NEG_ON,    /* 外部减速负向生效 */
     SYS_EVENT_EXTERNAL_DECEL_NEG_OFF,   /* 外部减速负向解除 */
+    SYS_EVENT_EXTERNAL_DECEL1_AXIS1_POS_ON,    /* 外部减速1轴1正向生效 */
+    SYS_EVENT_EXTERNAL_DECEL1_AXIS1_POS_OFF,   /* 外部减速1轴1正向解除 */
+    SYS_EVENT_EXTERNAL_DECEL1_AXIS1_NEG_ON,    /* 外部减速1轴1负向生效 */
+    SYS_EVENT_EXTERNAL_DECEL1_AXIS1_NEG_OFF,   /* 外部减速1轴1负向解除 */
+    SYS_EVENT_EXTERNAL_DECEL2_AXIS1_POS_ON,    /* 外部减速1轴1正向生效 */
+    SYS_EVENT_EXTERNAL_DECEL2_AXIS1_POS_OFF,   /* 外部减速1轴1正向解除 */
+    SYS_EVENT_EXTERNAL_DECEL2_AXIS1_NEG_ON,    /* 外部减速1轴1负向生效 */
+    SYS_EVENT_EXTERNAL_DECEL2_AXIS1_NEG_OFF,   /* 外部减速1轴1负向解除 */
     // MDI事件
     SYS_EVENT_HMI_RESET,                // 按下reset
     SYS_EVENT_COMP_PARAM_CHANGED,       /* 误差补偿参数变更（需 sync + on_params_synced） */

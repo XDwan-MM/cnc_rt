@@ -240,6 +240,8 @@ static bool is_newval_unvalid(){
 }
 
 static void auto_cal_target_vel(){
+    if(rt_data->sys_state[SYS_IS_EXTERNAL_DECLINE1_AXIS1_POS] || rt_data->sys_state[SYS_IS_EXTERNAL_DECLINE1_AXIS1_NEG]) cycle_tp->plan_block->param_vel = MIN(cycle_tp->plan_block->param_vel, rt_data->chan_data[0].cut_ex_dec1_vel);
+    if(rt_data->sys_state[SYS_IS_EXTERNAL_DECLINE2_AXIS1_POS] || rt_data->sys_state[SYS_IS_EXTERNAL_DECLINE2_AXIS1_NEG]) cycle_tp->plan_block->param_vel = MIN(cycle_tp->plan_block->param_vel, rt_data->chan_data[0].cut_ex_dec2_vel);
     switch (cycle_tp->exec_state)
     {
     case EXEC_RUNNING:
@@ -304,6 +306,7 @@ static void auto_look_ahead(){
     PLAN_BLOCK* next_block;
     for(int i = 0; i < plan_queue->size; i++){
         cur_block = queue_get_block(plan_queue, i);
+        block_cal_max_vel(cur_block);
         block_cal_lookahead_vel(cur_block);
     }
     // 修正末段ve

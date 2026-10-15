@@ -40,8 +40,9 @@ static void auto_pop_current_block();
 static void auto_update_buf_stop();
 static void auto_set_stop_skip_macro();
 static void auro_reset_stop_skip();
-static void auto_check_feed_override_event();
+static void auto_check_external_decline_event();
 static void auto_check_rapid_override_event();
+static void auto_check_feed_override_event();
 
 // 阻止缓冲：已弹出的停止块 ID
 static unsigned int s_buf_stop_popped_id = 0;
@@ -565,6 +566,39 @@ static void auto_check_event(){
         default:
             break;
         }
+        break;
+    case SYS_EVENT_FEED_OVERRIDE:
+        LOG(LOG_LEVEL_INFO, "自动模式处理进给倍率切换");
+        auto_check_feed_override_event();
+        break;
+    case SYS_EVENT_RAPID_OVERRIDE:
+        LOG(LOG_LEVEL_INFO, "自动模式处理快速进给倍率切换");
+        auto_check_rapid_override_event();
+        break;
+    case SYS_EVENT_EXTERNAL_DECEL1_AXIS1_POS_ON:
+        LOG(LOG_LEVEL_INFO, "自动模式处理外部减速信号1轴1正向开启");
+        if(cycle_tp->plan_block->move_axis != MOVING_AXIS_X) break;
+        rt_set_sys_state(SYS_IS_EXTERNAL_DECLINE1_AXIS1_POS, true);
+        auto_check_external_decline_event();
+        break;
+    case SYS_EVENT_EXTERNAL_DECEL1_AXIS1_POS_OFF:
+        LOG(LOG_LEVEL_INFO, "自动模式处理外部减速信号1轴1正向关闭");
+        if(cycle_tp->plan_block->move_axis != MOVING_AXIS_X) break;
+        rt_set_sys_state(SYS_IS_EXTERNAL_DECLINE1_AXIS1_POS, false);
+        auto_check_external_decline_event();
+        break;
+    case SYS_EVENT_EXTERNAL_DECEL2_AXIS1_POS_ON:
+        // 是否开启外部减速2
+        if(!rt_data->chan_data[0].ex_dec2_enable) break;
+        LOG(LOG_LEVEL_INFO, "自动模式处理外部减速信号2轴1正向开启");
+        rt_set_sys_state(SYS_IS_EXTERNAL_DECLINE2_AXIS1_POS, true);
+        auto_check_external_decline_event();
+        break;
+    case SYS_EVENT_EXTERNAL_DECEL2_AXIS1_POS_OFF:
+        if(!rt_data->chan_data[0].ex_dec2_enable) break;
+        LOG(LOG_LEVEL_INFO, "自动模式处理外部减速信号2轴1正向关闭");
+        rt_set_sys_state(SYS_IS_EXTERNAL_DECLINE1_AXIS1_POS, false);
+        auto_check_external_decline_event();
         break;
     case SYS_EVENT_FEED_OVERRIDE:
         LOG(LOG_LEVEL_INFO, "自动模式处理进给倍率切换");
@@ -1246,6 +1280,27 @@ void cycle_tp_reset(){
     cycle_tp_reset_pos_cmd_data();
     cycle_tp_reset_dwell_cmd_data();
     cycle_tp_mstb_cmd_data_reset();
+}
+
+static void auto_check_external_decline_event(){
+    switch (cycle_tp->exec_state)
+    {
+    case EXEC_RUNNING:
+        switch(cycle_tp->exec_cmd){
+        // TODO:根据参数设置是否对切削指令减速
+        case DO_MOVE_CMD:
+        case DO_CHOP_CMD:
+            cycle_tp->running_stage = BLOCK_BREAKPOINT;
+            break;
+        default:
+            break;
+        }
+        break;
+    case EXEC_PAUSING:
+    case EXEC_RESET:
+    case EXEC_IDLE:
+        break;
+    }
 }
 
 static void auto_check_rapid_override_event(){

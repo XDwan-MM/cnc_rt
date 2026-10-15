@@ -54,6 +54,10 @@ typedef enum
     SYS_IS_RIGID_RETURN,        // 攻丝回退
     SYS_IS_RIGID_RETURN_FINISH, // 刚性攻丝返回完成
     SYS_IS_MPG_EX_DEC_ENABLE,   // G23.3允许外部减速作用于手轮
+    SYS_IS_EXTERNAL_DECLINE1_AXIS1_POS,    // 外部减速1轴1正向
+    SYS_IS_EXTERNAL_DECLINE1_AXIS1_NEG,    // 外部减速1轴1负向
+    SYS_IS_EXTERNAL_DECLINE2_AXIS1_POS,    // 外部减速2轴1正向
+    SYS_IS_EXTERNAL_DECLINE2_AXIS1_NEG,    // 外部减速2轴1负向
 } SysStateIndex;
 
 // 路径和轨迹两个线程使用
