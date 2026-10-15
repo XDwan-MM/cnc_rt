@@ -34,7 +34,6 @@ void plc_f_signal_handler_cycle()
     plc_output_spl_orient_status();
     plc_output_spl_vel();
     plc_output_rigid();
-    spindle_trace_status();
 }
 
 static void plc_output_alarm()

@@ -7,6 +7,7 @@
 #include "global.h"
 #include "servosampleapi.h"
 #include "tapreturn.h"
+#include "rt_hal_adapter.h"
 
 namespace {
 constexpr double kMinVelocity = 1.0e-9;
@@ -134,7 +135,7 @@ void ServoSampleSampler::execute()
         sampleIfDue();
 
         if (isRigidTapConfig(_config)) {
-            const double rpm = static_cast<double>(spindle_driver.actual_vel);
+            const double rpm = static_cast<double>(rt_hal_spindle_rpm());
             const double feed = rt_data->axis_data[_config.axis].act_vel * TIME_MINUS_2_S;
             const double feedCommand = rt_data->axis_data[_config.axis].cmd_vel * TIME_MINUS_2_S;
             const double feedDirection = std::fabs(feedCommand) > kMinVelocity
@@ -711,7 +712,7 @@ void ServoSampleSampler::sampleOne()
             frame.values[i] = _actualCompositeVelocityMmPerMin;
             break;
         case CNC_SERVO_SIGNAL_ACT_SPINDLE_RPM:
-            frame.values[i] = static_cast<double>(spindle_driver.actual_vel);
+            frame.values[i] = static_cast<double>(rt_hal_spindle_rpm());
             break;
         case CNC_SERVO_SIGNAL_ACT_SPINDLE_ANGLE:
             frame.values[i] = rt_data->axis_data[AXIS_SP].motor_act_pos;
@@ -747,7 +748,7 @@ void ServoSampleSampler::sampleOne()
     }
     /* 安全检查始终基于直接反馈，与上面选择的显示通道无关。 */
     if (isRigidTapConfig(_config) && _tapMotionActive) {
-        const double rpm = static_cast<double>(spindle_driver.actual_vel);
+        const double rpm = static_cast<double>(rt_hal_spindle_rpm());
         const double feed = rt_data->axis_data[_config.axis].act_vel * TIME_MINUS_2_S;
         const double feedCommand = rt_data->axis_data[_config.axis].cmd_vel * TIME_MINUS_2_S;
         const double feedDirection = std::fabs(feedCommand) > kMinVelocity
