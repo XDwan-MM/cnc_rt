@@ -214,6 +214,7 @@ static void auto_deal_mstb(){
         case M29: // 将主轴定向，并且到CSP模式上使能
             setRegValue8(REG_F, 10, 0x1d);
             spindle_request_m29();
+            // spindle_request_m29_no_orient(); // 非定向
             break;
         default:
             // 判断M代码大小
