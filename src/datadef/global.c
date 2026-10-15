@@ -13,6 +13,7 @@
 #include <hmisysapi.h>
 #include <pthread.h>
 #include "tapreturn.h"
+#include "debug_mode.h"
 
 // ==============全局变量定义===============
 int update_pos_flag = 0;                // 理论位置读取驱动器位置
@@ -75,8 +76,8 @@ static GNC_RES shm_var_init(){
     setVarSysInt(VAR_SYS_CHAN_NUM, 1, 0);        // 通道数                     
     // 通道数据
     for(int i = 0; i < SYS_CHAN_NUM; i++){        
-        setVarChanInt(i, VAR_CHAN_CMD_FEEDRATE, 0, 0);          // 通道合成指令速度
-        setVarChanInt(i, VAR_CHAN_ACT_FEEDRATE, 0, 0);          // 通道实际合成速度
+        setVarChanDouble(i, VAR_CHAN_CMD_FEEDRATE, 0.0, 0);    // 通道合成指令速度
+        setVarChanDouble(i, VAR_CHAN_ACT_FEEDRATE, 0.0, 0);    // 通道实际合成速度
         setVarChanDouble(i, VAR_CHAN_FEED_OVERRIDE, 0.0, 0);    // 进给倍率    
         setVarChanDouble(i, VAR_CHAN_RAPID_OVERRIDE, 0.0, 0);   // 快速进给倍率
         setVarChanDouble(i, VAR_CHAN_SPDL_OVERRIDE, 0.0, 0);    // 主轴倍率
@@ -337,14 +338,20 @@ void shm_var_update(){
         setVarAxisDouble(i, VAR_AXIS_CMD_POS_RCS_EX, real, 0);
         // 机械坐标 = 机床指令位置
         setVarAxisDouble(i, VAR_AXIS_CMD_POS_EX, rt_data->axis_data[i].mac_cmd_pos, 0);
-        // 机床实际位置
+        // 机床实际位置。仿真反馈包含误差补偿，显示机械坐标时去除补偿。
+#ifdef DEBUG_MODE_ENABLED
+        setVarAxisDouble(i, VAR_AXIS_ACT_POS_EX, rt_data->axis_data[i].fb_pos_no_comp, 0);
+#else
         setVarAxisDouble(i, VAR_AXIS_ACT_POS_EX, rt_data->axis_data[i].motor_act_pos, 0);
+#endif
         // 电机脉冲
         setVarAxisInt(i, VAR_AXIS_ENC_CNTR, rt_data->axis_data[i].enc_cntr, 0);
         // 实际轴速度：进给轴 mm/min、主轴 rpm —— emcmot 已按用户单位换算好，这里不再乘
         setVarAxisDouble(i, VAR_AXIS_ACT_VEL_EX, rt_data->axis_data[i].act_vel, 0);
         // 指令轴速度
+        setVarAxisDouble(i, VAR_AXIS_CMD_VEL, rt_data->axis_data[i].cmd_vel * TIME_MINUS_2_S, 0);
         setVarAxisDouble(i, VAR_AXIS_CMD_VEL_EX, rt_data->axis_data[i].cmd_vel * TIME_MINUS_2_S, 0);
+        // 轴加速度，内部单位为 mm/s²，保持共享变量单位一致
         // 轴状态显示：机械锁住、互锁、移动中
         if(rt_data->sys_state[SYS_IS_MAC_LOCK_READY]) setVarAxisInt(i, VAR_AXIS_IS_MAC_LOCK, 1, 0);
         else setVarAxisInt(i, VAR_AXIS_IS_MAC_LOCK, 0, 0);
