@@ -73,6 +73,10 @@ typedef struct
     bool is_rev_limit;  // 手动负方向限制
     bool plc_is_disable;
     bool is_disable;   // 轴是否被屏蔽
+    /* 主轴侧"这拍想不想带力矩"。**只有主轴会写**（spl_drv_enable/disable），
+     * hal_axis_intent_poll 把它合并进使能意图，而急停与轴屏蔽永远优先。
+     * 初值 0（不带力矩）：要上力矩必须显式要——与 v1.27.1 一致。 */
+    bool spindle_wants_torque;
     bool is_lag_error; // 是否跟随误差报警 1是 0否
     // 外部减速状态：[0~4]功能号，[0]正向减速状态寄存，[1]负向减速状态寄存
     bool external_decel_active[SYS_EXTERNAL_DECEL_FUNCTION_COUNT][SYS_EXTERNAL_DECEL_DIRECTION_COUNT];
@@ -162,6 +166,11 @@ typedef struct
     double nlmt;                        // 负软极限
     double plmt2;                       // 第二级正软极限
     double nlmt2;                       // 第二级负软极限
+    double plmt3;                       // 第三级正软极限
+    double nlmt3;                       // 第三级负软极限
+    int lmt2_type;                      // 第二级正软极限类型
+    int lmt2_enable;                    // 第二级正软极限开启
+    int lmt3_enable;                    // 第三级负软极限开启
     double spl_default_speed;           // 主轴缺省速度
     double spdl_max_speed;              // 主轴最大转速(r/min)
     bool ex_dec_enable_pos_cut;         // 外部减速信号对正向切削进给是否生效
@@ -172,9 +181,15 @@ typedef struct
     double rpd_ex_dec4_vel;             // 外部减速4对快速进给的减速速度
     double rpd_ex_dec5_vel;             // 外部减速5对快速进给的减速速度
     // 重启生效
-    int pm_munit;                       // 电子齿轮比分子
+    double pm_munit;                    // 电子齿轮比分子(mm)。um→mm 后可能带小数，
+                                        // 存 int 会截断（5500um=5.5mm 会变成 5）——
+                                        // 当量与"每转位移"都拿它算，必须留小数
     int pm_pulse;                       // 电子齿轮比分母
     double enc_off;                     // 编码器反馈偏置量
+    /* 电机每转脉冲数（参数域 PAR_AX_MT_PPR）。与 pm_pulse（每转**指令**脉冲数）
+     * 不同：这个是电机侧的每转脉冲数，HAL 用它做模循环展开的模。
+     * 参数域里没填时为 0，此时 HAL 侧退回用 pm_pulse（见 main.cpp 的说明）。 */
+    int mt_ppr;
     // 内部
     double act_vel;                     // 轴实际速度
     double act_acc;                     // 轴实际加速度

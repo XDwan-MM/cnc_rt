@@ -1,10 +1,7 @@
 #include <stdio.h>
 #include <cstdio>
 #include <cerrno>
-#include "driver_hal.h"
-#include "driver.h"
-#include "hal_io.h"
-#include "main_demo.h"
+#include <cmath>
 #include "shmapi.h"
 #include "rt_sem.h"
 #include "plctask.h"
@@ -16,7 +13,7 @@
 #include "parser.h"
 #include <hmisysapi.h>
 #include "stored_stroke_check.h"
-#include "master_wcf.h"
+#include "rt_hal_adapter.h"
 #include "log.h"
 #include <QFile>
 #include <QTextStream>
@@ -27,6 +24,41 @@
 static char version[64];
 static int sys_start_rt = 0;
 static int sys_close_rt = 0;
+
+/* 把机床参数域里的换算量交给适配层。值来自共享内存参数。 */
+static void fill_hal_params(RtHalAxisParams params[RT_HAL_AXIS_COUNT]) {
+    /* 四个 RT 轴槽，顺序与 HAL 逻辑轴号一致（X=0 Y=1 Z=2 主轴=3） */
+    static const int rt_slot[RT_HAL_AXIS_COUNT] = {AXIS_X, AXIS_Y, AXIS_Z, AXIS_SP};
+    memset(params, 0, sizeof(RtHalAxisParams) * RT_HAL_AXIS_COUNT);
+    if (!rt_data) return;
+
+    for (int i = 0; i < RT_HAL_AXIS_COUNT; ++i) {
+        const RT_AXIS* a = &rt_data->axis_data[rt_slot[i]];
+        /* 分子或分母为 0 = 参数没填：不装载、挂台账、禁止运动 */
+        if (a->pm_pulse == 0 || a->pm_munit == 0) {
+            RT_LOG(WARN, "轴 %d 的电子齿轮比为空（pm_munit=%g pm_pulse=%d），保持占位值并禁止运动",
+                   rt_slot[i], a->pm_munit, a->pm_pulse);
+            continue;
+        }
+        params[i].loaded = 1;
+        /* 当量 = 用户单位/计数 = |分子|(mm) / 分母(计数)；取绝对值，符号只表方向 */
+        params[i].scaling.units_per_count = std::fabs(a->pm_munit) / (double)a->pm_pulse;
+        /* 每转指令脉冲数：驱动器速度对象若是 pulse/s，HAL 拿它把 rpm 折成脉冲/秒
+         * （速度对象与位置命令用的是同一套指令脉冲单位）。rpm 单位时 HAL 不用它。 */
+        params[i].scaling.command_pulses_per_rev = a->pm_pulse;
+        params[i].scaling.enc_off = a->enc_off;
+        /* 方向：分子为负 = 反向 */
+        params[i].scaling.command_invert  = (a->pm_munit < 0) ? 1 : 0;
+        params[i].scaling.feedback_invert = (a->pm_munit < 0) ? 1 : 0;
+        /* 每转反馈计数：优先 MT_PPR，为 0 退回 pm_pulse；只主轴（模循环）用得到 */
+        params[i].scaling.feedback_pulses_per_rev = a->mt_ppr > 0 ? a->mt_ppr : a->pm_pulse;
+        /* 主轴转速上限：HAL 拿它做下发前的量程检查，超了就拒收。
+         * 不接的话 HAL 只能用占位值 1000 rpm —— 编 S1500 会被拒收、主轴不转，
+         * 而且只有一行 stderr，很难查。参数里没填时留 0，由适配层保持占位值。 */
+        if (i == RT_HAL_AXIS_SP)
+            params[i].max_speed = std::fabs(rt_data->axis_data[AXIS_SP].spdl_max_speed);
+    }
+}
 
 // Ctrl + C 终止程序触发
 void sigint_handler([[maybe_unused]] int sig) {
@@ -90,38 +122,52 @@ int main() {
     parser_new();
     RT_LOG(INFO, "初始化译码器成功");
     LOG(LOG_LEVEL_INFO, "初始化译码器成功");
-    // 初始化硬件抽象层
-    Hal_Driver_Manager_Init();
-    Hal_Driver_Array_Init();
-    Hal_Io_Array_Init();
+    // 初始化硬件抽象层：装配 profile（含从机床参数取的换算量）并创建 HAL context。
+    {
+        RtHalAxisParams hal_params[RT_HAL_AXIS_COUNT];
+        fill_hal_params(hal_params);
+        char hal_err[192] = {0};
+        if (rt_hal_create(hal_params, hal_err, sizeof(hal_err)) != HAL_OK) {
+            RT_LOG(ERROR, "HAL 配置装配/创建失败: %s", hal_err);
+            LOG(LOG_LEVEL_ERR, "HAL 配置装配/创建失败: %s", hal_err);
+            return -1;
+        }
+    }
     RT_LOG(INFO, "初始化硬件抽象层成功");
     LOG(LOG_LEVEL_INFO, "初始化硬件抽象层成功");
     //初始化行程检查功能
     Axis_Limit_Manager_Init();
-
-    // 创建信号量，需要放在线程启动（threads_start函数）前
-    init_rt_sem();
-    RT_LOG(INFO, "初始化实时信号量成功");
-    LOG(LOG_LEVEL_INFO, "初始化实时信号量成功");
-
-    // 启动主站
-#ifndef DEBUG_MODE_ENABLED
-    if (Master_Start() < 0) {
-        RT_LOG(ERROR, "EtherCAT主站启动失败");
-        LOG(LOG_LEVEL_ERR, "EtherCAT主站启动失败");
-        // setAlarm(ALARM_SY, ALARM_ERROR, 6);
-        return -1; // 直接退出，不再启动线程
+    // 启动主站。
+    // 实时模式是真实主站，调试模式是 rt_hal_sim_backend。
+    {
+        char hal_err[192] = {0};
+        if (rt_hal_start(hal_err, sizeof(hal_err)) != HAL_OK) {
+            RT_LOG(ERROR, "EtherCAT主站启动失败: %s", hal_err);
+            LOG(LOG_LEVEL_ERR, "EtherCAT主站启动失败: %s", hal_err);
+    
+            rt_hal_shutdown();
+            return -1;
+        }
     }
     
     RT_LOG(INFO, "启动EtherCAT主站");
     LOG(LOG_LEVEL_INFO, "启动EtherCAT主站");
-#endif
-    
-    // 启动各个线程，pdo线程运行master_run，给各实时线程发送信号量
+
+    init_rt_sem();
+    // 启动各个线程，pdo线程跑 HAL 周期循环，并给各实时线程发送信号量
     if (threads_start()) {
         RT_LOG(ERROR, "创建线程失败");
         LOG(LOG_LEVEL_ERR, "线程创建失败");
-        exit(1);
+
+        __atomic_store_n(&thread_exit_flag, 1, __ATOMIC_RELEASE);
+        for (int i = 0; i < 3; i++) post_rt_sem_all();
+        threads_joint();
+        rt_hal_shutdown();
+        destroy_rt_sem();
+        rt_global_delete();
+        RT_LOG(ERROR, "实时端初始化失败，已回收资源并退出");
+        RT_LOG_CLOSE();
+        return -1;
     }
     RT_LOG(INFO, "创建所有线程成功");
     LOG(LOG_LEVEL_INFO, "创建所有线程成功");
@@ -138,34 +184,47 @@ int main() {
     LOG(LOG_LEVEL_INFO, "等待实时关闭信号");
     
     // 主循环
+
+    int fault_exit = 0;
+
     #ifndef DEBUG_MODE_ENABLED
     while (!main_exit_flag) {
         // 等待实时关闭信号
         getSysCommInt(SYS_CLOSE_RT, &sys_close_rt, 0);
         if(sys_close_rt) break;
+
+        if (__atomic_load_n(&pdo_unexpected_exit, __ATOMIC_ACQUIRE)) {
+            LOG(LOG_LEVEL_ERR, "PDO 意外退出：按故障收尾（停机流程由主线程执行）");
+            fault_exit = 1;
+            break;
+        }
         sleep(1);
     }
     #else
     while (!main_exit_flag) {
+        if (__atomic_load_n(&pdo_unexpected_exit, __ATOMIC_ACQUIRE)) {
+            LOG(LOG_LEVEL_ERR, "PDO 意外退出：按故障收尾（停机流程由主线程执行）");
+            fault_exit = 1;
+            break;
+        }
         sleep(1);
     }
     #endif
     // 16. 开始关闭实时系统
     RT_LOG(INFO, "获取到实时关闭信号");
     LOG(LOG_LEVEL_INFO, "获取到实时关闭信号");
-    // 17. 通知所有线程退出
-    thread_exit_flag = 1;
+    // 17. 通知所有线程退出（原子写：工作线程在别的核上读它）
+    __atomic_store_n(&thread_exit_flag, 1, __ATOMIC_RELEASE);
     RT_LOG(INFO, "关闭线程");
     LOG(LOG_LEVEL_INFO, "关闭线程");
-    // 唤醒所有阻塞在信号量上的线程，让它们能够检查 thread_exit_flag 并退出
+    // 唤醒所有阻塞在信号量上的线程
     for (int i = 0; i < 3; i++) {
         post_rt_sem_all();
     }
     // 释放线程
     threads_joint();
 #ifndef DEBUG_MODE_ENABLED
-    // 关闭主轴
-    Master_Close();
+
     RT_LOG(INFO, "关闭主站");
     LOG(LOG_LEVEL_INFO, "关闭主站");
 #endif
@@ -177,6 +236,10 @@ int main() {
     }
     // 21. 销毁实时信号量
     destroy_rt_sem();
+
+    rt_hal_shutdown();
+    RT_LOG(INFO, "关闭主站");
+    LOG(LOG_LEVEL_INFO, "关闭主站");
     // 释放全局变量
     rt_global_delete();
     RT_LOG(INFO, "释放全局变量");
@@ -191,5 +254,6 @@ int main() {
     RT_LOG(INFO, "********************************************************");
     // 关闭实时日志
     RT_LOG_CLOSE();
-    return 0;
+    /* 故障收尾过 → 非零，正常关闭 → 0。 */
+    return fault_exit ? 1 : 0;
 }

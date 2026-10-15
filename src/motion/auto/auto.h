@@ -90,8 +90,10 @@ typedef struct{
     bool signal_tf;         // 刀具功能选通信号
     bool signal_den;        // 分配结束信号
     bool signal_fin;        // 结束信号
-    bool m29_fin_low_seen;  // 本条指令已确认前次 FIN 回低
-    bool m29_fin_latched;   // 本条 PLC FIN 已满足持续时间
+    bool m29_fin_low_seen;   /* M29：当前指令内见过 FIN 低电平 */
+    bool m29_fin_latched;    /* M29：当前指令的 FIN 已锁存（指令内独占） */
+    int  m29_wait_cycles;    /* M29：等握手已过的拍数（只诊断/超时，不参与判定） */
+    bool m29_wait_alarmed;   /* M29：等待超时是否已报警（每条指令只报一次） */
     bool pmc_end;           // pmc侧动作完成
     int tfin_count;         // 完成信号计数
     int tmf_count;          // 选通脉冲延时计数

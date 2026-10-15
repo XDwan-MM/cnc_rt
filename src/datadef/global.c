@@ -15,37 +15,11 @@
 #include "tapreturn.h"
 
 // ==============全局变量定义===============
-sem_t exit_sem;                         // 退出信号
-sem_t op_sem;                           // 已进入op信号，用于线程间通信
-int InterruptFlag = 0;                  // 打断标志位
 int update_pos_flag = 0;                // 理论位置读取驱动器位置
-int rc = 0;
-PdoWarn PdoWarnInfo; //pdo警告信息结构体
-int slavernum = 0;
-uint16_t* status;
-uint32_t* pos;
-uint32_t* pos_cmd;
-uint16_t* error_code;
 
-TxEntry_Unit DI0[MAX_IO_MODULES];
-TxEntry_Unit DI1[MAX_IO_MODULES];
-RxEntry_Unit DO0[MAX_IO_MODULES];
-RxEntry_Unit DO1[MAX_IO_MODULES];
 
-TxEntry_Unit StatusWord[MAX_DRIVERS];      // 状态字
-TxEntry_Unit CurPos[MAX_DRIVERS];          // 当前位置
-TxEntry_Unit CurVel[MAX_DRIVERS];          // 当前速度
-TxEntry_Unit CurTor[MAX_DRIVERS];          // 当前转矩
-TxEntry_Unit ErrorNumb[MAX_DRIVERS];       // 报警码
 
-RxEntry_Unit ControlWord[MAX_DRIVERS];     // 控制字
-RxEntry_Unit PurPos[MAX_DRIVERS];          // 目标位置
-RxEntry_Unit PurVel[MAX_DRIVERS];          // 目标速度
-RxEntry_Unit PurTor[MAX_DRIVERS];          // 目标转矩
-RxEntry_Unit OperationMode[MAX_DRIVERS];   // 操作模式
 
-TxEntry_Unit MCPDI[11];
-RxEntry_Unit MCPDO[7];
 
 // 共享内存
 VarData* var_data = NULL;                                   // var 数据
@@ -82,6 +56,9 @@ REF_TP *ref_tp;                 // 回零轨迹规划
 pthread_mutex_t shm_mutex;
 
 // ==============全局变量定义===============
+
+
+
 
 static GNC_RES shm_var_init(); 
 static GNC_RES shm_par_init();
@@ -364,8 +341,8 @@ void shm_var_update(){
         setVarAxisDouble(i, VAR_AXIS_ACT_POS_EX, rt_data->axis_data[i].motor_act_pos, 0);
         // 电机脉冲
         setVarAxisInt(i, VAR_AXIS_ENC_CNTR, rt_data->axis_data[i].enc_cntr, 0);
-        // 实际轴速度
-        setVarAxisDouble(i, VAR_AXIS_ACT_VEL_EX, rt_data->axis_data[i].act_vel * TIME_MINUS_2_S, 0); 
+        // 实际轴速度：进给轴 mm/min、主轴 rpm —— emcmot 已按用户单位换算好，这里不再乘
+        setVarAxisDouble(i, VAR_AXIS_ACT_VEL_EX, rt_data->axis_data[i].act_vel, 0);
         // 指令轴速度
         setVarAxisDouble(i, VAR_AXIS_CMD_VEL_EX, rt_data->axis_data[i].cmd_vel * TIME_MINUS_2_S, 0);
         // 轴状态显示：机械锁住、互锁、移动中
@@ -380,8 +357,8 @@ void shm_var_update(){
     {
         // 运行模式
         setVarChanInt(0, VAR_CHAN_MODE, rt_data->current_mode, 0);
-        // 实际速度
-        setVarChanDouble(i, VAR_CHAN_ACT_FEEDRATE, CONV_MM_S_TO_MM_MIN(rt_data->chan_data[i].act_vel), 0);
+        // 实际速度（mm/min：三轴 mm/min 的模长，emcmot 已换算，这里不再乘）
+        setVarChanDouble(i, VAR_CHAN_ACT_FEEDRATE, rt_data->chan_data[i].act_vel, 0);
         // 指令速度
         setVarChanDouble(i, VAR_CHAN_CMD_FEEDRATE, CONV_MM_S_TO_MM_MIN(rt_data->chan_data[i].cmd_vel), 0);
         // 刚性攻丝中

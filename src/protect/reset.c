@@ -1,4 +1,5 @@
 #include "reset.h"
+#include "rt_hal_adapter.h"
 #include "rerun.h"
 #include "rt_data.h"
 #include "global.h"
@@ -54,14 +55,14 @@ void nc_set_resetted(){
         case MODE_MDI: // MDI
         case MODE_MEM: // 记忆
         case MODE_DNC:
-            if(nc_reset->is_resetting && cycle_tp->exec_state == EXEC_IDLE && IsEqualTo(spindle_driver.actual_vel, 0)){
+            if(nc_reset->is_resetting && cycle_tp->exec_state == EXEC_IDLE && IsEqualTo(rt_hal_spindle_rpm(), 0)){
                 nc_reset->is_resetted = 1;
                 rt_data_reset();
                 rerun_data_reset();
             }
             break;
         case MODE_HOMING: // 回零
-            if(nc_reset->is_resetting && !var_chan[0][VAR_CHAN_IS_HOMING].value.i && IsEqualTo(spindle_driver.actual_vel, 0)){
+            if(nc_reset->is_resetting && !var_chan[0][VAR_CHAN_IS_HOMING].value.i && IsEqualTo(rt_hal_spindle_rpm(), 0)){
                 nc_reset->is_resetted = 1;
                 rt_data_reset();
                 rerun_data_reset();
@@ -72,7 +73,7 @@ void nc_set_resetted(){
         case MODE_IDLE: // 空闲状态
         case MODE_EDIT: // 编辑
         default: // error
-            if(nc_reset->is_resetting && IsEqualTo(spindle_driver.actual_vel, 0)){
+            if(nc_reset->is_resetting && IsEqualTo(rt_hal_spindle_rpm(), 0)){
                 nc_reset->is_resetted = 1;
                 rt_data_reset();
                 rerun_data_reset();

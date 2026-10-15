@@ -4,15 +4,13 @@
 #include "backlash_comp.h"
 #include "comp_data.h"
 #include "debug_mode.h"
-#include "driver.h"
-#include "egear_ratio.h"
 #include "ferror_control.h"
 #include "global.h"
 #include "handwheel.h"
 #include "hmisysapi.h"
 #include "ref.h"
+#include "rt_hal_adapter.h"
 #include "jog.h"
-#include "master_wcf.h"
 #include "parser.h"
 #include "pathplan.h"
 #include "pitch_comp.h"
@@ -52,9 +50,8 @@ void emcmot_test_rebuild_axis_positions_from_feedback()
 }
 #endif
 
-// 绝对式电机编码器位置(指令，反馈)
-static int32_t x_cmd_pulse_pos, y_cmd_pulse_pos, z_cmd_pulse_pos, sp_cmd_pulse_pos;
-static int32_t x_act_pulse_pos, y_act_pulse_pos, z_act_pulse_pos, sp_act_pulse_pos;
+
+
 const char *mode_names[] = {"编辑", "AUTO", "MDI", "DNC", "手轮", "手动", "回零", "空闲"};
 
 // 轨迹规划
@@ -295,41 +292,50 @@ static void check_for_fault()
 
 static void read_from_hal()
 {
-    // 记录上周期
-    rt_data->axis_data[AXIS_X].motor_act_pos_pre = rt_data->axis_data[AXIS_X].motor_act_pos;
-    rt_data->axis_data[AXIS_Y].motor_act_pos_pre = rt_data->axis_data[AXIS_Y].motor_act_pos;
-    rt_data->axis_data[AXIS_Z].motor_act_pos_pre = rt_data->axis_data[AXIS_Z].motor_act_pos;
-    // 读取实际位置
-#ifdef DEBUG_MODE_ENABLED
-    rt_data->axis_data[AXIS_X].motor_act_pos = rt_data->axis_data[AXIS_X].motor_cmd_pos;
-    rt_data->axis_data[AXIS_Y].motor_act_pos = rt_data->axis_data[AXIS_Y].motor_cmd_pos;
-    rt_data->axis_data[AXIS_Z].motor_act_pos = rt_data->axis_data[AXIS_Z].motor_cmd_pos;
-    rt_data->axis_data[AXIS_SP].motor_act_pos = rt_data->axis_data[AXIS_SP].motor_cmd_pos;
-#else
-    // 计算进给轴位置
-    Hal_Driver_Get_Actual_Pos(&x_axis_driver, &x_act_pulse_pos);
-    rt_data->axis_data[AXIS_X].motor_act_pos = pulses_to_position(&rt_data->axis_data[AXIS_X], x_act_pulse_pos);
-    Hal_Driver_Get_Actual_Pos(&y_axis_driver, &y_act_pulse_pos);
-    rt_data->axis_data[AXIS_Y].motor_act_pos = pulses_to_position(&rt_data->axis_data[AXIS_Y], y_act_pulse_pos);
-    Hal_Driver_Get_Actual_Pos(&z_axis_driver, &z_act_pulse_pos);
-    rt_data->axis_data[AXIS_Z].motor_act_pos = pulses_to_position(&rt_data->axis_data[AXIS_Z], z_act_pulse_pos);
-    // todo：计算旋转轴角度
-    Hal_Driver_Get_Actual_Pos(&spindle_driver, &sp_act_pulse_pos);
-    // rt_data->axis_data[AXIS_SP].motor_act_pos = pulses_to_position(&rt_data->axis_data[AXIS_SP], sp_act_pulse_pos);
-#endif
-    // 电机脉冲
-    rt_data->axis_data[AXIS_X].enc_cntr = x_act_pulse_pos;
-    rt_data->axis_data[AXIS_Y].enc_cntr = y_act_pulse_pos;
-    rt_data->axis_data[AXIS_Z].enc_cntr = z_act_pulse_pos;
-    rt_data->axis_data[AXIS_SP].enc_cntr = sp_cmd_pulse_pos;
-    // 读取实际速度
-    rt_data->axis_data[AXIS_X].act_vel = x_axis_driver.actual_vel;
-    rt_data->axis_data[AXIS_Y].act_vel = y_axis_driver.actual_vel;
-    rt_data->axis_data[AXIS_Z].act_vel = z_axis_driver.actual_vel;
-    rt_data->axis_data[AXIS_SP].act_vel = spindle_driver.actual_vel;
-    // 进给值实际合成速度，不包含主轴
-    rt_data->chan_data[0].act_vel = sqrt(pow(x_axis_driver.actual_vel, 2) + pow(y_axis_driver.actual_vel, 2) +
-                                         pow(z_axis_driver.actual_vel, 2));
+    /* HAL 给的就是用户单位（mm）——脉冲换算与 enc_off 语义都由 HAL 完成，
+     * 这里不再调 pulses_to_position()，也不重复加减 enc_off。 */
+    double pos = 0.0;
+    if (rt_hal_axis_pos(RT_HAL_AXIS_X, &pos) == HAL_OK)
+        rt_data->axis_data[AXIS_X].motor_act_pos = pos;
+    if (rt_hal_axis_pos(RT_HAL_AXIS_Y, &pos) == HAL_OK)
+        rt_data->axis_data[AXIS_Y].motor_act_pos = pos;
+    if (rt_hal_axis_pos(RT_HAL_AXIS_Z, &pos) == HAL_OK)
+        rt_data->axis_data[AXIS_Z].motor_act_pos = pos;
+
+
+    /* enc_cntr：HAL 不提供原始反馈计数，置 0。仅用于显示，不参与保护判断。 */
+    rt_data->axis_data[AXIS_X].enc_cntr = 0;
+    rt_data->axis_data[AXIS_Y].enc_cntr = 0;
+    rt_data->axis_data[AXIS_Z].enc_cntr = 0;
+    rt_data->axis_data[AXIS_SP].enc_cntr = 0;
+
+    /* 实际速度 —— 这里就换成**用户单位**，显示侧不再动（见 global.c）。
+     *   进给轴 mm/min = 电机 rpm × 每转位移(mm)；
+     *     每转位移 = |电子齿轮比分子| —— 它本身就是"电机每转的负载位移"，
+     *     所以"当量 × 每转指令脉冲数"也是它（0.001mm × 10000 = 10mm/转）。
+     *     前提：驱动器速度对象得是 rpm —— pulse/s 的驱动器由 HAL 折算成 rpm 再给。
+     *   主轴 rpm，直接用 HAL 给的主轴转速。
+     * speed_valid 为 0 = 该轴没映射速度 PDO（0x606C 与 0x60FF 不都是 32 位），
+     * rt_hal_axis_speed_rpm() 会返回 UNSUPPORTED，这里置 0 显示*/
+    const RtHalAxisSlot feed_slot[3] = {RT_HAL_AXIS_X, RT_HAL_AXIS_Y, RT_HAL_AXIS_Z};
+    const int feed_axis[3] = {AXIS_X, AXIS_Y, AXIS_Z};
+    for (int i = 0; i < 3; ++i) {
+        double rpm = 0.0;
+        if (rt_hal_axis_speed_rpm(feed_slot[i], &rpm) != HAL_OK) rpm = 0.0;
+        const double mm_per_rev = fabs(rt_data->axis_data[feed_axis[i]].pm_munit);
+        rt_data->axis_data[feed_axis[i]].act_vel = rpm * mm_per_rev;
+    }
+    /* 主轴：HalCSpindleStatus.actual_speed，rpm（HAL 已按 speed_unit 换算）。 */
+    double spd = 0.0;
+    if (rt_hal_spindle_speed(RT_HAL_AXIS_SP, &spd) == HAL_OK)
+        rt_data->axis_data[AXIS_SP].act_vel = spd;
+    /* 进给轴实际合成速度（不含主轴）：三轴 mm/min 的欧氏模。纯显示量，不参与保护判断。 */
+    {
+        const double vx = rt_data->axis_data[AXIS_X].act_vel;
+        const double vy = rt_data->axis_data[AXIS_Y].act_vel;
+        const double vz = rt_data->axis_data[AXIS_Z].act_vel;
+        rt_data->chan_data[0].act_vel = sqrt(vx * vx + vy * vy + vz * vz);
+    }
 
     if (!update_pos_flag)
     {
@@ -341,15 +347,16 @@ static void read_from_hal()
 
 static void output_to_hal()
 {
-    // 发送给驱动器
-    x_cmd_pulse_pos = position_to_pulses(&rt_data->axis_data[AXIS_X], rt_data->axis_data[AXIS_X].motor_cmd_pos);
-    Hal_Driver_Set_Target_Pos(&x_axis_driver, x_cmd_pulse_pos);
-    y_cmd_pulse_pos = position_to_pulses(&rt_data->axis_data[AXIS_Y], rt_data->axis_data[AXIS_Y].motor_cmd_pos);
-    Hal_Driver_Set_Target_Pos(&y_axis_driver, y_cmd_pulse_pos);
-    z_cmd_pulse_pos = position_to_pulses(&rt_data->axis_data[AXIS_Z], rt_data->axis_data[AXIS_Z].motor_cmd_pos);
-    Hal_Driver_Set_Target_Pos(&z_axis_driver, z_cmd_pulse_pos);
-    // 编码器位置打印
-    // printf("Z_PULSE_cmd%d Z_PULSE_act%d\n",z_cmd_pulse_pos, z_act_pulse_pos);
+    /* 以用户单位（mm）发布命令，只放进适配层的按拍缓冲；真正的写入由 PDO 线程
+     * 在 commit 前完成。台账未清时适配层会拒收，此处有意忽略返回值。 */
+    (void)rt_hal_request_axis_pos(RT_HAL_AXIS_X, rt_data->axis_data[AXIS_X].motor_cmd_pos);
+    (void)rt_hal_request_axis_pos(RT_HAL_AXIS_Y, rt_data->axis_data[AXIS_Y].motor_cmd_pos);
+    (void)rt_hal_request_axis_pos(RT_HAL_AXIS_Z, rt_data->axis_data[AXIS_Z].motor_cmd_pos);
+    /* 刚性攻丝：把插补算的主轴绝对角度发给驱动器（主轴在 CSP 位置环里跟随）。
+     * 只在"当前块是刚性攻丝"时发 —— 别的时候主轴是速度模式（CSV），写位置会被 HAL 拒。
+     * 角度语义见 interpolate_tap()：从本段起点算起、跨圈累计、反向为负。 */
+    if (cycle_tp->plan_block->type == RIGID_TAP)
+        (void)rt_hal_request_axis_pos(RT_HAL_AXIS_SP, rt_data->axis_data[AXIS_SP].wcs_cmd_pos_cur);
 }
 
 static void compute_error_comp()

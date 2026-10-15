@@ -27,14 +27,14 @@ void Axis_Limit_Manager_Init(void)
         runtime[i].config.level1.positive_limit = rt_data->axis_data[i].plmt;
         runtime[i].config.level1.negative_limit = rt_data->axis_data[i].nlmt;
         //level 2
-        runtime[i].config.level2.is_enabled = par_axis[i][503].value.val_int;
-        runtime[i].config.level2_mode = par_axis[i][502].value.val_int;
+        runtime[i].config.level2.is_enabled = rt_data->axis_data[i].lmt2_enable;
+        runtime[i].config.level2_mode = rt_data->axis_data[i].lmt2_type;
         runtime[i].config.level2.positive_limit = rt_data->axis_data[i].plmt2;
         runtime[i].config.level2.negative_limit = rt_data->axis_data[i].nlmt2;
         //level 3
-        runtime[i].config.level3.is_enabled = par_axis[i][504].value.val_int;
-        runtime[i].config.level3.positive_limit = par_axis[i][500].value.val_real;
-        runtime[i].config.level3.negative_limit = par_axis[i][501].value.val_real;
+        runtime[i].config.level3.is_enabled = rt_data->axis_data[i].lmt3_enable;
+        runtime[i].config.level3.positive_limit = rt_data->axis_data[i].plmt3;
+        runtime[i].config.level3.negative_limit = rt_data->axis_data[i].nlmt3;
 
         rt_data->axis_data[i].status.is_fwd_limit = 0;
         rt_data->axis_data[i].status.is_rev_limit = 0;

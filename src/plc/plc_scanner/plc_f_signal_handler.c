@@ -1,4 +1,5 @@
 #include "plc_f_signal_handler.h"
+#include "rt_hal_adapter.h"
 #include "alarmapi.h"
 #include "global.h"
 #include "regapi.h"
@@ -356,7 +357,12 @@ static void plc_output_axis_status()
 
 static void plc_output_spl_vel_status()
 {
-    // 发布控制层统一判定，不反向修改主轴状态。
+    //　主轴速度到达信号F45.3
+    /* 只查询，不反向改任何主轴控制状态：到速/完成反馈完全由主轴控制层判定
+     * （停止完成、复位/急停、定向窗口、M29、模式切换、待启动请求都在
+     * spindle_velocity_is_ready() 里统一屏蔽）。以前这里会强制置
+     * SPINDLE_VEL_ARRIVED —— 还把速度读取失败也当成满足停止条件，结果
+     * F45.3 依赖发布顺序，并可能早于主轴真正停稳。 */
     if (spindle_velocity_is_ready())
     {
         setRegBit(REG_F, 45, 3);
@@ -365,8 +371,16 @@ static void plc_output_spl_vel_status()
     {
         clearRegBit(REG_F, 45, 3);
     }
-    //　主轴零速信号F45.1
-    if(abs(spindle_driver.actual_vel) < 5)
+//    if(spl_data.spl_vel_state == SPINDLE_VEL_ZERO)
+//    {
+//        setRegBit(REG_F, 45, 1);
+//    }
+//    else
+//    {
+//        clearRegBit(REG_F, 45, 1);
+//    }
+    //　主轴零速信号F45.1：独立反映实际零速，不参与完成状态
+    if (fabs(rt_hal_spindle_rpm()) < 5.0)
     {
         setRegBit(REG_F, 45, 1);
     }
@@ -378,8 +392,8 @@ static void plc_output_spl_vel_status()
 
 static void plc_output_spl_orient_status()
 {
-    /* F45.7 is the ordinary M19 orientation-complete signal.
-     * M29 completion is joined with PLC FIN in auto_mst.c. */
+    /* F45.7 是普通 M19 定向完成信号；M29 的完成由 auto_mst.c 用
+     * PLC FIN + NC CSP 就绪的双条件握手判定，不在这里发布。 */
     if (spl_orient_is_done() && !spl_context.m29_active)
     {
         setRegBit(REG_F, 45, 7);

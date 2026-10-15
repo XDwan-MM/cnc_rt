@@ -189,6 +189,11 @@ static void rt_reset_axis_data()
         rt_data->axis_data[i].nlmt = par_axis[i][PAR_AX_NLMT].value.val_real;                                            // 轴负软极限
         rt_data->axis_data[i].plmt2 = par_axis[i][PAR_AX_PLMT2].value.val_real;                                          // 轴第二级正软极限
         rt_data->axis_data[i].nlmt2 = par_axis[i][PAR_AX_NLMT2].value.val_real;                                          // 轴第二级负软极限
+        rt_data->axis_data[i].plmt3 = par_axis[i][PAR_AX_PLMT3].value.val_real;                                          // 轴第二级正软极限
+        rt_data->axis_data[i].nlmt3 = par_axis[i][PAR_AX_NLMT3].value.val_real;                                          // 轴第二级负软极限
+        rt_data->axis_data[i].lmt2_type = par_axis[i][PAR_AX_LMT2_TYPE].value.val_int;                                   // 轴第二级软极限类型
+        rt_data->axis_data[i].lmt2_enable = par_axis[i][PAR_AX_LMT2_ENABLE].value.val_int;                               // 轴第二级软极限开启
+        rt_data->axis_data[i].lmt3_enable = par_axis[i][PAR_AX_LMT3_ENABLE].value.val_int;                               // 轴第三级软极限开启
         rt_data->axis_data[i].spl_default_speed = par_axis[i][PAR_AX_DEFAULT_S].value.val_real;                          // 主轴缺省S速度
         rt_data->axis_data[i].spdl_max_speed = par_axis[i][PAR_SPDL_MAX_SPEED].value.val_real;                           // 主轴最大转速 (HMI unit: r/min)
         rt_data->axis_data[i].ex_dec_enable_pos_cut = par_axis[i][PAR_AX_EX_DEC_ENABLE_POS_CUT].value.val_bool;          // 外部减速信号对正向切削进给是否生效
@@ -220,6 +225,9 @@ static void rt_reboot_axis_data()
         rt_data->axis_data[i].pm_munit = CONV_UM_TO_MM(par_axis[i][PAR_AX_PM_MUNIT].value.val_int); // 轴电子齿轮比分子 (HMI unit: um, | 实时 单位: mm)
         rt_data->axis_data[i].pm_pulse = par_axis[i][PAR_AX_PM_PULSE].value.val_int;                // 轴电子齿轮比分母 (HMI unit: 脉冲)
         rt_data->axis_data[i].enc_off = par_axis[i][PAR_AX_ENC_OFF].value.val_real;                 // 轴编码器反馈偏置量 (HMI unit: mm)
+        /* 电机每转脉冲数。参数域里没填就是 0——调用方要能区分"没填"和"填了 0"，
+         * 所以这里不做任何兜底，兜底放在消费侧（main.cpp 的 fill_hal_params）。 */
+        rt_data->axis_data[i].mt_ppr = par_axis[i][PAR_AX_MT_PPR].value.val_int;
     }
 }
 
