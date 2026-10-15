@@ -43,6 +43,8 @@ void handle_auto_cmd(){
     trace_publisher_publish_current(0);
     // 更新阶段
     auto_update_stage();
+    //运行中刷新程序再启动断电块
+    rerun_snapshot_position(cycle_tp->plan_block);
     // 检查程序结束
     auto_check_program_end();
 }

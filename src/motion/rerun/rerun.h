@@ -125,6 +125,7 @@ void rerun_make_mst_block(const MST_RESTORE* r, int index,
 //     POS         break_end;                              /*!< 目标段那行第一个包的译码终点（绝对） */
 //     bool        is_mem_rerun;                           /*!< 这一轮记忆模式被打断过 */
 // } RERUN_SAVE;
+void rerun_snapshot_position(const PLAN_BLOCK* block);
 
 void rerun_save_pack(RERUN_SAVE* out);
 

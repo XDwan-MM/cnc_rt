@@ -4,9 +4,19 @@
 #include "alarmapi.h"
 #include "cnc_math.h"        
 
+
+#define RERUN_SNAPSHOT_TICKS (1) //运行时存储数据刷新频率
+
 // 停止是否记断点标志（急停、报警、切换模式停止）需要置1
 // 复位、程序跑完不置位
 static bool rerun_interrupted =false; 
+
+///
+static int rerun_block_m_code(const PLAN_BLOCK* block)
+{
+    return (block->mode == PMC_MODE_M_CMD) ? block->mst_data.m_code : -1;
+}
+
 GNC_RES rerun_data_init(){
     rerun_data = (RERUN_DATA*)calloc(sizeof(RERUN_DATA), 1);
     if(rerun_data == NULL) return GNC_DATA_NULL;
@@ -122,7 +132,7 @@ void rerun_make_mst_block(const MST_RESTORE* r, int index,
     out->state = target->state;
     // 统一显示在再启动行：恢复期间 HMI 的运行行不来回跳
     out->line_number = rerun_data->rerun_row;
-    out->is_breakpoint = false;
+    out->is_breakpoint = true;
     out->mst_data.m_code = r->m_code[index];
     out->mst_data.tool_number = -1;
     out->mst_data.spindle.speed = 0;
@@ -152,9 +162,49 @@ void rerun_data_clear_breakpoint(void)
     rerun_data->rerun_row = 0;
     rerun_data->is_first_time_click_rerun = true;
     rerun_interrupted =false;
+    rerun_data->cur_row_line =-1;
+    memset(&rerun_data->cur_row_first_end, 0, sizeof(rerun_data->cur_row_first_end));
     rerun_mst_reset();
     delAlarm(ALARM_CH, ALARM_WARNING, 3);
     delAlarm(ALARM_CH, ALARM_ERROR, 4);
+    rerun_persist();
+}
+
+/// @brief 程序段换行时把这一行的段信息写进断电块
+static void rerun_snapshot_row(const PLAN_BLOCK* block)
+{
+    rerun_data->break_block.line_number = block->line_number;
+    rerun_data->break_block.mode        = block->mode;
+    rerun_data->break_block.type        = block->type;
+    rerun_data->break_block.m_code      = block->mst_data.m_code;
+    // valid = 这份段信息有效（有行号、有坐标可参考）
+    // 但是不等于可以自动再启动—— 能不能自动跳行看 is_mem_rerun，那个只由打断路径置位
+    rerun_data->break_block.valid       = true;
+    memcpy(&rerun_data->break_end, &rerun_data->cur_row_first_end, sizeof(POS));
+    rerun_persist();
+}
+
+/// @brief 运行中持续刷新断电块
+/// @note  掉电时界面是先存盘、再给实时发信号触发急停，实时那条记录赶不上存盘，
+///        所以运行中就把行号/坐标持续写进共享内存。
+///        断电记录的位置与真正急停触发的位置差一点。
+///        只更新数据，不置 is_mem_rerun —— 跑到这和被打断过、能自动再启动是两回事。
+void rerun_snapshot_position(const PLAN_BLOCK* block)
+{
+    static int ticks = 0;
+
+    if (rerun_data == NULL || block == NULL) return;
+    if (rt_data->current_mode != MODE_MEM) return;
+    if (cycle_tp == NULL || cycle_tp->exec_state != EXEC_RUNNING) return;
+    if (block->is_breakpoint) return;     // 回断点定位段不计
+    if (rerun_data->is_rerun) return;     // 回断点途中不刷，否则会把回断点目标盖掉
+
+    rerun_data->breakpoint.x = rt_data->axis_data[AXIS_X].wcs_cmd_pos_cur;
+    rerun_data->breakpoint.y = rt_data->axis_data[AXIS_Y].wcs_cmd_pos_cur;
+    rerun_data->breakpoint.z = rt_data->axis_data[AXIS_Z].wcs_cmd_pos_cur;
+
+    if (++ticks < RERUN_SNAPSHOT_TICKS) return;
+    ticks = 0;
     rerun_persist();
 }
 
@@ -164,10 +214,12 @@ void rerun_track_current_row(const PLAN_BLOCK* block)
     if (rerun_data == NULL || block == NULL) return;
     if (rt_data->current_mode != MODE_MEM) return;
     if (block->is_breakpoint) return;
+    if (rerun_data->is_rerun) return;
     if (block->line_number == rerun_data->cur_row_line) return;   // 同一行的后续包，不动
 
     rerun_data->cur_row_line = block->line_number;
     memcpy(&rerun_data->cur_row_first_end, &block->end_pos, sizeof(POS));
+    rerun_snapshot_row(block);
 }
 
 /// @brief 被打断时记一份断点快照
@@ -180,7 +232,7 @@ void rerun_store_breakpoint(const PLAN_BLOCK* block){
     rerun_data->break_block.line_number = block->line_number;
     rerun_data->break_block.mode        = block->mode;
     rerun_data->break_block.type        = block->type;
-    rerun_data->break_block.m_code      = block->mst_data.m_code;
+    rerun_data->break_block.m_code      = rerun_block_m_code(block);
     memcpy(&rerun_data->break_end, &rerun_data->cur_row_first_end, sizeof(POS));
 
     rerun_data->breakpoint.x = rt_data->axis_data[AXIS_X].wcs_cmd_pos_cur;
