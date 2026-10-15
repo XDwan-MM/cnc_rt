@@ -43,6 +43,10 @@ static int last_req_mode;
 static bool plc_stop;
 static bool plc_read_error;
 static int axis_read_error = -1;
+static unsigned orient_requests, setpos_requests, position_requests;
+static int mode_request_error, setpos_error, position_error;
+static int speed_request_error;
+static int setpos_result;
 int getRegBit(RegType type, int idx, int bit, bool *value)
 {
     if (type == REG_R && idx == 284 && bit == 0) {
@@ -64,16 +68,18 @@ int rt_hal_spindle_status(RtHalAxisSlot slot, HalCSpindleStatus *out)
 int rt_hal_spindle_speed(RtHalAxisSlot slot, double *out)
 { assert(slot == RT_HAL_AXIS_SP); *out = actual_rpm; return HAL_OK; }
 int rt_hal_request_spindle_speed(RtHalAxisSlot slot, double rpm, int dir)
-{ assert(slot == RT_HAL_AXIS_SP); last_req_rpm = rpm; last_req_dir = dir; return HAL_OK; }
+{ assert(slot == RT_HAL_AXIS_SP); last_req_rpm = rpm; last_req_dir = dir; return speed_request_error; }
 int rt_hal_request_spindle_mode(RtHalAxisSlot slot, HalSpindleMode mode)
-{ assert(slot == RT_HAL_AXIS_SP); last_req_mode = mode; return HAL_OK; }
+{ assert(slot == RT_HAL_AXIS_SP); last_req_mode = mode; return mode_request_error; }
 int rt_hal_spindle_orient_state(RtHalAxisSlot slot, int32_t *out)
 { assert(slot == RT_HAL_AXIS_SP); *out = HAL_ORIENT_NONE; return HAL_OK; }
 int rt_hal_request_axis_pos(RtHalAxisSlot slot, double pos)
-{ assert(slot == RT_HAL_AXIS_SP); (void)pos; return HAL_OK; }
+{ assert(slot == RT_HAL_AXIS_SP); (void)pos; ++position_requests; return position_error; }
 int rt_hal_axis_set_pos(RtHalAxisSlot slot, double pos)
-{ assert(slot == RT_HAL_AXIS_SP); (void)pos; return HAL_OK; }
-bool spl_orient_request(void) { return true; }
+{ assert(slot == RT_HAL_AXIS_SP); (void)pos; ++setpos_requests; return setpos_error; }
+int rt_hal_axis_set_pos_result(RtHalAxisSlot slot)
+{ assert(slot == RT_HAL_AXIS_SP); return setpos_result; }
+bool spl_orient_request(void) { ++orient_requests; return true; }
 bool spl_orient_is_done(void) { return orient_done; }
 bool spl_orient_release(void) { return true; }
 void spl_orient_abort(void) { }
@@ -93,6 +99,7 @@ static void prepare(int mode, int enabled)
     data.axis_data[AXIS_SP].max_feed_acc = 8000.0;
     axis.enabled = enabled;
     axis.raw_status = enabled ? 0x27 : 0x23;
+    axis.speed_valid = axis.position_valid = 1;
     spindle.mode = mode;
     spl_context.m29_active = true;
     spl_context.m29_phase = SPINDLE_M29_SWITCHING_CSP;
@@ -106,6 +113,11 @@ static void prepare(int mode, int enabled)
     last_req_rpm = 0.0;
     last_req_dir = 0;
     last_req_mode = -1;
+    axis_read_error = -1;
+    orient_requests = setpos_requests = position_requests = 0;
+    mode_request_error = setpos_error = position_error = 0;
+    speed_request_error = 0;
+    setpos_result = HAL_OK;
 }
 
 /* ================= 交接回归：F45.3 完成判定 ================= */
@@ -596,6 +608,123 @@ static void test_plc_trace_is_read_only_and_change_driven(void)
     puts("PASS: PLC trace records changes/read errors and cleanup without changing control state");
 }
 
+static void prepare_no_orient(int mode, int enabled)
+{
+    prepare(mode, enabled);
+    spl_context.m29_active = false;
+    spl_context.m29_phase = SPINDLE_M29_IDLE;
+    spl_ms_reset();
+    axis.actual_pos = axis.command_pos = spindle.position_deg = 12345.0;
+}
+
+static void test_m29_no_orient(void)
+{
+    for (int mode = HAL_SPINDLE_CSV; mode <= HAL_SPINDLE_CSP; ++mode) {
+        prepare_no_orient(mode, 1);
+        assert(spindle_request_m29_no_orient());
+        assert(!spindle_request_m29_no_orient()); // Do not restart an in-flight request.
+        for (unsigned i = 0; i < SPINDLE_M29_STABLE_CYCLES; ++i) spindle_control_update();
+        assert(last_req_mode == HAL_SPINDLE_CSP && orient_requests == 0);
+        assert(!spindle_m29_is_ready());
+        spindle.mode = HAL_SPINDLE_CSP;
+        axis.enabled = 0;
+        axis.raw_status = 0x23;
+        for (int i = 0; i < 5; ++i) spindle_control_update();
+        assert(!setpos_requests && !spindle_m29_is_ready());
+        axis.enabled = 1;
+        axis.raw_status = 0x27;
+        spindle_control_update();
+        assert(setpos_requests == 1 && !spindle_m29_is_ready());
+        unsigned before = position_requests;
+        setpos_result = HAL_ERROR_BUSY;
+        for (int i = 0; i < 15; ++i) spindle_control_update();
+        assert(position_requests == before && !spindle_m29_is_ready());
+        // Simulate a later PDO snapshot confirming the coordinate shift, not rotation.
+        axis.actual_pos = axis.command_pos = spindle.position_deg = 0.0;
+        spindle_control_update();
+        assert(!spindle_m29_is_ready()); // Zero-valued feedback is not an acknowledgement.
+        setpos_result = HAL_OK;
+        for (unsigned i = 0; i < SPINDLE_M29_STABLE_CYCLES; ++i) spindle_control_update();
+        assert(spindle_m29_is_ready() && position_requests == before + 1);
+        assert(orient_requests == 0 && spl_context.orient_phase == SPINDLE_ORIENT_IDLE);
+        assert(!spl_context.mcode_feedback && data.sys_state[SYS_IS_RIGID]);
+        spindle_complete_m29();
+        assert(!spl_context.m29_active && spl_context.m29_phase == SPINDLE_M29_READY);
+        spl_context.spl_event = SPINDLE_EVENT_STOP;
+        spindle_control_update();
+        assert(spl_context.m29_phase == SPINDLE_M29_IDLE);
+    }
+    for (int direction = -1; direction <= 1; direction += 2) {
+        prepare_no_orient(HAL_SPINDLE_CSV, 1);
+        axis.actual_speed_rpm = actual_rpm = direction * 100.0;
+        assert(spindle_request_m29_no_orient());
+        spindle_control_update();
+        assert(last_req_dir == direction && last_req_rpm < 100.0);
+        for (int i = 0; i < 30; ++i) spindle_control_update();
+        assert(last_req_mode == -1); // Software zero alone is insufficient.
+        axis.actual_speed_rpm = actual_rpm = 0.0;
+        for (unsigned i = 0; i < SPINDLE_M29_STABLE_CYCLES; ++i) spindle_control_update();
+        assert(last_req_mode == HAL_SPINDLE_CSP && !orient_requests);
+    }
+    for (int failure = 0; failure < 9; ++failure) {
+        prepare_no_orient(HAL_SPINDLE_CSV, 1);
+        assert(spindle_request_m29_no_orient());
+        if (failure == 0) data.sys_state[SYS_ESTOP_INPUT] = true;
+        if (failure == 1) data.nc_event = SYS_EVENT_HMI_RESET;
+        if (failure == 2) axis.raw_status = 0x08;
+        if (failure == 3) axis_read_error = RT_HAL_AXIS_SP;
+        if (failure == 4) axis.speed_valid = 0;
+        if (failure == 5) axis.actual_speed_rpm = NAN;
+        if (failure == 6) spl_context.spl_event = SPINDLE_EVENT_STOP;
+        if (failure == 7) spl_context.orient_elapsed_cycles = SPINDLE_M29_MODE_TIMEOUT_CYCLES;
+        if (failure == 8) speed_request_error = HAL_ERROR_NOT_RUNNING;
+        spindle_control_update();
+        assert(spl_context.m29_phase == SPINDLE_M29_ERROR);
+        assert(!data.axis_data[AXIS_SP].status.spindle_wants_torque);
+        assert(!spindle_m29_is_ready() && !orient_requests && alarms == 1);
+    }
+    for (int failure = 0; failure < 4; ++failure) {
+        prepare_no_orient(HAL_SPINDLE_CSV, 1);
+        assert(spindle_request_m29_no_orient());
+        if (failure == 0) mode_request_error = HAL_ERROR_STATE;
+        for (unsigned i = 0; i < SPINDLE_M29_STABLE_CYCLES; ++i) spindle_control_update();
+        spindle.mode = HAL_SPINDLE_CSP;
+        if (failure == 1) setpos_error = HAL_ERROR_STATE;
+        if (failure == 2) position_error = HAL_ERROR_STATE;
+        if (failure == 3) setpos_result = HAL_ERROR_STATE;
+        if (failure) {
+            spindle_control_update();
+            axis.actual_pos = axis.command_pos = spindle.position_deg = 0.0;
+            for (unsigned i = 0; i < SPINDLE_M29_STABLE_CYCLES; ++i) spindle_control_update();
+        }
+        assert(spl_context.m29_phase == SPINDLE_M29_ERROR && !spindle_m29_is_ready());
+    }
+    prepare_no_orient(HAL_SPINDLE_CSP, 1);
+    axis.actual_speed_rpm = 100.0;
+    assert(!spindle_request_m29_no_orient());
+    for (int stage = SPINDLE_M29_NO_ORIENT_SWITCHING;
+         stage <= SPINDLE_M29_NO_ORIENT_ALIGNING; ++stage) {
+        prepare_no_orient(HAL_SPINDLE_CSV, 1);
+        assert(spindle_request_m29_no_orient());
+        spl_context.m29_phase = (spindle_m29_phase_t)stage;
+        spl_context.orient_elapsed_cycles = SPINDLE_M29_MODE_TIMEOUT_CYCLES - 1;
+        spindle_control_update();
+        assert(spl_context.m29_phase == SPINDLE_M29_ERROR && alarms == 1);
+    }
+    prepare_no_orient(HAL_SPINDLE_CSV, 0); // Cold spindle need not already be enabled.
+    assert(spindle_request_m29_no_orient());
+    spindle_control_update();
+    assert(data.axis_data[AXIS_SP].status.spindle_wants_torque && !spindle_m29_is_ready());
+    prepare_no_orient(HAL_SPINDLE_CSV, 1);
+    spl_context.orient_phase = SPINDLE_ORIENT_RUNNING;
+    assert(!spindle_request_m29_no_orient());
+    prepare_no_orient(HAL_SPINDLE_CSV, 1);
+    spindle_request_m29();
+    assert(spl_context.m29_phase == SPINDLE_M29_ORIENTING);
+    assert(spl_context.spl_event == SPINDLE_EVENT_ORIENT);
+    puts("PASS: no-orient M29 stop / CSP / coordinate acknowledgement / safety / rejection; original M29 unchanged");
+}
+
 int main(void)
 {
     prepare(HAL_SPINDLE_CSV, 1);
@@ -674,6 +803,7 @@ int main(void)
     test_fault_blocks_completion_and_deferred_start();
     test_mode_request_replaces_pending_opposite_mode();
     test_plc_trace_is_read_only_and_change_driven();
+    test_m29_no_orient();
     return 0;
 }
 

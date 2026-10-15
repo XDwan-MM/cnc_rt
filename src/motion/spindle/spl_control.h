@@ -55,7 +55,10 @@ typedef enum
     SPINDLE_M29_RELEASING,
     SPINDLE_M29_SWITCHING_CSP,
     SPINDLE_M29_READY,
-    SPINDLE_M29_ERROR
+    SPINDLE_M29_ERROR,
+    SPINDLE_M29_NO_ORIENT_STOPPING,
+    SPINDLE_M29_NO_ORIENT_SWITCHING,
+    SPINDLE_M29_NO_ORIENT_ALIGNING
 } spindle_m29_phase_t;
 
 /** 主轴速度指令来源。G33.7=0 使用 CNC，G33.7=1 使用 PLC。 */
@@ -93,6 +96,7 @@ typedef struct
     bool m19_active; /**< 当前是否有待完成的 M19 定向握手。 */
     bool m29_active; /**< 当前是否有待完成的 M29 握手。 */
     spindle_m29_phase_t m29_phase;
+    uint32_t m29_stop_stable_cycles;
     bool csv_switch_pending; /**< M03/M04 请求从 CSP 安全切回 CSV。 */
     bool orient_hold_stop; /**< M19/定向完成后锁定停止，等待新的 M3/M4。 */
     bool orient_request_pending; /**< 收到定向请求但尚未提交驱动器定向命令。 */
@@ -114,6 +118,11 @@ void spindle_control_update(void);
 void spl_context_init(spindle_context_t* spl_ctx);
 /** 在 F 信号发布之后记录状态变化，cycle 为发布周期编号。 */
 void spindle_request_m29(void);
+/* 运动线程独立入口，不改变普通 M29：CSV 受控停车后切 CSP，当前位置作为攻丝零点。
+ * 已停稳的 CSP 也可受理；定向/其他切换在飞、移动中的 CSP 或无有效反馈时拒绝。
+ * true 仅代表受理，仍须等待 spindle_m29_is_ready() 和原有 PLC FIN 握手。
+ * false 时调用者必须中止本次 M29，不能把拒绝当作完成。 */
+bool spindle_request_m29_no_orient(void);
 bool spindle_m29_is_ready(void);
 void spindle_clear_velocity_arrival(void);   /* 新指令/复位/定向/M29 入口调用 */
 bool spindle_velocity_is_ready(void);        /* F45.3 的唯一查询入口（只读） */

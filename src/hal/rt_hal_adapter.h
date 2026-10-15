@@ -92,6 +92,9 @@ int rt_hal_request_axis_pos(RtHalAxisSlot slot, double pos);
  * 不动电机，故不受未确认台账阻挡。按拍请求，HAL 调用在 PDO 线程（set_pos 要求已采样过）；同拍先于位置写生效。
  * pos：主轴角度、进给轴 mm。HAL_ERROR_ARGUMENT / HAL_ERROR_NOT_RUNNING。 */
 int rt_hal_axis_set_pos(RtHalAxisSlot slot, double pos);
+/* 在一次已受理的 set_pos 后，由同一运动线程查询：BUSY=尚未消费，
+ * OK=HAL 已成功执行，否则为 HAL 错误。只对应该轴最近一次设零请求。 */
+int rt_hal_axis_set_pos_result(RtHalAxisSlot slot);
 
 /* 请求主轴转到单圈刻度（度）：deg ∈ [-360, 360]，符号定方向，0 取最近零刻度；与 axis_pos 同受台账闸门，
  * 同拍两者都置时以本接口为准；语义见 hal_rt_api.h 的 hal_rt_spindle_write_pos()。

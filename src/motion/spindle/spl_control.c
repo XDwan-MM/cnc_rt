@@ -230,6 +230,11 @@ static void spindle_update_m29(void);
 static void spindle_update_m29_feedback(void);
 static bool spindle_reset_or_estop_active(void);
 static void spindle_log_m29_csp_trace(void);
+static void spindle_update_m29_no_orient(void);
+static bool spindle_m29_no_orient_preparing(void) {
+    return spl_context.m29_phase >= SPINDLE_M29_NO_ORIENT_STOPPING &&
+           spl_context.m29_phase <= SPINDLE_M29_NO_ORIENT_ALIGNING;
+}
 
 /* ==========================================================================
  * 2. 外部函数定义
@@ -244,6 +249,13 @@ static void spindle_log_m29_csp_trace(void);
 void spindle_control_update(void)
 {
     bool release_orient_event;
+
+    if (spindle_m29_no_orient_preparing()) {
+        spindle_update_m29_no_orient();
+        spindle_publish_status();
+        spindle_publish_rigid_state();
+        return;
+    }
 
     release_orient_event =
         (spl_context.spl_event == SPINDLE_EVENT_RELEASE_ORIENT);
@@ -389,6 +401,175 @@ void spindle_request_m29(void)
     spl_context.command_speed = 0.0;
     spl_context.command_state = SPINDLE_STOP;
     spl_context.start_request_pending = false;
+}
+
+/* 不能用读取失败时回零的便捷访问器判断停稳。 */
+static bool spindle_m29_read_feedback(HalCAxisStatus *axis, HalCSpindleStatus *spindle)
+{
+    return rt_hal_axis_status(RT_HAL_AXIS_SP, axis) == HAL_OK &&
+           rt_hal_spindle_status(RT_HAL_AXIS_SP, spindle) == HAL_OK &&
+           axis->speed_valid && axis->position_valid &&
+           isfinite(axis->actual_speed_rpm) && isfinite(axis->actual_pos) &&
+           isfinite(axis->command_pos) && isfinite(spindle->position_deg) &&
+           (spindle->mode == HAL_SPINDLE_CSV || spindle->mode == HAL_SPINDLE_CSP);
+}
+
+bool spindle_request_m29_no_orient(void)
+{
+    HalCAxisStatus axis;
+    HalCSpindleStatus spindle;
+    int32_t orient;
+    if (spindle_stop_is_required(&spl_context) || rt_data->sys_state[SYS_ESTOP_INPUT] ||
+        rt_data->axis_data[AXIS_SP].status.is_disable ||
+        rt_data->axis_data[AXIS_SP].status.is_error ||
+        spl_context.m29_active || spl_ms_switching() || spl_context.csv_switch_pending ||
+        spl_context.orient_phase != SPINDLE_ORIENT_IDLE || spl_context.orient_request_pending ||
+        rt_hal_spindle_orient_state(RT_HAL_AXIS_SP, &orient) != HAL_OK || orient != HAL_ORIENT_NONE ||
+        !spindle_m29_read_feedback(&axis, &spindle) ||
+        (axis.raw_status & 0x0008U) || (axis.error_code_valid && axis.error_code) ||
+        !isfinite(rt_data->axis_data[AXIS_SP].max_feed_acc) ||
+        rt_data->axis_data[AXIS_SP].max_feed_acc <= 0.0)
+        return false;
+    /* CSP 运动由插补所有，不能把正在走的目标截成当前位置。 */
+    if (spindle.mode == HAL_SPINDLE_CSP &&
+        (fabs(axis.actual_speed_rpm) > SPINDLE_ACTUAL_ZERO_EPSILON ||
+         fabs(axis.command_pos - axis.actual_pos) > SPINDLE_CSP_POSITION_EPSILON))
+        return false;
+    if (spindle.mode == HAL_SPINDLE_CSP &&
+        rt_hal_request_axis_pos(RT_HAL_AXIS_SP, axis.actual_pos) != HAL_OK)
+        return false;
+
+    s_m29_trace_tail = 2000;
+    s_m29_trace_start = true;
+    spl_context.m29_active = true;
+    spl_context.m29_phase = SPINDLE_M29_NO_ORIENT_STOPPING;
+    spl_context.m29_stop_stable_cycles = 0;
+    spl_context.orient_elapsed_cycles = 0;
+    spl_context.reset_requires_start = false;
+    spl_context.m19_active = false;
+    spl_context.orient_hold_stop = true;
+    spl_context.orient_release_pending = false;
+    spl_context.start_request_pending = false;
+    spl_context.deferred_start_pending = false;
+    spl_context.spl_event = SPINDLE_EVENT_NONE;
+    spl_context.command_state = spl_context.spl_state = SPINDLE_STOP;
+    spl_context.command_speed = 0.0;
+    spl_context.vel_planner.current_vel = axis.actual_speed_rpm;
+    spl_context.vel_planner.target_vel = 0.0;
+    spl_context.vel_planner.enable = false;
+    s_spl_target_pos = axis.actual_pos;
+    spindle_clear_velocity_arrival();
+    spl_ms_reset();
+    LOG(LOG_LEVEL_INFO, "M29无预定向：等待停稳后切CSP，当前位置作为攻丝起点");
+    return true;
+}
+
+static void spindle_m29_no_orient_fail(void)
+{
+    spl_context.m29_phase = SPINDLE_M29_ERROR;
+    spl_context.m29_active = false;
+    spl_context.reset_requires_start = true;
+    spl_context.start_request_pending = false;
+    spl_context.deferred_start_pending = false;
+    spl_context.command_state = spl_context.spl_state = SPINDLE_STOP;
+    spl_context.command_speed = 0.0;
+    spl_context.vel_planner.enable = false;
+    spl_context.vel_planner.target_vel = 0.0;
+    s_spl_target_vel = 0.0;
+    (void)rt_hal_request_spindle_speed(RT_HAL_AXIS_SP, 0.0, 0);
+    spindle_clear_velocity_arrival();
+    spl_ms_reset();
+    spl_drv_disable();
+    setAlarm(ALARM_AX, ALARM_ERROR, SPINDLE_ALARM_ORIENT_TIMEOUT);
+    LOG(LOG_LEVEL_ERR, "M29无预定向准备中止：停止/联锁、反馈或请求异常、等待超时");
+}
+
+static void spindle_update_m29_no_orient(void)
+{
+    HalCAxisStatus axis;
+    HalCSpindleStatus spindle;
+    int32_t orient;
+    if (spindle_stop_is_required(&spl_context) || rt_data->sys_state[SYS_ESTOP_INPUT] ||
+        rt_data->axis_data[AXIS_SP].status.is_disable ||
+        rt_data->axis_data[AXIS_SP].status.is_error ||
+        !spindle_m29_read_feedback(&axis, &spindle) ||
+        !isfinite(rt_data->axis_data[AXIS_SP].max_feed_acc) ||
+        rt_data->axis_data[AXIS_SP].max_feed_acc <= 0.0 ||
+        (axis.raw_status & 0x0008U) || (axis.error_code_valid && axis.error_code) ||
+        rt_hal_spindle_orient_state(RT_HAL_AXIS_SP, &orient) != HAL_OK || orient != HAL_ORIENT_NONE ||
+        spl_context.spl_event == SPINDLE_EVENT_ORIENT ||
+        spl_context.spl_event == SPINDLE_EVENT_RELEASE_ORIENT ||
+        ++spl_context.orient_elapsed_cycles >= SPINDLE_M29_MODE_TIMEOUT_CYCLES) {
+        spindle_m29_no_orient_fail();
+        return;
+    }
+    /* PLC 的方向边沿不能接管准备流程；不产生 M19 完成或 F45.7。 */
+    spl_context.spl_event = SPINDLE_EVENT_NONE;
+    spl_drv_enable();
+    if (spl_context.m29_phase == SPINDLE_M29_NO_ORIENT_STOPPING) {
+        if (spindle.mode == HAL_SPINDLE_CSV) {
+            spl_context.vel_planner.max_acc = rt_data->axis_data[AXIS_SP].max_feed_acc;
+            spl_vel_planner_update(&spl_context.vel_planner, SPINDLE_CONTROL_PERIOD_SECONDS);
+            s_spl_target_vel = spl_context.vel_planner.current_vel;
+            if (rt_hal_request_spindle_speed(RT_HAL_AXIS_SP, fabs(s_spl_target_vel),
+                    s_spl_target_vel > 0 ? 1 : s_spl_target_vel < 0 ? -1 : 0) != HAL_OK) {
+                spindle_m29_no_orient_fail();
+                return;
+            }
+        }
+        if (fabs(axis.actual_speed_rpm) <= SPINDLE_ACTUAL_ZERO_EPSILON &&
+            (spindle.mode == HAL_SPINDLE_CSP ||
+             fabs(spl_context.vel_planner.current_vel) <= SPINDLE_SPEED_EPSILON))
+            ++spl_context.m29_stop_stable_cycles;
+        else spl_context.m29_stop_stable_cycles = 0;
+        if (spl_context.m29_stop_stable_cycles >= SPINDLE_M29_STABLE_CYCLES) {
+            if (spl_ms_request(HAL_SPINDLE_CSP) != HAL_OK) {
+                spindle_m29_no_orient_fail();
+                return;
+            }
+            spl_context.m29_phase = SPINDLE_M29_NO_ORIENT_SWITCHING;
+            spl_context.orient_elapsed_cycles = 0;
+        }
+        return;
+    }
+    if (spl_context.m29_phase == SPINDLE_M29_NO_ORIENT_SWITCHING) {
+        if (!spl_ms_done() || spindle.mode != HAL_SPINDLE_CSP || !axis.enabled ||
+            (axis.raw_status & 0x006fU) != 0x0027U ||
+            fabs(axis.actual_speed_rpm) > SPINDLE_ACTUAL_ZERO_EPSILON) return;
+        /* HAL 切 CSP 时预置实际位置。这里只平移坐标，不命令转回机械零度；
+         * 下一拍确认设零反馈后才写零位置，避免设零被拒时发出旧坐标的零目标。 */
+        if (rt_hal_axis_set_pos(RT_HAL_AXIS_SP, 0.0) != HAL_OK) {
+            spindle_m29_no_orient_fail();
+            return;
+        }
+        spl_context.m29_phase = SPINDLE_M29_NO_ORIENT_ALIGNING;
+        spl_context.orient_elapsed_cycles = 0;
+        spl_context.m29_stop_stable_cycles = 0;
+        return;
+    }
+    const int setpos_result = rt_hal_axis_set_pos_result(RT_HAL_AXIS_SP);
+    if (setpos_result == HAL_ERROR_BUSY) return;
+    if (setpos_result != HAL_OK) {
+        spindle_m29_no_orient_fail();
+        return;
+    }
+    if (spindle.mode != HAL_SPINDLE_CSP || !axis.enabled ||
+        (axis.raw_status & 0x006fU) != 0x0027U ||
+        fabs(axis.actual_speed_rpm) > SPINDLE_ACTUAL_ZERO_EPSILON ||
+        fabs(axis.actual_pos) > SPINDLE_CSP_POSITION_EPSILON ||
+        fabs(axis.command_pos) > SPINDLE_CSP_POSITION_EPSILON) {
+        spl_context.m29_stop_stable_cycles = 0;
+        return;
+    }
+    if (++spl_context.m29_stop_stable_cycles < SPINDLE_M29_STABLE_CYCLES) return;
+    if (rt_hal_request_axis_pos(RT_HAL_AXIS_SP, 0.0) != HAL_OK) {
+        spindle_m29_no_orient_fail();
+        return;
+    }
+    rt_data->axis_data[AXIS_SP].wcs_cmd_pos_cur = 0.0;
+    s_spl_target_pos = 0.0;
+    spl_context.m29_phase = SPINDLE_M29_READY;
+    LOG(LOG_LEVEL_INFO, "M29无预定向：CSP使能与起点对齐已确认，等待PLC握手");
 }
 
 bool spindle_m29_is_ready(void)

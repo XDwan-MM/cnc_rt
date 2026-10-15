@@ -13,3 +13,8 @@ cc -std=gnu11 -DSHM_STATIC -fPIC "${qt_cflags[@]}" -g -O0 -Wall -Wextra -ffuncti
     "$ROOT/src/motion/spindle/spl_vel_planner.c" \
     -Wl,--gc-sections -lm -o "$ROOT/build/rt_spindle_m29_check"
 "$ROOT/build/rt_spindle_m29_check"
+
+cc -std=gnu11 -DSHM_STATIC -fPIC "${qt_cflags[@]}" -g -O0 -Wall -Wextra -ffunction-sections -fdata-sections \
+    "${includes[@]}" "$ROOT/test/rt_setpos_result_check.c" \
+    -Wl,--gc-sections -lm -o "$ROOT/build/rt_setpos_result_check"
+"$ROOT/build/rt_setpos_result_check"

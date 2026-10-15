@@ -725,6 +725,13 @@ int rt_hal_axis_set_pos(RtHalAxisSlot slot, double pos) {
     return HAL_OK;
 }
 
+int rt_hal_axis_set_pos_result(RtHalAxisSlot slot) {
+    if (!slot_ok(slot)) return HAL_ERROR_ARGUMENT;
+    if (!s_ctx || !s_snap_valid) return HAL_ERROR_NOT_RUNNING;
+    if (s_req_setpos_dirty[slot]) return HAL_ERROR_BUSY;
+    return s_req_fail_rc[slot][RT_REQ_SETPOS];
+}
+
 int rt_hal_request_axis_pos(RtHalAxisSlot slot, double pos) {
     if (!slot_ok(slot)) return HAL_ERROR_ARGUMENT;
     if (!s_ctx) return HAL_ERROR_NOT_RUNNING;
