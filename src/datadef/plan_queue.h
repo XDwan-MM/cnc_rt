@@ -80,6 +80,19 @@ typedef struct
     int endlineno;
 }NURBS_DATA;
 
+// 运动轴
+typedef enum 
+{
+    MOVING_AXIS_NONE = 0,
+    MOVING_AXIS_X,
+    MOVING_AXIS_Y,
+    MOVING_AXIS_Z,
+    MOVING_AXIS_XY,
+    MOVING_AXIS_XZ,
+    MOVING_AXIS_YZ,
+    MOVING_AXIS_XYZ,
+}MOVE_AXIS;
+
 typedef struct
 {
     INTERP_TYPE type;   // 插补类型
@@ -111,6 +124,7 @@ typedef struct
     VECTOR start_vec;   // 起始矢量
     VECTOR end_vec;     // 终点矢量
     bool is_breakpoint; // 是否为回断点程序段
+    MOVE_AXIS move_axis;
 }PLAN_BLOCK;
 
 // 循环队列
