@@ -235,13 +235,13 @@ void ServoSampleSampler::handleCommand()
         break;
     }
     case CNC_SERVO_COMMAND_STOP: {
+        // 同周期的复位仍需更新复位序列并清空数据，随后由停止请求结束会话。
+        handleReset();
         const uint32_t state = loadState(_shared);
-        if (state == CNC_SERVO_STATE_RUNNING) {
-            _drainRequested = 1;
-            __atomic_store_n(&_shared->state, CNC_SERVO_STATE_DRAINING, __ATOMIC_RELEASE);
-        } else if (state == CNC_SERVO_STATE_DRAINING) {
-            // 等待中的最后一个采样点会完成停止请求。
-        } else if (state != CNC_SERVO_STATE_IDLE) {
+        // 停止不依赖运动、圆弧门控或最后一个采样点。取消本周期待处理的
+        // 启动事件，确保手动停止后不会重新进入待命或采样状态。
+        _cycleStartPending = false;
+        if (state != CNC_SERVO_STATE_IDLE) {
             finish(CNC_SERVO_STATE_COMPLETED, CNC_SERVO_STOP_MANUAL,
                    CNC_SERVO_ERROR_NONE);
         }
@@ -782,6 +782,7 @@ void ServoSampleSampler::sampleOne()
 
 void ServoSampleSampler::finish(uint32_t state, uint32_t reason, int32_t error)
 {
+    _cycleStartPending = false;
     __atomic_store_n(&_shared->stopReason, reason, __ATOMIC_RELEASE);
     __atomic_store_n(&_shared->errorCode, error, __ATOMIC_RELEASE);
     __atomic_store_n(&_shared->tapErrorCode,
