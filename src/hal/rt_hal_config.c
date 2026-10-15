@@ -1,4 +1,4 @@
-/* 台架本地 profile 实现。取值须有依据；没依据的挂 RT_HAL_TODO_* 台账。 */
+/* 台架本地 profile：取值须有依据，没依据的挂 RT_HAL_TODO_* 台账 */
 
 #include "rt_hal_config.h"
 
@@ -6,23 +6,18 @@
 #include <stdio.h>
 #include <string.h>
 
-/* hal_config_validate / HAL_OK 在 hal_config_api.h；rt_hal_config.h 只带
- * hal_types.h（类型），避免让配置头把校验接口也拖进来。 */
+/* hal_config_validate / HAL_OK 来自 hal_config_api.h；rt_hal_config.h 只带类型 */
 #include "hal_config_api.h"
 
-/* 模块内状态。台账按轴记，全局掩码分不清"全都缺"和"只缺一根"。 */
+/* 台账按轴记：全局掩码分不清"全都缺"和"只缺一根" */
 static int      s_built;                                  /* 是否已 build 过 */
 static uint32_t s_todo = 0xFFFFFFFFu;                     /* 对外台账掩码 */
 static uint8_t  s_scaling_ok[RT_HAL_AXIS_COUNT];          /* 当量+enc_off 已装载 */
 static uint8_t  s_pulses_ok[RT_HAL_AXIS_COUNT];           /* 每转反馈计数已知 */
 static uint8_t  s_spindle_max_ok;                         /* 主轴转速上限已从参数域装载 */
 
-/* "现场确认开关"已删：IO_MAP / MOTION 两位不再进台账。
- * 留下来的保守行为不变：**参数域没给换算就挡住运动**
- * （SCALING / ENC_OFF / ENCODER 三位仍按轴挂，见 recompute_todo()）。 */
-
 static void recompute_todo(void) {
-    /* 台账只反映"参数域给全了没有"，按轴算。 */
+    /* 台账只反映"参数域给全了没有" */
     uint32_t t = 0;
     for (int i = 0; i < RT_HAL_AXIS_COUNT; ++i) {
         if (!s_scaling_ok[i]) t |= RT_HAL_TODO_SCALING | RT_HAL_TODO_ENC_OFF;
@@ -40,7 +35,7 @@ static HalCAxisCfg* find_axis_cfg(HalCConfig* cfg, int hal_axis) {
     return NULL;
 }
 
-/* 从站拓扑：0 面板、1 IO、2 主轴、3/4/5 进给，沿用旧 RT 编号 */
+/* 从站拓扑：0 面板、1 IO、2 主轴、3/4/5 进给 */
 #define RT_SLAVE_PANEL   0
 #define RT_SLAVE_IO      1
 #define RT_SLAVE_SPINDLE 2
@@ -48,8 +43,7 @@ static HalCAxisCfg* find_axis_cfg(HalCConfig* cfg, int hal_axis) {
 #define RT_SLAVE_Y       4
 #define RT_SLAVE_Z       5
 
-/* 轴绑定表：RT 槽 ↔ 从站 ↔ HAL 逻辑轴号。
- * 第 4 列与行号相同是有意的——多一套编号就多一类静默错误。不要改。 */
+/* 轴绑定表：RT 槽 ↔ 从站 ↔ HAL 逻辑轴号；第 4 列必须与行号相同，不要改 */
 static const RtHalBinding kBindings[RT_HAL_AXIS_COUNT] = {
     {"X",  RT_SLAVE_X,       0, 0, 0},
     {"Y",  RT_SLAVE_Y,       0, 1, 0},
@@ -57,18 +51,18 @@ static const RtHalBinding kBindings[RT_HAL_AXIS_COUNT] = {
     {"SP", RT_SLAVE_SPINDLE, 0, 3, 1},
 };
 
-/* 主站参数，沿用旧 RT 的 main_demo.h；待与 RT 插补周期核对 */
+/* 主站参数取值沿用旧 RT 的 main_demo.h */
 #define RT_CYCLE_US        1000u
 #define RT_START_TIMEOUT   120000u
 #define RT_CYCLE_TIMEOUT   5000u
 #define RT_FAULT_RESET_TIMEOUT 5000u   /* 故障复位等待上限（ms） */
 #define RT_DC_ENABLE       1
 
-/* 未确认占位值。用恒等 1.0/1 而不是抄示例——忘了看台账时结果是明显不对的。 */
+/* 未确认占位值：用恒等 1.0/1，忘了看台账时结果明显不对 */
 #define RT_PLACEHOLDER_UNITS_PER_COUNT 1.0
 #define RT_PLACEHOLDER_PULSES_PER_REV  1
 #define RT_PLACEHOLDER_ENC_OFF         0.0
-/* 主轴转速上限。只是配置域里的占位，转速约束实际由驱动器侧决定。 */
+/* 主轴转速上限：配置域占位，实际约束由驱动器侧决定 */
 #define RT_PLACEHOLDER_SPINDLE_MAX_RPM 1000.0
 
 static int fail(char* err, uint32_t len, int code, const char* text) {
@@ -77,7 +71,7 @@ static int fail(char* err, uint32_t len, int code, const char* text) {
 }
 
 uint32_t rt_hal_config_todo(void) {
-    /* TODO_ESTOP 不在列：四轴一律"去使能"，见 fill_axis()。 */
+    /* TODO_ESTOP 不在列：四轴一律"去使能"，见 fill_axis() */
     return s_todo;
 }
 
@@ -98,7 +92,7 @@ int rt_hal_config_hal_axis(RtHalAxisSlot slot) {
     return kBindings[slot].hal_axis;
 }
 
-/* 主轴判定，唯一来源是绑表第 5 列（build() 按同一列装配 spindles[]）。 */
+/* 主轴判定唯一来源是绑表第 5 列（build() 按同一列装配 spindles[]） */
 int rt_hal_config_is_spindle(RtHalAxisSlot slot) {
     if (slot < 0 || slot >= RT_HAL_AXIS_COUNT) return 0;
     return kBindings[slot].is_spindle;
@@ -127,10 +121,8 @@ static void fill_axis(HalCAxisCfg* a, const RtHalBinding* b, int spindle) {
     a->estop_action = HAL_ESTOP_DISABLE_OPERATION;
     /* 进给轴必须是位置模式（HAL 强制）；主轴默认速度模式 */
     a->work_mode = spindle ? HAL_WORK_VELOCITY : HAL_WORK_POSITION;
-    /* HAL 只校验不消费这个字段 */
     a->encoder_type = HAL_ENC_ABSOLUTE;
     a->feedback_pulses_per_rev = RT_PLACEHOLDER_PULSES_PER_REV;
-    /* 主轴模循环（每转回绕），进给线性计数 */
     a->feedback_wrap = spindle ? HAL_WRAP_MODULAR : HAL_WRAP_LINEAR;
     a->command_units_per_count = RT_PLACEHOLDER_UNITS_PER_COUNT;
     a->feedback_units_per_count = RT_PLACEHOLDER_UNITS_PER_COUNT;
@@ -142,7 +134,7 @@ static void fill_axis(HalCAxisCfg* a, const RtHalBinding* b, int spindle) {
     a->vendor_orient_control_word = spindle ? RT_PLACEHOLDER_ORIENT_CW : 0u;
     a->vendor_orient_done_mask    = spindle ? RT_PLACEHOLDER_ORIENT_DONE : 0u;
     a->vendor_orient_delay_ms     = spindle ? RT_ORIENT_DELAY_MS : 0;
-    /* 速度对象单位（见 kSpeedUnit）；hal_axis 是恒等映射，这里再兜一次越界 */
+    /* 速度对象单位见 kSpeedUnit；hal_axis 是恒等映射，这里再兜一次越界 */
     a->speed_unit = (b->hal_axis >= 0 && b->hal_axis < RT_HAL_AXIS_COUNT)
                         ? kSpeedUnit[b->hal_axis] : HAL_SPEED_RPM;
 }
@@ -156,14 +148,11 @@ int rt_hal_config_build(HalCConfig* out, char* err, uint32_t err_len) {
     memset(s_scaling_ok, 0, sizeof(s_scaling_ok));
     memset(s_pulses_ok, 0, sizeof(s_pulses_ok));
     s_spindle_max_ok = 0;
-    /* 初始台账必须走 recompute_todo() 算，不能写死常量：
-     * 参数域为空时要挂满 SCALING/ENC_OFF/ENCODER，让运动被挡住。 */
+    /* 初始台账必须走 recompute_todo()：参数域为空时要挂满台账、挡住运动 */
     recompute_todo();
 
-    /* ABI 闸门：必须拦在编译期。HalCAxisStatus 是**出参**，身上没有 struct_size
-     * 可查，HAL 只给它加字段时 hal_config_validate() 查不出来，而 RT 备的是栈上小
-     * 一号的结构体 —— 结果是**写坏栈**。
-     * 改了 HAL 的 HAL_C_ABI_* 就要同步改这一行。 */
+    /* ABI 闸门必须拦在编译期：HalCAxisStatus 是出参、没有 struct_size 可查，HAL 加字段
+     * 时 validate() 查不出来，而 RT 备的是栈上小一号的结构体 → 写坏栈。 */
 #if HAL_C_ABI_MAJOR != 7u || HAL_C_ABI_MINOR != 2u
 #  error "HAL ABI 与 rt_hal_config 预期不符（期望 7.2）：先读 HAL/include/hal_types.h 的版本说明，再改这一行"
 #endif
@@ -184,8 +173,7 @@ int rt_hal_config_build(HalCConfig* out, char* err, uint32_t err_len) {
     out->fault_reset_timeout_ms = RT_FAULT_RESET_TIMEOUT;
     out->dc_enable = RT_DC_ENABLE;
 
-    /* 三进给 + 一主轴。主轴也放在 spindles[] 且要能被 HalAxisId 寻址，
-     * 所以 logical_axis 必须 >= 0。 */
+    /* 三进给 + 一主轴；主轴也要能被 HalAxisId 寻址，logical_axis 必须 >= 0 */
     out->axis_count = 3;
     for (int i = 0; i < 3; ++i)
         fill_axis(&out->axes[i], &kBindings[i], 0);
@@ -194,8 +182,8 @@ int rt_hal_config_build(HalCConfig* out, char* err, uint32_t err_len) {
     fill_axis(&out->spindles[0].axis, &kBindings[RT_HAL_AXIS_SP], 1);
     out->spindles[0].max_speed = RT_PLACEHOLDER_SPINDLE_MAX_RPM;
 
-    /* IO 与面板共用 PLC 的 X/Y 地址域，靠起始地址分段：
-     * IO 占 X0..X3 / Y0..Y3，面板占 X4..X25 / Y4..Y17。 */
+    /* IO 与面板共用 PLC 的 X/Y 地址域，靠起始地址分段：IO 占 X0..X3/Y0..Y3，
+     * 面板占 X4..X25/Y4..Y17。 */
     out->io_count = 1;
     out->ios[0].slave_pos = RT_SLAVE_IO;
     out->ios[0].x_start = 0;
@@ -291,9 +279,7 @@ int rt_hal_config_finish(HalCConfig* cfg, char* err, uint32_t err_len) {
     return 0;
 }
 
-/* 用 profile 的占位值装配一套并校验，参数域为空时的入口。
- * **不是 RT 的启动入口**：启动走 rt_hal_create() 的
- * build → set_scaling ×N → set_spindle_max → finish。 */
+/* 用占位值装配一套并校验，参数域为空时的入口；RT 启动走 rt_hal_create() */
 int rt_hal_config_build_and_check(HalCConfig* out, char* err, uint32_t err_len) {
     const int rc = rt_hal_config_build(out, err, err_len);
     if (rc) return rc;
@@ -315,7 +301,7 @@ int rt_hal_config_set_scaling(HalCConfig* cfg, RtHalAxisSlot slot, const RtHalAx
     if (!a) return RT_HAL_ERR_SLOT;
 
     a->command_units_per_count = s->units_per_count;
-    /* RT 命令与反馈共用一个电子齿轮比；HAL 允许不同，本台架不需要 */
+    /* RT 命令与反馈共用一个电子齿轮比（HAL 允许不同） */
     a->feedback_units_per_count = s->units_per_count;
     a->command_invert = s->command_invert ? 1 : 0;
     a->command_pulses_per_rev = s->command_pulses_per_rev;

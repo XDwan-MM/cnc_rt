@@ -1800,13 +1800,13 @@ static void spindle_log_m29_csp_trace(void)
     // if (target_changed || (trace_cycles % 100U) == 0U)
     if (target_changed)
     {
-        LOG(LOG_LEVEL_INFO,
-            "M29 CSP跟踪：target_pos=%.0f target_vel=%.0f actual_pos=%.0f "
-            "actual_vel=%.0f act_mode=%d req_mode=%d enabled=%d "
-            "status_word=0x%04X",
-            s_spl_target_pos, s_spl_target_vel, spl_drv_actual_pos(),
-            spl_drv_actual_vel(), spl_drv_mode(),
-            s_spl_req_mode, spl_drv_enabled(), spl_drv_status_word());
+        // LOG(LOG_LEVEL_INFO,
+            // "M29 CSP跟踪：target_pos=%.0f target_vel=%.0f actual_pos=%.0f "
+            // "actual_vel=%.0f act_mode=%d req_mode=%d enabled=%d "
+            // "status_word=0x%04X",
+            // s_spl_target_pos, s_spl_target_vel, spl_drv_actual_pos(),
+            // spl_drv_actual_vel(), spl_drv_mode(),
+            // s_spl_req_mode, spl_drv_enabled(), spl_drv_status_word());
     }
 
     last_target_pos = s_spl_target_pos;

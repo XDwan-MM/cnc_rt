@@ -32,7 +32,8 @@ void plc_f_signal_handler_cycle()
     plc_output_spl_vel_status();
     plc_output_spl_orient_status();
     plc_output_spl_vel();
-    spindle_m29_plc_trace_tick();
+    /* 调试信息（M29 PLC 追踪）先注释掉，函数本体保留 */
+    // spindle_m29_plc_trace_tick();
 }
 
 static void plc_output_alarm()

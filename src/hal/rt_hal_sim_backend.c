@@ -1,7 +1,5 @@
-/* 调试模式用的驱动层桩，只在 debug_mode 段编译与链接。
- * 把 HAL 驱动层换成内存仿真：位置与速度即时跟随指令，状态字按控制字推导。
- * **本文件是全工程唯一包含 HAL 内部头的**（桩必须知道 DeviceSlot / DevDictRole
- * 才能扮演驱动层），别处不要照抄。 */
+/* 调试模式用的驱动层桩：位置/速度即时跟随指令，状态字按控制字推导。本文件是全工程
+ * 唯一包含 HAL 内部头的（桩要知道 DeviceSlot / DevDictRole），别处不要照抄。 */
 
 #define _POSIX_C_SOURCE 200809L
 
@@ -18,11 +16,10 @@
 #include "Greemaster/main_demo.h"
 #include "common/devdict.h"
 #include "common/Ds402.h"
-/* 定向控制字与完成位来自本地 profile —— 桩要模拟"驱动器收到那个字之后延迟置
- * 完成位"，和真实驱动器用同一份定义，免得两处各写一份对不上。 */
+/* 定向控制字与完成位用本地 profile 的同一份定义，免得两处各写一份对不上 */
 #include "rt_hal_config.h"
 
-/* 从站拓扑，**必须与 rt_hal_config.c 的 kBindings 一致**，否则 HAL 在 start 阶段报错。 */
+/* 从站拓扑，必须与 rt_hal_config.c 的 kBindings 一致，否则 HAL 在 start 阶段报错 */
 #define SIM_SLAVE_PANEL   0
 #define SIM_SLAVE_IO      1
 #define SIM_SLAVE_SPINDLE 2
@@ -31,14 +28,14 @@
 #define SIM_SLAVE_Z       5
 #define SIM_SLOT_COUNT    6
 
-/* 模拟定向对准耗时（采样拍数）。真机由驱动器减速对准，几十到几百拍。 */
+/* 模拟定向对准耗时（采样拍数）。真机由驱动器减速对准，几十到几百拍 */
 #define SIM_ORIENT_DELAY  20
 
 #define SIM_IO_ENTRIES    2u    /* IO 模块每方向 2 个 16 位 Entry = 32 位 */
 #define SIM_PANEL_IN      11u   /* 面板输入 11 个 16 位 Entry */
 #define SIM_PANEL_OUT     7u    /* 面板输出  7 个 16 位 Entry */
 
-/* 单轴仿真状态，按槽号索引。 */
+/* 单轴仿真状态，按槽号索引 */
 typedef struct {
     uint32_t target_pos;
     uint32_t actual_pos;
@@ -66,10 +63,10 @@ static uint32_t   s_cycle_us = 1000u;
 static int        s_opened;
 static int        s_fail_bus;    /* 非零 = 所有驱动读都失败，用来验证总线故障路径 */
 static int        s_csv_reached; /* CNC_RT_SIM_CSV_REACHED: start in CSV with speed-reached bit10 */
-/* 驱动层停止标志，与真实 main_demo.c 对应：Master_RequestStop() 置，周期里查。 */
+/* 驱动层停止标志：Master_RequestStop() 置，周期里查 */
 static atomic_int s_stop_requested;
 
-/* 控制字 → 状态字，位模式同 CiA402。 */
+/* 控制字 → 状态字，位模式同 CiA402 */
 static uint16_t sim_status_from_ctrl(uint16_t cw) {
     if ((cw & 0x000Fu) == 0x000Fu) return 0x0237u;  /* Operation enabled */
     if ((cw & 0x0007u) == 0x0007u) return 0x0023u;  /* Switched on */
@@ -77,13 +74,13 @@ static uint16_t sim_status_from_ctrl(uint16_t cw) {
     return 0x0040u;                                 /* Switch on disabled */
 }
 
-/* 位长**必须与 HAL bind_axis/bind_io 期望一致**，对不上返回 UNSUPPORTED。 */
+/* 位长必须与 HAL bind_axis/bind_io 期望一致，对不上返回 UNSUPPORTED */
 static void set_bits(void* entry, uint8_t bits) {
-    /* Tx/RxEntry_Unit 布局相同，头字段都是 index/subindex/bit_length。 */
+    /* Tx/RxEntry_Unit 布局相同，头字段都是 index/subindex/bit_length */
     ((TxEntry_Unit*)entry)->bit_length = bits;
 }
 
-/* 建一张伺服槽。spindle 为真须补速度 PDO —— HAL 要求主轴必须有速度。 */
+/* 建一张伺服槽；spindle 为真须补速度 PDO，HAL 要求主轴必须有速度 */
 static void build_servo_slot(int idx, int slave, DEVICE_TYPE type, int spindle) {
     DeviceSlot* s = &s_slots[idx];
     memset(s, 0, sizeof(*s));
@@ -108,7 +105,7 @@ static void build_servo_slot(int idx, int slave, DEVICE_TYPE type, int spindle) 
         set_bits(&h->target_speed, 32);
         set_bits(&h->act_speed, 32);
     }
-    /* 初值：未使能，位置与速度都是 0，未故障。 */
+    /* 初值：未使能、位置与速度都是 0、未故障 */
     s_servo[idx].control_word = 0;
     s_servo[idx].fault = 0;
 }
@@ -141,17 +138,13 @@ static void build_io_slot(int idx, int slave) {
     }
 }
 
-/* ============================================================================
- * 驱动层接口。签名必须与 src/Greemaster 下头文件逐字一致，
- * 否则链接器会拉进真实现，变成"一半真一半假"。
- * ========================================================================== */
+/* 驱动层接口（签名须与 src/Greemaster 下头文件逐字一致，否则链接器会拉进真实现，
+ * 变成"一半真一半假"） */
 
-/* CNC_RT_SIM_FAULT_STUCK=1：注入的 Fault 不因 bit7 边沿消失。
- * 用来把故障复位**一直按在 PENDING 上**（"复位在飞"的窗口从几拍拉成 5 秒），
- * 好验"急停优先于复位"——否则复位几拍就收口，来不及按。 */
+/* CNC_RT_SIM_FAULT_STUCK=1：注入的 Fault 不因 bit7 边沿消失，把复位一直按在 PENDING
+ * 上（复位在飞窗口拉成 5 秒），好验"急停优先于复位"。 */
 static int s_fault_stuck;
-/* CNC_RT_SIM_ERR=<从站>[,<码>]：让该轴报出驱动器故障码（0x603F）。
- * 用来离线验证"驱动器故障 → is_error → F45.0 / F0.6"这条链。 */
+/* CNC_RT_SIM_ERR=<从站>[,<码>]：该轴报出驱动器故障码 0x603F（默认 0x1234） */
 static uint16_t s_err_code[SIM_SLOT_COUNT];
 
 int ethercat_init(const MasterConfig* cfg) {
@@ -165,7 +158,7 @@ int ethercat_init(const MasterConfig* cfg) {
     memset(s_panel_out, 0, sizeof(s_panel_out));
     memset(s_err_code, 0, sizeof(s_err_code));
 
-    /* CNC_RT_SIM_FAULT=<从站号>：让该轴上电即处于 Fault，用来离线验证复位链。 */
+    /* CNC_RT_SIM_FAULT=<从站号>：该轴上电即处于 Fault */
     const char* fault_slave = getenv("CNC_RT_SIM_FAULT");
 
     build_panel_slot(0, SIM_SLAVE_PANEL);
@@ -184,8 +177,8 @@ int ethercat_init(const MasterConfig* cfg) {
         s_identity[i].type = s_slots[i].type;
     }
 
-    /* 全零的面板输入等于"急停一直按着"，会拒掉所有复位事件，所以默认置"未按下"。
-     * 要测急停按下：CNC_RT_SIM_ESTOP=1。 */
+    /* 全零面板输入等于"急停一直按着"、会拒掉所有复位事件，故默认置"未按下"；
+     * 测按下用 CNC_RT_SIM_ESTOP=1。 */
     s_panel_in[2] = 0x0010u;   /* bit4 = X8.4 = 急停，低有效 → 1 表示未按下 */
     {
         const char* estop = getenv("CNC_RT_SIM_ESTOP");
@@ -210,7 +203,7 @@ int ethercat_init(const MasterConfig* cfg) {
             fprintf(stderr, "[SIM] Fault 不因复位边沿消失（CNC_RT_SIM_FAULT_STUCK）\n");
     }
     {
-        /* CNC_RT_SIM_ERR=<从站>[,<码>]：注入驱动器故障码 0x603F，码默认 0x1234。 */
+        /* 注入驱动器故障码 0x603F，码默认 0x1234 */
         const char* e = getenv("CNC_RT_SIM_ERR");
         if (e && *e) {
             unsigned long code = 0x1234u;
@@ -226,7 +219,7 @@ int ethercat_init(const MasterConfig* cfg) {
         }
     }
 
-    /* CNC_RT_SIM_FAIL=1：让所有驱动读失败，用来离线验证总线错误转报警。 */
+    /* CNC_RT_SIM_FAIL=1：所有驱动读失败 */
     {
         const char* f = getenv("CNC_RT_SIM_FAIL");
         s_fail_bus = (f && *f && atoi(f)) ? 1 : 0;
@@ -275,8 +268,7 @@ int Master_WaitCycle(void) {
 int Master_CommitCycle(void) {
     if (!s_opened) return -1;
     if (atomic_load(&s_stop_requested)) return MASTER_STOP_REQUESTED;
-    /* CNC_RT_SIM_CYCLE_FAIL=<第几拍>：到那一拍就返回失败，用来离线验证
-     * PDO 意外退出 → 主线程收尾这条链（不设置时行为不变）。 */
+    /* CNC_RT_SIM_CYCLE_FAIL=<第几拍>：到那一拍返回失败 */
     {
         static long fail_at = -1;
         static long commits;
@@ -289,7 +281,7 @@ int Master_CommitCycle(void) {
             return -1;
         }
     }
-    /* 只有 bit7 上升沿清 Fault；桩不能替 HAL 改主站输出控制字。 */
+    /* 只有 bit7 上升沿清 Fault */
     for (int i = 0; i < SIM_SLOT_COUNT; ++i) {
         SimServo* v = &s_servo[i];
         if (!s_fault_stuck && v->fault && (v->control_word & 0x0080u) &&
@@ -300,7 +292,7 @@ int Master_CommitCycle(void) {
 }
 
 int Master_BusHealth(MasterBusHealth* out) {
-    /* 仿真总线：无警告、无 CRC/超时计数。要验证报警链路就在这里造数。 */
+    /* 仿真总线：无警告、无 CRC/超时计数；要验证报警链路就在这里造数 */
     if (!out) return -1;
     memset(out, 0, sizeof(*out));
     return 0;
@@ -314,8 +306,8 @@ int Master_ServoRead(int slot, DevDictRole role, uint32_t* out) {
     /* Fault 优先于按控制字推出的状态（真实驱动器故障时状态字 bit3 置位） */
     case DEV_DICT_ROLE_STATUS_WORD:
         if (v->fault) { *out = 0x0008u; return 0; }
-        /* 厂商定向字不是标准 DS402 控制字：低 4 位同样是使能，bit10 是厂商的"开始定向"。
-         * sim_status_from_ctrl 会把 0x040F 当普通使能算、结果里没有完成位，故单独判。 */
+        /* 厂商定向字不是标准 DS402 控制字：低 4 位同样是使能，bit10 是厂商"开始定向"；
+         * sim_status_from_ctrl 认不出，故单独判。 */
         if (v->orient_active) {
             const uint16_t base = sim_status_from_ctrl(RT_PLACEHOLDER_ORIENT_CW);
             ++v->orient_cycles;
@@ -368,8 +360,8 @@ int Master_ServoWrite(int slot, DevDictRole role, uint32_t value) {
     }
 }
 
-/* 与真实 servo_step.c 同构：预置目标 → 改模式 → 写控制字，**顺序不能变**。
- * 漏掉写控制字会让 DS402 状态机空转（使能/去使能/故障复位都推不动）。 */
+/* 与真实 servo_step.c 同构：预置目标 → 改模式 → 写控制字，顺序不能变；漏掉写控制字
+ * 会让 DS402 状态机空转（使能/去使能/故障复位都推不动）。 */
 int Master_ServoStep(int slot, Ds402Request req, uint16_t mode, uint16_t* out) {
     if (slot < 0 || slot >= SIM_SLOT_COUNT) return -1;
     SimServo* v = &s_servo[slot];
