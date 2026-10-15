@@ -121,16 +121,16 @@ typedef struct
     double radius_r_max_fv;     // 半径R的圆弧最大进给速度
     double circular_min_vel;    // 基于圆弧插补下减速的下限速度
     double axis_min_vel;        // 基于每个轴加速度的下限速度
-    double l_min_thre;
-    double l_theta_thre;
-    double theta_thre;
-    double kappa_thre;
-    double seg_theta_thre;
-    double kratio;
-    double nurbs_fiterror;
-    double nurbs_sagittaerror;
-    int nurbs_enable;       // 开启nurbs拟合
-    UNIF_TYPE unif_type;
+    double l_min_thre;          // 小线段剔除
+    double l_theta_thre;        // 逆行修复：线段长度阈值
+    double theta_thre;          // 逆行修复：线段间角度阈值
+    double kappa_thre;          // 逆行修复：线段间曲率阈值
+    double seg_theta_thre;      // 角度分段
+    double kratio;              // 曲率分段
+    double nurbs_fiterror;      // 拟合误差
+    double nurbs_sagittaerror;  // 弓高误差
+    int nurbs_enable;           // 开启nurbs拟合
+    UNIF_TYPE unif_type;        // 选择一致性类型
 } RT_CHAN;
 
 // 目前仅轨迹线程使用
