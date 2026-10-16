@@ -329,30 +329,30 @@ void spindle_trace_status(void)
     {
         if (spindle_driver.act_mode == DRV_MODE_CSP)
         {
-            LOG(LOG_LEVEL_INFO,
-                "主轴状态[%llu] mode=%s target_rpm=%.3f planned_rpm=%.3f "
-                "actual_rpm=%d target_pos=%d actual_pos=%d position_error=%d "
-                "orient=%d start_pending=%d deferred_start=%d "
-                "F45.3_ready=%d F7.0_MF=%d G4.3_FIN=%d M29_phase=%d",
-                (unsigned long long)cycle, mode_name, target,
-                spl_context.vel_planner.current_vel, spindle_driver.actual_vel,
-                spindle_driver.target_pos, spindle_driver.actual_pos,
-                spindle_driver.target_pos - spindle_driver.actual_pos,
-                spl_context.orient_phase, spl_context.start_request_pending,
-                spl_context.deferred_start_pending, ready, mf, fin,
-                spl_context.m29_phase);
+            // LOG(LOG_LEVEL_INFO,
+            //     "主轴状态[%llu] mode=%s target_rpm=%.3f planned_rpm=%.3f "
+            //     "actual_rpm=%d target_pos=%d actual_pos=%d position_error=%d "
+            //     "orient=%d start_pending=%d deferred_start=%d "
+            //     "F45.3_ready=%d F7.0_MF=%d G4.3_FIN=%d M29_phase=%d",
+            //     (unsigned long long)cycle, mode_name, target,
+            //     spl_context.vel_planner.current_vel, spindle_driver.actual_vel,
+            //     spindle_driver.target_pos, spindle_driver.actual_pos,
+            //     spindle_driver.target_pos - spindle_driver.actual_pos,
+            //     spl_context.orient_phase, spl_context.start_request_pending,
+            //     spl_context.deferred_start_pending, ready, mf, fin,
+            //     spl_context.m29_phase);
         }
         else
         {
-            LOG(LOG_LEVEL_INFO,
-                "主轴状态[%llu] mode=%s target_rpm=%.3f planned_rpm=%.3f "
-                "actual_rpm=%d orient=%d start_pending=%d deferred_start=%d "
-                "F45.3_ready=%d F7.0_MF=%d G4.3_FIN=%d M29_phase=%d",
-                (unsigned long long)cycle, mode_name, target,
-                spl_context.vel_planner.current_vel, spindle_driver.actual_vel,
-                spl_context.orient_phase, spl_context.start_request_pending,
-                spl_context.deferred_start_pending, ready, mf, fin,
-                spl_context.m29_phase);
+            // LOG(LOG_LEVEL_INFO,
+            //     "主轴状态[%llu] mode=%s target_rpm=%.3f planned_rpm=%.3f "
+            //     "actual_rpm=%d orient=%d start_pending=%d deferred_start=%d "
+            //     "F45.3_ready=%d F7.0_MF=%d G4.3_FIN=%d M29_phase=%d",
+            //     (unsigned long long)cycle, mode_name, target,
+            //     spl_context.vel_planner.current_vel, spindle_driver.actual_vel,
+            //     spl_context.orient_phase, spl_context.start_request_pending,
+            //     spl_context.deferred_start_pending, ready, mf, fin,
+            //     spl_context.m29_phase);
         }
     }
     initialized = true;
@@ -1845,15 +1845,15 @@ static void spindle_log_m29_csp_trace(void)
      * 控制权/握手变化时的实际位置偏差由 spindle_trace_status 补充记录。 */
     if (target_changed)
     {
-        LOG(LOG_LEVEL_INFO,
-            "M29 CSP跟踪：target_pos=%d target_vel=%d actual_pos=%d actual_vel=%d "
-            "act_mode=%d req_mode=%d state=%d target_state=%d "
-            "status_word=0x%04X control_word=0x%04X mode_switch=%d",
-            spindle_driver.target_pos, spindle_driver.target_vel, spindle_driver.actual_pos,
-            spindle_driver.actual_vel, spindle_driver.act_mode,
-            spindle_driver.req_mode, spindle_driver.state,
-            spindle_driver.target_state, spindle_driver.status_word,
-            spindle_driver.control_word, spindle_driver.mode_switch_state);
+        // LOG(LOG_LEVEL_INFO,
+        //     "M29 CSP跟踪：target_pos=%d target_vel=%d actual_pos=%d actual_vel=%d "
+        //     "act_mode=%d req_mode=%d state=%d target_state=%d "
+        //     "status_word=0x%04X control_word=0x%04X mode_switch=%d",
+        //     spindle_driver.target_pos, spindle_driver.target_vel, spindle_driver.actual_pos,
+        //     spindle_driver.actual_vel, spindle_driver.act_mode,
+        //     spindle_driver.req_mode, spindle_driver.state,
+        //     spindle_driver.target_state, spindle_driver.status_word,
+        //     spindle_driver.control_word, spindle_driver.mode_switch_state);
     }
 
     last_target_pos = spindle_driver.target_pos;
