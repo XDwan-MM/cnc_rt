@@ -4,7 +4,8 @@
 /*! 宏变量函数指针 */
 typedef int (*GetMacroVarCB)(int id, double *val);
 typedef int (*SetMacroVarCB)(int id, double val);
-
+typedef int (*GetParamCB)(int id, double *val);
+typedef int (*SetParamCB)(int id, double val);
 /*! 宏变量枚举定义 */
 typedef enum {
     ITP_MACRO_TOOL_GAUGE_X = 1421,          // 对刀仪X轴坐标

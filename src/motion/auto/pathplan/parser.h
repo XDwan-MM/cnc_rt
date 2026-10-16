@@ -26,9 +26,13 @@ extern "C" {
 // extern double cmv[MacroVarCount];
 int t_macroVarGetValue(int no, double *mac);
 int t_macroVarSetValue(int no, double mac);
+int t_getParamValue(int parId,double *val);
+int t_setParamValue(int parId,double val);
 /*! }*/
 
 #define PARSER_BUF_SIZE 1000 //译码器最大处理长度
+
+#define PARSER_STOP_NONE (-1) //-1 表示无待完成的停止程序
 
 typedef enum{
     PARSER_IDLE = 0,
@@ -45,8 +49,10 @@ typedef struct{
     NcItpState itp_state;               // 模态
     int interp_list_index;              // 译码结果索引
     int itp_line_no;                    // 当前行号
-    double cmv[MacroVarCount];          // 宏变量 todo:译码调整
     PARSER_STATE parser_state;
+    int stop_code;                      // 阻止缓冲的M值或者G值
+    int stop_is_g;                      // 0：M代码、1：G代码
+    int stop_seen;                      // 判断G代码是否时当前块，判断是否指向完成                      
     char parser_file_path[NCFILEPATH_CHAR_LEN];
     char mdiContent[MDICONTENT_CHAR_LEN];
 }PARSER_DATA;
@@ -58,6 +64,8 @@ GNC_RES parser_init(NC_MODE nc_mode);
 GNC_RES parser_reading();
 void parser_reset();
 void parser_run_mode();
+bool parser_isBufStopMCode(int m_code); 
+
 
 #ifdef __cplusplus
 }

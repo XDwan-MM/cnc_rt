@@ -33,6 +33,8 @@ extern int ItpGetDataPacket(NcItpDataPacket *packet);
 extern void ItpCfgGetMacroVarCB(GetMacroVarCB cb);
 extern void ItpCfgSetMacroVarCB(SetMacroVarCB cb);
 
+extern void ItpCfgGetParamCB(GetParamCB cb);
+extern void ItpCfgSetParamCB(SetParamCB cb);
 /**
  * @brief ItpGetMotionData
  * @param data 参考ncitpdatadef.h

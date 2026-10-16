@@ -3,6 +3,7 @@
 #include <hmisysapi.h>
 #include <alarmapi.h>
 #include <string.h> 
+#include <parapi.h>
 
 static void parser_macro_init();
 static GNC_RES parser_handle_recieve(pmc_data* motion_data, NcItpState *itp_state, int *line_no);
@@ -19,39 +20,49 @@ static bool parser_check_res(GNC_RES res);
 
 PARSER_DATA* parser_data;
 
-static void parser_macro_init()
-{
-    for (int i = 0; i < 30000; ++i) {
-        parser_data->cmv[i] = 0;
-    }
-    parser_data->cmv[18004] = 0.1;  // 设置半径值超差
-    parser_data->cmv[17031] = 0.0;  // 设置坐标旋转1轴运动计算方式
-    parser_data->cmv[5410] = -90.0; // 设置坐标旋转默认角度
-    parser_data->cmv[17028] = 1.0;  // 默认米制单位
-    parser_data->cmv[8132] = 1.0;   // 激活比例缩放功能G51
-    parser_data->cmv[8077] = 10.0;  // 设置渐开线插补误差最大值
-    parser_data->cmv[5114] = 0.5;   // G73钻深孔,D默认值
-    parser_data->cmv[5115] = 1.0;   // G83深孔加工循环,D默认值
+/* 防漂移*/
+static_assert(ITP_PAR_STOP_BUF_MCODE_1      == PAR_NCU_PARSER_STOP_BUF_MCODE_1,      "参数号与 PAR_NCU_PARSER_STOP_BUF_MCODE_1 不一致");
+static_assert(ITP_PAR_STOP_BUF_MCODE_10     == PAR_NCU_PARSER_STOP_BUF_MCODE_10,     "参数号与 PAR_NCU_PARSER_STOP_BUF_MCODE_10 不一致");
+static_assert(ITP_PAR_STOP_BUF_MCODE_R1_MIN == PAR_NCU_PARSER_STOP_BUF_MCODE_R1_MIN, "参数号与 PAR_NCU_PARSER_STOP_BUF_MCODE_R1_MIN 不一致");
+static_assert(ITP_PAR_STOP_BUF_MCODE_R6_MAX == PAR_NCU_PARSER_STOP_BUF_MCODE_R6_MAX, "参数号与 PAR_NCU_PARSER_STOP_BUF_MCODE_R6_MAX 不一致");
 
-    // 坐标偏置 todo:待shm更新后直接用，不用再赋值
-    for (int a = 0; a < 3; ++a)
+// 阻止缓冲的 M 码参数配置
+static ItpBufStopMCodeCfg s_bufStopCfg;
+static bool s_bufStopCfgLoaded = false;
+
+static void parser_loadBufStopCfg()
+{
+    memset(&s_bufStopCfg, 0, sizeof(s_bufStopCfg));
+
+    for (int i = 0; i < 10; ++i)
     {
-        getCrdsValue(CRDS_TYPE_EXT, a, &parser_data->cmv[5201 + a]);
+        s_bufStopCfg.single[i] = par_ncu[PAR_NCU_PARSER_STOP_BUF_MCODE_1 + i].value.val_int;
     }
-    for (int t = 0; t < 6; ++t)
+    for (int r = 0; r < 6; ++r)
     {
-        for (int a = 0; a < 3; ++a)
-        {
-            getCrdsValue(CRDS_TYPE_G5X + t, a, &parser_data->cmv[5221 + t * 20 + a]);
-        }
+        s_bufStopCfg.rangeMin[r] = par_ncu[PAR_NCU_PARSER_STOP_BUF_MCODE_R1_MIN + r * 2].value.val_int;
+        s_bufStopCfg.rangeMax[r] = par_ncu[PAR_NCU_PARSER_STOP_BUF_MCODE_R1_MAX + r * 2].value.val_int;
     }
+    s_bufStopCfgLoaded = true;
+}
+
+/* 阻止缓冲判定（实时侧）
+ * 00/M01/M02/M30（无条件）+ 参数配的 M 码*/
+bool parser_isBufStopMCode(int m_code)
+{
+    if (!s_bufStopCfgLoaded)
+    {
+        parser_loadBufStopCfg();
+    }
+    return itp_isBufStopMCode(&s_bufStopCfg, m_code);
 }
 
 void parser_new(){
     parser_data = new PARSER_DATA();
-    // 设置译码参数
-    parser_macro_init();
     parser_data->parser_state = PARSER_IDLE;
+    parser_data->stop_code = PARSER_STOP_NONE;
+    parser_data->stop_is_g =0;
+    parser_data->stop_seen =0;
     rt_set_parser_state(-1, 0);
 }
 
@@ -60,10 +71,10 @@ GNC_RES parser_init(NC_MODE nc_mode)
     GNC_RES res = GNC_OPERATOR_SUCCESS;
     ItpReset();
     parser_data->parser_state = PARSER_READING;
-    // 设置宏定义
-    parser_macro_init();
     ItpCfgGetMacroVarCB(t_macroVarGetValue);
     ItpCfgSetMacroVarCB(t_macroVarSetValue);
+    ItpCfgGetParamCB(t_getParamValue);
+    ItpCfgSetParamCB(t_setParamValue);
     // 是否跳过注释段
     ItpSetBlockSkipEnable(rt_get_sys_state(SYS_IS_BLOCK_SKIP));
     // 刀偏
@@ -300,6 +311,21 @@ static GNC_RES parser_handle_recieve(pmc_data* motion_data, NcItpState *itp_stat
                 res = GNC_OPERATOR_SUCCESS;
                 break;
         }
+        // 记下"阻止缓冲"的块（M 码 或 非模态 G），由 emcmotPathPlan() 据此暂停推进译码，直到该块运行完毕。
+        // G31 在实时端继续由 PMC_MODE_STOPSKIP / GNC_PARSER_WAIT 那条路径独占
+        if (itp_isBufStopGCode(itp_state->modal[0])
+            && itp_state->modal[0] != ITP_UNMODAL_STOP_SKIP)
+        {
+            parser_data->stop_code = itp_state->modal[0];
+            parser_data->stop_is_g = 1;
+            parser_data->stop_seen = 0;
+        }
+        else if (motion_data->mode == PMC_MODE_M_CMD && parser_isBufStopMCode(motion_data->m_code))
+        {
+            parser_data->stop_code = motion_data->m_code;
+            parser_data->stop_is_g = 0;
+            parser_data->stop_seen = 0;
+        }
     }
     else {  // 空包
         res = parser_handle_null(itp_state, line_no);
@@ -530,6 +556,9 @@ GNC_RES parser_waiting_to_end() {
 void parser_reset(){
     ItpReset();
     parser_data->parser_state = PARSER_IDLE;
+    parser_data->stop_code = PARSER_STOP_NONE;
+    parser_data->stop_is_g = 0;
+    parser_data->stop_seen = 0;
     rt_set_chan_state(0, CHAN_IS_PARSERING, false);
     rt_set_chan_state(0, CHAN_IS_MOTION_SYNC, false);
     rt_set_chan_state(0, CHAN_IS_PARSER_RERUN, false);
@@ -561,6 +590,59 @@ int t_macroVarSetValue(int no, double mac)
     return macroVarSetValue(no, mac, 0);
 }
 
+/* 译码器的参数读写, 按参数号连参数域 */
+int t_getParamValue(int parId, double *val)
+{
+    if (val == NULL)
+    {
+        return -1;
+    }
+    *val = 0.0;
+
+    ParamUnit par;
+    if (transParId2Data(parId, &par) != 0)
+    {
+        return -1;
+    }
+
+    switch (par.type)
+    {
+    case DTYPE_INT:   *val = par.value.val_int;  break;
+    case DTYPE_UINT:  *val = par.value.val_uint; break;
+    case DTYPE_FLOAT: *val = par.value.val_real; break;
+    case DTYPE_BOOL:  *val = par.value.val_bool; break;
+    default:          return -1;
+    }
+    return 0;
+}
+
+int t_setParamValue(int parId, double val)
+{
+    int file = 0;
+    int sub = 0;
+    int index = 0;
+    if (transParId2X(parId, &file, &sub, &index) != 0)
+    {
+        return -1;
+    }
+
+    ParamUnit par;
+    if (getParData(file, sub, index, &par) != 0)
+    {
+        return -1;
+    }
+
+    switch (par.type)
+    {
+    case DTYPE_INT:   par.value.val_int  = (int)val;        break;
+    case DTYPE_UINT:  par.value.val_uint = (unsigned int)val; break;
+    case DTYPE_FLOAT: par.value.val_real = val;             break;
+    case DTYPE_BOOL:  par.value.val_bool = (val != 0.0);    break;
+    default:          return -1;
+    }
+
+    return (setParData(file, sub, index, par) == 0) ? 0 : -1;
+}
 /*
 1、G31
 
