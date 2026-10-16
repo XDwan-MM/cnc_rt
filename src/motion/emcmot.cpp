@@ -37,9 +37,6 @@ static void read_from_hal();
 static void compute_error_comp();
 static void calcul_mac_cmd_pos();
 static void manual_unset_sys_state();
-static void manual_update_mac_lock();
-static bool manual_motion_is_stopped();
-static void manual_rebuild_position_base();
 static void reset_clean_warning();
 static void rebuild_axis_positions_from_feedback();
 static void handle_rigid_return_event();
@@ -52,8 +49,6 @@ void emcmot_test_rebuild_axis_positions_from_feedback()
 }
 #endif
 
-// 手动模式（点动/手轮）机械锁住是否生效，用于离开手动模式时判断坐标基准是否需要重建
-static bool manual_mac_lock_effective = false;
 const char *mode_names[] = {"编辑", "AUTO", "MDI", "DNC", "手轮", "手动", "回零", "空闲"};
 
 // 轨迹规划
@@ -351,6 +346,7 @@ static void read_from_hal()
     {
         // 报警复位后用最新带补偿反馈，重建未补偿坐标基准。
         rebuild_axis_positions_from_feedback();
+        handwheel_resync_position();
         update_pos_flag = 1;
     }
 }
@@ -552,8 +548,8 @@ static void manual_unset_sys_state()
         return;
     case MODE_JOG:
     case MODE_MPG:
-        // 点动和手轮支持机械锁住：状态位保留，由手动模式的锁住状态机切换
-        manual_update_mac_lock();
+        // 点动和手轮支持机械锁住：状态位保留，由 jog/handwheel 模块各自维护
+        // （见 jog_update_mac_lock() / handwheel_update_mac_lock()），这里不清除。
         return;
     default:
         break;
@@ -564,81 +560,9 @@ static void manual_unset_sys_state()
     {
         LOG(LOG_LEVEL_ERR, "%s模式不支持机械锁住，按键无效", mode_names[rt_data->current_mode]);
     }
-    if (manual_mac_lock_effective)
-    {
-        manual_rebuild_position_base();
-        manual_mac_lock_effective = false;
-    }
     rt_data->sys_state[SYS_IS_MAC_LOCK_READY] = false;
     rt_data->sys_state[SYS_IS_MAC_LOCK_ON] = false;
     rt_data->sys_state[SYS_IS_IT_LOCK] = false;
-}
-
-static void manual_update_mac_lock()
-{
-    bool lock_request;
-    bool lock_effective;
-
-    // 1. 锁住开关事件只改变请求，不直接改变生效状态
-    switch (rt_data->nc_event)
-    {
-    case SYS_EVENT_MAC_LOCK_ON:
-        LOG(LOG_LEVEL_INFO, "手动模式处理开启机械锁住");
-        rt_data->sys_state[SYS_IS_MAC_LOCK_ON] = true;
-        break;
-    case SYS_EVENT_MAC_LOCK_OFF:
-        LOG(LOG_LEVEL_INFO, "手动模式处理关闭机械锁住");
-        rt_data->sys_state[SYS_IS_MAC_LOCK_ON] = false;
-        break;
-    default:
-        break;
-    }
-
-    lock_request = rt_data->sys_state[SYS_IS_MAC_LOCK_ON];
-    lock_effective = rt_data->sys_state[SYS_IS_MAC_LOCK_READY];
-
-    // 2. 请求与实际不一致时，jog/handwheel 已经先把手动运动停下来，等停稳后再切换
-    if (lock_request != lock_effective && manual_motion_is_stopped())
-    {
-        rt_data->sys_state[SYS_IS_MAC_LOCK_READY] = lock_request;
-        if (lock_request)
-        {
-            LOG(LOG_LEVEL_INFO, "手动模式机械锁住生效");
-        }
-        else
-        {
-            LOG(LOG_LEVEL_INFO, "手动模式机械锁住解除，按反馈重建坐标基准");
-            manual_rebuild_position_base();
-        }
-    }
-
-    // 3. 记录手动模式下锁住是否生效，供离开手动模式时判断坐标基准是否需要重建
-    manual_mac_lock_effective = rt_data->sys_state[SYS_IS_MAC_LOCK_READY];
-}
-
-/* 手动运动（点动/手轮）是否已停稳：阈值与点动的停止判定保持一致。 */
-static bool manual_motion_is_stopped()
-{
-    for (int i = 0; i < JOG_AXIS_COUNT; i++)
-    {
-        if (fabs(jog_get_axis_velocity(i)) >= JOG_SPEED_THRESHOLD)
-        {
-            return false;
-        }
-    }
-    return fabs(handwheel_get_axis_velocity()) < JOG_SPEED_THRESHOLD;
-}
-
-/*
- * 重建手动模式的位置基准：以驱动器反馈重算未补偿机床坐标（同时刷新
- * wcs_cmd_pos_cur/pre），再让 jog/handwheel 把自己的规划位置对齐过来，
- * 丢弃锁住期间产生的虚拟位移。
- */
-static void manual_rebuild_position_base()
-{
-    rebuild_axis_positions_from_feedback();
-    jog_resync_position();
-    handwheel_resync_position();
 }
 
 static void rebuild_axis_positions_from_feedback()

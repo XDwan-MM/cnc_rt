@@ -40,12 +40,6 @@ extern void jog_handle_estop(void);
 /* 提供给模式切换逻辑的只读轴速度，非法轴号返回 0。 */
 extern double jog_get_axis_velocity(int axis);
 
-/*
- * 机械锁住解除后重新对齐规划位置：丢弃锁住期间产生的虚拟位移，
- * 并清除按键锁存，避免解除瞬间按残留的按键请求继续运动。
- */
-extern void jog_resync_position(void);
-
 #ifdef __cplusplus
 }
 #endif
