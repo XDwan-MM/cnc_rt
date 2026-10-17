@@ -44,7 +44,7 @@ typedef struct {
  * 本台架四轴都是 rpm（蓝海华腾须把 C2-00 设成 0，出厂默认 pulse/s）；某轴只能 pulse/s 时改 HAL_SPEED_PULSES_PER_S，
  * 换算常数由 pm_pulse 传入。 */
 static const int kSpeedUnit[RT_HAL_AXIS_COUNT] = {
-    HAL_SPEED_RPM, HAL_SPEED_RPM, HAL_SPEED_RPM, HAL_SPEED_RPM,
+    HAL_SPEED_PULSES_PER_S, HAL_SPEED_PULSES_PER_S, HAL_SPEED_PULSES_PER_S, HAL_SPEED_RPM,
 };
 
 /* ---- 未确认参数台账：参数域没给全就挡住运动，不猜值。非空时 motion_allowed() 返回 0；
