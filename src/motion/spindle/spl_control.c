@@ -14,7 +14,7 @@
 #define SPINDLE_SPEED_EPSILON          (1e-6)
 #define SPINDLE_ACTUAL_ZERO_EPSILON    (1.0)
 #define SPINDLE_ACTUAL_SPEED_EPSILON   (1.0)
-#define SPINDLE_CSP_POSITION_EPSILON   (200.0)
+#define SPINDLE_CSP_POSITION_EPSILON   (10.0)
 #define SPINDLE_M29_STABLE_CYCLES      (10U)
 #define SPINDLE_SPEED_ARRIVAL_TOL      (0.05)
 #define SPINDLE_SPEED_ARRIVAL_MIN_TOL  (5.0)
@@ -483,7 +483,7 @@ bool spindle_request_m29_no_orient(void)
     if (stop_required || rt_data->sys_state[SYS_ESTOP_INPUT] ||
         rt_data->axis_data[AXIS_SP].status.is_disable ||
         rt_data->axis_data[AXIS_SP].status.is_error ||
-        spl_context.m29_active || mode_switching || spl_context.csv_switch_pending ||
+        spl_context.m29_active ||
         spl_context.orient_phase != SPINDLE_ORIENT_IDLE || spl_context.orient_request_pending) {
         LOG(LOG_LEVEL_ERR,
             "M29无预定向入口拒绝：stop=%d estop=%d disable=%d error=%d "
