@@ -136,7 +136,7 @@ void ServoSampleSampler::execute()
 
         if (isRigidTapConfig(_config)) {
             const double rpm = static_cast<double>(rt_hal_spindle_rpm());
-            const double feed = rt_data->axis_data[_config.axis].act_vel * TIME_MINUS_2_S;
+            const double feed = rt_data->axis_data[_config.axis].act_vel;
             const double feedCommand = rt_data->axis_data[_config.axis].cmd_vel * TIME_MINUS_2_S;
             const double feedDirection = std::fabs(feedCommand) > kMinVelocity
                 ? (feedCommand < 0.0 ? -1.0 : 1.0) : 1.0;
@@ -171,16 +171,17 @@ void ServoSampleSampler::execute()
             return;
         }
 
-        const bool motionObserved = isCompositeConfig(_config)
-            ? std::fabs(var_chan[0][VAR_CHAN_CMD_FEEDRATE].value.f) > kMinVelocity ||
-              std::fabs(_actualCompositeVelocityMmPerMin) > kMinVelocity
-            : std::fabs(rt_data->axis_data[_config.axis].cmd_vel) > kMinVelocity ||
-              std::fabs(rt_data->axis_data[_config.axis].mac_cmd_pos -
-                        rt_data->axis_data[_config.axis].fb_pos_no_comp) > kMinVelocity;
-        if (programActive() || motionObserved) {
+        /* 结束判据只看通道是不是真的在运行：
+         *  - CHAN_IS_PARSERING 只表示译码器在读文件，程序真正启动前就会短暂置起又落下，
+         *    拿它当"程序跑过"会让采样在几十毫秒后就被判成 PROGRAM_END；
+         *  - 位置残差判据的阈值 1e-9 mm 低于一个编码器当量（本机 0.00016 mm），
+         *    静止时恒为真，等于一进 RUNNING 就认为程序已经跑过了。
+         * 两者都不再参与判据。 */
+        const bool programRunning = var_chan[0][VAR_CHAN_IS_RUNNING].value.i != 0;
+        if (programRunning) {
             _programObserved = true;
         }
-        if (_programObserved && programFinished()) {
+        if (_programObserved && !programRunning) {
             sampleOne();
             if (loadState(_shared) == CNC_SERVO_STATE_RUNNING) {
                 finish(CNC_SERVO_STATE_COMPLETED, CNC_SERVO_STOP_PROGRAM_END,
@@ -224,13 +225,15 @@ void ServoSampleSampler::handleCommand()
                    CNC_SERVO_ERROR_PROGRAM_NOT_READY);
         } else if (state == CNC_SERVO_STATE_RUNNING || state == CNC_SERVO_STATE_DRAINING) {
             __atomic_store_n(&_shared->errorCode, CNC_SERVO_ERROR_BUSY, __ATOMIC_RELEASE);
-        } else if (isExternalMotionConfig(_config)) {
-            // 圆度测试先进入待命状态，避免预定位移动进入采样窗口。
-            // 刚性攻丝沿用普通的采样开始流程，在 RUNNING 状态等待攻丝程序块。
+        } else if (var_chan[0][VAR_CHAN_IS_RUNNING].value.i != 0) {
+            // 程序已经在跑了（操作员先按了循环启动）：直接开采，免得永远停在待命状态。
+            startCapture();
+        } else {
+            // 圆度、直线和刚性攻丝一律先进入待命状态，由循环启动开采。
+            // 「采样开始」就开采会把循环启动之前的空闲段一起计入：既占用缓冲容量，
+            // 又让速度波动等统计把停机段算进去。
             __atomic_store_n(&_shared->state, CNC_SERVO_STATE_ARMED, __ATOMIC_RELEASE);
             __atomic_store_n(&_shared->errorCode, CNC_SERVO_ERROR_NONE, __ATOMIC_RELEASE);
-        } else {
-            startCapture();
         }
         __atomic_store_n(&_shared->acknowledgedSequence, sequence, __ATOMIC_RELEASE);
         break;
@@ -698,8 +701,10 @@ void ServoSampleSampler::sampleOne()
                                                     : rt_data->axis_data[axis].motor_act_pos;
         // 直接采集实时值，避免依赖共享变量镜像造成一个周期的延迟，
         // 并使调试反馈与实时运动控制器使用相同的数据源。
+        /* cmd_vel 是 mm/s，乘 60 换成 mm/min；act_vel 在 emcmot 里已经换算成
+         * 用户单位的 mm/min（见 rt_axis_view_speed_mm_min 的约定），不能再乘。 */
         const double channelCmdVel = rt_data->axis_data[axis].cmd_vel * TIME_MINUS_2_S;
-        const double channelActVel = rt_data->axis_data[axis].act_vel * TIME_MINUS_2_S;
+        const double channelActVel = rt_data->axis_data[axis].act_vel;
         const double channelFollowErrUm = (channelCmdPos - channelActPos) * 1000.0;
         switch (_config.channels[i].signalId) {
         case CNC_SERVO_SIGNAL_CMD_POS: frame.values[i] = channelCmdPos; break;
@@ -749,7 +754,8 @@ void ServoSampleSampler::sampleOne()
     /* 安全检查始终基于直接反馈，与上面选择的显示通道无关。 */
     if (isRigidTapConfig(_config) && _tapMotionActive) {
         const double rpm = static_cast<double>(rt_hal_spindle_rpm());
-        const double feed = rt_data->axis_data[_config.axis].act_vel * TIME_MINUS_2_S;
+        /* 同 execute() 里的同步判据：feed 是 mm/min，feedCommand 是 mm/s。 */
+        const double feed = rt_data->axis_data[_config.axis].act_vel;
         const double feedCommand = rt_data->axis_data[_config.axis].cmd_vel * TIME_MINUS_2_S;
         const double feedDirection = std::fabs(feedCommand) > kMinVelocity
             ? (feedCommand < 0.0 ? -1.0 : 1.0) : 1.0;
