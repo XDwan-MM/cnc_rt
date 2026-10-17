@@ -30,6 +30,8 @@ static bool auto_check_program_end();
 static void auto_pop_current_block();
 static void auto_set_stop_skip_macro();
 static void auro_reset_stop_skip();
+static void auto_check_feed_override_event();
+static void auto_check_rapid_override_event();
 
 void handle_auto_cmd(){
     // 更新状态
@@ -429,30 +431,6 @@ static void auto_check_event(){
     case SYS_EVENT_STOP_SKIP_OFF:
         LOG(LOG_LEVEL_INFO, "自动模式处理跳转信号");
         break;
-    case SYS_EVENT_FEED_OVERRIDE:
-        LOG(LOG_LEVEL_INFO, "自动模式处理进给倍率切换");
-        switch (cycle_tp->exec_state)
-        {
-        case EXEC_RUNNING:
-            switch(cycle_tp->exec_cmd){
-            case DO_CHOP_CMD:
-            case DO_HOME_CMD:
-                cycle_tp->running_stage = BLOCK_BREAKPOINT;
-                break;
-            case DO_TAP_CMD:  // 攻丝模式不受倍率影响
-            case DO_SKIP_CMD: // 跳转不受倍率影响
-            case DO_DWELL_CMD:
-            case DO_MSTB_CMD:
-            default:
-                break;
-            }
-            break;
-        case EXEC_PAUSING:
-        case EXEC_RESET:
-        case EXEC_IDLE:
-            break;
-        }
-        break;
     case SYS_EVENT_RIGID_RETURN_ON:
         switch (cycle_tp->plan_block->type)
         {
@@ -482,24 +460,13 @@ static void auto_check_event(){
             break;
         }
         break;
+    case SYS_EVENT_FEED_OVERRIDE:
+        LOG(LOG_LEVEL_INFO, "自动模式处理进给倍率切换");
+        auto_check_feed_override_event();
+        break;
     case SYS_EVENT_RAPID_OVERRIDE:
         LOG(LOG_LEVEL_INFO, "自动模式处理快速进给倍率切换");
-        switch (cycle_tp->exec_state)
-        {
-        case EXEC_RUNNING:
-            switch(cycle_tp->exec_cmd){
-            case DO_MOVE_CMD:
-                cycle_tp->running_stage = BLOCK_BREAKPOINT;
-                break;
-            default:
-                break;
-            }
-            break;
-        case EXEC_PAUSING:
-        case EXEC_RESET:
-        case EXEC_IDLE:
-            break;
-        }
+        auto_check_rapid_override_event();
         break;
     default:
         break;
@@ -1052,15 +1019,52 @@ void cycle_tp_reset(){
     cycle_tp->plan_block->type = UNKNOWN;
     cycle_tp->ncu_cycle = rt_data->ncu_data.cycle;
     cycle_tp->velplan_mode = rt_data->chan_data->vplan_mode;
-    cycle_tp->max_rapid_vel = MIN3(MIN(rt_data->axis_data[0].max_rapid_vel, rt_data->axis_data[0].jog_lowspd), MIN(rt_data->axis_data[1].max_rapid_vel, rt_data->axis_data[1].jog_lowspd), MIN(rt_data->axis_data[2].max_rapid_vel, rt_data->axis_data[2].jog_lowspd));
-    cycle_tp->max_rapid_acc = MIN3(rt_data->axis_data[0].max_rapid_acc, rt_data->axis_data[1].max_rapid_acc, rt_data->axis_data[2].max_rapid_acc);
-    cycle_tp->max_rapid_jerk = MIN3(rt_data->axis_data[0].max_rapid_jk, rt_data->axis_data[1].max_rapid_jk, rt_data->axis_data[2].max_rapid_jk);
-    cycle_tp->max_feed_vel = MIN3(rt_data->axis_data[0].max_feed_vel, rt_data->axis_data[1].max_feed_vel, rt_data->axis_data[2].max_feed_vel);
-    cycle_tp->max_feed_acc = MIN3(rt_data->axis_data[0].max_feed_acc, rt_data->axis_data[1].max_feed_acc, rt_data->axis_data[2].max_feed_acc);
-    cycle_tp->max_feed_jerk = MIN3(rt_data->axis_data[0].max_feed_jk, rt_data->axis_data[1].max_feed_jk, rt_data->axis_data[2].max_feed_jk);
     cycle_tp_reset_pos_cmd_data();
     cycle_tp_reset_dwell_cmd_data();
     cycle_tp_mstb_cmd_data_reset();
+}
+
+static void auto_check_rapid_override_event(){
+    switch (cycle_tp->exec_state)
+    {
+    case EXEC_RUNNING:
+        switch(cycle_tp->exec_cmd){
+        case DO_MOVE_CMD:
+            cycle_tp->running_stage = BLOCK_BREAKPOINT;
+            break;
+        default:
+            break;
+        }
+        break;
+    case EXEC_PAUSING:
+    case EXEC_RESET:
+    case EXEC_IDLE:
+        break;
+    }
+}
+
+static void auto_check_feed_override_event(){
+    switch (cycle_tp->exec_state)
+    {
+    case EXEC_RUNNING:
+        switch(cycle_tp->exec_cmd){
+        case DO_CHOP_CMD:
+        case DO_HOME_CMD:
+            cycle_tp->running_stage = BLOCK_BREAKPOINT;
+            break;
+        case DO_TAP_CMD:  // 攻丝模式不受倍率影响
+        case DO_SKIP_CMD: // 跳转不受倍率影响
+        case DO_DWELL_CMD:
+        case DO_MSTB_CMD:
+        default:
+            break;
+        }
+        break;
+    case EXEC_PAUSING:
+    case EXEC_RESET:
+    case EXEC_IDLE:
+        break;
+    }
 }
 
 // 编辑模式下复位，光标回到首行

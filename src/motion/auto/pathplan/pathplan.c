@@ -12,6 +12,7 @@
 #include "circle_smooth.h"
 
 static void block_cal_pos(PLAN_BLOCK* parser_block, PLAN_BLOCK* current_block, POS* start_pos);
+static void block_cal_move_axis(PLAN_BLOCK* current_block);
 static void block_cal_circle_vector(PLAN_BLOCK* current_block);
 static double block_cal_circle_length(PLAN_BLOCK* current_block);
 static double block_cal_nurbs_length(PLAN_BLOCK* current_block);
@@ -197,8 +198,10 @@ static void block_deal_parser_block(PLAN_BLOCK* parser_block, PLAN_BLOCK* pretre
         block_cal_vector(pretreat_block);
         // 计算起点曲率
         block_cal_curvature(pretreat_block, &pretreat_queue->pre_startpos, &pretreat_queue->pre_pos,&pretreat_block->end_pos);
-        // 计算速度
-        block_cal_vel(pretreat_block);
+        // 计算运动轴
+        block_cal_move_axis(pretreat_block);
+        // 计算最大速度
+        block_cal_max_vel(pretreat_block);
         // 保存信息
         pretreat_queue->pre_pos = pretreat_block->end_pos;
         pretreat_queue->pre_startpos = pretreat_block->start_pos;
@@ -662,45 +665,6 @@ static void block_cal_pos(PLAN_BLOCK* parser_block, PLAN_BLOCK* current_block, P
     }
 }
 
-// 计算段最大允许速度
-void block_cal_vel(PLAN_BLOCK* current_block){
-    double min_feed = MIN3(rt_data->axis_data[0].max_feed_vel, rt_data->axis_data[1].max_feed_vel, rt_data->axis_data[2].max_feed_vel);
-    double min_rapid_feed = MIN3(MIN(rt_data->axis_data[0].jog_lowspd, rt_data->axis_data[0].max_rapid_vel), MIN(rt_data->axis_data[1].jog_lowspd, rt_data->axis_data[1].max_rapid_vel), MIN(rt_data->axis_data[2].jog_lowspd, rt_data->axis_data[2].max_rapid_vel));  // G00最大速度为设置的快速进给速度
-    switch(current_block->type){
-        case RAPID:
-            current_block->max_vel = current_block->feed_vel = min_rapid_feed;
-            current_block->max_acc = MIN3(rt_data->axis_data[0].max_rapid_acc, rt_data->axis_data[1].max_rapid_acc, rt_data->axis_data[2].max_rapid_acc);
-            current_block->max_jerk = MIN3(rt_data->axis_data[0].max_rapid_jk, rt_data->axis_data[1].max_rapid_jk, rt_data->axis_data[3].max_rapid_jk);
-            break;
-        case LINE:
-        case RIGID_TAP:
-        case TAP_RETURN:
-        case PROBE:
-            current_block->max_vel = current_block->feed_vel = MIN(current_block->feed_vel, min_feed);   // G01最大速度
-            current_block->max_acc = MIN3(rt_data->axis_data[0].max_feed_acc, rt_data->axis_data[1].max_feed_acc, rt_data->axis_data[2].max_feed_acc);
-            current_block->max_jerk = MIN3(rt_data->axis_data[0].max_feed_jk, rt_data->axis_data[1].max_feed_jk, rt_data->axis_data[2].max_feed_jk);
-            break;
-        case CIRCLE_CCW:
-        case CIRCLE_CW:
-        case HELIX_CW:
-        case HELIX_CCW:
-            current_block->max_acc = MIN3(rt_data->axis_data[0].max_feed_acc, rt_data->axis_data[1].max_feed_acc, rt_data->axis_data[2].max_feed_acc);
-            current_block->max_jerk = MIN3(rt_data->axis_data[0].max_feed_jk, rt_data->axis_data[1].max_feed_jk, rt_data->axis_data[2].max_feed_jk);
-            double vc = vp_cal_circular_max_vel(current_block, rt_data->chan_data[0].path_tolerance, rt_data->chan_data[0].max_fv_arc_radius, rt_data->chan_data[0].radius_r_max_fv, rt_data->chan_data[0].circular_min_vel, rt_data->ncu_data.cycle);
-            current_block->max_vel = current_block->feed_vel = MIN3(current_block->feed_vel, min_feed, vc);   // G02G03最大速度
-            break;
-        case NURBS:
-            current_block->max_acc = MIN3(rt_data->axis_data[0].max_feed_acc, rt_data->axis_data[1].max_feed_acc, rt_data->axis_data[2].max_feed_acc);
-            current_block->max_jerk = MIN3(rt_data->axis_data[0].max_feed_jk, rt_data->axis_data[1].max_feed_jk, rt_data->axis_data[2].max_feed_jk);
-            // nurbs曲线最大速度计算
-            double vn = vp_cal_nurbs_max_vel(current_block, rt_data->chan_data[0].path_tolerance, rt_data->ncu_data.cycle);
-            current_block->max_vel = current_block->feed_vel = MIN3(current_block->feed_vel, min_feed, vn);
-            break;
-        default:
-            break;
-    }
-}
-
 static double cal_two_vectors_angle(VECTOR* vector1, VECTOR* vector2){
     double norm1 = POS_Norm(*vector1);
     double norm2 = POS_Norm(*vector2);
@@ -799,7 +763,7 @@ static void block_fix_pos(PLAN_BLOCK* pretreat_block, double l_theta_thre, doubl
         block_cal_vector(last_pretreat_block);
         block_cal_vector(pretreat_block);
         block_cal_length(last_pretreat_block);
-        block_cal_length(pretreat_block);
+        block_cal_length(pretreat_block);    
     }
 }
 
@@ -992,6 +956,217 @@ void block_cal_vector(PLAN_BLOCK* current_block){
             POS_Divide(&start_vec, POS_Norm(start_vec));
             current_block->end_vec = end_vec;
             current_block->start_vec = start_vec;
+            break;
+        default:
+            break;
+    }
+    
+}
+
+static void block_cal_move_axis(PLAN_BLOCK* current_block){
+    switch(current_block->type){
+    case RAPID:
+    case LINE:
+    case PROBE:
+        if(current_block->start_vec.x != 0 && current_block->start_vec.y != 0 && current_block->start_vec.z != 0 ) current_block->move_axis = MOVING_AXIS_XYZ;
+        else if (current_block->start_vec.x != 0 && current_block->start_vec.y != 0 && current_block->start_vec.z == 0 ) current_block->move_axis = MOVING_AXIS_XY;
+        else if (current_block->start_vec.x != 0 && current_block->start_vec.y == 0 && current_block->start_vec.z != 0 ) current_block->move_axis = MOVING_AXIS_XZ;
+        else if (current_block->start_vec.x == 0 && current_block->start_vec.y != 0 && current_block->start_vec.z != 0 ) current_block->move_axis = MOVING_AXIS_YZ;
+        else if (current_block->start_vec.x != 0 && current_block->start_vec.y == 0 && current_block->start_vec.z == 0 ) current_block->move_axis = MOVING_AXIS_X;
+        else if (current_block->start_vec.x == 0 && current_block->start_vec.y != 0 && current_block->start_vec.z == 0 ) current_block->move_axis = MOVING_AXIS_Y;
+        else if (current_block->start_vec.x == 0 && current_block->start_vec.y == 0 && current_block->start_vec.z != 0 ) current_block->move_axis = MOVING_AXIS_Z;
+        else current_block->move_axis = MOVING_AXIS_NONE;
+        break;
+    case RIGID_TAP:
+    case TAP_RETURN:
+        switch (current_block->plane)
+        {
+        case PLANE_XY:
+            current_block->move_axis = MOVING_AXIS_Z;
+            break;
+        case PLANE_XZ:
+            current_block->move_axis = MOVING_AXIS_Y;
+            break;
+        case PLANE_YZ:
+            current_block->move_axis = MOVING_AXIS_X;
+            break;
+        }
+        break;
+    case CIRCLE_CCW:
+    case CIRCLE_CW:
+        switch (current_block->plane)
+        {
+        case PLANE_XY:
+            current_block->move_axis = MOVING_AXIS_XY;
+            break;
+        case PLANE_XZ:
+            current_block->move_axis = MOVING_AXIS_XZ;
+            break;
+        case PLANE_YZ:
+            current_block->move_axis = MOVING_AXIS_YZ;
+            break;
+        }
+        break;
+    case HELIX_CW:
+    case HELIX_CCW:
+    case NURBS:
+    default:
+        current_block->move_axis = MOVING_AXIS_XYZ;
+        break;
+    }
+}
+
+// 计算段最大允许速度
+void block_cal_max_vel(PLAN_BLOCK* current_block){
+    switch(current_block->type){
+        case RAPID:
+            switch (current_block->move_axis)
+            {
+            case MOVING_AXIS_X:
+                current_block->param_vel = rt_data->axis_data[0].max_rapid_vel;
+                current_block->feed_vel = rt_data->axis_data[0].jog_lowspd;
+                current_block->max_vel = MIN(current_block->feed_vel, current_block->param_vel);
+                current_block->max_acc = rt_data->axis_data[0].max_rapid_acc;
+                current_block->max_jerk = rt_data->axis_data[0].max_rapid_jk;
+                break;
+            case MOVING_AXIS_Y:
+                current_block->param_vel = rt_data->axis_data[1].max_rapid_vel;
+                current_block->feed_vel = rt_data->axis_data[1].jog_lowspd;
+                current_block->max_vel = MIN(current_block->feed_vel, current_block->param_vel);
+                current_block->max_acc = rt_data->axis_data[1].max_rapid_acc;
+                current_block->max_jerk = rt_data->axis_data[1].max_rapid_jk;
+                break;
+            case MOVING_AXIS_Z:
+                current_block->param_vel = rt_data->axis_data[2].max_rapid_vel;
+                current_block->feed_vel = rt_data->axis_data[2].jog_lowspd;
+                current_block->max_vel = MIN(current_block->feed_vel, current_block->param_vel);
+                current_block->max_acc = rt_data->axis_data[2].max_rapid_acc;
+                current_block->max_jerk = rt_data->axis_data[2].max_rapid_jk;
+                break;
+            case MOVING_AXIS_XY:
+                current_block->param_vel = MIN(rt_data->axis_data[0].max_rapid_vel, rt_data->axis_data[1].max_rapid_vel);
+                current_block->feed_vel = MIN(rt_data->axis_data[0].jog_lowspd, rt_data->axis_data[1].jog_lowspd);
+                current_block->max_vel = MIN(current_block->feed_vel, current_block->param_vel);
+                current_block->max_acc = MIN(rt_data->axis_data[0].max_rapid_acc, rt_data->axis_data[1].max_rapid_acc);
+                current_block->max_jerk = MIN(rt_data->axis_data[0].max_rapid_jk, rt_data->axis_data[1].max_rapid_jk);
+                break;
+            case MOVING_AXIS_XZ:
+                current_block->param_vel = MIN(rt_data->axis_data[0].max_rapid_vel, rt_data->axis_data[2].max_rapid_vel);
+                current_block->feed_vel = MIN(rt_data->axis_data[0].jog_lowspd, rt_data->axis_data[2].jog_lowspd);
+                current_block->max_vel = MIN(current_block->feed_vel, current_block->param_vel);
+                current_block->max_acc = MIN(rt_data->axis_data[0].max_rapid_acc, rt_data->axis_data[2].max_rapid_acc);
+                current_block->max_jerk = MIN(rt_data->axis_data[0].max_rapid_jk, rt_data->axis_data[2].max_rapid_jk);
+                break;
+            case MOVING_AXIS_YZ:
+                current_block->param_vel = MIN(rt_data->axis_data[1].max_rapid_vel, rt_data->axis_data[2].max_rapid_vel);
+                current_block->feed_vel = MIN(rt_data->axis_data[1].jog_lowspd, rt_data->axis_data[2].jog_lowspd);
+                current_block->max_vel = MIN(current_block->feed_vel, current_block->param_vel);
+                current_block->max_acc = MIN(rt_data->axis_data[1].max_rapid_acc, rt_data->axis_data[2].max_rapid_acc);
+                current_block->max_jerk = MIN(rt_data->axis_data[1].max_rapid_jk, rt_data->axis_data[2].max_rapid_jk);
+                break;
+            case MOVING_AXIS_XYZ:
+            default:
+                current_block->param_vel = MIN(MIN(rt_data->axis_data[0].max_rapid_vel, rt_data->axis_data[1].max_rapid_vel), rt_data->axis_data[2].max_rapid_vel);    
+                current_block->feed_vel = MIN(MIN(rt_data->axis_data[0].jog_lowspd, rt_data->axis_data[1].jog_lowspd), rt_data->axis_data[2].jog_lowspd);
+                current_block->max_vel = MIN(current_block->feed_vel, current_block->param_vel);
+                current_block->max_acc = MIN3(rt_data->axis_data[0].max_rapid_acc, rt_data->axis_data[1].max_rapid_acc, rt_data->axis_data[2].max_rapid_acc);
+                current_block->max_jerk = MIN3(rt_data->axis_data[0].max_rapid_jk, rt_data->axis_data[1].max_rapid_jk, rt_data->axis_data[3].max_rapid_jk);
+                break;
+            }
+            break;
+        case LINE:
+        case RIGID_TAP:
+        case TAP_RETURN:
+        case PROBE:
+            switch (current_block->move_axis)
+            {
+            case MOVING_AXIS_X:
+                current_block->param_vel = rt_data->axis_data[0].max_feed_vel;
+                current_block->max_vel = MIN(current_block->feed_vel, current_block->param_vel);
+                current_block->max_acc = rt_data->axis_data[0].max_feed_acc;
+                current_block->max_jerk = rt_data->axis_data[0].max_feed_jk;
+                break;
+            case MOVING_AXIS_Y:
+                current_block->param_vel = rt_data->axis_data[1].max_feed_vel;
+                current_block->max_vel = MIN(current_block->feed_vel, current_block->param_vel);
+                current_block->max_acc = rt_data->axis_data[1].max_feed_acc;
+                current_block->max_jerk = rt_data->axis_data[1].max_feed_jk;
+                break;
+            case MOVING_AXIS_Z:
+                current_block->param_vel = rt_data->axis_data[2].max_feed_vel;
+                current_block->max_vel = MIN(current_block->feed_vel, current_block->param_vel);
+                current_block->max_acc = rt_data->axis_data[2].max_feed_acc;
+                current_block->max_jerk = rt_data->axis_data[2].max_feed_jk;
+                break;
+            case MOVING_AXIS_XY:
+                current_block->param_vel = MIN(rt_data->axis_data[0].max_feed_vel, rt_data->axis_data[1].max_feed_vel);
+                current_block->max_vel =  MIN(current_block->feed_vel, current_block->param_vel);
+                current_block->max_acc = MIN(rt_data->axis_data[0].max_feed_acc, rt_data->axis_data[1].max_feed_acc);
+                current_block->max_jerk = MIN(rt_data->axis_data[0].max_feed_jk, rt_data->axis_data[1].max_feed_jk);
+                break;
+            case MOVING_AXIS_XZ:
+                current_block->param_vel = MIN(rt_data->axis_data[0].max_feed_vel, rt_data->axis_data[2].max_feed_vel);
+                current_block->max_vel = MIN(current_block->feed_vel, current_block->param_vel);
+                current_block->max_acc = MIN(rt_data->axis_data[0].max_feed_acc, rt_data->axis_data[2].max_feed_acc);
+                current_block->max_jerk = MIN(rt_data->axis_data[0].max_feed_jk, rt_data->axis_data[2].max_feed_jk);
+                break;
+            case MOVING_AXIS_YZ:
+                current_block->param_vel = MIN(rt_data->axis_data[1].max_feed_vel, rt_data->axis_data[2].max_feed_vel);
+                current_block->max_vel = MIN(current_block->feed_vel, current_block->param_vel);
+                current_block->max_acc = MIN(rt_data->axis_data[1].max_feed_acc, rt_data->axis_data[2].max_feed_acc);
+                current_block->max_jerk = MIN(rt_data->axis_data[1].max_feed_jk, rt_data->axis_data[2].max_feed_jk);
+                break;
+            case MOVING_AXIS_XYZ:
+            default:
+                current_block->param_vel = MIN(MIN(rt_data->axis_data[0].max_feed_vel, rt_data->axis_data[1].max_feed_vel), rt_data->axis_data[2].max_feed_vel);
+                current_block->max_vel = MIN(current_block->feed_vel, current_block->param_vel);
+                current_block->max_acc = MIN3(rt_data->axis_data[0].max_feed_acc, rt_data->axis_data[1].max_feed_acc, rt_data->axis_data[2].max_feed_acc);
+                current_block->max_jerk = MIN3(rt_data->axis_data[0].max_feed_jk, rt_data->axis_data[1].max_feed_jk, rt_data->axis_data[2].max_feed_jk);
+                break;
+            }           
+            break;
+        case CIRCLE_CCW:
+        case CIRCLE_CW:
+        case HELIX_CW:
+        case HELIX_CCW:
+            switch (current_block->move_axis)
+            {
+            case MOVING_AXIS_XY:
+                current_block->param_vel = MIN(rt_data->axis_data[0].max_feed_vel, rt_data->axis_data[1].max_feed_vel);
+                current_block->max_vel =  MIN(current_block->feed_vel, current_block->param_vel);
+                current_block->max_acc = MIN(rt_data->axis_data[0].max_feed_acc, rt_data->axis_data[1].max_feed_acc);
+                current_block->max_jerk = MIN(rt_data->axis_data[0].max_feed_jk, rt_data->axis_data[1].max_feed_jk);
+                break;
+            case MOVING_AXIS_XZ:
+                current_block->param_vel = MIN(rt_data->axis_data[0].max_feed_vel, rt_data->axis_data[2].max_feed_vel);
+                current_block->max_vel = MIN(current_block->feed_vel, current_block->param_vel);
+                current_block->max_acc = MIN(rt_data->axis_data[0].max_feed_acc, rt_data->axis_data[2].max_feed_acc);
+                current_block->max_jerk = MIN(rt_data->axis_data[0].max_feed_jk, rt_data->axis_data[2].max_feed_jk);
+                break;
+            case MOVING_AXIS_YZ:
+                current_block->param_vel = MIN(rt_data->axis_data[1].max_feed_vel, rt_data->axis_data[2].max_feed_vel);
+                current_block->max_vel = MIN(current_block->feed_vel, current_block->param_vel);
+                current_block->max_acc = MIN(rt_data->axis_data[1].max_feed_acc, rt_data->axis_data[2].max_feed_acc);
+                current_block->max_jerk = MIN(rt_data->axis_data[1].max_feed_jk, rt_data->axis_data[2].max_feed_jk);
+                break;
+            case MOVING_AXIS_XYZ:
+            default:
+                current_block->param_vel = MIN(MIN(rt_data->axis_data[0].max_feed_vel, rt_data->axis_data[1].max_feed_vel), rt_data->axis_data[2].max_feed_vel);
+                current_block->max_vel = MIN(current_block->feed_vel, current_block->param_vel);
+                current_block->max_acc = MIN3(rt_data->axis_data[0].max_feed_acc, rt_data->axis_data[1].max_feed_acc, rt_data->axis_data[2].max_feed_acc);
+                current_block->max_jerk = MIN3(rt_data->axis_data[0].max_feed_jk, rt_data->axis_data[1].max_feed_jk, rt_data->axis_data[2].max_feed_jk);
+                break;
+            }
+            double vc = vp_cal_circular_max_vel(current_block, rt_data->chan_data[0].path_tolerance, rt_data->chan_data[0].max_fv_arc_radius, rt_data->chan_data[0].radius_r_max_fv, rt_data->chan_data[0].circular_min_vel, rt_data->ncu_data.cycle);
+            current_block->max_vel = MIN(current_block->max_vel, vc);
+            break;
+        case NURBS:
+            current_block->param_vel = MIN(MIN(rt_data->axis_data[0].max_feed_vel, rt_data->axis_data[1].max_feed_vel), rt_data->axis_data[2].max_feed_vel);
+            current_block->max_vel = MIN(current_block->feed_vel, current_block->param_vel);
+            current_block->max_acc = MIN3(rt_data->axis_data[0].max_feed_acc, rt_data->axis_data[1].max_feed_acc, rt_data->axis_data[2].max_feed_acc);
+            current_block->max_jerk = MIN3(rt_data->axis_data[0].max_feed_jk, rt_data->axis_data[1].max_feed_jk, rt_data->axis_data[2].max_feed_jk);      
+            double vn = vp_cal_nurbs_max_vel(current_block, rt_data->chan_data[0].path_tolerance, rt_data->ncu_data.cycle);
+            current_block->max_vel = MIN(current_block->max_vel, vn);
             break;
         default:
             break;
