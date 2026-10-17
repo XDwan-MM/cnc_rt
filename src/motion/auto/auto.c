@@ -844,6 +844,21 @@ void cycle_tp_add_block(){
         // 如果预处理队列无数据，提前结束
         if(queue_is_empty(unif_queue)) break;
         pretreat_block = queue_peak(unif_queue);
+        switch (pretreat_block->mode)
+        {
+        // 处理空包和非移动指令
+        case PMC_MODE_NULL:
+        case PMC_MODE_M_CMD:
+        case PMC_MODE_PAUSE:
+            pretreat_block->angle_rad = PI;
+            break;
+        // 处理移动指令 
+        default:
+            // 计算两段衔接夹角
+            block_cal_angle(pretreat_block, &unif_queue->pre_vec);
+            unif_queue->pre_vec = pretreat_block->end_vec;
+            break;
+        }
         queue_push(plan_queue, pretreat_block);
         queue_pop(unif_queue);  
     }

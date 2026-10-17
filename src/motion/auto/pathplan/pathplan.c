@@ -12,8 +12,6 @@
 #include "circle_smooth.h"
 
 static void block_cal_pos(PLAN_BLOCK* parser_block, PLAN_BLOCK* current_block, POS* start_pos);
-static void block_cal_vel(PLAN_BLOCK* current_block);
-static void block_cal_angle(PLAN_BLOCK* current_block, VECTOR* pre_end_vector);
 static void block_cal_circle_vector(PLAN_BLOCK* current_block);
 static double block_cal_circle_length(PLAN_BLOCK* current_block);
 static double block_cal_nurbs_length(PLAN_BLOCK* current_block);
@@ -178,9 +176,8 @@ static void block_deal_parser_block(PLAN_BLOCK* parser_block, PLAN_BLOCK* pretre
     case PMC_MODE_NULL:
     case PMC_MODE_M_CMD:
     case PMC_MODE_PAUSE:
-        pretreat_block->max_vel = pretreat_block->feed_vel = 0;
         pretreat_block->length = 0;
-        pretreat_block->angle_rad = PI;
+        pretreat_block->max_vel = pretreat_block->feed_vel = 0;
         break;
     // 处理移动指令 
     default:
@@ -196,17 +193,14 @@ static void block_deal_parser_block(PLAN_BLOCK* parser_block, PLAN_BLOCK* pretre
         block_cal_pos(parser_block, pretreat_block, &pretreat_queue->pre_pos);
         // 计算长度
         block_cal_length(pretreat_block);
-        // 计算速度
-        block_cal_vel(pretreat_block);
         // 计算切矢
         block_cal_vector(pretreat_block);
-        // 计算两段衔接夹角
-        block_cal_angle(pretreat_block, &pretreat_queue->pre_vec);
         // 计算起点曲率
         block_cal_curvature(pretreat_block, &pretreat_queue->pre_startpos, &pretreat_queue->pre_pos,&pretreat_block->end_pos);
+        // 计算速度
+        block_cal_vel(pretreat_block);
         // 保存信息
         pretreat_queue->pre_pos = pretreat_block->end_pos;
-        pretreat_queue->pre_vec = pretreat_block->end_vec;
         pretreat_queue->pre_startpos = pretreat_block->start_pos;
         break;
     }
@@ -669,7 +663,7 @@ static void block_cal_pos(PLAN_BLOCK* parser_block, PLAN_BLOCK* current_block, P
 }
 
 // 计算段最大允许速度
-static void block_cal_vel(PLAN_BLOCK* current_block){
+void block_cal_vel(PLAN_BLOCK* current_block){
     double min_feed = MIN3(rt_data->axis_data[0].max_feed_vel, rt_data->axis_data[1].max_feed_vel, rt_data->axis_data[2].max_feed_vel);
     double min_rapid_feed = MIN3(MIN(rt_data->axis_data[0].jog_lowspd, rt_data->axis_data[0].max_rapid_vel), MIN(rt_data->axis_data[1].jog_lowspd, rt_data->axis_data[1].max_rapid_vel), MIN(rt_data->axis_data[2].jog_lowspd, rt_data->axis_data[2].max_rapid_vel));  // G00最大速度为设置的快速进给速度
     switch(current_block->type){
@@ -720,7 +714,7 @@ static double cal_two_vectors_angle(VECTOR* vector1, VECTOR* vector2){
 }
 
 // 根据切失计算两段之间的衔接角度
-static void block_cal_angle(PLAN_BLOCK* current_block, VECTOR* pre_end_vector){
+void block_cal_angle(PLAN_BLOCK* current_block, VECTOR* pre_end_vector){
     switch(current_block->type){
         case CIRCLE_CCW:
         case CIRCLE_CW:
