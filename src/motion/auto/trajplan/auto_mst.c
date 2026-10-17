@@ -218,7 +218,14 @@ static void auto_deal_mstb(){
             #ifndef DEBUG_MODE_ENABLED
             // 回参考点（刚性攻丝时回参考点，攻丝回退时不返回参考点）
             if(rt_data->sys_state[SYS_IS_RIGID_RETURN]){
-                spindle_request_m29_no_orient();
+                if (!spindle_request_m29_no_orient()) {
+                    rt_data->sys_state[SYS_IS_RIGID] = 0;
+                    auto_clear_mstb_signal();
+                    setAlarm(ALARM_AX, ALARM_ERROR, SPINDLE_ALARM_M29_PREP_REJECT);
+                    rt_set_chan_state(0, CHAN_IS_PARSER_RESET, true);
+                    cycle_tp->mstb_cmd_data.finished = true;
+                    return;
+                }
             }else{
                 spindle_request_m29();
             }

@@ -56,6 +56,7 @@ typedef enum
     SPINDLE_M29_SWITCHING_CSP,
     SPINDLE_M29_READY,
     SPINDLE_M29_ERROR,
+    SPINDLE_M29_NO_ORIENT_WAIT_CSV,
     SPINDLE_M29_NO_ORIENT_STOPPING,
     SPINDLE_M29_NO_ORIENT_SWITCHING,
     SPINDLE_M29_NO_ORIENT_ALIGNING
@@ -131,6 +132,7 @@ void spindle_complete_m29(void);
 /* M29 握手超时报警 id（错误报警会触发自动运行停止）；HMI 侧需同 id 的报警文本，
  * 否则显示为未知报警。 */
 #define SPINDLE_ALARM_M29_FIN_TIMEOUT  (2101)
+#define SPINDLE_ALARM_M29_PREP_REJECT  (2102)
 
 /** M29 卡住诊断的只读快照：只观察，不改变任何控制状态。 */
 typedef struct

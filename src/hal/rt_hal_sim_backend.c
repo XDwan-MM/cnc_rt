@@ -9,13 +9,13 @@
 #include <time.h>
 #include <stdatomic.h>
 
-#include "Greemaster/device.h"
-#include "Greemaster/device_table.h"
-#include "Greemaster/servo_step.h"
-#include "Greemaster/entry_access.h"
-#include "Greemaster/main_demo.h"
-#include "common/devdict.h"
-#include "common/Ds402.h"
+#include "backend/greemaster/device.h"
+#include "backend/greemaster/device_table.h"
+#include "backend/greemaster/servo_step.h"
+#include "backend/greemaster/entry_access.h"
+#include "backend/greemaster/master.h"
+#include "backend/greemaster/devdict.h"
+#include "backend/greemaster/ds402.h"
 /* 定向控制字与完成位用本地 profile 的同一份定义，免得两处各写一份对不上 */
 #include "rt_hal_config.h"
 
@@ -138,7 +138,7 @@ static void build_io_slot(int idx, int slave) {
     }
 }
 
-/* 驱动层接口（签名须与 src/Greemaster 下头文件逐字一致，否则链接器会拉进真实现，
+/* 驱动层接口（签名须与后端头文件逐字一致，否则链接器会拉进真实现，
  * 变成"一半真一半假"） */
 
 /* CNC_RT_SIM_FAULT_STUCK=1：注入的 Fault 不因 bit7 边沿消失，把复位一直按在 PENDING

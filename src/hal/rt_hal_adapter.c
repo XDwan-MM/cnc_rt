@@ -619,6 +619,14 @@ int rt_hal_axis_speed_rpm(RtHalAxisSlot slot, double* out) {
     return HAL_OK;
 }
 
+int rt_hal_axis_speed_mm_min(RtHalAxisSlot slot, double* out) {
+    if (!slot_ok(slot) || !out) return HAL_ERROR_ARGUMENT;
+    if (!s_snap_valid) return HAL_ERROR_NOT_RUNNING;
+    if (!s_snap_status[slot].linear_speed_valid) return HAL_ERROR_UNSUPPORTED;
+    *out = s_snap_status[slot].actual_speed_mm_min;
+    return HAL_OK;
+}
+
 int rt_hal_spindle_status(RtHalAxisSlot slot, HalCSpindleStatus* out) {
     if (!slot_ok(slot) || !out) return HAL_ERROR_ARGUMENT;
     /* 非主轴槽 */

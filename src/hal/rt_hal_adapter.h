@@ -58,6 +58,10 @@ int rt_hal_axis_speed(RtHalAxisSlot slot, double* out);
  * HAL_ERROR_UNSUPPORTED = 该轴没映射速度 PDO（不是 0）；HAL_ERROR_NOT_RUNNING / HAL_ERROR_ARGUMENT。 */
 int rt_hal_axis_speed_rpm(RtHalAxisSlot slot, double* out);
 
+/* 读进给轴本拍实际线速度（mm/min）。无速度 PDO、无换算参数或主轴槽返回 HAL_ERROR_UNSUPPORTED；
+ * 快照未建立返回 HAL_ERROR_NOT_RUNNING，槽号或出参非法返回 HAL_ERROR_ARGUMENT。 */
+int rt_hal_axis_speed_mm_min(RtHalAxisSlot slot, double* out);
+
 /* 读某主轴本拍转速侧状态（模式、转速、累计转角）；必须主轴槽。HAL_ERROR_ARGUMENT = 槽号非法或非主轴
  * （快照主轴数组只填主轴槽，读非主轴会拿到"成功 + 0"）；HAL_ERROR_NOT_RUNNING。 */
 int rt_hal_spindle_status(RtHalAxisSlot slot, HalCSpindleStatus* out);

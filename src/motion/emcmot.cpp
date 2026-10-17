@@ -309,21 +309,13 @@ static void read_from_hal()
     rt_data->axis_data[AXIS_Z].enc_cntr = 0;
     rt_data->axis_data[AXIS_SP].enc_cntr = 0;
 
-    /* 实际速度 —— 这里就换成**用户单位**，显示侧不再动（见 global.c）。
-     *   进给轴 mm/min = 电机 rpm × 每转位移(mm)；
-     *     每转位移 = |电子齿轮比分子| —— 它本身就是"电机每转的负载位移"，
-     *     所以"当量 × 每转指令脉冲数"也是它（0.001mm × 10000 = 10mm/转）。
-     *     前提：驱动器速度对象得是 rpm —— pulse/s 的驱动器由 HAL 折算成 rpm 再给。
-     *   主轴 rpm，直接用 HAL 给的主轴转速。
-     * speed_valid 为 0 = 该轴没映射速度 PDO（0x606C 与 0x60FF 不都是 32 位），
-     * rt_hal_axis_speed_rpm() 会返回 UNSUPPORTED，这里置 0 显示*/
+    /* 进给轴读 HAL 换算后的 mm/min；主轴仍读 rpm。 */
     const RtHalAxisSlot feed_slot[3] = {RT_HAL_AXIS_X, RT_HAL_AXIS_Y, RT_HAL_AXIS_Z};
     const int feed_axis[3] = {AXIS_X, AXIS_Y, AXIS_Z};
     for (int i = 0; i < 3; ++i) {
-        double rpm = 0.0;
-        if (rt_hal_axis_speed_rpm(feed_slot[i], &rpm) != HAL_OK) rpm = 0.0;
-        const double mm_per_rev = fabs(rt_data->axis_data[feed_axis[i]].pm_munit);
-        rt_data->axis_data[feed_axis[i]].act_vel = rpm * mm_per_rev;
+        double mm_min = 0.0;
+        if (rt_hal_axis_speed_mm_min(feed_slot[i], &mm_min) != HAL_OK) mm_min = 0.0;
+        rt_data->axis_data[feed_axis[i]].act_vel = mm_min;
     }
     /* 主轴：HalCSpindleStatus.actual_speed，rpm（HAL 已按 speed_unit 换算）。 */
     double spd = 0.0;

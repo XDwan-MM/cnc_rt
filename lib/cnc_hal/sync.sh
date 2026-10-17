@@ -44,11 +44,9 @@ cp "$HAL_INC"/*.h "$SCRIPT_DIR/include/"
 # 2) 内部头 —— **只给调试构建的驱动层桩用**（rt_hal_sim_backend.c 要扮演驱动层，
 #    必须看到 DeviceSlot / DevDictRole / Ds402Request 这些类型）。
 #    实时构建的 INCLUDEPATH 里**没有**这个目录，依赖边界不被破坏。
-#    保留 Greemaster/ 与 common/ 两级子目录：HAL 里就是按 "Greemaster/device.h"
-#    这种方式 include 的，拍平了会全断。
-rm -rf "$SCRIPT_DIR/internal"; mkdir -p "$SCRIPT_DIR/internal/Greemaster" "$SCRIPT_DIR/internal/common"
-cp "$HAL_SRC"/Greemaster/*.h "$SCRIPT_DIR/internal/Greemaster/"
-cp "$HAL_SRC"/common/*.h     "$SCRIPT_DIR/internal/common/"
+#    保留后端目录层级，与 HAL 内部 include 路径一致。
+rm -rf "$SCRIPT_DIR/internal"; mkdir -p "$SCRIPT_DIR/internal/backend/greemaster"
+cp "$HAL_SRC"/backend/greemaster/*.h "$SCRIPT_DIR/internal/backend/greemaster/"
 
 # 3) 静态库 + 设备字典
 rm -rf "$SCRIPT_DIR/lib"; mkdir -p "$SCRIPT_DIR/lib"
@@ -56,10 +54,10 @@ cp "$HAL_LIB" "$SCRIPT_DIR/lib/"
 
 # 设备字典是 HAL 的运行时数据，必须跟头和库同版本走。放进 lib/ 之后由
 # run.sh 通过 CNC_HAL_DEVICES_JSON 指过去——发布版的编译期路径写死在
-# /usr/local/share（在 main_demo.c.o 里），RT 不编译 HAL 源码，改不了它，
+# /usr/local/share（在 master.c.o 里），RT 不编译 HAL 源码，改不了它，
 # 所以运行时覆盖是唯一的途径。
-[[ -f "$HAL_SRC/Greemaster/devices.json" ]] || { echo "找不到设备字典：$HAL_SRC/Greemaster/devices.json" >&2; exit 1; }
-cp "$HAL_SRC/Greemaster/devices.json" "$SCRIPT_DIR/lib/devices.json"
+[[ -f "$HAL_ROOT/config/devices.json" ]] || { echo "找不到设备字典：$HAL_ROOT/config/devices.json" >&2; exit 1; }
+cp "$HAL_ROOT/config/devices.json" "$SCRIPT_DIR/lib/devices.json"
 
 # 4) 记录来源，方便判断副本新旧
 {
@@ -69,7 +67,7 @@ cp "$HAL_SRC/Greemaster/devices.json" "$SCRIPT_DIR/lib/devices.json"
     echo "同步时间 : $(date -Iseconds)"
     echo "ABI      : $(grep -oP 'HAL_C_ABI_MAJOR\s+\K[0-9]+' "$HAL_INC/hal_types.h")u.$(grep -oP 'HAL_C_ABI_MINOR\s+\K[0-9]+' "$HAL_INC/hal_types.h")u"
     echo "公共头   : $(ls "$SCRIPT_DIR/include" | wc -l) 个"
-    echo "内部头   : $(ls "$SCRIPT_DIR/internal/Greemaster" "$SCRIPT_DIR/internal/common" | grep -c '\.h$') 个"
+    echo "内部头   : $(ls "$SCRIPT_DIR/internal/backend/greemaster" | grep -c '\.h$') 个"
     echo "设备字典 : devices.json sha256=$(sha256sum "$SCRIPT_DIR/lib/devices.json" | cut -c1-16)"
 } > "$SCRIPT_DIR/SYNCED.txt"
 
