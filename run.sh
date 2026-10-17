@@ -370,9 +370,8 @@ sleep 1
 if [ "$RUN_MODE" != "hmi_only" ]; then
     # 6. 启动实时进程（两个进程统一使用 sudo，避免一个 root 一个普通用户）
     cd "$RT_BIN_DIR"
-    # 告诉 RT 用随工程走的字典（vendored，sync.sh 保证它跟 HAL 同版本）。
-    # 必须这样传：sudo 默认清环境，且发布版的编译期路径写死在 /usr/local/share。
-    export CNC_HAL_DEVICES_JSON="${RT_ROOT}/lib/cnc_hal/lib/devices.json"
+    # sudo 会清理环境；把随 RT 包发布的设备字典显式传给实时进程。
+    CNC_HAL_DEVICES_JSON="${RT_ROOT}/lib/cnc_hal/lib/devices.json"
     sudo bash -c 'pid_file=$1; dict=$2; shift 2; echo $$ > "$pid_file"; export CNC_HAL_DEVICES_JSON="$dict"; exec stdbuf -oL -eL "$@"' \
         bash "$RT_PID_FILE" "$CNC_HAL_DEVICES_JSON" "${RT_ROOT}/bin/${RT_PAR}" 2>&1 | \
         while IFS= read -r line; do
