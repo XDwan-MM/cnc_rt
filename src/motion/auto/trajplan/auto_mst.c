@@ -227,7 +227,8 @@ static void auto_deal_mstb(){
                     return;
                 }
             }else{
-                spindle_request_m29();
+                spindle_request_m29_no_orient();
+                //spindle_request_m29();
             }
             #endif
             break;
