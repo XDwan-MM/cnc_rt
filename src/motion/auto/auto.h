@@ -73,6 +73,8 @@ typedef struct{
     double target_distance;         // 单个插补周期目标距离 target_distance = accum_distance - current_distance
     double accum_distance;          // 速度曲线累计插补距离
     double remain_distance;         // 速度曲线剩余插补距离
+    double u_current;               // 当前节点
+    double u_next;                  // 下一个节点
 } POS_CMD_DATA;
 
 typedef struct{
@@ -88,6 +90,8 @@ typedef struct{
     bool signal_tf;         // 刀具功能选通信号
     bool signal_den;        // 分配结束信号
     bool signal_fin;        // 结束信号
+    bool m29_fin_low_seen;  // 本条指令已确认前次 FIN 回低
+    bool m29_fin_latched;   // 本条 PLC FIN 已满足持续时间
     bool pmc_end;           // pmc侧动作完成
     int tfin_count;         // 完成信号计数
     int tmf_count;          // 选通脉冲延时计数
@@ -122,6 +126,7 @@ typedef struct{
 GNC_RES cycle_tp_init();
 void cycle_tp_delete();
 void cycle_tp_reset();
+void cycle_tp_add_block();
 void handle_auto_cmd();
 void handle_edit_cmd();
 void auto_handle_estop();

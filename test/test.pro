@@ -22,6 +22,12 @@ exists(/usr/include/gtest/gtest.h):exists(/usr/include/gmock/gmock.h) {
     message(Using system GoogleTest/GoogleMock from /usr/local)
     INCLUDEPATH += /usr/local/include
     LIBS += -L/usr/local/lib -lgmock -lgtest
+} else:exists(/usr/src/googletest/googletest/src/gtest-all.cc) {
+    message(Using local GoogleTest/GoogleMock sources)
+    INCLUDEPATH += /usr/src/googletest/googletest/include /usr/src/googletest/googlemock/include
+    INCLUDEPATH += /usr/src/googletest/googletest /usr/src/googletest/googlemock
+    SOURCES += /usr/src/googletest/googletest/src/gtest-all.cc
+    SOURCES += /usr/src/googletest/googlemock/src/gmock-all.cc
 } else {
     message(Using bundled lightweight GoogleTest/GoogleMock compatibility headers)
     INCLUDEPATH += $$PWD/gtest_compat
@@ -39,6 +45,10 @@ INCLUDEPATH += $$PWD/../lib/parser/api $$PWD/../lib/parser
 # 添加运动库
 LIBS += -L"$$PWD/../lib/kinematic/bin/" -lkinematic
 INCLUDEPATH += $$PWD/../lib/kinematic/include $$PWD/../lib/kinematic
+
+# 添加nurbs库
+# LIBS += -L"$$PWD/lib/nurbs/bin/" -lnurbsfit
+# INCLUDEPATH += $$PWD/lib/nurbs/include $$PWD/lib/nurbsfit
 
 # 添加误差补偿库
 LIBS += -L"$$PWD/../lib/CNC_ErrorComp/lib" -lCNC_ErrorComp
@@ -133,6 +143,9 @@ SOURCES += \
     ../src/motion/auto/pathplan/parser.cpp \
     ../src/motion/auto/pathplan/pathplan.c \
     ../src/motion/spindle/spl_control.c \
+    ../src/motion/spindle/spl_orient.c \
+    ../src/motion/spindle/spl_vel_planner.c \
+    ../src/motion/auto/trace_publisher.c \
     ../src/motion/spindle/spl_pos_planner.c \
     ../src/motion/emcmot.cpp \
     ../src/motion/manual/handwheel.c \
@@ -161,7 +174,8 @@ SOURCES += \
     ../src/threads/threads_controller.cpp \
     ../src/utils/math/cnc_math.c \
     ../src/utils/log/log.c \
-    
+    ../lib/nurbs/nurbsfit.c \
+
 
 INCLUDEPATH += \
     ../src/common \
@@ -191,6 +205,8 @@ INCLUDEPATH += \
     ../src/utils/math \
     ../src/utils/log \
     ../lib/kinematic/include \
+    ../lib/nurbs/include \
+
 
 # ============================================================
 # 单元测试
@@ -202,9 +218,27 @@ HEADERS += \
     gtest_compat/gmock/gmock.h
 
 # 自动查找所有 test_* 子目录下的测试源文件（tst_*.cpp）
-for(dir, $$list($$files($$PWD/test_*))) {
-    !exists($$dir/*):next()
-    files = $$files($$dir/tst_*.cpp)
-    SOURCES += $$files
-    INCLUDEPATH += $$dir
+# 可显式指定回归文件，避免无关的历史测试接口失配阻断定向测试。
+isEmpty(TEST_SOURCES) {
+    for(dir, $$list($$files($$PWD/test_*))) {
+        !exists($$dir/*):next()
+        files = $$files($$dir/tst_*.cpp)
+        SOURCES += $$files
+        INCLUDEPATH += $$dir
+    }
+} else {
+    SOURCES += $$TEST_SOURCES
+}
+
+contains(SOURCES, .*tst_spindle.cpp) {
+    # 单元测试不访问真实 EtherCAT 控制字 PDO。
+    QMAKE_LFLAGS += -Wl,--wrap=Ethercat_Driver_Write_Controlword
+}
+
+SOURCES = $$unique(SOURCES)
+HEADERS = $$unique(HEADERS)
+
+# 测试使用仿真主站；同时链接实时主站会重复定义 reset_sem。
+contains(DEFINES, DEBUG_MODE_ENABLED) {
+    SOURCES -= ../src/master/master_wcf.c
 }

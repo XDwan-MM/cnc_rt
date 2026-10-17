@@ -41,3 +41,9 @@ void POS_COPY(POS* dest, POS* src){
     dest->y = src->y;
     dest->z = src->z;
 }
+
+//向量叉乘求模
+double CrossVector(POS* AB,POS* BC ){
+    double cross_val = sqrt((AB->y*BC->z - AB->z*BC->y)*(AB->y*BC->z - AB->z*BC->y) + (AB->x*BC->z - AB->z*BC->x)*(AB->x*BC->z - AB->z*BC->x) + (AB->x*BC->y - AB->y*BC->x)*(AB->x*BC->y - AB->y*BC->x));
+    return cross_val;
+}
