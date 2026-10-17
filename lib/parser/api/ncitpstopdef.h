@@ -1,16 +1,8 @@
-/**
- * @file ncitpstopdef.h
- * @brief 停止译码 / 阻止缓冲 的共用定义
- *
- *  语义：配了阻止缓冲的 M 代码，控制译码器不预读它后面的程序段，
- *        从而保证执行完这个 M 代码之前，不执行后面的宏语句。
- */
-
 #ifndef NCITPSTOPDEF_H
 #define NCITPSTOPDEF_H
 
 
-/*! 阻止缓冲的 M 代码配置 —— 由各端从参数读出来填好 */
+// 阻止缓冲的 M 代码配置从参数读出来填好
 typedef struct {
     int single[10];      /*!< PAR_CH_STOP_BUF_MCODE_1  ~ _10   单值，0 = 未配置 */
     int rangeMin[6];     /*!< PAR_CH_STOP_BUF_MCODE_R1_MIN ~ R6_MIN */
@@ -46,14 +38,13 @@ typedef struct {
 #define ITP_BUFSTOP_M02     (2)     /* 程序结束 */
 #define ITP_BUFSTOP_M30     (30)    /* 程序结束并返回开头 */
 
-/* 执行缓冲的 M 代码 —— 与参数设定无关，永远不阻止缓冲
+/* 执行缓冲的 M 代码 远不阻止缓冲
  *
- *  M98/M99、子程序调用用的 M 代码、自定义宏调用用的 M 代码
- *  属于执行缓冲，不能被配成阻止缓冲。
  *      M98 / M99   子程序调用 / 返回
  *      M65 / M66   文件调用
- *      宏程序调用在本系统是 G65（G 码不受影响）
+ *      M06         换刀
  */
+#define ITP_BUFEXEC_M06 (6)
 #define ITP_BUFEXEC_M98 (98)
 #define ITP_BUFEXEC_M99 (99)
 #define ITP_BUFEXEC_M65 (65)
@@ -62,7 +53,8 @@ typedef struct {
 static inline bool itp_isBufExecMCode(int m_code)
 {
     return m_code == ITP_BUFEXEC_M98 || m_code == ITP_BUFEXEC_M99
-        || m_code == ITP_BUFEXEC_M65 || m_code == ITP_BUFEXEC_M66;
+        || m_code == ITP_BUFEXEC_M65 || m_code == ITP_BUFEXEC_M66
+        || m_code == ITP_BUFEXEC_M06;
 }
 
 /* 判定M 代码是否阻止缓冲停预读*/

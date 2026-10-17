@@ -30,39 +30,19 @@ static_assert(ITP_PAR_STOP_BUF_MCODE_R6_MAX == PAR_NCU_PARSER_STOP_BUF_MCODE_R6_
 static ItpBufStopMCodeCfg s_bufStopCfg;
 static bool s_bufStopCfgLoaded = false;
 
-static void parser_loadBufStopCfg()
-{
-    memset(&s_bufStopCfg, 0, sizeof(s_bufStopCfg));
+static bool parser_is_hold_gcode(int unmodal);
+static void parser_loadBufStopCfg();
+bool parser_isBufStopMCode(int m_code);
+static void buf_stop_record(BufStop *s, int code, int is_g);
+static void parser_clear_buf_stop();
+static bool parser_buf_stop_gate();
 
-    for (int i = 0; i < 10; ++i)
-    {
-        s_bufStopCfg.single[i] = par_ncu[PAR_NCU_PARSER_STOP_BUF_MCODE_1 + i].value.val_int;
-    }
-    for (int r = 0; r < 6; ++r)
-    {
-        s_bufStopCfg.rangeMin[r] = par_ncu[PAR_NCU_PARSER_STOP_BUF_MCODE_R1_MIN + r * 2].value.val_int;
-        s_bufStopCfg.rangeMax[r] = par_ncu[PAR_NCU_PARSER_STOP_BUF_MCODE_R1_MAX + r * 2].value.val_int;
-    }
-    s_bufStopCfgLoaded = true;
-}
 
-/* 阻止缓冲判定（实时侧）
- * 00/M01/M02/M30（无条件）+ 参数配的 M 码*/
-bool parser_isBufStopMCode(int m_code)
-{
-    if (!s_bufStopCfgLoaded)
-    {
-        parser_loadBufStopCfg();
-    }
-    return itp_isBufStopMCode(&s_bufStopCfg, m_code);
-}
 
 void parser_new(){
     parser_data = new PARSER_DATA();
     parser_data->parser_state = PARSER_IDLE;
-    parser_data->stop_code = PARSER_STOP_NONE;
-    parser_data->stop_is_g =0;
-    parser_data->stop_seen =0;
+    parser_clear_buf_stop();
     rt_set_parser_state(-1, 0);
 }
 
@@ -70,6 +50,7 @@ GNC_RES parser_init(NC_MODE nc_mode)
 {   
     GNC_RES res = GNC_OPERATOR_SUCCESS;
     ItpReset();
+    parser_clear_buf_stop();
     parser_data->parser_state = PARSER_READING;
     ItpCfgGetMacroVarCB(t_macroVarGetValue);
     ItpCfgSetMacroVarCB(t_macroVarSetValue);
@@ -207,10 +188,14 @@ void parser_run_mode(){
 }
 
 GNC_RES parser_reading(){
+
+    if(parser_buf_stop_gate())return GNC_CAL_SUCCESS;
     GNC_RES res = GNC_CAL_SUCCESS;
     ItpGetMotionData(&parser_data->itp_datas);
     ItpGetState(&parser_data->itp_state);
     ItpGetLineNumber(&parser_data->itp_line_no);
+    if(parser_is_hold_gcode(parser_data->itp_state.modal[0]))
+        buf_stop_hold(&parser_data->bufstop); 
     if (parser_data->itp_datas.count > PARSER_BUF_SIZE) return GNC_PARSER_OVER;
     int error_no = ItpError();
     rt_set_parser_state(error_no, parser_data->itp_line_no);
@@ -237,6 +222,7 @@ GNC_RES parser_reading(){
     }
     if (res == GNC_PARSER_WAIT)
     {
+        if(parser_data->bufstop.hold) return res; // 等阻止缓冲块运行完成
         ItpNextLine();
         return res;
     }
@@ -248,7 +234,8 @@ GNC_RES parser_reading(){
             return GNC_PARSER_OVER;
         }
         return GNC_PARSER_OVER_AND_WAIT;
-    } 
+    }
+    if(parser_data->bufstop.hold) return res; // 等阻止缓冲块运行完成
     ItpNextLine();
     return res;
 }
@@ -310,21 +297,6 @@ static GNC_RES parser_handle_recieve(pmc_data* motion_data, NcItpState *itp_stat
             default:
                 res = GNC_OPERATOR_SUCCESS;
                 break;
-        }
-        // 记下"阻止缓冲"的块（M 码 或 非模态 G），由 emcmotPathPlan() 据此暂停推进译码，直到该块运行完毕。
-        // G31 在实时端继续由 PMC_MODE_STOPSKIP / GNC_PARSER_WAIT 那条路径独占
-        if (itp_isBufStopGCode(itp_state->modal[0])
-            && itp_state->modal[0] != ITP_UNMODAL_STOP_SKIP)
-        {
-            parser_data->stop_code = itp_state->modal[0];
-            parser_data->stop_is_g = 1;
-            parser_data->stop_seen = 0;
-        }
-        else if (motion_data->mode == PMC_MODE_M_CMD && parser_isBufStopMCode(motion_data->m_code))
-        {
-            parser_data->stop_code = motion_data->m_code;
-            parser_data->stop_is_g = 0;
-            parser_data->stop_seen = 0;
         }
     }
     else {  // 空包
@@ -456,6 +428,10 @@ static GNC_RES parser_handle_gcode(pmc_data* motion_data, NcItpState *itp_state,
     // LOG(LOG_LEVEL_DEBUG, "no %d end pos %f %f %f mode %d type:%d fv %f", plan_block.line_number, motion_data->position.x, motion_data->position.y, motion_data->position.z, plan_block.mode, plan_block.type, plan_block.feed_vel);
     // ======= 测试 ===========
     queue_push(parser_queue, &plan_block);
+    if(parser_is_hold_gcode(itp_state->modal[0])) // 记录G阻止缓冲块
+    {
+        buf_stop_record(&parser_data->bufstop,itp_state->modal[0],1);
+    }
     if(plan_block.mode == pmc_mode::PMC_MODE_STOPSKIP) return GNC_PARSER_WAIT;
 
     return GNC_OPERATOR_SUCCESS;
@@ -495,6 +471,10 @@ static GNC_RES parser_handle_mcode(pmc_data* motion_data, NcItpState *itp_state,
         return GNC_DATA_FULL;
     }
     queue_push(parser_queue, &plan_block);
+    if(parser_isBufStopMCode(motion_data->m_code)) // 记录M阻止缓冲块
+    {
+        buf_stop_record(&parser_data->bufstop, motion_data->m_code, 0);
+    }
     return GNC_OPERATOR_SUCCESS;
 }
 
@@ -556,9 +536,7 @@ GNC_RES parser_waiting_to_end() {
 void parser_reset(){
     ItpReset();
     parser_data->parser_state = PARSER_IDLE;
-    parser_data->stop_code = PARSER_STOP_NONE;
-    parser_data->stop_is_g = 0;
-    parser_data->stop_seen = 0;
+    parser_clear_buf_stop();
     rt_set_chan_state(0, CHAN_IS_PARSERING, false);
     rt_set_chan_state(0, CHAN_IS_MOTION_SYNC, false);
     rt_set_chan_state(0, CHAN_IS_PARSER_RERUN, false);
@@ -642,6 +620,69 @@ int t_setParamValue(int parId, double val)
     }
 
     return (setParData(file, sub, index, par) == 0) ? 0 : -1;
+}
+
+
+static void parser_loadBufStopCfg()
+{
+    memset(&s_bufStopCfg, 0, sizeof(s_bufStopCfg));
+
+    for (int i = 0; i < 10; ++i)
+    {
+        s_bufStopCfg.single[i] = par_ncu[PAR_NCU_PARSER_STOP_BUF_MCODE_1 + i].value.val_int;
+    }
+    for (int r = 0; r < 6; ++r)
+    {
+        s_bufStopCfg.rangeMin[r] = par_ncu[PAR_NCU_PARSER_STOP_BUF_MCODE_R1_MIN + r * 2].value.val_int;
+        s_bufStopCfg.rangeMax[r] = par_ncu[PAR_NCU_PARSER_STOP_BUF_MCODE_R1_MAX + r * 2].value.val_int;
+    }
+    s_bufStopCfgLoaded = true;
+}
+
+/* 阻止缓冲判定
+ * 00/M01/M02/M30（无条件）+ 参数配的 M 码*/
+bool parser_isBufStopMCode(int m_code)
+{
+    if (!s_bufStopCfgLoaded)
+    {
+        parser_loadBufStopCfg();
+    }
+    return itp_isBufStopMCode(&s_bufStopCfg, m_code);
+}
+
+/// @brief  记录阻止缓冲块
+static void buf_stop_record(BufStop *s, int code, int is_g)
+{
+    if (s->code == code && s->is_g == is_g)
+        return;
+
+    s->code = code;
+    s->is_g = is_g;
+    s->seen = 0;
+    buf_stop_hold(s);
+}
+
+static void parser_clear_buf_stop()
+{
+    buf_stop_clear(&parser_data->bufstop);
+}
+
+/// @brief  如果上一段是阻止缓冲代码，阻止缓冲，等待运行完毕再往下译码
+static bool parser_buf_stop_gate()
+{
+    if (!parser_data->bufstop.hold)
+        return false;
+
+    if (buf_stop_active(&parser_data->bufstop))
+        return true;                        // 阻止缓冲区代码还没运行完，接着等 
+
+    buf_stop_hold_done(&parser_data->bufstop);
+    ItpNextLine();                          //阻止缓冲区代码执行完毕，开始译下一段
+    return true;
+}
+static bool parser_is_hold_gcode(int unmodal)
+{
+    return itp_isBufStopGCode(unmodal) && unmodal != ITP_UNMODAL_STOP_SKIP;
 }
 /*
 1、G31

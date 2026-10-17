@@ -43,6 +43,34 @@ typedef enum{
     PARSER_WAITING_TO_END,
 }PARSER_STATE;
 
+// 阻止译码器缓冲状态
+typedef struct{
+    int code;       // PARSER_STOP_NONE = 无；否则M 码号或G值
+    int is_g;       // 0 = code是M码；1 = 非模态G
+    int seen;       // 是否已看到它成为当前块
+    int hold;       // 
+} BufStop;
+
+static inline bool buf_stop_active(const BufStop *s) { return s->code != PARSER_STOP_NONE; }
+
+static inline void buf_stop_release(BufStop *s)
+{
+    s->code = PARSER_STOP_NONE;
+    s->is_g = 0;
+    s->seen = 0;
+}
+
+// 阻止译码器推进
+static inline void buf_stop_hold(BufStop *s) { s->hold = 1; }
+static inline void buf_stop_hold_done(BufStop *s) { s->hold = 0; }
+static inline void buf_stop_clear(BufStop *s)
+{
+    s->code = PARSER_STOP_NONE;
+    s->is_g = 0;
+    s->seen = 0;
+    s->hold = 0;
+}
+
 typedef struct{
     // ItpParam itp_parameter;          // 译码参数 todo:调整译码后删除
     NcItpData itp_datas;                // 译码结果
@@ -50,9 +78,7 @@ typedef struct{
     int interp_list_index;              // 译码结果索引
     int itp_line_no;                    // 当前行号
     PARSER_STATE parser_state;
-    int stop_code;                      // 阻止缓冲的M值或者G值
-    int stop_is_g;                      // 0：M代码、1：G代码
-    int stop_seen;                      // 判断G代码是否时当前块，判断是否指向完成                      
+    BufStop      bufstop;               // 阻止缓冲标志                     
     char parser_file_path[NCFILEPATH_CHAR_LEN];
     char mdiContent[MDICONTENT_CHAR_LEN];
 }PARSER_DATA;

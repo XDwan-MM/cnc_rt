@@ -42,6 +42,7 @@ static void calcul_mac_cmd_pos();
 static void manual_unset_sys_state();
 static void reset_clean_warning();
 static void rebuild_axis_positions_from_feedback();
+static bool rt_should_hold_decode(void);
 
 #ifdef UNIT_TEST
 void emcmot_test_rebuild_axis_positions_from_feedback()
@@ -74,46 +75,6 @@ void emcmotTrajPlan()
     rt_data->nc_event = SYS_EVENT_NONE;
 }
 
-// 阻止译码缓冲门控,程序运行完毕接着译码
-static bool rt_should_hold_decode(void)
-{
-    if (parser_data == NULL || parser_data->stop_code == PARSER_STOP_NONE)
-        return false;
-
-    PLAN_BLOCK *blk = cycle_tp->plan_block;
-    if (blk == NULL)
-        return true;
-
-    if (!parser_data->stop_is_g)
-    {
-        // M 码：等它成为当前块 → 等 FIN（运行完毕）→ 等机器恢复运行
-        if (blk->mode != PMC_MODE_M_CMD || blk->mst_data.m_code != parser_data->stop_code)
-            return true;
-
-        if (!auto_mstb_cmd_is_finished())
-            return true;
-
-        if (cycle_tp->exec_state != EXEC_RUNNING)
-            return true;
-    }
-    else
-    {
-        //G31 走自己的 GNC_PARSER_WAIT 路径，
-        const bool isTarget = (blk->state.modal[0] == parser_data->stop_code);
-        if (!parser_data->stop_seen)
-        {
-            if (!isTarget) return true;         // 还没轮到
-            parser_data->stop_seen = 1;         // 轮到了，但还没执行完
-            return true;
-        }
-        if (isTarget) return true;              // 还在执行
-        
-    }
-    // 已经过了 → 执行完毕
-    parser_data->stop_code = PARSER_STOP_NONE;
-    parser_data->stop_seen = 0;
-    return false;
-}
 // 路径规划
 void emcmotPathPlan()
 {
@@ -127,9 +88,9 @@ void emcmotPathPlan()
             rt_set_chan_state(i, CHAN_IS_FIRST_RUN, true);
             rt_set_chan_state(i, CHAN_IS_PARSER_RERUN, false);
         }
-        // 解释器译码
+        // 遇到阻止缓冲块，暂停译码
         if(!rt_should_hold_decode())
-        {
+        {   // 解释器译码
             parser_run_mode();
         }
         // 添加block
@@ -608,4 +569,69 @@ static void rebuild_axis_positions_from_feedback()
         straightness1_comp_state[axis].pos_initialized = true;
         straightness2_comp_state[axis].pos_initialized = true;
     }
+}
+
+typedef enum
+{
+    STOP_STAGE_WAIT = 0,    // 等待执行
+    STOP_STAGE_RUNNING,     // 还没执行完 
+    STOP_STAGE_PASSED,      // 执行完毕
+} BufStopStage;
+
+/// @brief  判断是否是阻止缓冲块
+static bool blk_is_stop_target(const BufStop *s, const PLAN_BLOCK *blk)
+{
+    if (blk == NULL)
+        return false;
+
+    if (s->is_g)
+        return blk->state.modal[0] == s->code;
+
+    return blk->mode == PMC_MODE_M_CMD && blk->mst_data.m_code == s->code;
+}
+
+static BufStopStage stop_block_stage(BufStop *s)
+{
+    PLAN_BLOCK *blk = queue_peak(plan_queue);
+
+    if (!s->seen)
+    {
+        
+        if (cycle_tp->exec_state == EXEC_RESET)
+            return STOP_STAGE_PASSED;
+
+        if (!blk_is_stop_target(s, blk))
+        {
+            if (cycle_tp->exec_state == EXEC_IDLE
+                && queue_is_empty(plan_queue)
+                && queue_is_empty(pretreat_queue)
+                && queue_is_empty(parser_queue))
+            {
+                return STOP_STAGE_PASSED;
+            }
+            return STOP_STAGE_WAIT;
+        }
+        s->seen = 1;
+        return STOP_STAGE_RUNNING;
+    }
+
+    if (blk_is_stop_target(s, blk))
+        return STOP_STAGE_RUNNING;
+
+    //暂停中（M00/单段暂停）不放行，等操作工按循环启动
+    if (!s->is_g && cycle_tp->exec_state == EXEC_PAUSING)
+        return STOP_STAGE_RUNNING;
+    return STOP_STAGE_PASSED;
+}
+
+static bool rt_should_hold_decode(void)
+{
+    if (parser_data == NULL || !buf_stop_active(&parser_data->bufstop))
+        return false;
+
+    if (stop_block_stage(&parser_data->bufstop) != STOP_STAGE_PASSED)
+        return true;
+
+    buf_stop_release(&parser_data->bufstop);   // 执行完毕
+    return false;
 }
