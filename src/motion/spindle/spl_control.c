@@ -433,10 +433,11 @@ bool spindle_request_m29_no_orient(void)
     int32_t orient;
     const bool stop_required = spindle_stop_is_required(&spl_context);
     const bool mode_switching = spl_ms_switching();
+    bool wait_csv;
     if (stop_required || rt_data->sys_state[SYS_ESTOP_INPUT] ||
         rt_data->axis_data[AXIS_SP].status.is_disable ||
         rt_data->axis_data[AXIS_SP].status.is_error ||
-        spl_context.m29_active || mode_switching || spl_context.csv_switch_pending ||
+        spl_context.m29_active ||
         spl_context.orient_phase != SPINDLE_ORIENT_IDLE || spl_context.orient_request_pending) {
         LOG(LOG_LEVEL_ERR,
             "M29无预定向入口拒绝：stop=%d estop=%d disable=%d error=%d "
@@ -473,25 +474,36 @@ bool spindle_request_m29_no_orient(void)
             spindle.mode, axis.actual_speed_rpm);
         return false;
     }
-    /* CSP 运动由插补所有，不能把正在走的目标截成当前位置。 */
+    /* 复位可能把 CSP 目标留在中断前的位置；只有复位后的静止轴可接管旧目标。 */
     if (spindle.mode == HAL_SPINDLE_CSP &&
         (fabs(axis.actual_speed_rpm) > SPINDLE_ACTUAL_ZERO_EPSILON ||
-         fabs(axis.command_pos - axis.actual_pos) > SPINDLE_CSP_POSITION_EPSILON)) {
-        LOG(LOG_LEVEL_ERR, "M29无预定向入口拒绝：CSP未停稳或位置未跟随");
+         (!spl_context.reset_requires_start &&
+          fabs(axis.command_pos - axis.actual_pos) > SPINDLE_CSP_POSITION_EPSILON))) {
+        LOG(LOG_LEVEL_ERR,
+            "M29无预定向入口拒绝：CSP未停稳或位置未跟随 rpm=%.3f 目标=%.3f 实际=%.3f",
+            axis.actual_speed_rpm, axis.command_pos, axis.actual_pos);
         return false;
     }
-    if (spindle.mode == HAL_SPINDLE_CSP &&
+    if (spindle.mode == HAL_SPINDLE_CSP && !mode_switching &&
+        !spl_context.csv_switch_pending &&
         rt_hal_request_axis_pos(RT_HAL_AXIS_SP, axis.actual_pos) != HAL_OK) {
         LOG(LOG_LEVEL_ERR, "M29无预定向入口拒绝：CSP位置保持请求失败");
+        return false;
+    }
+    wait_csv = mode_switching || spl_context.csv_switch_pending ||
+        (spindle.mode != HAL_SPINDLE_CSV && spindle.mode != HAL_SPINDLE_CSP);
+    if (wait_csv && spl_ms_request(HAL_SPINDLE_CSV) != HAL_OK) {
+        LOG(LOG_LEVEL_ERR, "M29无预定向入口拒绝：CSV模式请求失败 rc=%d",
+            spl_ms_result());
         return false;
     }
 
     s_m29_trace_tail = 2000;
     s_m29_trace_start = true;
     spl_context.m29_active = true;
-    spl_context.m29_phase =
-        spindle.mode == HAL_SPINDLE_CSV || spindle.mode == HAL_SPINDLE_CSP ?
-        SPINDLE_M29_NO_ORIENT_STOPPING : SPINDLE_M29_NO_ORIENT_WAIT_CSV;
+    spl_context.m29_phase = wait_csv ?
+        SPINDLE_M29_NO_ORIENT_WAIT_CSV : SPINDLE_M29_NO_ORIENT_STOPPING;
+    spl_context.csv_switch_pending = false;
     spl_context.m29_stop_stable_cycles = 0;
     spl_context.orient_elapsed_cycles = 0;
     spl_context.reset_requires_start = false;
@@ -508,8 +520,10 @@ bool spindle_request_m29_no_orient(void)
     spl_context.vel_planner.enable = false;
     s_spl_target_pos = axis.actual_pos;
     spindle_clear_velocity_arrival();
-    spl_ms_reset();
-    LOG(LOG_LEVEL_INFO, "M29无预定向：初始模式=%d，准备停稳后切CSP", spindle.mode);
+    if (!wait_csv) spl_ms_reset();
+    LOG(LOG_LEVEL_INFO,
+        "M29无预定向：初始模式=%d 切换中=%d 当前位置=%.3f 旧目标=%.3f，准备停稳后切CSP",
+        spindle.mode, mode_switching, axis.actual_pos, axis.command_pos);
     return true;
 }
 

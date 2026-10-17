@@ -120,7 +120,7 @@ void spl_context_init(spindle_context_t* spl_ctx);
 /** 在 F 信号发布之后记录状态变化，cycle 为发布周期编号。 */
 void spindle_request_m29(void);
 /* 运动线程独立入口，不改变普通 M29：CSV 受控停车后切 CSP，当前位置作为攻丝零点。
- * 已停稳的 CSP 也可受理；定向/其他切换在飞、移动中的 CSP 或无有效反馈时拒绝。
+ * 已停稳的 CSP 和未完成的普通模式切换也可接管；定向中、移动中的 CSP 或无有效反馈时拒绝。
  * true 仅代表受理，仍须等待 spindle_m29_is_ready() 和原有 PLC FIN 握手。
  * false 时调用者必须中止本次 M29，不能把拒绝当作完成。 */
 bool spindle_request_m29_no_orient(void);
