@@ -33,9 +33,14 @@ typedef enum
     SYS_ESTOP_INPUT,            // 系统急停输入
     SYS_IS_ALARMING,            // 是否正在报警中
     SYS_IS_SWITCHING_MODE,      // 是否正在切换模式
-    SYS_IS_MAC_LOCK_ON,         // 机床锁住开启
+    SYS_IS_MAC_LOCK,            // 机床锁住开启
     SYS_IS_MAC_LOCK_READY,      // 机床锁住完成
     SYS_IS_IT_LOCK,             // 所有轴互锁
+    SYS_IS_IT1_LOCK,            // 轴1互锁
+    SYS_IS_IT2_LOCK,            // 轴2互锁
+    SYS_IS_IT3_LOCK,            // 轴3互锁
+    SYS_IS_IT4_LOCK,            // 轴4互锁
+    SYS_IS_IT5_LOCK,            // 轴5互锁
     SYS_IS_BSL_LOCK,            // 程序段开始锁住
     SYS_IS_CSL_LOCK,            // 切削程序段开始锁住
     SYS_IS_DRY_RUN,             // 空运行

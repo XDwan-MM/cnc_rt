@@ -258,8 +258,7 @@ static void auto_cal_target_vel(){
             else cycle_tp->pos_cmd_data.target_vel = MIN(cycle_tp->plan_block->feed_vel * var_chan[0][VAR_CHAN_FEED_OVERRIDE].value.f / OVERRIDE_PERCENT, cycle_tp->max_feed_vel);
             break;
         }
-        if(!rt_data->sys_state[SYS_IS_MAC_LOCK_READY] && rt_data->sys_state[SYS_IS_MAC_LOCK_ON]) cycle_tp->pos_cmd_data.target_vel = 0;
-        if(rt_data->sys_state[SYS_IS_MAC_LOCK_READY] && !rt_data->sys_state[SYS_IS_MAC_LOCK_ON]) cycle_tp->pos_cmd_data.target_vel = 0;
+        if(rt_data->sys_state[SYS_IS_MAC_LOCK_READY] != rt_data->sys_state[SYS_IS_MAC_LOCK]) cycle_tp->pos_cmd_data.target_vel = 0;
         if(rt_data->sys_state[SYS_IS_IT_LOCK] || rt_data->sys_state[SYS_IS_STOP_SKIP]) cycle_tp->pos_cmd_data.target_vel = 0;
         break;
     case EXEC_PAUSING:

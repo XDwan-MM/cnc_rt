@@ -95,7 +95,7 @@ static void plc_output_auto()
     else
         clearRegBit(REG_F, 2, 7);
     // 机械锁住
-    if (rt_data->sys_state[SYS_IS_MAC_LOCK_READY])
+    if (rt_data->sys_state[SYS_IS_MAC_LOCK])
         setRegBit(REG_F, 4, 1);
     else
         clearRegBit(REG_F, 4, 1);
