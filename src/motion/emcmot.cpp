@@ -301,6 +301,8 @@ static void read_from_hal()
         rt_data->axis_data[AXIS_Y].motor_act_pos = pos;
     if (rt_hal_axis_pos(RT_HAL_AXIS_Z, &pos) == HAL_OK)
         rt_data->axis_data[AXIS_Z].motor_act_pos = pos;
+    if (rt_hal_axis_pos(RT_HAL_AXIS_SP, &pos) == HAL_OK)
+        rt_data->axis_data[RT_HAL_AXIS_SP].motor_act_pos = pos;
 
 
     /* enc_cntr：HAL 不提供原始反馈计数，置 0。仅用于显示，不参与保护判断。 */
@@ -347,7 +349,7 @@ static void output_to_hal()
     /* 刚性攻丝：把插补算的主轴绝对角度发给驱动器（主轴在 CSP 位置环里跟随）。
      * 只在"当前块是刚性攻丝"时发 —— 别的时候主轴是速度模式（CSV），写位置会被 HAL 拒。
      * 角度语义见 interpolate_tap()：从本段起点算起、跨圈累计、反向为负。 */
-    if (cycle_tp->plan_block->type == RIGID_TAP)
+    if (cycle_tp->plan_block->type == RIGID_TAP || cycle_tp->plan_block->type == TAP_RETURN)
         (void)rt_hal_request_axis_pos(RT_HAL_AXIS_SP, rt_data->axis_data[AXIS_SP].wcs_cmd_pos_cur);
 }
 

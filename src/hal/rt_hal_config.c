@@ -121,9 +121,9 @@ static void fill_axis(HalCAxisCfg* a, const RtHalBinding* b, int spindle) {
     a->estop_action = HAL_ESTOP_DISABLE_OPERATION;
     /* 进给轴必须是位置模式（HAL 强制）；主轴默认速度模式 */
     a->work_mode = spindle ? HAL_WORK_VELOCITY : HAL_WORK_POSITION;
-    a->encoder_type = HAL_ENC_ABSOLUTE;
+    a->encoder_type = spindle ? HAL_ENC_INCREMENTAL_Z :HAL_ENC_ABSOLUTE;
     a->feedback_pulses_per_rev = RT_PLACEHOLDER_PULSES_PER_REV;
-    a->feedback_wrap = spindle ? HAL_WRAP_MODULAR : HAL_WRAP_LINEAR;
+    a->feedback_wrap = spindle ? HAL_WRAP_LINEAR : HAL_WRAP_LINEAR;
     a->command_units_per_count = RT_PLACEHOLDER_UNITS_PER_COUNT;
     a->feedback_units_per_count = RT_PLACEHOLDER_UNITS_PER_COUNT;
     /* 命令与反馈方向分开配：外接光栅尺可能只需翻反馈 */
