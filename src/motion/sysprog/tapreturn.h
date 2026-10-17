@@ -40,7 +40,7 @@ void tapreturn_data_reset(void);
 // 运行中记录攻丝块参数
 bool tapreturn_record(const PLAN_BLOCK *block);
 
-// 按实际运动**推进记录状态；每周期调用（挂 handle_auto_cmd()），
+// 按 Z 轴反馈推进记录状态；攻丝段结束及复位位置对齐后调用。
 void tapreturn_update(const PLAN_BLOCK *cur_block);
 
 TAP_RETURN_STATE tapreturn_state(void);

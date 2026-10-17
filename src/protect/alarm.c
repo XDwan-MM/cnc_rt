@@ -58,6 +58,10 @@ static int s_reset_waiting;
 static int s_reset_failed;
 static struct timespec s_reset_started;
 
+bool alarm_fault_reset_pending(void) {
+    return s_reset_waiting || s_reset_failed;
+}
+
 static int drive_feedback_clear(void) {
     for (int i = 0; i < RT_HAL_AXIS_COUNT; ++i) {
         HalCAxisStatus st;

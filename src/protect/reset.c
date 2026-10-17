@@ -2,8 +2,11 @@
 #include "rt_hal_adapter.h"
 #include "rerun.h"
 #include "rt_data.h"
+#include "spl_control.h"
+#include "tapreturn.h"
 #include "global.h"
 #include <hmisysapi.h>
+#include <stdlib.h>
 
 const char* reset_trigger_name[] = {"紧急停止信号ESP", "外部复位信号ERS", "复位&倒带信号RRW", "按下MDI的RESET键"};
 
@@ -51,6 +54,8 @@ void nc_set_resetting(RESET_TRIGGER reset_trigger){
 /// @brief 完成F1.1的判断
 void nc_set_resetted(){
     if(rt_data->sys_state[SYS_IS_ALARMING] || rt_data->sys_state[SYS_IS_ESTOP_ACTIVE]) return;
+    if (nc_reset->is_resetting && nc_reset->reset_trigger == HMI_RESET &&
+        (spindle_reset_stop_pending() || !update_pos_flag)) return;
     switch (rt_data->current_mode) {
         case MODE_MDI: // MDI
         case MODE_MEM: // 记忆
@@ -58,6 +63,10 @@ void nc_set_resetted(){
             if(nc_reset->is_resetting && cycle_tp->exec_state == EXEC_IDLE && IsEqualTo(rt_hal_spindle_rpm(), 0)){
                 nc_reset->is_resetted = 1;
                 rt_data_reset();
+                if (nc_reset->reset_trigger == HMI_RESET) {
+                    tapreturn_update(NULL);
+                    tapreturn_refresh_return_param();
+                }
                 rerun_data_reset();
             }
             break;
@@ -65,6 +74,10 @@ void nc_set_resetted(){
             if(nc_reset->is_resetting && !var_chan[0][VAR_CHAN_IS_HOMING].value.i && IsEqualTo(rt_hal_spindle_rpm(), 0)){
                 nc_reset->is_resetted = 1;
                 rt_data_reset();
+                if (nc_reset->reset_trigger == HMI_RESET) {
+                    tapreturn_update(NULL);
+                    tapreturn_refresh_return_param();
+                }
                 rerun_data_reset();
             }
             break;
@@ -76,6 +89,10 @@ void nc_set_resetted(){
             if(nc_reset->is_resetting && IsEqualTo(rt_hal_spindle_rpm(), 0)){
                 nc_reset->is_resetted = 1;
                 rt_data_reset();
+                if (nc_reset->reset_trigger == HMI_RESET) {
+                    tapreturn_update(NULL);
+                    tapreturn_refresh_return_param();
+                }
                 rerun_data_reset();
             }
             break;

@@ -18,6 +18,7 @@ extern "C" {
 
 void handle_estop_cmd();
 void handle_alarm_cmd();
+bool alarm_fault_reset_pending(void);
 
 /* 每拍检查 HAL 侧状态，由运动线程调用（只读适配层快照，不碰 HAL context）。 */
 void alarm_poll_hal();

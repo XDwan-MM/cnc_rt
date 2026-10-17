@@ -1,6 +1,7 @@
 #include "spl_control.h"
 #include "spl_orient.h"
 #include "rt_hal_adapter.h"
+#include "alarm.h"
 #include <hmisysapi.h>
 #include <alarmapi.h>
 #include <hmisysapi.h>
@@ -22,6 +23,7 @@
 #define ALARM_RESULT_ALREADY_EXISTS    (-8)
 #define SPINDLE_ORIENT_TIMEOUT_CYCLES  (10000U)
 #define SPINDLE_M29_MODE_TIMEOUT_CYCLES (10000U)
+#define SPINDLE_RESET_STOP_TIMEOUT_CYCLES (30000U)
 
 spindle_context_t spl_context;
 
@@ -229,6 +231,8 @@ static void spindle_apply_deferred_start(void);
 static void spindle_update_m29(void);
 static void spindle_update_m29_feedback(void);
 static bool spindle_reset_or_estop_active(void);
+static bool spindle_reset_stop_abort_required(void);
+static void spindle_update_reset_stop(void);
 static void spindle_log_m29_csp_trace(void);
 static void spindle_update_m29_no_orient(void);
 static bool spindle_m29_no_orient_preparing(void) {
@@ -259,6 +263,42 @@ void spindle_control_update(void)
 
     release_orient_event =
         (spl_context.spl_event == SPINDLE_EVENT_RELEASE_ORIENT);
+
+    if (spl_context.reset_stop_pending && spindle_reset_stop_abort_required())
+        spl_context.reset_stop_pending = false;
+    if (rt_data->nc_event == SYS_EVENT_HMI_RESET &&
+        !spl_context.reset_stop_pending && !spl_context.reset_requires_start &&
+        !spindle_reset_stop_abort_required() &&
+        spl_drv_enabled())
+    {
+        const int mode = spl_drv_mode();
+        const bool tapping = cycle_tp != NULL && cycle_tp->plan_block != NULL &&
+            cycle_tp->exec_cmd == DO_TAP_CMD &&
+            (cycle_tp->plan_block->type == RIGID_TAP ||
+             cycle_tp->plan_block->type == TAP_RETURN);
+        int feed_axis = -1;
+        if (tapping) {
+            switch (cycle_tp->plan_block->plane) {
+            case PLANE_XY: feed_axis = AXIS_Z; break;
+            case PLANE_XZ: feed_axis = AXIS_Y; break;
+            case PLANE_YZ: feed_axis = AXIS_X; break;
+            default: break;
+            }
+        }
+        if ((mode == HAL_SPINDLE_CSV &&
+             (fabs(spl_drv_actual_vel()) > SPINDLE_ACTUAL_ZERO_EPSILON ||
+              fabs(spl_context.vel_planner.current_vel) > SPINDLE_SPEED_EPSILON)) ||
+            (mode == HAL_SPINDLE_CSP && tapping && feed_axis >= 0))
+        {
+            spl_context.reset_stop_pending = true;
+            spl_context.reset_stop_csp = mode == HAL_SPINDLE_CSP;
+            spl_context.reset_stop_feed_axis = feed_axis;
+            spl_context.reset_stop_cycles = 0;
+            spl_context.reset_stop_stable_cycles = 0;
+            LOG(LOG_LEVEL_INFO, "HMI复位：主轴保持%s受控停车",
+                spl_context.reset_stop_csp ? "CSP攻丝同步" : "CSV速度斜坡");
+        }
+    }
 
     /*
      * 这是 1 ms 周期入口。处理顺序很重要：先锁定安全状态，再处理
@@ -366,8 +406,14 @@ void spindle_control_update(void)
 static void spindle_publish_rigid_state(void)
 {
     rt_data->sys_state[SYS_IS_RIGID] =
+        (spl_context.reset_stop_pending && spl_context.reset_stop_csp) ||
         (spl_context.m29_phase != SPINDLE_M29_IDLE &&
          spl_context.m29_phase != SPINDLE_M29_ERROR);
+}
+
+bool spindle_reset_stop_pending(void)
+{
+    return spl_context.reset_stop_pending;
 }
 
 /**
@@ -913,9 +959,10 @@ static void spindle_update_driver_control(void)
 {
     bool velocity_control_ready = false;
 
-    /* 安全条件优先级最高：急停或驱动器 Fault 时立即清零目标并请求下使能，
-     * 否则急停释放后会把旧目标速度带回来。0x0008 是状态字的 Fault 位。 */
-    if (spindle_reset_or_estop_active() ||
+    /* 急停、驱动器 Fault 和未进入受控停车的复位立即下使能。
+     * 0x0008 是状态字的 Fault 位。 */
+    if ((spindle_reset_or_estop_active() && !spl_context.reset_stop_pending) ||
+        rt_data->sys_state[SYS_ESTOP_INPUT] ||
         (spl_drv_status_word() & 0x0008U) != 0U)
     {
         spl_context.spl_state = SPINDLE_STOP;
@@ -945,6 +992,12 @@ static void spindle_update_driver_control(void)
             }
         }
         spl_drv_disable();
+        return;
+    }
+
+    if (spl_context.reset_stop_pending)
+    {
+        spindle_update_reset_stop();
         return;
     }
 
@@ -1194,12 +1247,15 @@ static void spindle_handle_stop(spindle_context_t *context)
     context->command_state = SPINDLE_STOP;
     context->command_speed = 0.0;
     /*
-     * 停止事件只撤销速度目标。普通 M5 保持驱动器可受控减速，急停/Fault
-     * 则直接请求下使能；最终是否完成由 spindle_finish_stop_if_ready 判断。
+     * 停止事件只撤销速度目标。普通 M5 和 HMI 复位的 CSV 停车保持驱动器使能，
+     * 急停/Fault 则直接下使能；CSP 攻丝复位由插补继续下发同步位置。
      */
     context->spl_state = SPINDLE_STOP;
     context->vel_planner.enable = false;
     context->vel_planner.target_vel = 0.0;
+
+    if (context->reset_stop_pending && context->reset_stop_csp)
+        return;
 
     if (spl_drv_mode() == HAL_SPINDLE_CSP)
     {
@@ -1249,7 +1305,7 @@ static void spindle_handle_stop(spindle_context_t *context)
         return;
     }
 
-    /* 普通 M5 保持 CSV、允许驱动器受控减速；急停/复位/驱动器 Fault 一律去使能。
+    /* 普通 M5 和 HMI 复位受控停车保持 CSV；急停/驱动器 Fault 去使能。
      * 停止握手已完成的拍不能再重新使能（否则会把 spindle_finish_stop_if_ready() 刚下的
      * 去使能每拍盖回，主轴带力矩停着）；定向窗口 M19 与攻丝窗口 M29 READY 要带力矩。 */
     const bool stop_finished =
@@ -1258,7 +1314,8 @@ static void spindle_handle_stop(spindle_context_t *context)
         spl_context.m29_phase != SPINDLE_M29_READY &&
         fabs(spl_context.vel_planner.current_vel) <= SPINDLE_SPEED_EPSILON &&
         fabs((double)spl_drv_actual_vel()) <= SPINDLE_ACTUAL_ZERO_EPSILON;
-    if (!stop_finished && !spindle_reset_or_estop_active() &&
+    if (!stop_finished &&
+        (context->reset_stop_pending || !spindle_reset_or_estop_active()) &&
         (spl_drv_status_word() & 0x0008U) == 0U)
     {
         spl_drv_enable();
@@ -1279,6 +1336,79 @@ static bool spindle_reset_or_estop_active(void)
              (rt_data->nc_event == SYS_EVENT_HMI_RESET) ||
              (nc_reset != NULL && nc_reset->is_resetting);
     return active;
+}
+
+static bool spindle_reset_stop_abort_required(void)
+{
+    return rt_data->sys_state[SYS_ESTOP_INPUT] ||
+           rt_data->sys_state[SYS_IS_ESTOP_ACTIVE] ||
+           rt_data->sys_state[SYS_IS_ALARMING] ||
+           alarm_fault_reset_pending() ||
+           rt_data->axis_data[AXIS_SP].status.is_disable ||
+           rt_data->axis_data[AXIS_SP].status.is_error ||
+           (spl_drv_status_word() & 0x0008U) != 0U ||
+           (nc_reset != NULL && nc_reset->is_resetting &&
+            nc_reset->reset_trigger != HMI_RESET);
+}
+
+static void spindle_update_reset_stop(void)
+{
+    HalCAxisStatus axis;
+    HalCAxisStatus feed;
+    const bool csp = spl_context.reset_stop_csp;
+    const int mode = spl_drv_mode();
+    const int status_rc = rt_hal_axis_status(RT_HAL_AXIS_SP, &axis);
+    const int feed_rc = csp ?
+        rt_hal_axis_status((RtHalAxisSlot)spl_context.reset_stop_feed_axis, &feed) : HAL_OK;
+    if (++spl_context.reset_stop_cycles >= SPINDLE_RESET_STOP_TIMEOUT_CYCLES ||
+        status_rc != HAL_OK || !axis.speed_valid || !axis.enabled ||
+        mode != (csp ? HAL_SPINDLE_CSP : HAL_SPINDLE_CSV) ||
+        (csp && (!axis.position_valid || feed_rc != HAL_OK ||
+                 !feed.position_valid || !feed.linear_speed_valid)))
+    {
+        LOG(LOG_LEVEL_ERR, "HMI复位主轴受控停车失败：CSP=%d mode=%d status_rc=%d feed_rc=%d cycles=%u",
+            csp, mode, status_rc, feed_rc, spl_context.reset_stop_cycles);
+        spl_context.reset_stop_pending = false;
+        spl_drv_disable();
+        setAlarm(ALARM_AX, ALARM_ERROR, SPINDLE_ALARM_RESET_STOP_TIMEOUT);
+        return;
+    }
+
+    if (csp)
+    {
+        const double configured_tol = rt_data->axis_data[spl_context.reset_stop_feed_axis].pos_tol;
+        const double feed_tol = isfinite(configured_tol) && configured_tol > 0.0 ?
+            configured_tol : 0.01;
+        if (cycle_tp != NULL && cycle_tp->exec_state == EXEC_IDLE &&
+            fabs(axis.actual_speed_rpm) <= SPINDLE_ACTUAL_ZERO_EPSILON &&
+            fabs(axis.command_pos - axis.actual_pos) <= SPINDLE_CSP_POSITION_EPSILON &&
+            fabs(feed.actual_speed_mm_min) <= 1.0 &&
+            fabs(feed.command_pos - feed.actual_pos) <= feed_tol)
+            ++spl_context.reset_stop_stable_cycles;
+        else
+            spl_context.reset_stop_stable_cycles = 0;
+    }
+    else
+    {
+        spindle_update_velocity();
+        if (fabs(spl_context.vel_planner.current_vel) <= SPINDLE_SPEED_EPSILON &&
+            fabs(axis.actual_speed_rpm) <= SPINDLE_ACTUAL_ZERO_EPSILON)
+            ++spl_context.reset_stop_stable_cycles;
+        else
+            spl_context.reset_stop_stable_cycles = 0;
+    }
+
+    if (spl_context.reset_stop_stable_cycles >= SPINDLE_M29_STABLE_CYCLES)
+    {
+        spl_context.reset_stop_pending = false;
+        if (csp) update_pos_flag = 0;
+        spl_drv_disable();
+        LOG(LOG_LEVEL_INFO, "HMI复位：主轴已停稳，撤销使能");
+    }
+    else
+    {
+        spl_drv_enable();
+    }
 }
 
 static void spindle_handle_rotation(spindle_context_t *context,

@@ -295,13 +295,19 @@ static void read_from_hal()
     /* HAL 给的就是用户单位（mm）——脉冲换算与 enc_off 语义都由 HAL 完成，
      * 这里不再调 pulses_to_position()，也不重复加减 enc_off。 */
     double pos = 0.0;
+    bool feed_positions_valid = true;
     if (rt_hal_axis_pos(RT_HAL_AXIS_X, &pos) == HAL_OK)
         rt_data->axis_data[AXIS_X].motor_act_pos = pos;
+    else feed_positions_valid = false;
     if (rt_hal_axis_pos(RT_HAL_AXIS_Y, &pos) == HAL_OK)
         rt_data->axis_data[AXIS_Y].motor_act_pos = pos;
+    else feed_positions_valid = false;
     if (rt_hal_axis_pos(RT_HAL_AXIS_Z, &pos) == HAL_OK)
         rt_data->axis_data[AXIS_Z].motor_act_pos = pos;
-    if (rt_hal_axis_pos(RT_HAL_AXIS_SP, &pos) == HAL_OK)
+    else feed_positions_valid = false;
+    const bool spindle_position_valid =
+        rt_hal_axis_pos(RT_HAL_AXIS_SP, &pos) == HAL_OK;
+    if (spindle_position_valid)
         rt_data->axis_data[RT_HAL_AXIS_SP].motor_act_pos = pos;
 
 
@@ -331,7 +337,8 @@ static void read_from_hal()
         rt_data->chan_data[0].act_vel = sqrt(vx * vx + vy * vy + vz * vz);
     }
 
-    if (!update_pos_flag)
+    if (!update_pos_flag && feed_positions_valid &&
+        (!spl_context.reset_stop_csp || spindle_position_valid))
     {
         // 报警复位后用最新带补偿反馈，重建未补偿坐标基准。
         rebuild_axis_positions_from_feedback();

@@ -105,6 +105,11 @@ typedef struct
     spindle_orient_phase_t orient_phase; /**< CNC/PLC 层定向阶段。 */
     uint32_t orient_elapsed_cycles; /**< 定向运行已经过的控制周期数。 */
     bool reset_requires_start; /**< 复位/急停后禁止旧目标自动恢复。 */
+    bool reset_stop_pending; /**< HMI 复位后正在受控停车。 */
+    bool reset_stop_csp; /**< 攻丝复位时由插补继续下发 CSP 位置。 */
+    int reset_stop_feed_axis; /**< 攻丝所在平面的进给轴。 */
+    uint32_t reset_stop_cycles;
+    uint32_t reset_stop_stable_cycles;
     bool start_request_pending; /**< 已收到新的 M3/M4，允许解除复位启动锁。 */
     bool deferred_start_pending; /**< 定向期间收到的 M3/M4，释放后自动执行。 */
     spindle_state_t deferred_start_state; /**< 延迟启动的方向。 */
@@ -125,6 +130,7 @@ void spindle_request_m29(void);
  * false 时调用者必须中止本次 M29，不能把拒绝当作完成。 */
 bool spindle_request_m29_no_orient(void);
 bool spindle_m29_is_ready(void);
+bool spindle_reset_stop_pending(void);
 void spindle_clear_velocity_arrival(void);   /* 新指令/复位/定向/M29 入口调用 */
 bool spindle_velocity_is_ready(void);        /* F45.3 的唯一查询入口（只读） */
 void spindle_complete_m29(void);
@@ -133,6 +139,7 @@ void spindle_complete_m29(void);
  * 否则显示为未知报警。 */
 #define SPINDLE_ALARM_M29_FIN_TIMEOUT  (2101)
 #define SPINDLE_ALARM_M29_PREP_REJECT  (2102)
+#define SPINDLE_ALARM_RESET_STOP_TIMEOUT (2103)
 
 /** M29 卡住诊断的只读快照：只观察，不改变任何控制状态。 */
 typedef struct
