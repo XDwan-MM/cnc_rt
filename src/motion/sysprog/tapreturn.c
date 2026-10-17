@@ -349,7 +349,7 @@ GNC_RES tapreturn_generate_with_speed(int speed, char *buf, int buf_len)
 }
 
 double cal_rigid_pos_sync_error(){
-    double drill_axis_pos = rt_data->axis_data[AXIS_Z].motor_act_pos - rt_data->axis_data[AXIS_Z].motor_act_pos_pre;
-    double sp_axis_pos = rt_data->axis_data[AXIS_SP].motor_act_pos - rt_data->axis_data[AXIS_SP].motor_act_pos_pre;
+    double drill_axis_pos = rt_data->axis_data[AXIS_Z].mac_cmd_pos - rt_data->axis_data[AXIS_Z].motor_act_pos;
+    double sp_axis_pos = rt_data->axis_data[AXIS_SP].mac_cmd_pos - rt_data->axis_data[AXIS_SP].motor_act_pos;
     return drill_axis_pos / tap_return_data.screw_offset - sp_axis_pos / 360;
 }

@@ -220,7 +220,8 @@ static void auto_deal_mstb(){
             if(rt_data->sys_state[SYS_IS_RIGID_RETURN]){
                 spindle_request_m29_no_orient();
             }else{
-                spindle_request_m29();
+                spindle_request_m29_no_orient();
+                //spindle_request_m29();
             }
             #endif
             break;
