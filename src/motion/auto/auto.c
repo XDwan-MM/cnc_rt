@@ -436,7 +436,6 @@ static void auto_check_event(){
         break;
     case SYS_EVENT_STOP_SKIP_OFF:
         LOG(LOG_LEVEL_INFO, "自动模式处理跳转信号");
-        rt_set_sys_state(SYS_IS_STOP_SKIP, false);
         break;
     case SYS_EVENT_RIGID_RETURN_ON:
         switch (cycle_tp->exec_state)
