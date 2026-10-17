@@ -685,6 +685,18 @@ static bool parser_is_hold_gcode(int unmodal)
 {
     return itp_isBufStopGCode(unmodal) && unmodal != ITP_UNMODAL_STOP_SKIP;
 }
+/// @brief 判断译码器是否暂时不会产生新块 
+bool parser_hasNoMoreBlocks(void)
+{
+    if (parser_data == NULL)
+        return true;
+
+    if (parser_data->bufstop.hold && buf_stop_active(&parser_data->bufstop))
+        return true;
+
+    return parser_data->parser_state == PARSER_WAITING_FOR_MOTION
+        || parser_data->parser_state == PARSER_WAITING_FOR_IO;
+}
 /*
 1、G31
 

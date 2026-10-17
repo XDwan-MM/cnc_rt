@@ -91,6 +91,7 @@ GNC_RES parser_reading();
 void parser_reset();
 void parser_run_mode();
 bool parser_isBufStopMCode(int m_code); 
+bool parser_hasNoMoreBlocks(void);
 
 
 #ifdef __cplusplus

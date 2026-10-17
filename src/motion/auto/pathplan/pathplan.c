@@ -33,6 +33,14 @@ static bool is_length_valid(PLAN_BLOCK* parser_block);
 static void block_deal_nurbs_enable(PLAN_BLOCK* pretreat_block,PLAN_QUEUE* temp);
 static int blocknum = 1;//未复位
 
+extern bool parser_hasNoMoreBlocks(void);
+
+/// @brief 程序结束或译码器暂时暂停（G31等待运动同步指令、阻止缓冲指令）
+static bool noMoreBlocks(void)
+{
+    return !rt_data->chan_state[0][CHAN_IS_PARSERING] || parser_hasNoMoreBlocks();
+}
+
 /// @brief 将译码结果转换成插补段
 GNC_RES chan_add_block(){
     PLAN_BLOCK* pretreat_block;
@@ -62,7 +70,7 @@ GNC_RES pretreat_block()
     PLAN_BLOCK* treat_block;
 
     //结束逻辑：
-    if ((rt_data->chan_state[0][CHAN_IS_PARSERING] == false)&&queue_is_empty(parser_queue))
+    if (noMoreBlocks() &&queue_is_empty(parser_queue))
     {
         if(queue_get_size(pretreat_queue)==1)
         {
@@ -311,7 +319,7 @@ static GNC_RES block_unif_by_nurbs()
         return GNC_OPERATOR_SUCCESS;
     
     //结束逻辑：
-    if ((rt_data->chan_state[0][CHAN_IS_PARSERING] == false)&&queue_is_empty(treat_queue))
+    if (noMoreBlocks()&&queue_is_empty(treat_queue))
     {
         if(queue_get_size(fix_queue)==1)
         {
@@ -554,7 +562,7 @@ static GNC_RES block_unif_by_circle_smooth(void)
     for (int i = 0; i < PRE_TREAT_SIZE; ++i)
     {
         // 需同时检查两个上游队列。
-        bool flush = !rt_data->chan_state[0][CHAN_IS_PARSERING] && queue_is_empty(parser_queue) && queue_is_empty(pretreat_queue);
+        bool flush = noMoreBlocks() && queue_is_empty(parser_queue) && queue_is_empty(pretreat_queue);
 
         // 每次处理一对相邻段，仅进行几何平滑和队列传递。
         GNC_RES res = circle_smooth_queue_step(treat_queue, unif_queue, flush, &cfg, &map);
