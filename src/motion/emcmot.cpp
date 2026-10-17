@@ -32,14 +32,12 @@ static void smx_do_period();
 static void axis_write_out();
 static void check_for_fault();
 static void set_operating_mode();
-static void handle_nc_event();
 static void get_cmd_pos();
 static void update_status();
 static void output_to_hal();
 static void read_from_hal();
 static void compute_error_comp();
 static void calcul_mac_cmd_pos();
-static void manual_unset_sys_state();
 static void reset_clean_warning();
 static void rebuild_axis_positions_from_feedback();
 
@@ -116,8 +114,6 @@ static void chan_do_period()
         check_ferror_fault();
         // 判断运动模式
         set_operating_mode();
-        // 处理系统事件
-        handle_nc_event();
         // 主轴控制
         spindle_control_update();
         // 根据运动模式计算运动位置
@@ -495,41 +491,6 @@ static void reset_clean_warning()
         cleanAllAlarm(ALARM_HM, ALARM_WARNING);
         cleanAllAlarm(ALARM_ETHCAT_SV, ALARM_WARNING);
     }
-}
-
-/// @brief 所有模式下都统一处理的事件
-static void handle_nc_event(){
-    manual_unset_sys_state();
-    switch (rt_data->nc_event)
-    {
-    case SYS_EVENT_PROGRAM_RESTART_ON:
-        rt_set_sys_state(SYS_IS_PROG_RESTAR, true);
-        break;
-    case SYS_EVENT_PROGRAM_RESTART_OFF:
-        rt_set_sys_state(SYS_IS_PROG_RESTAR, false);
-        break;
-    case SYS_EVENT_BLOCK_SKIP_ON:
-        rt_set_sys_state(SYS_IS_BLOCK_SKIP, true);
-        break;
-    case SYS_EVENT_BLOCK_SKIP_OFF:
-        rt_set_sys_state(SYS_IS_BLOCK_SKIP, false);
-        break;
-    default:
-        break;
-    }
-}
-
-static void manual_unset_sys_state()
-{
-    if (rt_data->current_mode == MODE_MDI || rt_data->current_mode == MODE_MEM || rt_data->current_mode == MODE_DNC)
-        return;
-    // todo：手动模式暂不支持机械锁住和所有轴互锁
-    if (rt_data->sys_state[SYS_IS_MAC_LOCK_READY])
-        rt_data->sys_state[SYS_IS_MAC_LOCK_READY] = false;
-    if (rt_data->sys_state[SYS_IS_MAC_LOCK_ON])
-        rt_data->sys_state[SYS_IS_MAC_LOCK_ON] = false;
-    if (rt_data->sys_state[SYS_IS_IT_LOCK])
-        rt_data->sys_state[SYS_IS_IT_LOCK] = false;
 }
 
 static void rebuild_axis_positions_from_feedback()

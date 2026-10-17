@@ -100,6 +100,7 @@ typedef struct
     double start_vel;   // 起始速度
     double end_vel;     // 终点速度
     double feed_vel;    // 设置的进给速度F，读取NC文件参数，不变
+    double param_vel;   // 最高加工速度，根据参数设置计算最高加工速度
     double max_vel;     // 最大速度，随着进给倍率改变而改变
     double max_acc;
     double max_jerk;
