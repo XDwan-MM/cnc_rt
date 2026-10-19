@@ -48,8 +48,6 @@ void emcmot_test_rebuild_axis_positions_from_feedback()
 }
 #endif
 
-
-
 const char *mode_names[] = {"编辑", "AUTO", "MDI", "DNC", "手轮", "手动", "回零", "空闲"};
 
 // 轨迹规划
@@ -146,6 +144,8 @@ static void axis_write_out()
 
 static void set_operating_mode()
 {
+    NC_MODE previous_mode = rt_data->current_mode;
+
     // 急停拍下时不允许切换模式
     if (rt_get_sys_state(SYS_ESTOP_INPUT))
         return;
@@ -207,6 +207,13 @@ static void set_operating_mode()
         break;
     default:
         break;
+    }
+
+    // 切换完成后进入手轮模式时重建手轮位置基准：
+    // 离开手轮模式后其他模式可能已经移动过机床，不能沿用上一次手轮模式的规划位置。
+    if (previous_mode != MODE_MPG && rt_data->current_mode == MODE_MPG)
+    {
+        handwheel_resync_position();
     }
 }
 
@@ -338,6 +345,7 @@ static void read_from_hal()
     {
         // 报警复位后用最新带补偿反馈，重建未补偿坐标基准。
         rebuild_axis_positions_from_feedback();
+        handwheel_resync_position();
         update_pos_flag = 1;
     }
 }
@@ -505,6 +513,7 @@ static void reset_clean_warning()
         cleanAllAlarm(ALARM_ETHCAT_SV, ALARM_WARNING);
     }
 }
+
 
 static void rebuild_axis_positions_from_feedback()
 {
