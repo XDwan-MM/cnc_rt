@@ -62,14 +62,10 @@ private:
     bool _hasLastCompositePosition = false;
     double _lastCompositePosition[3] = {0.0, 0.0, 0.0};
     double _actualCompositeVelocityMmPerMin = 0.0;
-    double _tapSyncIntegralMm = 0.0;
     double _tapSyncErrorSumMm = 0.0;
     double _tapSyncMinimumMm = 0.0;
     double _tapSyncMaximumMm = 0.0;
     uint32_t _tapSyncSampleCount = 0;
-    bool _hasLastTapFeedback = false;
-    double _lastTapSpindleAngle = 0.0;
-    double _lastTapAxisPosition = 0.0;
 };
 
 #endif

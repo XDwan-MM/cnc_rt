@@ -10,7 +10,6 @@
 #include "rt_hal_adapter.h"
 
 namespace {
-constexpr double kMinVelocity = 1.0e-9;
 constexpr uint32_t kCompositeAxisCount = 3U;
 
 uint32_t loadState(const CncServoSampleData* data)
@@ -134,49 +133,12 @@ void ServoSampleSampler::execute()
         }
         sampleIfDue();
 
-        if (isRigidTapConfig(_config)) {
-            const double rpm = static_cast<double>(rt_hal_spindle_rpm());
-            const double feed = rt_data->axis_data[_config.axis].act_vel;
-            const double feedCommand = rt_data->axis_data[_config.axis].cmd_vel * TIME_MINUS_2_S;
-            const double feedDirection = std::fabs(feedCommand) > kMinVelocity
-                ? (feedCommand < 0.0 ? -1.0 : 1.0) : 1.0;
-            const double expected = feedDirection * std::fabs(rpm * _config.tapPitchMm);
-            // 启动、暂停和换向时转速为零是正常现象。只有确认进给轴确实运动后，
-            // 才判定为缺少主轴反馈。
-            if (_tapMotionActive && _tapSyncSampleCount > 10U &&
-                std::fabs(feed) > 1.0 && std::fabs(rpm) < 1.0e-6) {
-                finish(CNC_SERVO_STATE_ERROR, CNC_SERVO_STOP_SAFETY,
-                       CNC_SERVO_ERROR_TAP_NO_SPINDLE_FEEDBACK);
-                return;
-            }
-            const bool spindleReverse = tapMotion && cycle_tp->plan_block->rigid_data.reverse;
-            if (_tapMotionActive && _tapSyncSampleCount > 10U && std::fabs(rpm) > kMinVelocity &&
-                ((spindleReverse && rpm > 0.0) || (!spindleReverse && rpm < 0.0))) {
-                finish(CNC_SERVO_STATE_ERROR, CNC_SERVO_STOP_SAFETY,
-                       CNC_SERVO_ERROR_TAP_DIRECTION);
-                return;
-            }
-            if (_tapMotionActive && _tapSyncSampleCount > 10U && std::fabs(feed) > kMinVelocity &&
-                    std::fabs(expected - feed) >
-                    std::max(1.0, std::fabs(_config.speedMmPerMin) * 0.75)) {
-                finish(CNC_SERVO_STATE_ERROR, CNC_SERVO_STOP_SAFETY,
-                       CNC_SERVO_ERROR_TAP_SYNC);
-                return;
-            }
-        }
+        
 
-        /* 外部会话不使用通用的程序状态结束条件；圆度测试由上面的两段圆弧
-         * 采样门控逻辑负责结束。 */
         if (isExternalMotionConfig(_config)) {
             return;
         }
 
-        /* 结束判据只看通道是不是真的在运行：
-         *  - CHAN_IS_PARSERING 只表示译码器在读文件，程序真正启动前就会短暂置起又落下，
-         *    拿它当"程序跑过"会让采样在几十毫秒后就被判成 PROGRAM_END；
-         *  - 位置残差判据的阈值 1e-9 mm 低于一个编码器当量（本机 0.00016 mm），
-         *    静止时恒为真，等于一进 RUNNING 就认为程序已经跑过了。
-         * 两者都不再参与判据。 */
         const bool programRunning = var_chan[0][VAR_CHAN_IS_RUNNING].value.i != 0;
         if (programRunning) {
             _programObserved = true;
@@ -425,14 +387,10 @@ bool ServoSampleSampler::startCapture()
     _actualVelocityMmPerMin = 0.0;
     _hasLastCompositePosition = false;
     _actualCompositeVelocityMmPerMin = 0.0;
-    _tapSyncIntegralMm = 0.0;
     _tapSyncErrorSumMm = 0.0;
     _tapSyncMinimumMm = 0.0;
     _tapSyncMaximumMm = 0.0;
     _tapSyncSampleCount = 0;
-    _hasLastTapFeedback = false;
-    _lastTapSpindleAngle = 0.0;
-    _lastTapAxisPosition = 0.0;
     __atomic_store_n(&_shared->stopReason, CNC_SERVO_STOP_NONE, __ATOMIC_RELEASE);
     __atomic_store_n(&_shared->errorCode, CNC_SERVO_ERROR_NONE, __ATOMIC_RELEASE);
     __atomic_store_n(&_shared->state, CNC_SERVO_STATE_RUNNING, __ATOMIC_RELEASE);
@@ -452,14 +410,10 @@ void ServoSampleSampler::resetCaptureData()
     _actualVelocityMmPerMin = 0.0;
     _hasLastCompositePosition = false;
     _actualCompositeVelocityMmPerMin = 0.0;
-    _tapSyncIntegralMm = 0.0;
     _tapSyncErrorSumMm = 0.0;
     _tapSyncMinimumMm = 0.0;
     _tapSyncMaximumMm = 0.0;
     _tapSyncSampleCount = 0;
-    _hasLastTapFeedback = false;
-    _lastTapSpindleAngle = 0.0;
-    _lastTapAxisPosition = 0.0;
     _shared->tapSyncMaxMm = 0.0;
     _shared->tapSyncMinMm = 0.0;
     _shared->tapSyncAverageMm = 0.0;
@@ -545,10 +499,17 @@ bool ServoSampleSampler::validateConfig(const CncServoSampleConfig& config,
             if (error) *error = CNC_SERVO_ERROR_TAP_PITCH;
             return false;
         }
+        /* 攻丝会话固定三通道：同步误差、Z 实际速度、主轴实际转速(rpm)，
+         * 界面用后两者同时画“主轴转速 / Z 轴速度”两条曲线。 */
+        const uint32_t mask = config.channelMask;
         if (config.loopType != CNC_SERVO_LOOP_VELOCITY || config.tapSyncSource != CNC_SERVO_SYNC_SOURCE_SPINDLE ||
-            config.channelMask != 0x03U || config.channels[0].signalId != CNC_SERVO_SIGNAL_RIGID_POS_SYNC_ERROR ||
+            mask != 0x07U ||
+            config.channels[0].signalId != CNC_SERVO_SIGNAL_RIGID_POS_SYNC_ERROR ||
             config.channels[1].signalId != CNC_SERVO_SIGNAL_ACT_VEL || config.channels[0].axis != AXIS_Z ||
-            config.channels[1].axis != AXIS_Z || config.tapPlane > 2U ||
+            config.channels[1].axis != AXIS_Z ||
+            config.channels[2].signalId != CNC_SERVO_SIGNAL_ACT_SPINDLE_RPM ||
+            config.channels[2].axis != AXIS_SP ||
+            config.tapPlane > 2U ||
             config.tapCycle > 1U || config.tapRPointMm < 0.0 || config.tapDwellMs < 0.0) {
             if (error) *error = CNC_SERVO_ERROR_INVALID_CONFIG;
             return false;
@@ -726,8 +687,8 @@ void ServoSampleSampler::sampleOne()
             frame.values[i] = rt_data->axis_data[AXIS_SP].motor_cmd_pos;
             break;
         case CNC_SERVO_SIGNAL_RIGID_POS_SYNC_ERROR:
-            frame.values[i] = (_tapMotionActive && _config.tapPitchMm > 0.0)
-                ? cal_rigid_pos_sync_error() * _config.tapPitchMm * 1000.0 : 0.0;
+            /* 直接使用 cal_rigid_pos_sync_error() 的原始返回值，不做螺距/µm 换算。 */
+            frame.values[i] = _tapMotionActive ? cal_rigid_pos_sync_error() : 0.0;
             break;
         default: break;
         }
@@ -750,40 +711,6 @@ void ServoSampleSampler::sampleOne()
         _shared->tapSyncAverageMm = _tapSyncErrorSumMm /
             static_cast<double>(_tapSyncSampleCount);
         __atomic_store_n(&_shared->tapSyncSampleCount, _tapSyncSampleCount, __ATOMIC_RELEASE);
-    }
-    /* 安全检查始终基于直接反馈，与上面选择的显示通道无关。 */
-    if (isRigidTapConfig(_config) && _tapMotionActive) {
-        const double rpm = static_cast<double>(rt_hal_spindle_rpm());
-        /* 同 execute() 里的同步判据：feed 是 mm/min，feedCommand 是 mm/s。 */
-        const double feed = rt_data->axis_data[_config.axis].act_vel;
-        const double feedCommand = rt_data->axis_data[_config.axis].cmd_vel * TIME_MINUS_2_S;
-        const double feedDirection = std::fabs(feedCommand) > kMinVelocity
-            ? (feedCommand < 0.0 ? -1.0 : 1.0) : 1.0;
-        const double spindleAngle = rt_data->axis_data[AXIS_SP].motor_act_pos;
-        const double tapAxisPosition = rt_data->axis_data[_config.axis].motor_act_pos;
-        if (!std::isfinite(spindleAngle) || !std::isfinite(tapAxisPosition) ||
-            !std::isfinite(rpm) || !std::isfinite(feed)) {
-            finish(CNC_SERVO_STATE_ERROR, CNC_SERVO_STOP_SAFETY,
-                   CNC_SERVO_ERROR_TAP_NO_SPINDLE_FEEDBACK);
-            return;
-        }
-        if (!_hasLastTapFeedback) {
-            _hasLastTapFeedback = true;
-            _lastTapSpindleAngle = spindleAngle;
-            _lastTapAxisPosition = tapAxisPosition;
-        } else {
-            // 刚性攻丝误差与测得的主轴相位相关，而不是与指令转速相关。
-            // 对单个采样点的角度增量归一化，避免编码器回绕造成虚假的整圈跳变。
-            double angleDelta = spindleAngle - _lastTapSpindleAngle;
-            while (angleDelta > 180.0) angleDelta -= 360.0;
-            while (angleDelta < -180.0) angleDelta += 360.0;
-            const double expectedDelta = feedDirection * std::fabs(angleDelta) / 360.0 *
-                                         _config.tapPitchMm;
-            const double actualDelta = tapAxisPosition - _lastTapAxisPosition;
-            _tapSyncIntegralMm += expectedDelta - actualDelta;
-            _lastTapSpindleAngle = spindleAngle;
-            _lastTapAxisPosition = tapAxisPosition;
-        }
     }
 }
 
