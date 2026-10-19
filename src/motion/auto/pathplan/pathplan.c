@@ -12,7 +12,6 @@
 #include "circle_smooth.h"
 
 static void block_cal_pos(PLAN_BLOCK* parser_block, PLAN_BLOCK* current_block, POS* start_pos);
-static void block_cal_move_axis(PLAN_BLOCK* current_block);
 static void block_cal_circle_vector(PLAN_BLOCK* current_block);
 static double block_cal_circle_length(PLAN_BLOCK* current_block);
 static double block_cal_nurbs_length(PLAN_BLOCK* current_block);
@@ -196,15 +195,14 @@ static void block_deal_parser_block(PLAN_BLOCK* parser_block, PLAN_BLOCK* pretre
         block_cal_length(pretreat_block);
         // 计算切矢
         block_cal_vector(pretreat_block);
+        // 计算两段衔接夹角
+        block_cal_angle(pretreat_block, &pretreat_queue->pre_vec);
         // 计算起点曲率
         block_cal_curvature(pretreat_block, &pretreat_queue->pre_startpos, &pretreat_queue->pre_pos,&pretreat_block->end_pos);
-        // 计算运动轴
-        block_cal_move_axis(pretreat_block);
-        // 计算最大速度
-        block_cal_max_vel(pretreat_block);
         // 保存信息
         pretreat_queue->pre_pos = pretreat_block->end_pos;
         pretreat_queue->pre_startpos = pretreat_block->start_pos;
+        pretreat_queue->pre_vec = pretreat_block->end_vec;
         break;
     }
 }
@@ -462,7 +460,6 @@ static GNC_RES block_unif_by_nurbs()
                         block_cal_angle(treat_block, &queue_peak_pre_tail(unif_queue)->end_vec);  
                         // nurbs段重算与下一段连接角度
                         block_cal_angle(queue_peak(fix_queue), &treat_block->end_vec);  
-
                         queue_push(unif_queue, treat_block);
                         return GNC_OPERATOR_SUCCESS;
                     }
@@ -963,7 +960,7 @@ void block_cal_vector(PLAN_BLOCK* current_block){
     
 }
 
-static void block_cal_move_axis(PLAN_BLOCK* current_block){
+void block_cal_move_axis(PLAN_BLOCK* current_block){
     switch(current_block->type){
     case RAPID:
     case LINE:
