@@ -172,6 +172,7 @@ HEADERS += \
     src/threads/rt_sem.h \
     src/threads/threads_config.h \
     src/threads/threads_controller.h \
+    src/hal/rt_hal_sdo.h \
     src/utils/math/cnc_math.h \
     src/utils/rt_axis_view.h \
     src/utils/log/log.h \
@@ -190,6 +191,7 @@ SOURCES += \
     src/datadef/record_queue.c \
     src/hal/rt_hal_config.c \
     src/hal/rt_hal_adapter.c \
+    src/hal/rt_hal_sdo.c \
     src/motion/auto/auto.c \
     src/motion/auto/trace_publisher.c \
     src/motion/auto/trajplan/auto_gcode.c \

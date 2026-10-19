@@ -36,6 +36,13 @@ void rt_hal_shutdown(void);
 /* 1 = 已 start 且未 shutdown */
 int rt_hal_running(void);
 
+/* 底层同步 SDO 调用，由 rt_hal_sdo_worker 使用。业务侧通过 rt_hal_sdo.h
+ * 提交请求并取结果；不得从 PDO/运动周期线程直接调用本接口。 */
+int rt_hal_sdo_read(int slave_pos, uint16_t index, uint8_t subindex,
+                    void* data, uint32_t size, uint32_t timeout_ms);
+int rt_hal_sdo_write(int slave_pos, uint16_t index, uint8_t subindex,
+                     const void* data, uint32_t size, uint32_t timeout_ms);
+
 /* ---- 周期（仅 PDO 线程）---- */
 
 /* 整圈循环，PDO 线程唯一入口；thread_exit_flag 置位或任一 HAL 调用失败时返回。

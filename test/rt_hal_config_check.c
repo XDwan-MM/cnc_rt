@@ -64,7 +64,7 @@ int main(void) {
         const double before_off   = cfg.axes[0].enc_off;
 
         /* 非法值：当量 0 必须整体拒绝，不留半套换算 */
-        RtHalAxisScaling bad = {0.0, 12.0, 0, 0, 10000};
+        RtHalAxisScaling bad = {0.0, 12.0, 0, 0, 10000, 10000};
         expect(rt_hal_config_set_scaling(&cfg, RT_HAL_AXIS_X, &bad) == RT_HAL_ERR_PARAM,
                "当量为 0 被拒 (RT_HAL_ERR_PARAM)");
         expect(cfg.axes[0].command_units_per_count == before_units &&
@@ -80,13 +80,20 @@ int main(void) {
         expect(rt_hal_config_set_scaling(&cfg, RT_HAL_AXIS_X, &bad) == RT_HAL_ERR_PARAM,
                "每转计数为负被拒");
 
+        bad.feedback_pulses_per_rev = 10000;
+        bad.command_pulses_per_rev = 0;
+        expect(rt_hal_config_set_scaling(&cfg, RT_HAL_AXIS_X, &bad) == RT_HAL_ERR_PARAM,
+               "pulse/s 速度缺指令每转脉冲数被拒");
+        expect(cfg.axes[0].command_units_per_count == before_units,
+               "缺指令每转脉冲数时配置保持不变");
+
         expect(rt_hal_config_set_scaling(NULL, RT_HAL_AXIS_X, &bad) == RT_HAL_ERR_NULL_ARG,
                "cfg 为空被拒");
         expect(rt_hal_config_set_scaling(&cfg, (RtHalAxisSlot)99, &bad) == RT_HAL_ERR_SLOT,
                "轴槽越界被拒");
 
         /* 合法值：当量 = 1mm/转 ÷ 10000 脉冲/转 = 0.0001 mm/count */
-        const RtHalAxisScaling feed = {0.0001, 150.0, 0, 0, 100000};
+        const RtHalAxisScaling feed = {0.0001, 150.0, 0, 0, 100000, 100000};
         expect(rt_hal_config_set_scaling(&cfg, RT_HAL_AXIS_X, &feed) == 0, "X 装载成功");
         expect(cfg.axes[0].command_units_per_count == 0.0001 &&
                cfg.axes[0].feedback_units_per_count == 0.0001 &&
@@ -96,7 +103,7 @@ int main(void) {
         expect(!rt_hal_config_scaling_loaded(RT_HAL_AXIS_Y), "Y 仍未装载");
 
         /* 主轴：带符号 rpm，每转计数未知（传 0） */
-        const RtHalAxisScaling sp = {0.16, 0.0, 0, 0, 0};
+        const RtHalAxisScaling sp = {0.16, 0.0, 0, 0, 0, 0};
         expect(rt_hal_config_set_scaling(&cfg, RT_HAL_AXIS_SP, &sp) == 0, "SP 装载成功");
         expect(!rt_hal_config_scaling_loaded(RT_HAL_AXIS_SP),
                "SP 每转计数未知 → 仍算未装载");
@@ -107,8 +114,8 @@ int main(void) {
                "只装 2/4 根轴时 SCALING 仍置起（保守挡住整机）");
 
         /* 补 Y/Z 当量；ENCODER 因缺每转计数仍留着 */
-        const RtHalAxisScaling y = {0.0001, 150.0, 0, 0, 100000};
-        const RtHalAxisScaling z = {0.0001, 150.0, 0, 0, 100000};
+        const RtHalAxisScaling y = {0.0001, 150.0, 0, 0, 100000, 100000};
+        const RtHalAxisScaling z = {0.0001, 150.0, 0, 0, 100000, 100000};
         expect(rt_hal_config_set_scaling(&cfg, RT_HAL_AXIS_Y, &y) == 0, "Y 装载成功");
         expect(rt_hal_config_set_scaling(&cfg, RT_HAL_AXIS_Z, &z) == 0, "Z 装载成功");
         const uint32_t t3 = rt_hal_config_todo();
@@ -121,7 +128,7 @@ int main(void) {
         expect(rt_hal_config_motion_allowed() == 0, "仍有未确认项，运动继续被阻止");
 
         /* 补上主轴每转计数（取参数域 pm_pulse）→ ENCODER 清空：参数域给全即台账清空、运动放开 */
-        const RtHalAxisScaling sp2 = {0.16, 0.0, 0, 0, 120000};
+        const RtHalAxisScaling sp2 = {0.16, 0.0, 0, 0, 120000, 0};
         expect(rt_hal_config_set_scaling(&cfg, RT_HAL_AXIS_SP, &sp2) == 0,
                "SP 补上每转计数后重新装载成功");
         expect(rt_hal_config_scaling_loaded(RT_HAL_AXIS_SP), "SP 转为已装载");

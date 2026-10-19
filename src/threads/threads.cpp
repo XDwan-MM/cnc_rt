@@ -1,5 +1,6 @@
 #include "thread_manager.h"
 #include "threads_controller.h"
+#include "rt_hal_sdo.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -12,6 +13,7 @@ managed_thread_t motion_controller;
 managed_thread_t soft_plc;
 managed_thread_t path_plan;
 managed_thread_t pdo;
+managed_thread_t sdo;
 
 int threads_start() {
     // 检查系统CPU核心数
@@ -42,8 +44,16 @@ int threads_start() {
     pdo.config = pdo_config;
     pdo.function = pdo_thread_func;
 
+    // SDO 邮箱访问单独放在普通调度线程，避免阻塞实时周期。
+    if (rt_hal_sdo_prepare() != HAL_OK) return EXIT_FAILURE;
+    sdo.config = sdo_config;
+    sdo.function = rt_hal_sdo_worker;
+
     // 7. 依次创建并启动所有线程。
     //    每成功一个就记 created，退出路径据此挑着 join 真正建过的线程。
+    if (create_managed_thread(&sdo) != 0) return EXIT_FAILURE;
+    sdo.created = 1;
+    LOG(LOG_LEVEL_INFO, "创建SDO线程成功");
     if (create_managed_thread(&pdo) != 0) return EXIT_FAILURE;
     pdo.created = 1;
     RT_LOG(INFO, "创建pdo线程成功");
@@ -67,6 +77,12 @@ int threads_start() {
 void threads_joint() {
     // 只 join 创建成功的线程：join 未创建的 pthread_t 是未定义行为。
     // join 完清标志，使本函数可重复调用（重复停机幂等）。
+    rt_hal_sdo_stop();
+    if (sdo.created) {
+        pthread_join(sdo.id, NULL);
+        sdo.created = 0;
+        LOG(LOG_LEVEL_INFO, "退出SDO线程");
+    }
     if (motion_controller.created) {
         pthread_join(motion_controller.id, NULL);
         motion_controller.created = 0;

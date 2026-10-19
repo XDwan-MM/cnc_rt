@@ -29,6 +29,7 @@ thread_config_t plc_config = {.core_id = -1, .policy = SCHED_OTHER, .priority = 
 thread_config_t pdo_config = {.core_id = -1, .policy = SCHED_OTHER, .priority = 0, .thread_name = "PDO线程(调试)"};
 thread_config_t motion_config = {.core_id = -1, .policy = SCHED_OTHER, .priority = 0, .thread_name = "运动控制器(调试)"};
 thread_config_t path_plan_config = {.core_id = -1, .policy = SCHED_OTHER, .priority = 0, .thread_name = "解释器线程(调试)"};
+thread_config_t sdo_config = {.core_id = -1, .policy = SCHED_OTHER, .priority = 0, .thread_name = "SDO线程(调试)"};
 #else
 // ============ 实时模式线程配置 ============
 // 使用实时调度策略，绑定CPU核心，需要root权限
@@ -37,6 +38,7 @@ thread_config_t plc_config = {.core_id = 3, .policy = SCHED_RR, .priority = 32, 
 thread_config_t pdo_config = {.core_id = 3, .policy = SCHED_FIFO, .priority = 40, .thread_name = "PDO线程"};
 thread_config_t motion_config = {.core_id = 2, .policy = SCHED_FIFO, .priority = 39, .thread_name = "运动控制器"};
 thread_config_t path_plan_config = {.core_id = 2, .policy = SCHED_RR, .priority = 30, .thread_name = "解释器线程"};
+thread_config_t sdo_config = {.core_id = -1, .policy = SCHED_OTHER, .priority = 0, .thread_name = "SDO线程"};
 #endif
 
 #define OVERTIME_THR 10

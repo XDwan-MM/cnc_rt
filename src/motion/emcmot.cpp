@@ -357,10 +357,17 @@ static void output_to_hal()
     (void)rt_hal_request_axis_pos(RT_HAL_AXIS_X, rt_data->axis_data[AXIS_X].motor_cmd_pos);
     (void)rt_hal_request_axis_pos(RT_HAL_AXIS_Y, rt_data->axis_data[AXIS_Y].motor_cmd_pos);
     (void)rt_hal_request_axis_pos(RT_HAL_AXIS_Z, rt_data->axis_data[AXIS_Z].motor_cmd_pos);
-    /* 刚性攻丝：把插补算的主轴绝对角度发给驱动器（主轴在 CSP 位置环里跟随）。
-     * 只在"当前块是刚性攻丝"时发 —— 别的时候主轴是速度模式（CSV），写位置会被 HAL 拒。
-     * 角度语义见 interpolate_tap()：从本段起点算起、跨圈累计、反向为负。 */
-    if (cycle_tp->plan_block->type == RIGID_TAP || cycle_tp->plan_block->type == TAP_RETURN)
+    /* 复位停车仍需同步插补；停稳后旧攻丝块不能再把中断前的角度写回 CSP。 */
+    const bool tap_block = cycle_tp->plan_block != NULL &&
+        (cycle_tp->plan_block->type == RIGID_TAP ||
+         cycle_tp->plan_block->type == TAP_RETURN);
+    const bool reset_tap_stop = spl_context.reset_stop_pending &&
+                                spl_context.reset_stop_csp;
+    const bool active_tap = cycle_tp->exec_state == EXEC_RUNNING &&
+                            cycle_tp->exec_cmd == DO_TAP_CMD &&
+                            spl_context.m29_phase == SPINDLE_M29_READY &&
+                            (nc_reset == NULL || !nc_reset->is_resetting);
+    if (tap_block && (reset_tap_stop || active_tap))
         (void)rt_hal_request_axis_pos(RT_HAL_AXIS_SP, rt_data->axis_data[AXIS_SP].wcs_cmd_pos_cur);
 }
 

@@ -123,6 +123,7 @@ static void fill_axis(HalCAxisCfg* a, const RtHalBinding* b, int spindle) {
     a->work_mode = spindle ? HAL_WORK_VELOCITY : HAL_WORK_POSITION;
     a->encoder_type = spindle ? HAL_ENC_INCREMENTAL_Z :HAL_ENC_ABSOLUTE;
     a->feedback_pulses_per_rev = RT_PLACEHOLDER_PULSES_PER_REV;
+    a->command_pulses_per_rev = RT_PLACEHOLDER_PULSES_PER_REV;
     a->feedback_wrap = spindle ? HAL_WRAP_LINEAR : HAL_WRAP_LINEAR;
     a->command_units_per_count = RT_PLACEHOLDER_UNITS_PER_COUNT;
     a->feedback_units_per_count = RT_PLACEHOLDER_UNITS_PER_COUNT;
@@ -153,8 +154,8 @@ int rt_hal_config_build(HalCConfig* out, char* err, uint32_t err_len) {
 
     /* ABI 闸门必须拦在编译期：HalCAxisStatus 是出参、没有 struct_size 可查，HAL 加字段
      * 时 validate() 查不出来，而 RT 备的是栈上小一号的结构体 → 写坏栈。 */
-#if HAL_C_ABI_MAJOR != 7u || HAL_C_ABI_MINOR != 3u
-#  error "HAL ABI 与 rt_hal_config 预期不符（期望 7.3）：先读 HAL/include/hal_types.h 的版本说明，再改这一行"
+#if HAL_C_ABI_MAJOR != 8u || HAL_C_ABI_MINOR != 3u
+#  error "HAL ABI 与 rt_hal_config 预期不符（期望 8.3）：先读 HAL/include/hal_types.h 的版本说明，再改这一行"
 #endif
 
     memset(out, 0, sizeof(*out));
@@ -299,6 +300,8 @@ int rt_hal_config_set_scaling(HalCConfig* cfg, RtHalAxisSlot slot, const RtHalAx
 
     HalCAxisCfg* a = find_axis_cfg(cfg, kBindings[slot].hal_axis);
     if (!a) return RT_HAL_ERR_SLOT;
+    if (a->speed_unit == HAL_SPEED_PULSES_PER_S && s->command_pulses_per_rev <= 0)
+        return RT_HAL_ERR_PARAM;
 
     a->command_units_per_count = s->units_per_count;
     /* RT 命令与反馈共用一个电子齿轮比（HAL 允许不同） */

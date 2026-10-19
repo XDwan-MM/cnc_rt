@@ -7,16 +7,16 @@
 # 一眼就能看出副本旧没旧。
 #
 # 用法：  ./lib/cnc_hal/sync.sh [HAL 工程根目录]
-#         HAL_ROOT=/path/to/HAL ./lib/cnc_hal/sync.sh
+#         HAL_ROOT=/path/to/cnc_hal ./lib/cnc_hal/sync.sh
 set -euo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 RT_ROOT="$(cd -- "$SCRIPT_DIR/../.." && pwd)"
-HAL_ROOT="${1:-${HAL_ROOT:-$(dirname -- "$RT_ROOT")/HAL}}"
+HAL_ROOT="${1:-${HAL_ROOT:-$(dirname -- "$RT_ROOT")/cnc_hal}}"
 
 HAL_INC="$HAL_ROOT/include"
 HAL_SRC="$HAL_ROOT/src"
-HAL_LIB="$HAL_ROOT/build/all/libcnc_hal.a"
+HAL_LIB="${HAL_STATIC_LIB:-$HAL_ROOT/build/all/libcnc_hal.a}"
 
 [[ -f "$HAL_INC/hal_types.h" ]] || { echo "找不到 HAL 公共头：$HAL_INC" >&2; exit 1; }
 [[ -f "$HAL_LIB" ]] || { echo "找不到 HAL 静态库：$HAL_LIB（先在 HAL 里跑 ./build_all.sh）" >&2; exit 1; }
@@ -63,6 +63,9 @@ cp "$HAL_ROOT/config/devices.json" "$SCRIPT_DIR/lib/devices.json"
 {
     echo "同步自   : $HAL_ROOT"
     echo "提交     : $(git -C "$HAL_ROOT" rev-parse --short HEAD 2>/dev/null || echo '(非 git 仓库)')"
+    if [[ -n "$(git -C "$HAL_ROOT" status --porcelain 2>/dev/null)" ]]; then
+        echo "工作树   : 有未提交修改"
+    fi
     echo "提交说明 : $(git -C "$HAL_ROOT" log -1 --format=%s 2>/dev/null || echo '-')"
     echo "同步时间 : $(date -Iseconds)"
     echo "ABI      : $(grep -oP 'HAL_C_ABI_MAJOR\s+\K[0-9]+' "$HAL_INC/hal_types.h")u.$(grep -oP 'HAL_C_ABI_MINOR\s+\K[0-9]+' "$HAL_INC/hal_types.h")u"
