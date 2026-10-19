@@ -263,4 +263,3 @@ INCLUDEPATH += \
     lib/kinematic/include \
     lib/nurbs/include \
     lib/circleSmooth/include \
-

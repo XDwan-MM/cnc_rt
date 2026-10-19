@@ -408,6 +408,7 @@ void cycle_tp_reset_pos_cmd_data(){
     cycle_tp->pos_cmd_data.target_distance = 0.0;
     cycle_tp->pos_cmd_data.u_current = 0.0;
     cycle_tp->pos_cmd_data.u_next = 0.0;
+    cycle_tp->pos_cmd_data.blocknum = 1;//计数器，程序开启时重置
 }
 
 void cycle_tp_reset_dwell_cmd_data(){

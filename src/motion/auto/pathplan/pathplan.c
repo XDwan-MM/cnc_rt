@@ -29,7 +29,6 @@ static int block_cal_segment(PLAN_BLOCK* pretreat_block, double seg_theta_thre,P
 static void block_fix_pos(PLAN_BLOCK* pretreat_block, double l_theta_thre ,double theta_thre, PLAN_QUEUE* temp);
 static bool is_length_valid(PLAN_BLOCK* parser_block);
 static void block_deal_nurbs_enable(PLAN_BLOCK* pretreat_block,PLAN_QUEUE* temp);
-static int blocknum = 1;//未复位
 
 /// @brief 将译码结果转换成插补段
 GNC_RES chan_add_block(){
@@ -83,7 +82,7 @@ GNC_RES pretreat_block()
         treat_block = queue_peak_tail(treat_queue);
         if(treat_block == NULL) return GNC_DATA_NULL;
         memcpy(treat_block, pretreat_block, sizeof(PLAN_BLOCK));
-        // 处理异常点
+        // 处理小线段点
         block_deal_outlier(pretreat_block, treat_block);
     }
     return GNC_CAL_SUCCESS;
@@ -201,6 +200,7 @@ static void block_deal_parser_block(PLAN_BLOCK* parser_block, PLAN_BLOCK* pretre
         block_cal_curvature(pretreat_block, &pretreat_queue->pre_startpos, &pretreat_queue->pre_pos,&pretreat_block->end_pos);
         // 保存信息
         pretreat_queue->pre_pos = pretreat_block->end_pos;
+        pretreat_queue->pre_vec = pretreat_block->end_vec;
         pretreat_queue->pre_startpos = pretreat_block->start_pos;
         pretreat_queue->pre_vec = pretreat_block->end_vec;
         break;
@@ -223,16 +223,16 @@ static void block_deal_outlier(PLAN_BLOCK* pretreat_block, PLAN_BLOCK* treat_blo
         // 长度小于阈值不放入队列
         if(!is_length_valid(pretreat_block)){
             queue_pop(pretreat_queue);
-            // 更新下一段起点，起始方向，终点方向，长度
+            // 更新上一段终点，长度，
+            // 更新下一段起点，长度，
+            // 矢量，角度计算放到后面（circle,fix或cy—tp—add）
             PLAN_BLOCK* next_block;
             next_block=queue_peak(pretreat_queue);
             next_block->start_pos=pretreat_block->end_pos;
-            next_block->start_vec= next_block->end_vec = VECTOR_Unit(&next_block->start_pos, &next_block->end_pos);
             block_cal_length(next_block);
         }else{
             queue_pop(pretreat_queue);
             queue_soft_push(treat_queue);
-
         }
         break;
     }
@@ -275,17 +275,16 @@ static GNC_RES block_fixturnning_point()
             fix_block = queue_peak_tail(fix_queue);
             if(fix_block == NULL) return GNC_DATA_NULL;
             memcpy(fix_block, treat_block, sizeof(PLAN_BLOCK));
+            // 处理异常点
+            block_deal_nurbs_enable(fix_block,fix_queue_temp);
             // 判断是否分段
             block_cal_segment(fix_block, rt_data->chan_data[0].seg_theta_thre,fix_queue_temp);
-            // 处理nurbs拟合
-            block_deal_nurbs_enable(fix_block,fix_queue_temp);
-
             queue_pop(treat_queue);
             queue_soft_push(fix_queue);
             fix_queue->pre_pos = fix_block->end_pos;
             fix_queue->pre_vec = fix_block->end_vec;
             fix_queue->pre_startpos = fix_block->start_pos;
-            blocknum++;
+            cycle_tp->pos_cmd_data.blocknum++;
         }
     }
     return GNC_CAL_SUCCESS;
@@ -598,7 +597,7 @@ static void block_deal_nurbs_enable(PLAN_BLOCK* pretreat_block, PLAN_QUEUE *temp
     if (rt_data->chan_data[0].nurbs_enable)
     {
         // 逆行点修复
-        if(blocknum > 3){
+        if(cycle_tp->pos_cmd_data.blocknum > 3){
             block_fix_pos(pretreat_block, rt_data->chan_data[0].l_theta_thre, rt_data->chan_data[0].theta_thre, temp);
         }
         // 修改为nurbs类型
@@ -723,7 +722,7 @@ static int block_cal_segment(PLAN_BLOCK* pretreat_block, double seg_theta_thre,P
         pretreat_block->isContinue=0;
         return 0;
     }
-    if(blocknum>1)
+    if(cycle_tp->pos_cmd_data.blocknum >1)
     if (fabs((queue_peak_pre_tail(temp)->length)/pretreat_block->length)>20|| fabs((queue_peak_pre_tail(temp)->length)/pretreat_block->length)<0.05)
     {
         pretreat_block->isContinue=0;
@@ -744,6 +743,10 @@ static int block_cal_segment(PLAN_BLOCK* pretreat_block, double seg_theta_thre,P
 static void block_fix_pos(PLAN_BLOCK* pretreat_block, double l_theta_thre, double theta_thre, PLAN_QUEUE *temp){
     PLAN_BLOCK* last_pretreat_block=queue_peak_pre_tail(temp);
     PLAN_BLOCK* lastlast_pretreat_block=queue_peak_prepre_tail(temp);
+
+    block_cal_angle(last_pretreat_block, &lastlast_pretreat_block->end_vec);
+    block_cal_angle(pretreat_block, &last_pretreat_block->end_vec);
+
     if((last_pretreat_block->angle_rad!=0)&&(pretreat_block->angle_rad!=0))
     if((last_pretreat_block->length<l_theta_thre)&&(last_pretreat_block->angle_rad>(theta_thre*PI/180))&&(pretreat_block->angle_rad>(theta_thre*PI/180)))
     {
@@ -757,10 +760,15 @@ static void block_fix_pos(PLAN_BLOCK* pretreat_block, double l_theta_thre, doubl
             last_pretreat_block->end_pos.z=(pretreat_block->end_pos.z+ last_pretreat_block->start_pos.z)/2;
             pretreat_block->start_pos=last_pretreat_block->end_pos;
         }
+
+        block_cal_length(last_pretreat_block);
+        block_cal_length(pretreat_block);   
+
         block_cal_vector(last_pretreat_block);
         block_cal_vector(pretreat_block);
-        block_cal_length(last_pretreat_block);
-        block_cal_length(pretreat_block);    
+
+        block_cal_angle(last_pretreat_block, &lastlast_pretreat_block->end_vec);
+        block_cal_angle(pretreat_block, &last_pretreat_block->end_vec);
     }
 }
 

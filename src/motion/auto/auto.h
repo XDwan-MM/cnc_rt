@@ -75,6 +75,7 @@ typedef struct{
     double remain_distance;         // 速度曲线剩余插补距离
     double u_current;               // 当前节点
     double u_next;                  // 下一个节点
+    int blocknum;
 } POS_CMD_DATA;
 
 typedef struct{
