@@ -46,6 +46,8 @@ static int32_t s_req_fail_rc[RT_HAL_AXIS_COUNT][RT_REQ_KINDS];
 static uint32_t s_req_fail_age[RT_HAL_AXIS_COUNT][RT_REQ_KINDS];
 static int32_t s_snap_reset[RT_HAL_AXIS_COUNT];   /* 复位进展快照 */
 static int32_t s_snap_orient[RT_HAL_AXIS_COUNT];  /* 定向状态快照 */
+static uint8_t s_snap_fresh[RT_HAL_AXIS_COUNT];   /* 该轴本拍反馈读取成功 */
+static uint8_t s_snap_spindle_fresh[RT_HAL_AXIS_COUNT];
 static int32_t s_cycle_error;                     /* 周期循环异常退出的原因；0 = 无 */
 static HalSpindleMode s_req_mode[RT_HAL_AXIS_COUNT];      /* 期望的 CSV / CSP */
 static int    s_req_mode_dirty[RT_HAL_AXIS_COUNT];        /* 只有变了才下发 */
@@ -197,6 +199,8 @@ int rt_hal_create(const RtHalAxisParams* params, char* err, uint32_t err_len) {
     memset(s_req_fail_age, 0, sizeof(s_req_fail_age));
     memset(s_snap_reset, 0, sizeof(s_snap_reset));
     memset(s_snap_orient, 0, sizeof(s_snap_orient));
+    memset(s_snap_fresh, 0, sizeof(s_snap_fresh));
+    memset(s_snap_spindle_fresh, 0, sizeof(s_snap_spindle_fresh));
     s_cycle_error = 0;
     memset(s_req_mode_dirty, 0, sizeof(s_req_mode_dirty));
     __atomic_store_n(&plc_cycle_target, 0, __ATOMIC_RELEASE);
@@ -254,11 +258,25 @@ void rt_hal_shutdown(void) {
     s_ctx = NULL;
 
     s_snap_valid = s_io_ready = 0;
+    memset(s_snap_fresh, 0, sizeof(s_snap_fresh));
+    memset(s_snap_spindle_fresh, 0, sizeof(s_snap_spindle_fresh));
     s_in_cycle = 0;
     s_x_size = s_y_size = 0;
 }
 
 int rt_hal_running(void) { return s_running; }
+
+int rt_hal_sdo_read(int slave_pos, uint16_t index, uint8_t subindex,
+                    void* data, uint32_t size, uint32_t timeout_ms) {
+    if (!s_ctx || !s_running) return HAL_ERROR_NOT_RUNNING;
+    return hal_sdo_read(s_ctx, slave_pos, index, subindex, data, size, timeout_ms);
+}
+
+int rt_hal_sdo_write(int slave_pos, uint16_t index, uint8_t subindex,
+                     const void* data, uint32_t size, uint32_t timeout_ms) {
+    if (!s_ctx || !s_running) return HAL_ERROR_NOT_RUNNING;
+    return hal_sdo_write(s_ctx, slave_pos, index, subindex, data, size, timeout_ms);
+}
 
 int rt_hal_io_image_size(uint32_t* x_size, uint32_t* y_size) {
     if (!x_size || !y_size) return HAL_ERROR_ARGUMENT;
@@ -273,6 +291,8 @@ int rt_hal_io_image_size(uint32_t* x_size, uint32_t* y_size) {
 /* 取本拍快照；只读，不触发总线访问 */
 static void publish_snapshot(void) {
     for (int i = 0; i < RT_HAL_AXIS_COUNT; ++i) {
+        s_snap_fresh[i] = 0;
+        s_snap_spindle_fresh[i] = 0;
         const int hal_axis = rt_hal_config_hal_axis((RtHalAxisSlot)i);
         if (hal_axis < 0) continue;
         /* 读成功才覆盖快照；失败保留上一拍——过期的真值比新鲜的零安全 */
@@ -280,8 +300,11 @@ static void publish_snapshot(void) {
         HalCSpindleStatus sp;
         if (hal_rt_axis_read_status(s_ctx, (HalAxisId)hal_axis, &st) != HAL_OK) continue;
         memcpy(&s_snap_status[i], &st, sizeof(st));
-        if (hal_rt_spindle_read_status(s_ctx, (HalAxisId)hal_axis, &sp) == HAL_OK)
+        s_snap_fresh[i] = 1;
+        if (hal_rt_spindle_read_status(s_ctx, (HalAxisId)hal_axis, &sp) == HAL_OK) {
             memcpy(&s_snap_spindle[i], &sp, sizeof(sp));
+            s_snap_spindle_fresh[i] = 1;
+        }
         /* 复位进展进快照：别的线程用它判断收没收口，但不许碰 context */
         int32_t rst = HAL_RESET_NONE;
         if (hal_rt_axis_fault_reset_state(s_ctx, (HalAxisId)hal_axis, &rst) != HAL_OK)
@@ -589,14 +612,15 @@ int rt_hal_io_set_stop_image(const uint8_t* y, uint32_t len) {
 
 int rt_hal_axis_pos(RtHalAxisSlot slot, double* out) {
     if (!slot_ok(slot) || !out) return HAL_ERROR_ARGUMENT;
-    if (!s_snap_valid) return HAL_ERROR_NOT_RUNNING;
+    if (!s_snap_valid || !s_snap_fresh[slot]) return HAL_ERROR_NOT_RUNNING;
+    if (!s_snap_status[slot].position_valid) return HAL_ERROR_UNSUPPORTED;
     *out = s_snap_status[slot].actual_pos;
     return HAL_OK;
 }
 
 int rt_hal_axis_status(RtHalAxisSlot slot, HalCAxisStatus* out) {
     if (!slot_ok(slot) || !out) return HAL_ERROR_ARGUMENT;
-    if (!s_snap_valid) return HAL_ERROR_NOT_RUNNING;
+    if (!s_snap_valid || !s_snap_fresh[slot]) return HAL_ERROR_NOT_RUNNING;
     *out = s_snap_status[slot];
     return HAL_OK;
 }
@@ -604,7 +628,7 @@ int rt_hal_axis_status(RtHalAxisSlot slot, HalCAxisStatus* out) {
 /* speed_valid=0 → UNSUPPORTED，让上层区分"没速度 PDO"和"停着" */
 int rt_hal_axis_speed(RtHalAxisSlot slot, double* out) {
     if (!slot_ok(slot) || !out) return HAL_ERROR_ARGUMENT;
-    if (!s_snap_valid) return HAL_ERROR_NOT_RUNNING;
+    if (!s_snap_valid || !s_snap_fresh[slot]) return HAL_ERROR_NOT_RUNNING;
     if (!s_snap_status[slot].speed_valid) return HAL_ERROR_UNSUPPORTED;
     *out = s_snap_status[slot].actual_speed;
     return HAL_OK;
@@ -613,7 +637,7 @@ int rt_hal_axis_speed(RtHalAxisSlot slot, double* out) {
 /* 与 rt_hal_axis_speed() 同一读数，换成 rpm 口径（HAL 已按 speed_unit 换算） */
 int rt_hal_axis_speed_rpm(RtHalAxisSlot slot, double* out) {
     if (!slot_ok(slot) || !out) return HAL_ERROR_ARGUMENT;
-    if (!s_snap_valid) return HAL_ERROR_NOT_RUNNING;
+    if (!s_snap_valid || !s_snap_fresh[slot]) return HAL_ERROR_NOT_RUNNING;
     if (!s_snap_status[slot].speed_valid) return HAL_ERROR_UNSUPPORTED;
     *out = s_snap_status[slot].actual_speed_rpm;
     return HAL_OK;
@@ -621,7 +645,7 @@ int rt_hal_axis_speed_rpm(RtHalAxisSlot slot, double* out) {
 
 int rt_hal_axis_speed_mm_min(RtHalAxisSlot slot, double* out) {
     if (!slot_ok(slot) || !out) return HAL_ERROR_ARGUMENT;
-    if (!s_snap_valid) return HAL_ERROR_NOT_RUNNING;
+    if (!s_snap_valid || !s_snap_fresh[slot]) return HAL_ERROR_NOT_RUNNING;
     if (!s_snap_status[slot].linear_speed_valid) return HAL_ERROR_UNSUPPORTED;
     *out = s_snap_status[slot].actual_speed_mm_min;
     return HAL_OK;
@@ -631,7 +655,7 @@ int rt_hal_spindle_status(RtHalAxisSlot slot, HalCSpindleStatus* out) {
     if (!slot_ok(slot) || !out) return HAL_ERROR_ARGUMENT;
     /* 非主轴槽 */
     if (!rt_hal_config_is_spindle(slot)) return HAL_ERROR_ARGUMENT;
-    if (!s_snap_valid) return HAL_ERROR_NOT_RUNNING;
+    if (!s_snap_valid || !s_snap_spindle_fresh[slot]) return HAL_ERROR_NOT_RUNNING;
     *out = s_snap_spindle[slot];
     return HAL_OK;
 }
@@ -640,7 +664,7 @@ int rt_hal_spindle_speed(RtHalAxisSlot slot, double* out) {
     if (!slot_ok(slot) || !out) return HAL_ERROR_ARGUMENT;
     /* 非主轴槽 */
     if (!rt_hal_config_is_spindle(slot)) return HAL_ERROR_ARGUMENT;
-    if (!s_snap_valid) return HAL_ERROR_NOT_RUNNING;
+    if (!s_snap_valid || !s_snap_spindle_fresh[slot]) return HAL_ERROR_NOT_RUNNING;
     *out = s_snap_spindle[slot].actual_speed;
     return HAL_OK;
 }
