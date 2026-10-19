@@ -33,6 +33,11 @@ release_platform {
     TARGET = cnc_rt
 }
 
+# 曾经有个 offline_ledger 档：用 -D 打开两个"现场确认开关"，另编一个
+# bin/cnc_rt_ledger_d 给离线主轴回归用（台账不开时运动类请求会被适配层整条丢掉）。
+# 那两个开关已删（见 src/hal/rt_hal_config.c 顶部注释）：台账现在只反映"参数域
+# 给全了没有"，握手端把四轴参数写全台账就清了 —— 所以离线回归直接用 bin/cnc_rt_d。
+
 # 检查编译缓存工具 ccache 是否可用
 win32 {
     if(system(ccache --version > NUL 2>&1)) {
@@ -83,26 +88,37 @@ unix:!macx: {
     DESTDIR = $$PWD/bin
 }
 
-LIBS += -L/opt/GreeMaster/lib -lGREEMASTER -lpthread -Wl,--no-as-needed -lxml2 -Wl,--as-needed
-LIBS += -L "/usr/local/lib/" -lethercat
+LIBS += -L/opt/GreeMaster/lib -lGREEMASTER -lpthread -Wl,--no-as-needed -lxml2 -Wl,--as-needed -lm
 INCLUDEPATH += /opt/GreeMaster/include/libGREEMASTER/
 
+# ============ HAL 接入 ============
+# 原来的 -lethercat（libethercat.so，旧驱动层）已移除：那一层连同 src/master/master.c
+# 一起被 HAL 取代。两者不能共存——HAL 静态库与 libethercat.so 有 31 个重名符号
+# （ethercat_init / ethercat_close / g_device_data 等），同一次链接里谁在前谁赢，
+# 另一个的调用会绑到签名不同的版本上，实测其中一种顺序直接段错误。
+#
+# 依赖随工程走：与 lib/parser、lib/kinematic、lib/CNC_ErrorComp 同一约定——
+# HAL 的头与静态库作为 vendored 副本放在 lib/cnc_hal/ 下，不引用外部路径、
+# 不依赖环境变量。HAL 改了之后跑 lib/cnc_hal/sync.sh 重新同步（来源记在 SYNCED.txt）。
+LIBS += -L"$$PWD/lib/cnc_hal/lib" -lcnc_hal
+INCLUDEPATH += $$PWD/lib/cnc_hal/include
 
-# 调试模式使用模拟主站
+
+# 调试模式：驱动层用内存桩，不接硬件也能跑 RT 逻辑。
+# 注意这不是"另一套 RT 逻辑"——适配层和周期循环两种模式共用，
+# 差别只在这一份驱动层实现。
 debug_mode {
-    HEADERS += src/master/master_sim.h
-    SOURCES += src/master/master_sim.c
+    SOURCES += src/hal/rt_hal_sim_backend.c
+    # 桩必须扮演 HAL 的驱动层，所以要看得到 HAL 的内部类型
+    # （DeviceSlot / DevDictRole / Ds402Request）。**只有调试构建**加这条路径，
+    # 实时构建仍然只见公共头，依赖边界不被破坏。
+    INCLUDEPATH += $$PWD/lib/cnc_hal/internal
 }
 
-# 实时模式使用真实主站
-!debug_mode {
-    HEADERS += src/master/main_demo.h
-    HEADERS += src/master/cJSON.h
-    HEADERS += src/master/device.h
-    HEADERS += src/master/slave_list.h
-    HEADERS += src/master/master_wcf.h
-    SOURCES += src/master/master_wcf.c
-}
+# 实时模式：驱动层来自 HAL 静态库。
+# src/master/ 整个目录与 src/hal/ 的旧驱动层（driver/driver_hal/ethercat_driver_hal/
+# hal_io/egear_ratio）已随接入完成删除——它们全被 HAL 取代，保留只会让人以为
+# 还有两条路径。需要时从基线提交 4222562 捞回。
 
 HEADERS += \
     src/common/debug_mode.h \
@@ -115,8 +131,6 @@ HEADERS += \
     src/datadef/plan_queue.h \
     src/datadef/rt_data.h \
     src/datadef/record_queue.h \
-    src/hal/hal_io.h \
-    src/hal/egear_ratio.h \
     src/motion/auto/auto.h \
     src/motion/auto/trace_publisher.h \
     src/motion/auto/trajplan/auto_gcode.h \
@@ -124,6 +138,7 @@ HEADERS += \
     src/motion/auto/interp/interpolation.h \
     src/motion/auto/pathplan/parser.h \
     src/motion/auto/pathplan/pathplan.h \
+    src/motion/auto/pathplan/hmi_request.h \
     src/motion/spindle/spl_control.h \
     src/motion/spindle/spl_orient.h \
     src/motion/spindle/spl_vel_planner.h \
@@ -136,6 +151,8 @@ HEADERS += \
     src/motion/servo_sample/servosamplesampler.h \
     src/motion/servo_sample/servosampleevents.h \
     src/motion/rerun/rerun.h \
+    src/motion/sysprog/tapreturn.h \
+    src/motion/sysprog/sysprog.h\
     src/protect/alarm.h \
     src/protect/ferror_control.h \
     src/protect/stored_stroke_check.h \
@@ -156,11 +173,8 @@ HEADERS += \
     src/threads/threads_config.h \
     src/threads/threads_controller.h \
     src/utils/math/cnc_math.h \
+    src/utils/rt_axis_view.h \
     src/utils/log/log.h \
-    src/master/master_wcf.h \
-    src/hal/driver_hal.h \
-    src/hal/driver.h \
-    src/hal/ethercat_driver_hal.h \
     lib/nurbs/include/nurbsfit.h \
     lib/circleSmooth/include/circle_smooth.h \
     
@@ -174,8 +188,8 @@ SOURCES += \
     src/datadef/plan_queue.c \
     src/datadef/rt_data.c \
     src/datadef/record_queue.c \
-    src/hal/hal_io.c \
-    src/hal/egear_ratio.c \
+    src/hal/rt_hal_config.c \
+    src/hal/rt_hal_adapter.c \
     src/motion/auto/auto.c \
     src/motion/auto/trace_publisher.c \
     src/motion/auto/trajplan/auto_gcode.c \
@@ -183,6 +197,7 @@ SOURCES += \
     src/motion/auto/interp/interpolation.c \
     src/motion/auto/pathplan/parser.cpp \
     src/motion/auto/pathplan/pathplan.c \
+    src/motion/auto/pathplan/hmi_request.c \
     src/motion/spindle/spl_control.c \
     src/motion/spindle/spl_orient.c \
     src/motion/spindle/spl_vel_planner.c \
@@ -194,6 +209,8 @@ SOURCES += \
     src/motion/manual/jog/jog_planner.c \
     src/motion/servo_sample/servosamplesampler.cpp \
     src/motion/rerun/rerun.c \
+    src/motion/sysprog/tapreturn.c \
+    src/motion/sysprog/sysprog.c\
     src/protect/alarm.c \
     src/protect/ferror_control.c \
     src/protect/stored_stroke_check.c \
@@ -211,10 +228,8 @@ SOURCES += \
     src/threads/rt_sem.c \
     src/threads/threads_controller.cpp \
     src/utils/math/cnc_math.c \
+    src/utils/rt_axis_view.c \
     src/utils/log/log.c \
-    src/hal/driver_hal.c \
-    src/hal/driver.c \
-    src/hal/ethercat_driver_hal.c \
     #lib/nurbs/nurbsfit.c \
     #lib/circleSmooth/circle_smooth.c \
 
@@ -224,7 +239,6 @@ INCLUDEPATH += \
     src/compensation \
     src/datadef \
     src/hal \
-    src/master \
     src/motion \
     src/motion/auto \
     src/motion/auto/pathplan \
@@ -235,6 +249,7 @@ INCLUDEPATH += \
     src/motion/manual \
     src/motion/servo_sample \
     src/motion/rerun \
+    src/motion/sysprog \
     src/protect \
     src/plc \
     src/plc/plc_scanner \

@@ -1,7 +1,6 @@
 #ifndef SPL_CONTROL_H
 #define SPL_CONTROL_H
 
-#include "driver_hal.h"
 #include "global.h"
 #include "spl_vel_planner.h"
 #include <stdbool.h>
@@ -57,7 +56,11 @@ typedef enum
     SPINDLE_M29_RELEASING,
     SPINDLE_M29_SWITCHING_CSP,
     SPINDLE_M29_READY,
-    SPINDLE_M29_ERROR
+    SPINDLE_M29_ERROR,
+    SPINDLE_M29_NO_ORIENT_WAIT_CSV,
+    SPINDLE_M29_NO_ORIENT_STOPPING,
+    SPINDLE_M29_NO_ORIENT_SWITCHING,
+    SPINDLE_M29_NO_ORIENT_ALIGNING
 } spindle_m29_phase_t;
 
 /** 主轴速度指令来源。G33.7=0 使用 CNC，G33.7=1 使用 PLC。 */
@@ -95,6 +98,7 @@ typedef struct
     bool m19_active; /**< 当前是否有待完成的 M19 定向握手。 */
     bool m29_active; /**< 当前是否有待完成的 M29 握手。 */
     spindle_m29_phase_t m29_phase;
+    uint32_t m29_stop_stable_cycles;
     bool csv_switch_pending; /**< M03/M04 请求从 CSP 安全切回 CSV。 */
     bool orient_hold_stop; /**< M19/定向完成后锁定停止，等待新的 M3/M4。 */
     bool orient_request_pending; /**< 收到定向请求但尚未提交驱动器定向命令。 */
@@ -102,6 +106,11 @@ typedef struct
     spindle_orient_phase_t orient_phase; /**< CNC/PLC 层定向阶段。 */
     uint32_t orient_elapsed_cycles; /**< 定向运行已经过的控制周期数。 */
     bool reset_requires_start; /**< 复位/急停后禁止旧目标自动恢复。 */
+    bool reset_stop_pending; /**< HMI 复位后正在受控停车。 */
+    bool reset_stop_csp; /**< 攻丝复位时由插补继续下发 CSP 位置。 */
+    int reset_stop_feed_axis; /**< 攻丝所在平面的进给轴。 */
+    uint32_t reset_stop_cycles;
+    uint32_t reset_stop_stable_cycles;
     bool start_request_pending; /**< 已收到新的 M3/M4，允许解除复位启动锁。 */
     bool deferred_start_pending; /**< 定向期间收到的 M3/M4，释放后自动执行。 */
     spindle_state_t deferred_start_state; /**< 延迟启动的方向。 */
@@ -114,14 +123,49 @@ extern spindle_context_t spl_context;
 void spindle_control_update(void);
 
 void spl_context_init(spindle_context_t* spl_ctx);
-void spindle_clear_velocity_arrival(void);
-bool spindle_velocity_is_ready(void);
 /** 在 F 信号发布之后记录状态变化，cycle 为发布周期编号。 */
-void spindle_trace_status(void);
 void spindle_request_m29(void);
-void spindle_request_m29_stop_to_csp(void);
+/* 运动线程独立入口，不改变普通 M29：CSV 受控停车后切 CSP，当前位置作为攻丝零点。
+ * 已停稳的 CSP 和未完成的普通模式切换也可接管；定向中、移动中的 CSP 或无有效反馈时拒绝。
+ * true 仅代表受理，仍须等待 spindle_m29_is_ready() 和原有 PLC FIN 握手。
+ * false 时调用者必须中止本次 M29，不能把拒绝当作完成。 */
+bool spindle_request_m29_no_orient(void);
 bool spindle_m29_is_ready(void);
+bool spindle_reset_stop_pending(void);
+void spindle_clear_velocity_arrival(void);   /* 新指令/复位/定向/M29 入口调用 */
+bool spindle_velocity_is_ready(void);        /* F45.3 的唯一查询入口（只读） */
 void spindle_complete_m29(void);
+
+/* M29 握手超时报警 id（错误报警会触发自动运行停止）；HMI 侧需同 id 的报警文本，
+ * 否则显示为未知报警。 */
+#define SPINDLE_ALARM_M29_FIN_TIMEOUT  (2101)
+#define SPINDLE_ALARM_M29_PREP_REJECT  (2102)
+#define SPINDLE_ALARM_RESET_STOP_TIMEOUT (2103)
+
+/** M29 卡住诊断的只读快照：只观察，不改变任何控制状态。 */
+typedef struct
+{
+    int m29_phase;        /**< 当前 M29 阶段。 */
+    int m29_active;       /**< M29 是否仍挂在本段上。 */
+    int orient_phase;     /**< CNC/PLC 层定向阶段。 */
+    int orient_state;     /**< HAL 定向状态（NONE/RUNNING/DONE）。 */
+    int ms_state;         /**< 模式切换闩锁：0 IDLE / 1 SWITCHING / 2 DONE / 3 ERROR。 */
+    int ms_result;        /**< 最近一次模式切换请求返回值。 */
+    int ms_req_mode;      /**< 期望模式（HAL_SPINDLE_*）。 */
+    int act_mode;         /**< 实际 6061；< 0 表示读不到。 */
+    int enabled;          /**< 驱动器使能。 */
+    uint16_t status_word; /**< PDO 状态字。 */
+    bool ready;           /**< spindle_m29_is_ready() 的结果。 */
+    double planned_rpm;
+    double target_rpm;
+    double actual_rpm;
+    double target_deg;
+    double actual_deg;
+} spindle_m29_diag_t;
+
+void spindle_m29_diag_info(spindle_m29_diag_t *out);
+/* 在 F 发布之后采样；记录 M29 期间/之后变化的 PLC 联锁 */
+void spindle_m29_plc_trace_tick(void);
 
 #ifdef __cplusplus
 }

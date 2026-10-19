@@ -14,7 +14,7 @@ extern "C" {
 typedef struct {
     int axisCount;                                            /*!< 每个参考点的轴数，<= ITP_SYS_AXIS_MAX */
     double refPos[ITP_SYS_REF_POINT_MAX][ITP_SYS_AXIS_MAX];   /*!< [参考点序号][轴序号]，机床坐标 */
-} IptRefPoint;
+} ItpRefPoint;
 
 typedef struct {
     int cnv;    //干涉检查模式
@@ -24,7 +24,7 @@ typedef struct {
     int suv;    // No.5003#1: 起刀类型高位
     int ccc;    // No.19607#2: 外边拐角连接 0=直线 1=圆弧
     int lookAheadSegments;      // 刀补开启时预读段数，缓冲区容量 = 预读段数 + 1
-    IptRefPoint refPoint;       // 第1、2、3、4参考点
+    ItpRefPoint refPoint;
 } ItpParam_temp;
 
 typedef struct {
@@ -58,6 +58,14 @@ typedef struct {
     int lineNo;             // 译码当前行号
     NcItpState ncItpState;  // 译码模态
 } NcItpDataPacket;
+
+typedef struct
+{
+    double r_plane_z;   /*!< 攻丝 R 平面 Z（工件坐标，绝对） */
+    double pitch;       /*!< 螺距 mm/rev，必须 > 0 */
+    int    reverse;     /*!< 回退转向 0/1 */
+    int    valid;       /*!< 本次是否有效（0=无效） */
+} ItpRigidReturnParam;
 
 #ifdef __cplusplus
 }

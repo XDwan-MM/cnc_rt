@@ -1,12 +1,9 @@
 #include "jog.h"
 #include "global.h"
 #include "jog_planner.h"
+#include "rt_hal_adapter.h"
 #include <math.h>
 #include <string.h>
-#include "master_wcf.h"
-#include "device.h"
-#include "ethercat_driver_hal.h"
-#include "driver.h"
 
 /*
  * JOG 的公共入口只有周期处理、急停和速度查询；外部减速状态保存在 AxisStatus。
@@ -104,6 +101,28 @@ static void jog_execute_axis(int axis, jog_axis_t *jog_axis, bool is_rapid);
 static void jog_process_axis(int axis, bool is_rapid, bool global_fatal, bool reset_requested, bool switching_mode);
 static void jog_update_outputs(void);
 
+/* 基线里这个信号是 master.c 的 reset_sem：驱动器报警复位已发出、还没收口。
+ * HAL 把它拆成了每轴的复位进展，这里逐轴查一遍。 */
+static bool jog_fault_reset_in_progress(void)
+{
+    static const RtHalAxisSlot slots[] = {
+        RT_HAL_AXIS_X, RT_HAL_AXIS_Y, RT_HAL_AXIS_Z, RT_HAL_AXIS_SP
+    };
+    unsigned i;
+
+    for (i = 0; i < sizeof(slots) / sizeof(slots[0]); ++i)
+    {
+        int32_t state = HAL_RESET_NONE;
+        if (rt_hal_fault_reset_state(slots[i], &state) == HAL_OK &&
+            state == HAL_RESET_PENDING)
+        {
+            return true;
+        }
+    }
+
+    return false;
+}
+
 /* 外部函数定义 */
 
 /**
@@ -111,27 +130,6 @@ static void jog_update_outputs(void);
  */
 void handle_jog_cmd(void)
 {
-    // // test mode switch
-    // Hal_Driver_Update(&spindle_driver, true, false);
-    // Ethercat_Driver_Read_Actual_Mode(&spindle_driver);
-    // if(spindle_driver.act_mode != DRV_MODE_CSP)
-    // {
-    //     printf("请求切换CSP模式 主轴驱动器当前实际模式 %d\n", spindle_driver.act_mode);
-    //     // 下使能
-    //     Ethercat_Driver_Write_Controlword(&spindle_driver, DRV_CONTROL_DISABLE_OPERATION);
-    //     // 设置成CSP模式
-    //     Ethercat_Driver_Write_Mode(&spindle_driver, DRV_MODE_CSP);
-    //     // 上使能
-    //     Ethercat_Driver_Write_Controlword(&spindle_driver, DRV_CONTROL_ENABLE_OPERATION);
-
-    // }
-    // if(spindle_driver.act_mode == DRV_MODE_CSP)
-    // {
-    //     printf("主轴驱动器当前实际模式 %d\n", spindle_driver.act_mode);
-    //     // 下使能
-    //     Ethercat_Driver_Write_Controlword(&spindle_driver, DRV_CONTROL_DISABLE_OPERATION);
-    // }
-    
     bool global_fatal;
     bool reset_requested;
     bool switching_mode;
@@ -151,7 +149,7 @@ void handle_jog_cmd(void)
     event = rt_data->nc_event;
     switching_mode = rt_data->sys_state[SYS_IS_SWITCHING_MODE];
     is_rapid = rt_data->sys_state[SYS_IS_RAPID];
-    reset_requested = (event == SYS_EVENT_HMI_RESET || reset_sem);
+    reset_requested = (event == SYS_EVENT_HMI_RESET || jog_fault_reset_in_progress());
 
     /* 切换模式期间不接受新的 JOG 运动请求，等速度降为零后再离开。 */
     if (switching_mode)

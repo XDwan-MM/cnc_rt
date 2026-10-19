@@ -1,4 +1,5 @@
 #include "plc_f_signal_handler.h"
+#include "rt_hal_adapter.h"
 #include "alarmapi.h"
 #include "global.h"
 #include "regapi.h"
@@ -19,6 +20,7 @@ static void plc_output_axis_status();
 static void plc_output_spl_vel_status();
 static void plc_output_spl_orient_status();
 static void plc_output_spl_vel();
+static void plc_output_rigid();
 
 void plc_f_signal_handler_cycle()
 {
@@ -31,7 +33,7 @@ void plc_f_signal_handler_cycle()
     plc_output_spl_vel_status();
     plc_output_spl_orient_status();
     plc_output_spl_vel();
-    spindle_trace_status();
+    plc_output_rigid();
 }
 
 static void plc_output_alarm()
@@ -77,13 +79,9 @@ static void plc_output_auto()
         clearRegBit(REG_F, 2, 6);
     // 可选程序段跳过
     if (rt_get_sys_state(SYS_IS_BLOCK_SKIP))
-    {
         setRegBit(REG_F, 4, 0);
-    }
     else
-    {
         clearRegBit(REG_F, 4, 0);
-    }
     // 辅助功能锁住
     if (rt_data->sys_state[SYS_IS_MSBT_LOCK])
         setRegBit(REG_F, 4, 4);
@@ -109,11 +107,21 @@ static void plc_output_auto()
         setRegBit(REG_F, 2, 4);
     else
         clearRegBit(REG_F, 2, 4);
+}
+
+static void plc_output_rigid(){
     // 刚性攻丝方式中
-    if(rt_data->sys_state[SYS_IS_RIGID])
+    if(rt_data->sys_state[SYS_IS_RIGID]) 
         setRegBit(REG_F, 76, 3);
-    else
+    else 
         clearRegBit(REG_F, 76, 3);
+    // 刚性攻丝返回完成信号
+    if(rt_data->sys_state[SYS_IS_RIGID_RETURN] && rt_data->sys_state[SYS_IS_RIGID_RETURN_FINISH]) 
+        setRegBit(REG_F, 66, 1);
+    else{
+        clearRegBit(REG_F, 66, 1);
+        rt_data->sys_state[SYS_IS_RIGID_RETURN_FINISH] = 0;
+    }
 }
 
 // 各轴返回零点完成、参考点建立
@@ -348,7 +356,12 @@ static void plc_output_axis_status()
 
 static void plc_output_spl_vel_status()
 {
-    // 发布控制层统一判定，不反向修改主轴状态。
+    //　主轴速度到达信号F45.3
+    /* 只查询，不反向改任何主轴控制状态：到速/完成反馈完全由主轴控制层判定
+     * （停止完成、复位/急停、定向窗口、M29、模式切换、待启动请求都在
+     * spindle_velocity_is_ready() 里统一屏蔽）。以前这里会强制置
+     * SPINDLE_VEL_ARRIVED —— 还把速度读取失败也当成满足停止条件，结果
+     * F45.3 依赖发布顺序，并可能早于主轴真正停稳。 */
     if (spindle_velocity_is_ready())
     {
         setRegBit(REG_F, 45, 3);
@@ -357,8 +370,16 @@ static void plc_output_spl_vel_status()
     {
         clearRegBit(REG_F, 45, 3);
     }
-    //　主轴零速信号F45.1
-    if(abs(spindle_driver.actual_vel) < 5)
+//    if(spl_data.spl_vel_state == SPINDLE_VEL_ZERO)
+//    {
+//        setRegBit(REG_F, 45, 1);
+//    }
+//    else
+//    {
+//        clearRegBit(REG_F, 45, 1);
+//    }
+    //　主轴零速信号F45.1：独立反映实际零速，不参与完成状态
+    if (fabs(rt_hal_spindle_rpm()) < 5.0)
     {
         setRegBit(REG_F, 45, 1);
     }
@@ -370,8 +391,8 @@ static void plc_output_spl_vel_status()
 
 static void plc_output_spl_orient_status()
 {
-    /* F45.7 is the ordinary M19 orientation-complete signal.
-     * M29 completion is joined with PLC FIN in auto_mst.c. */
+    /* F45.7 是普通 M19 定向完成信号；M29 的完成由 auto_mst.c 用
+     * PLC FIN + NC CSP 就绪的双条件握手判定，不在这里发布。 */
     if (spl_orient_is_done() && !spl_context.m29_active)
     {
         setRegBit(REG_F, 45, 7);

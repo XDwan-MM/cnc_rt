@@ -1,8 +1,11 @@
 #include "parser.h"
 #include "global.h"
+#include "hmi_request.h"
 #include <hmisysapi.h>
 #include <alarmapi.h>
 #include <string.h> 
+#include "tapreturn.h"
+#include "sysprog.h"
 
 static void parser_macro_init();
 static GNC_RES parser_handle_recieve(pmc_data* motion_data, NcItpState *itp_state, int *line_no);
@@ -18,6 +21,21 @@ static GNC_RES parser_set_content(NC_MODE nc_mode);
 static bool parser_check_res(GNC_RES res);
 
 PARSER_DATA* parser_data;
+
+void rt_set_rigid_return_param(double r_plane_z, double pitch, int reverse, int valid)
+{
+    ItpRigidReturnParam rp;
+    rp.r_plane_z = r_plane_z;
+    rp.pitch     = pitch;
+    rp.reverse   = reverse;
+    rp.valid     = valid;
+    ItpSetRigidReturnParam(&rp);
+}
+
+void rt_clear_rigid_return_param(void)
+{
+    ItpClearRigidReturnParam();
+}
 
 static void parser_macro_init()
 {
@@ -116,6 +134,8 @@ GNC_RES parser_init(NC_MODE nc_mode)
     ori_pos_y = rt_data->axis_data[AXIS_Y].wcs_cmd_pos_cur;
     ori_pos_z = rt_data->axis_data[AXIS_Z].wcs_cmd_pos_cur;
     ItpSetOriginMacPos(ori_pos_x, ori_pos_y, ori_pos_z, 0);
+    tapreturn_refresh_return_param();
+
     // 设置程序段来源
     res = parser_set_content(nc_mode);
     if(res != GNC_OPERATOR_SUCCESS) return res;
@@ -123,11 +143,111 @@ GNC_RES parser_init(NC_MODE nc_mode)
     return res;
 }
 
+static GNC_RES parser_take_hmi_request(char *buf, int buf_len, bool *handled)
+{
+    *handled = false;
+
+    HmiRequestSnapshot hmiSnap = {};
+    int32_t hmiReason = HMI_REQUEST_ERROR_NONE;
+    const int taken = hmi_request_take(&hmiSnap, &hmiReason);
+
+    static uint32_t lastConsumedSeq = 0;
+    if (taken == 0) {
+        lastConsumedSeq = 0;
+    }
+    if (taken == 1 && hmiSnap.seq == lastConsumedSeq) {
+        LOG(LOG_LEVEL_WARN, "同一HMI请求(seq=%u)已执行过，本次运行忽略",
+            (unsigned)hmiSnap.seq);
+        *handled = true;
+        return GNC_OPERATOR_ERROR;      // 不回执、也不退回编辑器内容：本次不启动
+    }
+
+    if (taken == 1) {
+        *handled = true;
+        if (sysprog_content_ready()) {
+            LOG(LOG_LEVEL_WARN, "HMI 请求启动：放弃已就绪的系统程序（本次跑的是请求内容）");
+            sysprog_cleanup();
+            tapreturn_refresh_return_param();   // 收口把参数清了 → 再对齐（幂等）
+        }
+
+        int len = 0;
+        switch (hmiSnap.action) {
+        case HMI_REQUEST_ACTION_MST_DISPATCH:
+            len = hmi_mst_build_program(&hmiSnap.params.mst, buf, buf_len);
+            if (len > 0) {
+                LOG(LOG_LEVEL_INFO, "mst程序 %s", buf);
+            } else {
+                LOG(LOG_LEVEL_WARN, "MST程序生成失败 t=%d s=%d m=%d",
+                    hmiSnap.params.mst.tValue, hmiSnap.params.mst.sValue,
+                    hmiSnap.params.mst.mValue);
+            }
+            break;
+        case HMI_REQUEST_ACTION_TAP_RETRACT:
+   
+            len = hmi_tapret_build_program(&hmiSnap.params.tapret, buf, buf_len);
+            if (len == HMI_TAPRET_REJECT_PARAM) {
+                hmi_request_ack(hmiSnap.seq, HMI_REQUEST_STATE_REJECTED,
+                                HMI_REQUEST_ERROR_PARAM_INVALID);
+                LOG(LOG_LEVEL_WARN, "攻丝回退被拒：页面参数与记录不符");
+                return GNC_OPERATOR_ERROR;
+            }
+            if (len > 0) {
+                LOG(LOG_LEVEL_INFO, "攻丝回退程序 %s", buf);
+            } else {
+                LOG(LOG_LEVEL_WARN, "攻丝回退程序生成失败 pitch=%f s=%d m=%d",
+                    (double)hmiSnap.params.tapret.pitchMm, hmiSnap.params.tapret.sValue,
+                    hmiSnap.params.tapret.mValue);
+            }
+            break;
+        default:
+            break;
+        }
+
+        if (len <= 0) {
+            // 生成失败：回执拒绝，且不退回 MDI 内容（与参数被拒同一处理）
+            hmi_request_ack(hmiSnap.seq, HMI_REQUEST_STATE_REJECTED,
+                            HMI_REQUEST_ERROR_PROGRAM);
+            return GNC_OPERATOR_ERROR;
+        }
+        // 记住"这条执行过了"（见上面的去重判据）
+        lastConsumedSeq = hmiSnap.seq;
+        // 回执给界面反馈
+        hmi_request_ack(hmiSnap.seq, HMI_REQUEST_STATE_CONSUMED,
+                        HMI_REQUEST_ERROR_NONE);
+        return GNC_OPERATOR_SUCCESS;
+    }
+
+    if (taken == -2) {
+        // 有请求但拒绝执行：回执 + 日志，且不退回 MDI 内容
+        hmi_request_ack(hmiSnap.seq,
+                        (hmiReason == HMI_REQUEST_ERROR_STALE)
+                            ? HMI_REQUEST_STATE_TIMEOUT : HMI_REQUEST_STATE_REJECTED,
+                        hmiReason);
+        LOG(LOG_LEVEL_WARN, "HMI请求未执行 action=%u reason=%d",
+            (unsigned)hmiSnap.action, hmiReason);
+        *handled = true;
+        return GNC_OPERATOR_ERROR;
+    }
+    if (taken == -1) {
+        // 读取期间被 HMI 改写：不执行
+        LOG(LOG_LEVEL_WARN, "HMI请求读取期间被改写，本轮不执行");
+        *handled = true;
+        return GNC_OPERATOR_ERROR;
+    }
+
+    return GNC_OPERATOR_SUCCESS;        // taken == 0：请求区里没有请求
+}
+
 static GNC_RES parser_set_content(NC_MODE nc_mode){
     // 设置程序段来源
     switch (nc_mode)
     {
     case MODE_MEM:
+        if(sysprog_content_ready())
+        {
+            LOG(LOG_LEVEL_INFO, "记忆模式启动：放弃就绪系统程序");
+            sysprog_cleanup();
+        }
         // 选择NC文件
         getNcFilePath(parser_data->parser_file_path);
         // todo：界面增加校验，增加警告
@@ -142,9 +262,38 @@ static GNC_RES parser_set_content(NC_MODE nc_mode){
         ItpSetFile(parser_data->parser_file_path);
         LOG(LOG_LEVEL_INFO, "mem程序 %s", parser_data->parser_file_path);
         break;
-    case MODE_MDI:
-        // 读取MDI内容
-        getMdiContent(parser_data->mdiContent);
+    case MODE_MDI: {
+        tapreturn_refresh_return_param();
+        static char hmiProgBuf[(HMI_MST_PROGRAM_BUF_LEN > HMI_TAPRET_PROGRAM_BUF_LEN)
+                                   ? HMI_MST_PROGRAM_BUF_LEN
+                                   : HMI_TAPRET_PROGRAM_BUF_LEN];
+        bool hmiHandled = false;
+        if (parser_take_hmi_request(hmiProgBuf, (int)sizeof(hmiProgBuf), &hmiHandled)
+                != GNC_OPERATOR_SUCCESS) {
+            return GNC_OPERATOR_ERROR;      
+        }
+        if (hmiHandled) {                   
+            ItpSetContent(hmiProgBuf, 0);
+            break;
+        }
+    
+        if (sysprog_content_ready())
+        {
+            if (!sysprog_get_content(parser_data->mdiContent, sizeof(parser_data->mdiContent)))
+            {
+
+                LOG(LOG_LEVEL_ERR, "系统程序内容不可用（超出 MDI 缓冲 %d 字节），本次不启动",
+                    (int)sizeof(parser_data->mdiContent));
+                setAlarm(ALARM_CH, ALARM_WARNING, 2);
+                sysprog_cleanup();
+                return GNC_OPERATOR_ERROR;
+            }
+            sysprog_mark_consumed();
+        }
+        else
+        {
+            getMdiContent(parser_data->mdiContent);
+        }
         if((strlen(parser_data->mdiContent) == 0)){
             LOG(LOG_LEVEL_WARN, "MDI内容为空");
             setAlarm(ALARM_CH, ALARM_WARNING, 2);
@@ -156,6 +305,7 @@ static GNC_RES parser_set_content(NC_MODE nc_mode){
         ItpSetContent(parser_data->mdiContent, 0);
         LOG(LOG_LEVEL_INFO, "mdi程序 %s", parser_data->mdiContent);
         break;
+    }
     default:
         break;
     }
@@ -308,7 +458,7 @@ static GNC_RES parser_handle_recieve(pmc_data* motion_data, NcItpState *itp_stat
 }
 
 static GNC_RES parser_handle_null(NcItpState *itp_state, int *line_no){
-    PLAN_BLOCK plan_block;
+    PLAN_BLOCK plan_block ={};
     // 模态
     plan_block.state = *itp_state;
     // 模组
@@ -327,7 +477,7 @@ static GNC_RES parser_handle_null(NcItpState *itp_state, int *line_no){
 
 static GNC_RES parser_handle_gcode(pmc_data* motion_data, NcItpState *itp_state, int *line_no)
 {
-    PLAN_BLOCK plan_block;
+    PLAN_BLOCK plan_block ;
     // 插补类型
     switch(motion_data->interp){
         case PMC_G00:
@@ -373,7 +523,6 @@ static GNC_RES parser_handle_gcode(pmc_data* motion_data, NcItpState *itp_state,
             plan_block.rigid_data.screw_offset = motion_data->screw_offset;
             plan_block.rigid_data.speed = motion_data->spindle.speed;
             plan_block.rigid_data.reverse = motion_data->spindle.reverse;
-            plan_block.rigid_data.screw_offset = motion_data->feed.value / motion_data->spindle.speed;
             // LOG(LOG_LEVEL_DEBUG, "no %d speed %d reverse %d screw_offset %f", *line_no, motion_data->spindle.speed, motion_data->spindle.reverse, motion_data->screw_offset);
             break;
         case PMC_G33_2: // 攻丝回退
@@ -382,7 +531,6 @@ static GNC_RES parser_handle_gcode(pmc_data* motion_data, NcItpState *itp_state,
             plan_block.rigid_data.screw_offset = motion_data->screw_offset;
             plan_block.rigid_data.speed = motion_data->spindle.speed;
             plan_block.rigid_data.reverse = motion_data->spindle.reverse;
-            plan_block.rigid_data.screw_offset = motion_data->feed.value / motion_data->spindle.speed;
             // LOG(LOG_LEVEL_DEBUG, "no %d speed %d reverse %d screw_offset %f", *line_no, motion_data->spindle.speed, motion_data->spindle.reverse, motion_data->screw_offset);
             break;
         default:
@@ -462,6 +610,7 @@ static GNC_RES parser_handle_mcode(pmc_data* motion_data, NcItpState *itp_state,
     // 子程序或宏程序
     // printf("motion_data->m_code=%d \n", motion_data->m_code);
     plan_block.mst_data.sub_program = motion_data->sub_program;
+    // LOG(LOG_LEVEL_DEBUG, "no %d m%d", plan_block.line_number, plan_block.mst_data.m_code);
     // 预留
     plan_block.mst_data.size = 1;
     plan_block.is_breakpoint = false;

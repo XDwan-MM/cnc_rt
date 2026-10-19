@@ -14,6 +14,9 @@ typedef struct {
     thread_config_t config; // 线程配置
     thread_func_t function; // 线程要执行的函数
     void* arg;              // 传递给线程函数的参数 (可选)
+    /* 本线程是否创建成功（threads_start() 每个成功创建后置 1）。
+     * join 未创建的 pthread_t 是未定义行为，退出路径必须按它挑着 join。 */
+    int created;
 } managed_thread_t;
 
 /**

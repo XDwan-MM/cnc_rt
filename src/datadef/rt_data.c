@@ -6,6 +6,7 @@
 
 extern RT_DATA* rt_data;
 static void rt_reset_ncu_data();
+static void rt_reset_sys_data();
 static void rt_reset_chan_data();
 static void rt_reset_axis_data();
 static void rt_reboot_ncu_data();
@@ -32,6 +33,9 @@ GNC_RES rt_data_reset(void){
     pthread_mutex_lock(&rt_data->mutex);
     rt_upate_reset_valid_data();
     setVarChanInt(0, VAR_CHAN_IS_PROGEND, 1, 0);
+    rt_data->sys_state[SYS_IS_RIGID] = 0;
+    rt_data->sys_state[SYS_IS_RIGID_RETURN] = 0;
+    rt_data->sys_state[SYS_IS_RIGID_RETURN_FINISH] = 0;
     pthread_mutex_unlock(&rt_data->mutex);
     return GNC_OPERATOR_SUCCESS;
 }
@@ -107,6 +111,7 @@ static void rt_update_reboot_valid_data(){
 /// @brief 复位时生效的par数据，同步更新到实时数据
 static void rt_upate_reset_valid_data(){
     rt_reset_ncu_data();
+    rt_reset_sys_data();
     rt_reset_chan_data();
     rt_reset_axis_data();
     rt_set_zero_vel_params();
@@ -114,6 +119,9 @@ static void rt_upate_reset_valid_data(){
 }
 
 static void rt_reset_ncu_data(){
+}
+
+static void rt_reset_sys_data(){  
 }
 
 static void rt_reset_chan_data()
@@ -217,6 +225,9 @@ static void rt_reboot_axis_data()
         rt_data->axis_data[i].pm_munit = CONV_UM_TO_MM(par_axis[i][PAR_AX_PM_MUNIT].value.val_int); // 轴电子齿轮比分子 (HMI unit: um, | 实时 单位: mm)
         rt_data->axis_data[i].pm_pulse = par_axis[i][PAR_AX_PM_PULSE].value.val_int;                // 轴电子齿轮比分母 (HMI unit: 脉冲)
         rt_data->axis_data[i].enc_off = par_axis[i][PAR_AX_ENC_OFF].value.val_real;                 // 轴编码器反馈偏置量 (HMI unit: mm)
+        /* 电机每转脉冲数。参数域里没填就是 0——调用方要能区分"没填"和"填了 0"，
+         * 所以这里不做任何兜底，兜底放在消费侧（main.cpp 的 fill_hal_params）。 */
+        rt_data->axis_data[i].mt_ppr = par_axis[i][PAR_AX_MT_PPR].value.val_int;
     }
 }
 

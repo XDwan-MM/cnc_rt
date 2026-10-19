@@ -6,7 +6,7 @@ static POS interpolate_line(PLAN_BLOCK* current_block, double accum_distance);
 static POS interpolate_rapid(PLAN_BLOCK* current_block, double accum_distance);
 static POS interpolate_circle(POS current_pos, PLAN_BLOCK* current_block, double accum_distance);
 static POS interpolate_helix(POS current_pos, PLAN_BLOCK* current_block, double accum_distance);
-static POS interpolate_tap(PLAN_BLOCK* current_block, double accum_distance);
+static POS interpolate_tap(PLAN_BLOCK* current_block, double accum_distance, double target_distance);
 
 POS auto_cal_interp_pos(POS_CMD_DATA* pos_cmd_data, double accum_distance, double target_distance){
     if(accum_distance <= 0) return pos_cmd_data->current_pos;
@@ -34,7 +34,7 @@ POS auto_cal_interp_pos(POS_CMD_DATA* pos_cmd_data, double accum_distance, doubl
             break;
         case RIGID_TAP:
         case TAP_RETURN:
-            interp_pos = interpolate_tap(current_block, accum_distance);
+            interp_pos = interpolate_tap(current_block, accum_distance, target_distance);
             break;
         case UNKNOWN:
 		
@@ -140,27 +140,33 @@ static POS interpolate_helix(POS current_pos, PLAN_BLOCK* current_block, double 
     return interp_pos;
 }
 
-// 刚性攻丝同步（进给 = 转速 × 螺距：F = S × Pitch）
-// 主轴位置 Z = Pitch × (θ/360°)
-static POS interpolate_tap(PLAN_BLOCK* current_block, double accum_distance){
+/* 刚性攻丝同步（进给 = 转速 × 螺距：F = S × Pitch）
+主轴位置 Z = Pitch × (θ/360°)
+G0 X0 Y0 Z0;
+M29 S100;
+G84 Z-10 R5 F100;
+*/
+static POS interpolate_tap(PLAN_BLOCK* current_block, double accum_distance, double target_distance){
     // 进给值插补位置
-    POS interp_pos;
+    POS interp_pos = current_block->start_pos;
     switch(current_block->plane){
         case PLANE_XY:
-            interp_pos.z = current_block->start_pos.z + accum_distance;
+            interp_pos.z = current_block->start_pos.z + current_block->start_vec.z * accum_distance;
             break;
         case PLANE_XZ:
-            interp_pos.y = current_block->start_pos.y + accum_distance;
+            interp_pos.y = current_block->start_pos.y + current_block->start_vec.y * accum_distance;
             break;
         case PLANE_YZ:
-            interp_pos.x = current_block->start_pos.x + accum_distance;
+            interp_pos.x = current_block->start_pos.x + current_block->start_vec.x * accum_distance;
             break;
     }
     // 主轴旋转角度
-    double spl_pos = accum_distance / current_block->rigid_data.screw_offset;
+    double spl_pos = fmod(target_distance / current_block->rigid_data.screw_offset, current_block->rigid_data.screw_offset);
     double spl_angle = spl_pos * 360;
     if(current_block->rigid_data.reverse) spl_angle = - spl_angle;
     // 测试
-    rt_data->axis_data[AXIS_SP].wcs_cmd_pos_cur = spl_angle;
+    double sp_wcs_cmd_pos_cur = fmod(rt_data->axis_data[AXIS_SP].wcs_cmd_pos_cur, 360);
+    rt_data->axis_data[AXIS_SP].wcs_cmd_pos_cur += spl_angle;
+    // printf("z:%f, sp:%f, 螺距：%f, 同步：%f\n", spl_pos, sp_wcs_cmd_pos_cur, current_block->rigid_data.screw_offset, target_distance / spl_pos);
     return interp_pos;
 }

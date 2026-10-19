@@ -51,7 +51,8 @@ typedef enum
     SYS_IS_PROG_RESTAR,         // 程序再启动
     SYS_IS_STOP_SKIP,           // 外部跳转
     SYS_IS_RIGID,               // 刚性攻丝
-    SYS_IS_RIGID_RERTURN,       // 攻丝回退
+    SYS_IS_RIGID_RETURN,        // 攻丝回退
+    SYS_IS_RIGID_RETURN_FINISH, // 刚性攻丝返回完成
 } SysStateIndex;
 
 // 路径和轨迹两个线程使用
@@ -77,6 +78,10 @@ typedef struct
     bool is_rev_limit;  // 手动负方向限制
     bool plc_is_disable;
     bool is_disable;   // 轴是否被屏蔽
+    /* 主轴侧"这拍想不想带力矩"。**只有主轴会写**（spl_drv_enable/disable），
+     * hal_axis_intent_poll 把它合并进使能意图，而急停与轴屏蔽永远优先。
+     * 初值 0（不带力矩）：要上力矩必须显式要——与 v1.27.1 一致。 */
+    bool spindle_wants_torque;
     bool is_lag_error; // 是否跟随误差报警 1是 0否
     // 外部减速状态：[0~4]功能号，[0]正向减速状态寄存，[1]负向减速状态寄存
     bool external_decel_active[SYS_EXTERNAL_DECEL_FUNCTION_COUNT][SYS_EXTERNAL_DECEL_DIRECTION_COUNT];
@@ -181,9 +186,15 @@ typedef struct
     double rpd_ex_dec4_vel;             // 外部减速4对快速进给的减速速度
     double rpd_ex_dec5_vel;             // 外部减速5对快速进给的减速速度
     // 重启生效
-    int pm_munit;                       // 电子齿轮比分子
+    double pm_munit;                    // 电子齿轮比分子(mm)。um→mm 后可能带小数，
+                                        // 存 int 会截断（5500um=5.5mm 会变成 5）——
+                                        // 当量与"每转位移"都拿它算，必须留小数
     int pm_pulse;                       // 电子齿轮比分母
     double enc_off;                     // 编码器反馈偏置量
+    /* 电机每转脉冲数（参数域 PAR_AX_MT_PPR）。与 pm_pulse（每转**指令**脉冲数）
+     * 不同：这个是电机侧的每转脉冲数，HAL 用它做模循环展开的模。
+     * 参数域里没填时为 0，此时 HAL 侧退回用 pm_pulse（见 main.cpp 的说明）。 */
+    int mt_ppr;
     // 内部
     double act_vel;                     // 轴实际速度
     double act_acc;                     // 轴实际加速度
@@ -198,6 +209,7 @@ typedef struct
     double mac_act_pos;                 // 机床实际位置 = fb_pos_no_comp
     double motor_cmd_pos;               // 驱动器指令位置（带补偿）
     double motor_act_pos;               // 驱动器反馈位置（带补偿）
+    double motor_act_pos_pre;           // 驱动器反馈位置（上一插补）
     double fb_pos_no_comp;              // 反馈位置（去除补偿）
     double pitch_comp_val;              // 当前位置螺距误差补偿值 (单位:mm)
     double backlash_comp_val;           // 当前位置反向间隙补偿值 (单位:mm)

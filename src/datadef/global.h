@@ -15,12 +15,11 @@
 #include "event_queue.h"
 #include "rt_data.h"
 #include "rerun.h"
+#include "sysprog.h"
 #include "reset.h"
 #include "auto.h"
 #include "ref.h"
 #include "trajectory.h"
-#include "driver_hal.h"
-#include "hal_io.h"
 #include "jog.h"
 #include "ferror_control.h"
 #include "stored_stroke_check.h"
@@ -70,38 +69,9 @@
 extern "C" {
 #endif
 
-extern sem_t exit_sem;                         // 退出信号
-extern sem_t op_sem;                           // 已进入op信号，用于线程间通信
-extern int InterruptFlag;                      // 打断标志位
+
+
 extern int update_pos_flag;                    // 理论位置读取驱动器位置
-extern int rc;
-extern PdoWarn PdoWarnInfo; //pdo警告信息结构体
-extern int slavernum;
-extern uint16_t* status;
-extern uint32_t* pos;
-extern uint32_t* pos_cmd;
-extern uint16_t* error_code;
-
-extern TxEntry_Unit DI0[MAX_IO_MODULES];
-extern TxEntry_Unit DI1[MAX_IO_MODULES];
-extern RxEntry_Unit DO0[MAX_IO_MODULES];
-extern RxEntry_Unit DO1[MAX_IO_MODULES];
-
-extern TxEntry_Unit StatusWord[MAX_DRIVERS];      // 状态字
-extern TxEntry_Unit CurPos[MAX_DRIVERS];          // 当前位置
-extern TxEntry_Unit CurVel[MAX_DRIVERS];          // 当前速度
-extern TxEntry_Unit CurTor[MAX_DRIVERS];          // 当前转矩
-extern TxEntry_Unit ErrorNumb[MAX_DRIVERS];       // 报警码
-
-extern RxEntry_Unit ControlWord[MAX_DRIVERS];     // 控制字
-extern RxEntry_Unit PurPos[MAX_DRIVERS];          // 目标位置
-extern RxEntry_Unit PurVel[MAX_DRIVERS];          // 目标速度
-extern RxEntry_Unit PurTor[MAX_DRIVERS];          // 目标转矩
-extern RxEntry_Unit OperationMode[MAX_DRIVERS];   // 操作模式
-
-
-extern TxEntry_Unit MCPDI[11];
-extern RxEntry_Unit MCPDO[7];
 
 // 共享内存
 extern VarData* var_data;                                    // var 变量
