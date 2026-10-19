@@ -203,6 +203,12 @@ static void rt_reset_axis_data()
         rt_data->axis_data[i].rpd_ex_dec3_vel = CONV_MM_MIN_TO_MM_S(par_axis[i][PAR_AX_RPD_EX_DEC3_VEL].value.val_real); // 快移外部减速3的减速速度(mm/min)
         rt_data->axis_data[i].rpd_ex_dec4_vel = CONV_MM_MIN_TO_MM_S(par_axis[i][PAR_AX_RPD_EX_DEC4_VEL].value.val_real); // 快移外部减速4的减速速度(mm/min)
         rt_data->axis_data[i].rpd_ex_dec5_vel = CONV_MM_MIN_TO_MM_S(par_axis[i][PAR_AX_RPD_EX_DEC5_VEL].value.val_real); // 快移外部减速5的减速速度(mm/min)
+        rt_data->axis_data[i].mpg_ex_dec1_vel = 1; // 外部减速1对手轮进给的减速速度
+        rt_data->axis_data[i].mpg_ex_dec2_vel = 2; // 外部减速2对手轮进给的减速速度
+        rt_data->axis_data[i].mpg_ex_dec3_vel = 3; // 外部减速3对手轮进给的减速速度
+        rt_data->axis_data[i].mpg_ex_dec4_vel = 4; // 外部减速4对手轮进给的减速速度
+        rt_data->axis_data[i].mpg_ex_dec5_vel = 5; // 外部减速5对手轮进给的减速速度
+        
     }
 }
 
