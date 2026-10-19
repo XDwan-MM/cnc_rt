@@ -32,9 +32,6 @@ static bool is_first_scan = true;
  * 1. 内部函数声明 (Private Prototypes)
  * ========================================================================== */
 
-// 扫描关于宏变量的 G 信号
-static void plc_macro_g_signal_scan_cycle(const G_INPUT_MAP *curr_g, const G_INPUT_MAP *last_g);
-
 // 扫描关于互锁的 G 信号
 static void plc_lock_g_signal_scan_cycle(const G_INPUT_MAP *curr_g, const G_INPUT_MAP *last_g);
 
@@ -225,9 +222,6 @@ void plc_g_signal_scan_cycle(void)
     // 扫描关于互锁的 G 信号
     plc_lock_g_signal_scan_cycle(&curr_g, &last_g);
 
-    // 扫描关于宏变量的 G 信号
-    plc_macro_g_signal_scan_cycle(&curr_g, &last_g);
-
     /*step3 更新快照供下一周期使用 */
     last_g = curr_g;
 
@@ -238,43 +232,6 @@ void plc_g_signal_scan_cycle(void)
 /* ==========================================================================
  * 3. 内部函数实现 (Private Implementations)
  * ========================================================================== */
-
-static void plc_macro_g_signal_scan_cycle(const G_INPUT_MAP *curr_g, const G_INPUT_MAP *last_g){
-    // G55~G57
-    for(int i = 54; i < 58; i++){
-        if (SIGNAL_BYTE_CHANGED(curr_g->g_regs[i], last_g->g_regs[i])){
-            for(int j = 0; j < 8; i++){
-                if (SIGNAL_RISING(curr_g->g_regs[i], last_g->g_regs[i], j))
-                {
-                    LOG(LOG_LEVEL_INFO, "扫描到G%d.%d 发生上升沿", i, j);
-                    // TODO:对宏变量进行赋值1
-                }
-                if (SIGNAL_FALLING(curr_g->g_regs[i], last_g->g_regs[i], j))
-                {
-                    LOG(LOG_LEVEL_INFO, "扫描到G%d.%d 发生下降沿", i, j);
-                    // TODO:对宏变量进行赋值0
-                }
-            }
-        } 
-    }
-    // G276~G287
-    for(int i = 276; i < 288; i++){
-        if (SIGNAL_BYTE_CHANGED(curr_g->g_regs[i], last_g->g_regs[i])){
-            for(int j = 0; j < 8; i++){
-                if (SIGNAL_RISING(curr_g->g_regs[i], last_g->g_regs[i], j))
-                {
-                    LOG(LOG_LEVEL_INFO, "扫描到G%d.%d 发生上升沿", i, j);
-                    // TODO:对宏变量进行赋值1
-                }
-                if (SIGNAL_FALLING(curr_g->g_regs[i], last_g->g_regs[i], j))
-                {
-                    LOG(LOG_LEVEL_INFO, "扫描到G%d.%d 发生下降沿", i, j);
-                    // TODO:对宏变量进行赋值0
-                }
-            }
-        }
-    }
-}
 
 static void plc_spindle_g_signal_scan_cycle(const G_INPUT_MAP *curr_g, const G_INPUT_MAP *last_g){
     /* 主轴正反信号检测 (G70.4 主轴反转, G70.5 主轴正转, G29.6 主轴停止信号) */
