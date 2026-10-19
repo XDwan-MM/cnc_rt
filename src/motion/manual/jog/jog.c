@@ -253,7 +253,7 @@ static void jog_sync_on_mode_entry(void)
  */
 static bool jog_is_mac_lock_switching(void)
 {
-    return rt_data->sys_state[SYS_IS_MAC_LOCK_ON] != rt_data->sys_state[SYS_IS_MAC_LOCK_READY];
+    return rt_data->sys_state[SYS_IS_MAC_LOCK] != rt_data->sys_state[SYS_IS_MAC_LOCK_READY];
 }
 
 /*
@@ -272,7 +272,7 @@ static void jog_apply_mac_lock(void)
 {
     bool lock_request;
 
-    lock_request = rt_data->sys_state[SYS_IS_MAC_LOCK_ON];
+    lock_request = rt_data->sys_state[SYS_IS_MAC_LOCK];
     /* 只有真的发生变化才打日志，避免全轴空闲时每周期刷屏；赋值本身与 auto 一样是无条件的 */
     if (rt_data->sys_state[SYS_IS_MAC_LOCK_READY] != lock_request)
     {
@@ -288,11 +288,11 @@ static void jog_update_mac_lock(void)
     {
     case SYS_EVENT_MAC_LOCK_ON:
         LOG(LOG_LEVEL_INFO, "手动模式处理开启机械锁住");
-        rt_data->sys_state[SYS_IS_MAC_LOCK_ON] = true;
+        rt_data->sys_state[SYS_IS_MAC_LOCK] = true;
         break;
     case SYS_EVENT_MAC_LOCK_OFF:
         LOG(LOG_LEVEL_INFO, "手动模式处理关闭机械锁住");
-        rt_data->sys_state[SYS_IS_MAC_LOCK_ON] = false;
+        rt_data->sys_state[SYS_IS_MAC_LOCK] = false;
         break;
     default:
         break;

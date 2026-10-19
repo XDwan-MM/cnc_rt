@@ -36,7 +36,6 @@ static void output_to_hal();
 static void read_from_hal();
 static void compute_error_comp();
 static void calcul_mac_cmd_pos();
-static void manual_unset_sys_state();
 static void reset_clean_warning();
 static void rebuild_axis_positions_from_feedback();
 static void handle_rigid_return_event();
@@ -515,55 +514,6 @@ static void reset_clean_warning()
     }
 }
 
-/// @brief 所有模式下都统一处理的事件
-static void handle_nc_event(){
-    manual_unset_sys_state();
-    switch (rt_data->nc_event)
-    {
-    case SYS_EVENT_PROGRAM_RESTART_ON:
-        rt_set_sys_state(SYS_IS_PROG_RESTAR, true);
-        break;
-    case SYS_EVENT_PROGRAM_RESTART_OFF:
-        rt_set_sys_state(SYS_IS_PROG_RESTAR, false);
-        break;
-    case SYS_EVENT_BLOCK_SKIP_ON:
-        rt_set_sys_state(SYS_IS_BLOCK_SKIP, true);
-        break;
-    case SYS_EVENT_BLOCK_SKIP_OFF:
-        rt_set_sys_state(SYS_IS_BLOCK_SKIP, false);
-        break;
-    default:
-        break;
-    }
-}
-
-static void manual_unset_sys_state()
-{
-    switch (rt_data->current_mode)
-    {
-    case MODE_MDI:
-    case MODE_MEM:
-    case MODE_DNC:
-        // 自动模式的机械锁住和所有轴互锁由 auto.c 的状态机维护
-        return;
-    case MODE_JOG:
-    case MODE_MPG:
-        // 点动和手轮支持机械锁住：状态位保留，由 jog/handwheel 模块各自维护
-        // （见 jog_update_mac_lock() / handwheel_update_mac_lock()），这里不清除。
-        return;
-    default:
-        break;
-    }
-    // 其他手动类模式（编辑/回零/空闲）暂不支持机械锁住和所有轴互锁，进入时清除，
-    // 避免锁住状态残留导致点动、回零等操作失效。
-    if (rt_data->nc_event == SYS_EVENT_MAC_LOCK_ON || rt_data->nc_event == SYS_EVENT_MAC_LOCK_OFF)
-    {
-        LOG(LOG_LEVEL_ERR, "%s模式不支持机械锁住，按键无效", mode_names[rt_data->current_mode]);
-    }
-    rt_data->sys_state[SYS_IS_MAC_LOCK_READY] = false;
-    rt_data->sys_state[SYS_IS_MAC_LOCK_ON] = false;
-    rt_data->sys_state[SYS_IS_IT_LOCK] = false;
-}
 
 static void rebuild_axis_positions_from_feedback()
 {

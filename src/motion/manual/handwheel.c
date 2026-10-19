@@ -190,7 +190,7 @@ void Simple_Tp_Update(simple_tp_t_handwheel *tp)
  */
 static bool handwheel_is_mac_lock_switching(void)
 {
-    return rt_data->sys_state[SYS_IS_MAC_LOCK_ON] != rt_data->sys_state[SYS_IS_MAC_LOCK_READY];
+    return rt_data->sys_state[SYS_IS_MAC_LOCK] != rt_data->sys_state[SYS_IS_MAC_LOCK_READY];
 }
 
 /* 锁住状态切换期间停止追赶已有目标：目标位置对齐当前规划位置，由规划器按斜坡停稳 */
@@ -225,7 +225,7 @@ static void handwheel_update_mac_lock(void)
      * 先按“上一周期结束时的请求/生效状态”判断能不能切换，再处理本周期的开关事件
      * （与自动模式一致），这样 ON=1,READY=0 / ON=0,READY=1 过渡态至少存在一个周期。
      */
-    lock_request = rt_data->sys_state[SYS_IS_MAC_LOCK_ON];
+    lock_request = rt_data->sys_state[SYS_IS_MAC_LOCK];
     lock_effective = rt_data->sys_state[SYS_IS_MAC_LOCK_READY];
 
     /* 请求与实际不一致（正在锁住或正在解除）：先等手轮运动停稳，再切换生效状态 */
@@ -240,11 +240,11 @@ static void handwheel_update_mac_lock(void)
     {
     case SYS_EVENT_MAC_LOCK_ON:
         LOG(LOG_LEVEL_INFO, "手动模式处理开启机械锁住");
-        rt_data->sys_state[SYS_IS_MAC_LOCK_ON] = true;
+        rt_data->sys_state[SYS_IS_MAC_LOCK] = true;
         break;
     case SYS_EVENT_MAC_LOCK_OFF:
         LOG(LOG_LEVEL_INFO, "手动模式处理关闭机械锁住");
-        rt_data->sys_state[SYS_IS_MAC_LOCK_ON] = false;
+        rt_data->sys_state[SYS_IS_MAC_LOCK] = false;
         break;
     default:
         break;
