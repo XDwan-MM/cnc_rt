@@ -223,13 +223,18 @@ static void block_deal_outlier(PLAN_BLOCK* pretreat_block, PLAN_BLOCK* treat_blo
         // 长度小于阈值不放入队列
         if(!is_length_valid(pretreat_block)){
             queue_pop(pretreat_queue);
-            // 更新上一段终点，长度，
-            // 更新下一段起点，长度，
-            // 矢量，角度计算放到后面（circle,fix或cy—tp—add）
             PLAN_BLOCK* next_block;
+            PLAN_BLOCK* last_block;
+            // 更新上一段终点，长度，
+            last_block=queue_peak_pre_tail(pretreat_queue);
+            last_block->end_pos=pretreat_block->start_pos;
+            block_cal_length(last_block);
+            // 更新下一段起点，长度，
             next_block=queue_peak(pretreat_queue);
             next_block->start_pos=pretreat_block->end_pos;
             block_cal_length(next_block);
+            // 矢量，角度计算放到后面（circle,fix或cy—tp—add）
+
         }else{
             queue_pop(pretreat_queue);
             queue_soft_push(treat_queue);
