@@ -54,6 +54,10 @@ INCLUDEPATH += $$PWD/../lib/kinematic/include $$PWD/../lib/kinematic
 LIBS += -L"$$PWD/../lib/CNC_ErrorComp/lib" -lCNC_ErrorComp
 INCLUDEPATH += $$PWD/../lib/CNC_ErrorComp/include $$PWD/../lib/CNC_ErrorComp
 
+# 路径规划依赖圆弧平滑头文件和静态库。
+LIBS += -L"$$PWD/../lib/circleSmooth/bin" -lcircleSmooth
+INCLUDEPATH += $$PWD/../lib/circleSmooth/include $$PWD/../lib/circleSmooth
+
 # HAL 的头与静态库（vendored，见 lib/cnc_hal/sync.sh）。
 # 测试跑的是 debug 构建，所以驱动层用 HAL 的内存桩，还要看得到 HAL 内部头。
 LIBS += -L"$$PWD/../lib/cnc_hal/lib" -lcnc_hal
@@ -91,7 +95,8 @@ HEADERS += \
     ../src/motion/spindle/spl_orient.h \
     ../src/motion/spindle/spl_pos_planner.h \
     ../src/motion/emcmot.h \
-    ../src/motion/manual/handwheel.h \
+    ../src/motion/manual/mpg/mpg.h \
+    ../src/motion/manual/mpg/mpg_planner.h \
     ../src/motion/manual/ref.h \
     ../src/motion/manual/jog/jog.h \
     ../src/motion/manual/jog/jog_planner.h \
@@ -146,7 +151,8 @@ SOURCES += \
     ../src/motion/spindle/spl_vel_planner.c \
     ../src/motion/spindle/spl_pos_planner.c \
     ../src/motion/emcmot.cpp \
-    ../src/motion/manual/handwheel.c \
+    ../src/motion/manual/mpg/mpg.c \
+    ../src/motion/manual/mpg/mpg_planner.c \
     ../src/motion/manual/ref.c \
     ../src/motion/manual/jog/jog.c \
     ../src/motion/manual/jog/jog_planner.c \
@@ -186,6 +192,8 @@ INCLUDEPATH += \
     ../src/motion/auto/interp \
     ../src/motion/auto/trajplan \
     ../src/motion/manual/jog \
+    ../src/motion/manual/mpg \
+    ../src/motion/sysprog \
     ../src/motion/spindle \
     ../src/motion/manual \
     ../src/motion/servo_sample \

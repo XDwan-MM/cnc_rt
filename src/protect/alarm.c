@@ -4,7 +4,7 @@
 #include "reset.h"
 #include <alarmapi.h>
 #include <hmisysapi.h>
-#include "handwheel.h"
+#include "mpg.h"
 #include <time.h>
 
 /* HAL 错误码 → 报警号。RT 直接用 HAL 的返回值报号。

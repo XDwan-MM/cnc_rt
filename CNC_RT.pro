@@ -144,7 +144,8 @@ HEADERS += \
     src/motion/spindle/spl_vel_planner.h \
     src/motion/spindle/spl_pos_planner.h \
     src/motion/emcmot.h \
-    src/motion/manual/handwheel.h \
+    src/motion/manual/mpg/mpg.h \
+    src/motion/manual/mpg/mpg_planner.h \
     src/motion/manual/ref.h \
     src/motion/manual/jog/jog.h \
     src/motion/manual/jog/jog_planner.h \
@@ -203,7 +204,8 @@ SOURCES += \
     src/motion/spindle/spl_vel_planner.c \
     src/motion/spindle/spl_pos_planner.c \
     src/motion/emcmot.cpp \
-    src/motion/manual/handwheel.c \
+    src/motion/manual/mpg/mpg.c \
+    src/motion/manual/mpg/mpg_planner.c \
     src/motion/manual/ref.c \
     src/motion/manual/jog/jog.c \
     src/motion/manual/jog/jog_planner.c \
@@ -245,6 +247,7 @@ INCLUDEPATH += \
     src/motion/auto/interp \
     src/motion/auto/trajplan \
     src/motion/manual/jog \
+    src/motion/manual/mpg \
     src/motion/spindle \
     src/motion/manual \
     src/motion/servo_sample \
