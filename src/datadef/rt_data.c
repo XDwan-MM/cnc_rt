@@ -208,7 +208,6 @@ static void rt_reset_axis_data()
         rt_data->axis_data[i].mpg_ex_dec3_vel = 3; // 外部减速3对手轮进给的减速速度
         rt_data->axis_data[i].mpg_ex_dec4_vel = 4; // 外部减速4对手轮进给的减速速度
         rt_data->axis_data[i].mpg_ex_dec5_vel = 5; // 外部减速5对手轮进给的减速速度
-        
     }
 }
 
