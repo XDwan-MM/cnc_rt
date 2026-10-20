@@ -140,6 +140,36 @@ TEST_F(TestMpg, PlannerDiscardsFirstCountAndHandlesCounterWrap)
     EXPECT_GT(planner.target_position, 0.0);
 }
 
+TEST_F(TestMpg, AxisOutputPreservesPreviousCommandPosition)
+{
+    configure_mpg_input(0, HANDWHEEL_AXIS_X, HANDWHEEL_RATE_X1);
+    handle_mpg_cmd();
+
+    configure_mpg_input(4000, HANDWHEEL_AXIS_X, HANDWHEEL_RATE_X1);
+    handle_mpg_cmd();
+    const double first_position = rt_data->axis_data[AXIS_X].wcs_cmd_pos_cur;
+    EXPECT_GT(first_position, 0.0);
+    EXPECT_DOUBLE_EQ(rt_data->axis_data[AXIS_X].wcs_cmd_pos_pre, 0.0);
+
+    handle_mpg_cmd();
+    EXPECT_DOUBLE_EQ(rt_data->axis_data[AXIS_X].wcs_cmd_pos_pre, first_position);
+    EXPECT_GT(rt_data->axis_data[AXIS_X].wcs_cmd_pos_cur, first_position);
+}
+
+TEST_F(TestMpg, ChannelVelocityIsFeedAxisVectorMagnitude)
+{
+    rt_data->axis_data[AXIS_Y].cmd_vel = 3.0;
+    configure_mpg_input(0, HANDWHEEL_AXIS_X, HANDWHEEL_RATE_X1);
+    handle_mpg_cmd();
+    configure_mpg_input(4000, HANDWHEEL_AXIS_X, HANDWHEEL_RATE_X1);
+    handle_mpg_cmd();
+
+    const double x_velocity = rt_data->axis_data[AXIS_X].cmd_vel;
+    EXPECT_GT(x_velocity, 0.0);
+    EXPECT_NEAR(rt_data->chan_data[0].cmd_vel,
+                std::sqrt(x_velocity * x_velocity + 9.0), 1.0e-12);
+}
+
 TEST_F(TestMpg, PlannerMultiplierScalesCountDistance)
 {
     mpg_planner_t planner = {};

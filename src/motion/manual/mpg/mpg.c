@@ -33,6 +33,7 @@ static int mpg_decode_axis(int switch_value);
 static bool mpg_axis_is_valid(int axis);
 static bool mpg_selection_is_valid(int axis, int multiplier);
 static void mpg_update_axis_output(int axis);
+static void mpg_update_channel_output(void);
 static void mpg_stop_axis_chasing(int axis);
 static int mpg_get_motion_direction(const mpg_planner_t *planner);
 static double mpg_get_external_decel_velocity(int axis, int direction);
@@ -251,20 +252,43 @@ static bool mpg_selection_is_valid(int axis, int multiplier)
 
 /*
  * 将某一规划器的当前位置和速度写回实时数据。
- * 位置使用规划器积分后的当前位置；轴速度和通道速度保持历史约定，写入速度绝对值，
+ * 位置使用规划器积分后的当前位置；轴速度保持绝对值，通道速度按 X/Y/Z 轴速度矢量合成，
  * 运动方向由位置变化体现。无效轴或实时数据未初始化时函数不产生任何副作用。
  */
 static void mpg_update_axis_output(int axis)
 {
     mpg_planner_t *planner;
+    double previous_position;
 
     if (rt_data == NULL || !mpg_axis_is_valid(axis))
         return;
     planner = &mpg_context.planner_by_axis[axis];
-    /* 轴和通道速度沿用既有绝对值语义；运动正负方向由位置及计数方向表示。 */
+    /* 保存更新前的位置供 emcmot 按本周期位置增量累计机床坐标。 */
+    previous_position = rt_data->axis_data[axis].wcs_cmd_pos_cur;
+    rt_data->axis_data[axis].wcs_cmd_pos_pre = previous_position;
     rt_data->axis_data[axis].wcs_cmd_pos_cur = planner->current_position;
+    /* 运动正负方向由位置及计数方向表示，轴速度输出保持非负。 */
     rt_data->axis_data[axis].cmd_vel = fabs(planner->current_velocity);
-    rt_data->chan_data[0].cmd_vel = fabs(planner->current_velocity);
+    mpg_update_channel_output();
+}
+
+/* 通道速度按当前 X/Y/Z 轴指令速度的矢量模合成。 */
+static void mpg_update_channel_output(void)
+{
+    double velocity_squared;
+
+    if (rt_data == NULL)
+        return;
+
+    velocity_squared = 0.0;
+    for (int axis = 0; axis < MPG_FEED_AXIS_COUNT; axis++)
+    {
+        double axis_velocity;
+
+        axis_velocity = rt_data->axis_data[axis].cmd_vel;
+        velocity_squared += axis_velocity * axis_velocity;
+    }
+    rt_data->chan_data[0].cmd_vel = sqrt(velocity_squared);
 }
 
 /*
@@ -404,5 +428,5 @@ static void mpg_update_active_axis(void)
     if (mpg_axis_is_valid(mpg_context.selected_axis))
         mpg_update_axis_output(mpg_context.selected_axis);
     else if (rt_data != NULL)
-        rt_data->chan_data[0].cmd_vel = 0.0;
+        mpg_update_channel_output();
 }
