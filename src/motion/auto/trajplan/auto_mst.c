@@ -6,6 +6,8 @@
 #include "regapi.h"
 #include <hmisysapi.h>  
 #include <alarmapi.h>
+#include <limits.h>
+#include <math.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -16,7 +18,7 @@ static void auto_clear_mstb_signal();
 static void auto_mstb_fin_alert();
 static void auto_mstb_fin_reset();
 static void auto_set_mcode_signal(int index);
-static void auto_set_scode_signal(int index);
+static void auto_set_scode_signal(int speed);
 static void auto_set_tcode_signal(int index);
 static void auto_set_bcode_signal(int index);
 
@@ -155,7 +157,7 @@ static void auto_deal_mstb(){
             cycle_tp->target_stage = PROGRAM_END;
             break;
         case M03: // 主轴正转
-            setRegValue8(REG_F, 10, 0x03); 
+            setRegValue8(REG_F, 10, 0x03);
             spindle_clear_velocity_arrival();   /* 新指令：清上一条的到速完成 */
             spl_context.command_speed = cycle_tp->plan_block->mst_data.spindle.speed;
             spl_context.mcp_target_speed = cycle_tp->plan_block->mst_data.spindle.speed;
@@ -166,10 +168,11 @@ static void auto_deal_mstb(){
             spl_context.start_request_pending = true;
             /* 新指令取消排队中的延迟启动。 */
             spl_context.deferred_start_pending = false;
-            auto_set_scode_signal(i);
+            auto_set_scode_signal((int)fmin((double)INT_MAX,
+                                              spindle_cnc_target_speed(spl_context.command_speed)));
             break;
         case M04: // 主轴反转
-            setRegValue8(REG_F, 10, 0x04); 
+            setRegValue8(REG_F, 10, 0x04);
             spindle_clear_velocity_arrival();   /* 新指令：清上一条的到速完成 */
             spl_context.command_speed = cycle_tp->plan_block->mst_data.spindle.speed;
             spl_context.mcp_target_speed = cycle_tp->plan_block->mst_data.spindle.speed;
@@ -180,7 +183,8 @@ static void auto_deal_mstb(){
             spl_context.start_request_pending = true;
             /* 新指令取消排队中的延迟启动。 */
             spl_context.deferred_start_pending = false;
-            auto_set_scode_signal(i);
+            auto_set_scode_signal((int)fmin((double)INT_MAX,
+                                              spindle_cnc_target_speed(spl_context.command_speed)));
             break;
         case M05: // 主轴停止
             setRegValue8(REG_F, 10, 0x05);
@@ -193,7 +197,7 @@ static void auto_deal_mstb(){
             spl_context.start_request_pending = false;
             /* 停止取消排队中的延迟启动。 */
             spl_context.deferred_start_pending = false;
-            auto_set_scode_signal(i);
+            auto_set_scode_signal(cycle_tp->plan_block->mst_data.spindle.speed);
             break;
         case M06: // 不输出M代码信号：1、M99，M98，M198；2、调用子程序的M代码；3、调用用户宏程序的M代码
             spl_context.mcode_feedback = false;
@@ -379,30 +383,30 @@ static void auto_set_mcode_signal(int index){
     }
 }
 
-static void auto_set_scode_signal(int index){
-    if(cycle_tp->plan_block->mst_data.spindle.speed < REG_8BITE){
-        setRegValue8(REG_F, 22, cycle_tp->plan_block->mst_data.spindle.speed);
+static void auto_set_scode_signal(int speed){
+    if(speed < REG_8BITE){
+        setRegValue8(REG_F, 22, speed);
         setRegValue8(REG_F, 23, 0);
         setRegValue8(REG_F, 24, 0);
         setRegValue8(REG_F, 25, 0);
     } 
-    else if(cycle_tp->plan_block->mst_data.spindle.speed < REG_16BITE){
-        setRegValue8(REG_F, 22, cycle_tp->plan_block->mst_data.spindle.speed & 0xFF);          // 低 8 位
-        setRegValue8(REG_F, 23, (cycle_tp->plan_block->mst_data.spindle.speed >> 8) & 0xFF);   // 高 8 位
+    else if(speed < REG_16BITE){
+        setRegValue8(REG_F, 22, speed & 0xFF);          // 低 8 位
+        setRegValue8(REG_F, 23, (speed >> 8) & 0xFF);   // 高 8 位
         setRegValue8(REG_F, 24, 0);
         setRegValue8(REG_F, 25, 0);
     }
-    else if(cycle_tp->plan_block->mst_data.spindle.speed < REG_24BITE){
-        setRegValue8(REG_F, 22, cycle_tp->plan_block->mst_data.spindle.speed & 0xFF);
-        setRegValue8(REG_F, 23, (cycle_tp->plan_block->mst_data.spindle.speed >> 8) & 0xFF);
-        setRegValue8(REG_F, 24, (cycle_tp->plan_block->mst_data.spindle.speed >> 16) & 0xFF);
+    else if(speed < REG_24BITE){
+        setRegValue8(REG_F, 22, speed & 0xFF);
+        setRegValue8(REG_F, 23, (speed >> 8) & 0xFF);
+        setRegValue8(REG_F, 24, (speed >> 16) & 0xFF);
         setRegValue8(REG_F, 25, 0);
     }
     else{
-        setRegValue8(REG_F, 22, cycle_tp->plan_block->mst_data.spindle.speed & 0xFF);
-        setRegValue8(REG_F, 23, (cycle_tp->plan_block->mst_data.spindle.speed >> 8) & 0xFF);
-        setRegValue8(REG_F, 24, (cycle_tp->plan_block->mst_data.spindle.speed >> 16) & 0xFF);
-        setRegValue8(REG_F, 25, (cycle_tp->plan_block->mst_data.spindle.speed >> 24) & 0xFF);
+        setRegValue8(REG_F, 22, speed & 0xFF);
+        setRegValue8(REG_F, 23, (speed >> 8) & 0xFF);
+        setRegValue8(REG_F, 24, (speed >> 16) & 0xFF);
+        setRegValue8(REG_F, 25, (speed >> 24) & 0xFF);
     }
     // LOG(LOG_LEVEL_DEBUG, "主轴转速 %d", cycle_tp->plan_block->mst_data.spindle.speed);
 }

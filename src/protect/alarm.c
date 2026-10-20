@@ -22,11 +22,10 @@
 #define HAL_ALARM_UNSUPPORTED    129  /* 设备不支持该功能 */
 #define HAL_ALARM_BUSY           130  /* 主站已被占用 */
 #define HAL_ALARM_RESET_TIMEOUT  131  /* 故障复位超时 */
-#define HAL_ALARM_AXIS_NOT_ENABLED 132  /* 轴槽持续未使能：运动指令会被 HAL 拒收（HMI 报警文本表需补条目） */
 #define HAL_ALARM_UNKNOWN        139  /* 未归类的 HAL 错误 */
 
-/* 轴槽持续未使能多久才报警：1 ms/拍 → 约 0.2 s，避开使能过渡期。 */
-#define AXIS_NOT_ENABLED_WARN_CYCLES 200u
+/* 未使能仅作诊断；启动和故障复位后的 DS402 使能过渡不应产生系统报警。 */
+#define AXIS_NOT_ENABLED_LOG_CYCLES 5000u
 
 static int hal_code_to_alarm(int32_t rc) {
     switch (rc) {
@@ -194,42 +193,36 @@ static void alarm_poll_drive_errors(void) {
     }
 }
 
-/* 轴槽长期未使能看门狗：位置指令会被 HAL 以"轴尚未使能"拒收，而业务层看不到
- * 返回码（适配层只打 stderr），最终被后续的跟随误差报警盖住。这里把"持续未使能"
- * 升级成报警，让现场第一眼看到的是根因。复位/急停/报警/模式切换期间不判。 */
+/* 未使能不是驱动故障：仅在持续异常时留下逐轴诊断，不触发复位循环。 */
 static void alarm_poll_axis_not_enabled(void) {
-    static uint32_t s_age;
-    static int s_alarmed;
-    /* 不看 SYS_IS_ALARMING：否则本报警一置起就会被下一拍当成"静态期"清掉，来回闪。
-     * 驱动故障另有按轴报警 30..33，这里只在急停/复位/模式切换/总线错误时静默。 */
+    static uint32_t s_age[RT_HAL_AXIS_COUNT];
+    static int s_logged[RT_HAL_AXIS_COUNT];
     const int quiescent = !!(rt_data->sys_state[SYS_ESTOP_INPUT] ||
                              rt_data->sys_state[SYS_IS_SWITCHING_MODE] ||
                              rt_hal_cycle_error() != 0 ||
                              alarm_fault_reset_pending());
-    int bad = 0;
-    if (!quiescent) {
-        for (int i = 0; i < RT_HAL_AXIS_COUNT; ++i) {
-            HalCAxisStatus st;
-            /* 按参数/PLC 屏蔽的轴，和主轴主动要求不带力矩（M5/复位停车）都不算异常。 */
-            if (rt_data->axis_data[i].status.is_disable) continue;
-            if (rt_hal_config_is_spindle((RtHalAxisSlot)i) &&
-                !rt_data->axis_data[i].status.spindle_wants_torque) continue;
-            if (rt_hal_axis_status((RtHalAxisSlot)i, &st) == HAL_OK && !st.enabled) bad = 1;
+    for (int i = 0; i < RT_HAL_AXIS_COUNT; ++i) {
+        HalCAxisStatus st;
+        const int readable = rt_hal_axis_status((RtHalAxisSlot)i, &st) == HAL_OK;
+        const int expected = !quiescent &&
+            !rt_data->axis_data[i].status.is_disable &&
+            !rt_data->axis_data[i].status.is_error &&
+            (!rt_hal_config_is_spindle((RtHalAxisSlot)i) ||
+             rt_data->axis_data[i].status.spindle_wants_torque);
+        if (!expected || !readable || st.enabled) {
+            s_age[i] = 0;
+            s_logged[i] = 0;
+            continue;
         }
+        if (s_logged[i] || ++s_age[i] < AXIS_NOT_ENABLED_LOG_CYCLES) continue;
+        s_logged[i] = 1;
+        int32_t reset_state = -1;
+        (void)rt_hal_fault_reset_state((RtHalAxisSlot)i, &reset_state);
+        LOG(LOG_LEVEL_WARN,
+            "HAL 轴槽 %d 持续未使能：status_word=0x%04X 0x603F=0x%04X valid=%d reset=%d",
+            i, (unsigned)st.raw_status, (unsigned)st.error_code,
+            (int)st.error_code_valid, (int)reset_state);
     }
-    if (!bad) {
-        s_age = 0;
-        if (s_alarmed) {
-            s_alarmed = 0;
-            delAlarm(ALARM_ETHCAT_SV, ALARM_ERROR, HAL_ALARM_AXIS_NOT_ENABLED);
-        }
-        return;
-    }
-    if (s_alarmed) return;
-    if (++s_age < AXIS_NOT_ENABLED_WARN_CYCLES) return;
-    s_alarmed = 1;
-    LOG(LOG_LEVEL_ERR, "HAL 轴持续未使能：运动指令会被拒收（查驱动使能/故障复位是否收口）");
-    setAlarm(ALARM_ETHCAT_SV, ALARM_ERROR, HAL_ALARM_AXIS_NOT_ENABLED);
 }
 
 /* 每拍检查 HAL 侧状态，由运动线程调用（只读适配层快照，不碰 HAL context）。 */
@@ -241,7 +234,7 @@ void alarm_poll_hal() {
     /* 2) 驱动器故障码（0x603F）→ is_error。 */
     alarm_poll_drive_errors();
 
-    /* 2b) 轴槽持续未使能 → 报警（否则只表现为"轴不动 + 跟随误差"）。 */
+    /* 2b) 轴槽持续未使能仅记录诊断，不把正常使能过渡当系统报警。 */
     alarm_poll_axis_not_enabled();
 
     /* 3) 等四轴复位终态，外层截止时间防止无限等待。 */

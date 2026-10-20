@@ -361,17 +361,21 @@ static void output_to_hal()
     (void)rt_hal_request_axis_pos(RT_HAL_AXIS_X, rt_data->axis_data[AXIS_X].motor_cmd_pos);
     (void)rt_hal_request_axis_pos(RT_HAL_AXIS_Y, rt_data->axis_data[AXIS_Y].motor_cmd_pos);
     (void)rt_hal_request_axis_pos(RT_HAL_AXIS_Z, rt_data->axis_data[AXIS_Z].motor_cmd_pos);
-    /* 复位停车仍需同步插补；停稳后旧攻丝块不能再把中断前的角度写回 CSP。 */
-    const bool tap_block = cycle_tp->plan_block != NULL &&
-        (cycle_tp->plan_block->type == RIGID_TAP ||
-         cycle_tp->plan_block->type == TAP_RETURN);
+    /* M29 对零阶段由主轴状态机保持位置；CSP 受控停车仍需插补同步。
+     * 复位收口后等反馈坐标重建完成，避免旧目标重新下发。 */
+    HalCSpindleStatus spindle;
     const bool reset_tap_stop = spl_context.reset_stop_pending &&
                                 spl_context.reset_stop_csp;
-    const bool active_tap = cycle_tp->exec_state == EXEC_RUNNING &&
-                            cycle_tp->exec_cmd == DO_TAP_CMD &&
-                            spl_context.m29_phase == SPINDLE_M29_READY &&
-                            (nc_reset == NULL || !nc_reset->is_resetting);
-    if (tap_block && (reset_tap_stop || active_tap))
+    const bool reset_active = (nc_reset != NULL && nc_reset->is_resetting) ||
+                              rt_data->nc_event == SYS_EVENT_HMI_RESET ||
+                              rt_data->sys_state[SYS_ESTOP_INPUT] ||
+                              rt_data->sys_state[SYS_IS_ESTOP_ACTIVE] ||
+                              rt_data->sys_state[SYS_IS_ALARMING];
+    if (rt_hal_spindle_status(RT_HAL_AXIS_SP, &spindle) == HAL_OK &&
+        spindle.mode == HAL_SPINDLE_CSP &&
+        (reset_tap_stop ||
+         (update_pos_flag && !reset_active &&
+          spl_context.m29_phase == SPINDLE_M29_READY)))
         (void)rt_hal_request_axis_pos(RT_HAL_AXIS_SP, rt_data->axis_data[AXIS_SP].wcs_cmd_pos_cur);
 }
 

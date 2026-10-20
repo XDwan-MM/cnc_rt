@@ -1545,19 +1545,22 @@ static double spindle_get_selected_speed(const spindle_context_t *context)
     return context->command_speed;
 }
 
-static double spindle_calculate_target_velocity(const spindle_context_t *context)
+double spindle_cnc_target_speed(double command_speed)
 {
-    /* 应用主轴倍率和最大转速限制，并按 CW/CCW 输出带符号速度。 */
     const double max_speed = fabs(rt_data->axis_data[AXIS_SP].spdl_max_speed);
     const double override = var_chan[0][VAR_CHAN_SPDL_OVERRIDE].value.f / 100.0;
-    double target_speed = fabs(spindle_get_selected_speed(context));
+    return fmin(max_speed, fabs(command_speed) * fmax(0.0, override));
+}
 
+static double spindle_calculate_target_velocity(const spindle_context_t *context)
+{
+    /* CNC S 值与 PLC 输出共用同一有效目标；PLC 速度源不应用 CNC 倍率。 */
+    double target_speed;
     if (context->speed_source == SPINDLE_SPEED_SOURCE_CNC)
-    {
-        target_speed *= fmax(0.0, override);
-    }
-
-    target_speed = fmin(max_speed, target_speed);
+        target_speed = spindle_cnc_target_speed(spindle_get_selected_speed(context));
+    else
+        target_speed = fmin(fabs(rt_data->axis_data[AXIS_SP].spdl_max_speed),
+                            fabs(spindle_get_selected_speed(context)));
     if (context->spl_state == SPINDLE_CCW)
     {
         target_speed = -target_speed;
