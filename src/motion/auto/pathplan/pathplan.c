@@ -61,6 +61,9 @@ GNC_RES pretreat_block()
     //结束逻辑：
     if ((rt_data->chan_state[0][CHAN_IS_PARSERING] == false)&&queue_is_empty(parser_queue))
     {
+        // 如果一致性队列已满，提前结束
+        if(queue_is_full(treat_queue)) return GNC_DATA_FULL;
+
         if(queue_get_size(pretreat_queue)==1)
         {
             treat_block = queue_peak(pretreat_queue);
@@ -222,11 +225,12 @@ static void block_deal_outlier(PLAN_BLOCK* pretreat_block, PLAN_BLOCK* treat_blo
     default:
         // 长度小于阈值不放入队列
         if(!is_length_valid(pretreat_block)){
-            queue_pop(pretreat_queue);
             PLAN_BLOCK* next_block;
             PLAN_BLOCK* last_block;
+            queue_pop(pretreat_queue);
+
             // 更新上一段终点，长度，
-            last_block=queue_peak_pre_tail(pretreat_queue);
+            last_block=queue_peak_pre_tail(treat_queue);
             last_block->end_pos=pretreat_block->start_pos;
             block_cal_length(last_block);
             // 更新下一段起点，长度，
@@ -299,8 +303,6 @@ static GNC_RES block_unif_by_nurbs()
 {
     PLAN_BLOCK *treat_block;
 
-    // 未处理其译码结束时，nurbs队列还在等待新block
-    // static int startflag = 1;
 
     if ((queue_is_empty(fix_queue)))
         return GNC_OPERATOR_SUCCESS;
@@ -312,6 +314,10 @@ static GNC_RES block_unif_by_nurbs()
     //结束逻辑：
     if ((rt_data->chan_state[0][CHAN_IS_PARSERING] == false)&&queue_is_empty(treat_queue))
     {
+            // 如果前瞻队列已满，提前结束
+        if (queue_is_full(unif_queue))
+            return GNC_OPERATOR_SUCCESS;
+            
         if(queue_get_size(fix_queue)==1)
         {
             treat_block = queue_peak(fix_queue);
@@ -372,16 +378,6 @@ static GNC_RES block_unif_by_nurbs()
                             LOG(LOG_LEVEL_INFO, "nurbs拟合/拟合失败，在%d段出现", treat_block->line_number);
                             return GNC_OPERATOR_SUCCESS;
                         }
-                        // nurbs段重算速度与长度
-                        treat_block->length = treat_block->nurbs_data.length;
-                        double min_feed = MIN3(rt_data->axis_data[0].max_feed_vel, rt_data->axis_data[1].max_feed_vel, rt_data->axis_data[2].max_feed_vel);
-                        double vn = vp_cal_nurbs_max_vel(treat_block, rt_data->chan_data[0].path_tolerance, rt_data->ncu_data.cycle);
-                        treat_block->max_vel = treat_block->feed_vel = MIN3(treat_block->feed_vel, min_feed, vn);
-                        // nurbs段重算切矢与上一段连接角度
-                        block_cal_vector(treat_block);
-                        block_cal_angle(treat_block, &queue_peak_pre_tail(unif_queue)->end_vec);  
-                        // nurbs段重算与下一段连接角度
-                        block_cal_angle(queue_peak(fix_queue), &treat_block->end_vec);  
                         queue_push(unif_queue, treat_block);
                         return GNC_OPERATOR_SUCCESS;
                     }
@@ -454,16 +450,6 @@ static GNC_RES block_unif_by_nurbs()
                             LOG(LOG_LEVEL_INFO, "nurbs拟合/拟合失败，在%d段出现", treat_block->line_number);
                             return GNC_OPERATOR_SUCCESS;
                         }
-                         // nurbs段重算速度与长度
-                        treat_block->length = treat_block->nurbs_data.length;
-                        double min_feed = MIN3(rt_data->axis_data[0].max_feed_vel, rt_data->axis_data[1].max_feed_vel, rt_data->axis_data[2].max_feed_vel);
-                        double vn = vp_cal_nurbs_max_vel(treat_block, rt_data->chan_data[0].path_tolerance, rt_data->ncu_data.cycle);
-                        treat_block->max_vel = treat_block->feed_vel = MIN3(treat_block->feed_vel, min_feed, vn);
-                        // nurbs段重算切矢与上一段连接角度
-                        block_cal_vector(treat_block);
-                        block_cal_angle(treat_block, &queue_peak_pre_tail(unif_queue)->end_vec);  
-                        // nurbs段重算与下一段连接角度
-                        block_cal_angle(queue_peak(fix_queue), &treat_block->end_vec);  
                         queue_push(unif_queue, treat_block);
                         return GNC_OPERATOR_SUCCESS;
                     }
@@ -489,18 +475,7 @@ static GNC_RES block_unif_by_nurbs()
                         {
                             LOG(LOG_LEVEL_INFO, "nurbs拟合/拟合失败，在%d段出现", nurbs_temp_block->line_number);
                             return GNC_OPERATOR_SUCCESS;
-                        }
-                         // nurbs段重算速度与长度
-                        nurbs_temp_block->length = nurbs_temp_block->nurbs_data.length;
-                        double min_feed = MIN3(rt_data->axis_data[0].max_feed_vel, rt_data->axis_data[1].max_feed_vel, rt_data->axis_data[2].max_feed_vel);
-                        double vn = vp_cal_nurbs_max_vel(nurbs_temp_block, rt_data->chan_data[0].path_tolerance, rt_data->ncu_data.cycle);
-                        nurbs_temp_block->max_vel = nurbs_temp_block->feed_vel = MIN3(nurbs_temp_block->feed_vel, min_feed, vn);
-                        // nurbs段重算切矢与上一段连接角度
-                        block_cal_vector(nurbs_temp_block);
-                        block_cal_angle(nurbs_temp_block, &queue_peak_pre_tail(unif_queue)->end_vec);  
-                        // nurbs段重算与下一段连接角度
-                        block_cal_angle(queue_peak(fix_queue), &nurbs_temp_block->end_vec);  
-                       
+                        }                       
                         queue_push(unif_queue, nurbs_temp_block);
                         // 如果前瞻队列已满，提前结束
                         if (queue_is_full(unif_queue))
@@ -605,8 +580,6 @@ static void block_deal_nurbs_enable(PLAN_BLOCK* pretreat_block, PLAN_QUEUE *temp
         if(cycle_tp->pos_cmd_data.blocknum > 3){
             block_fix_pos(pretreat_block, rt_data->chan_data[0].l_theta_thre, rt_data->chan_data[0].theta_thre, temp);
         }
-        // 修改为nurbs类型
-        if(pretreat_block->isContinue && pretreat_block->type == LINE) pretreat_block->type = NURBS;  
     }
 }
 
@@ -736,6 +709,8 @@ static int block_cal_segment(PLAN_BLOCK* pretreat_block, double seg_theta_thre,P
     if(pretreat_block->type==LINE)
     {    
         pretreat_block->isContinue=1;
+        // 修改为nurbs类型
+        pretreat_block->type = NURBS;  
         return 1;
     }
     else 

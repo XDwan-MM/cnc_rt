@@ -129,6 +129,51 @@ void auto_execute_pos_cmd(){
     cycle_tp->pos_cmd_data.current_pos.x = rt_data->axis_data[AXIS_X].wcs_cmd_pos_cur = interp_pos.x;
     cycle_tp->pos_cmd_data.current_pos.y = rt_data->axis_data[AXIS_Y].wcs_cmd_pos_cur = interp_pos.y;
     cycle_tp->pos_cmd_data.current_pos.z = rt_data->axis_data[AXIS_Z].wcs_cmd_pos_cur = interp_pos.z;
+
+    static FILE *fpp;
+    static int flagg = 0;
+    if (!flagg)
+    {
+        fpp = fopen("插补.txt", "r");
+        if (fpp == NULL)
+        {
+            fpp = fopen("插补.txt", "w");
+            if (fpp == NULL)
+            {
+                // 创建失败，返回 NULL
+                return NULL;
+            }
+        }
+    }
+    fprintf(
+        fpp,
+        "%f,%f,%f,\t%f, %d, %d,%f\n",
+        interp_pos.x,
+        interp_pos.y,
+        interp_pos.z,
+        cycle_tp->pos_cmd_data.traj_data->v,
+        cycle_tp->plan_block->type,
+        cycle_tp->plan_block->line_number,
+        cycle_tp->pos_cmd_data.u_current
+    );
+    printf( "%f,%f,%f,%d,%d\n",
+        interp_pos.x,
+        interp_pos.y,
+        interp_pos.z,
+        cycle_tp->plan_block->type,
+        cycle_tp->plan_block->line_number
+    );
+    // if(cycle_tp->plan_block->line_number>=5101)
+    // {
+    //     printf("..\n");
+    // }
+    flagg++;
+    if (flagg > 1600000)
+    {
+        fclose(fpp);
+        fpp = NULL;
+        flagg=0;
+    }
 }
 
 static bool auto_pos_cmd_cycle_is_finished(){

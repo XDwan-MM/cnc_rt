@@ -54,7 +54,7 @@ static const RtHalBinding kBindings[RT_HAL_AXIS_COUNT] = {
 /* 主站参数取值沿用旧 RT 的 main_demo.h */
 #define RT_CYCLE_US        1000u
 #define RT_START_TIMEOUT   120000u
-#define RT_CYCLE_TIMEOUT   5000u
+#define RT_CYCLE_TIMEOUT   5000000000u
 #define RT_FAULT_RESET_TIMEOUT 5000u   /* 故障复位等待上限（ms） */
 #define RT_DC_ENABLE       1
 
