@@ -61,6 +61,7 @@ static uint32_t   s_panel_in[SIM_PANEL_IN];
 static uint32_t   s_panel_out[SIM_PANEL_OUT];
 static uint32_t   s_cycle_us = 1000u;
 static int        s_opened;
+static int        s_slave_count = SIM_SLOT_COUNT;
 static int        s_fail_bus;    /* 非零 = 所有驱动读都失败，用来验证总线故障路径 */
 static int        s_csv_reached; /* CNC_RT_SIM_CSV_REACHED: start in CSV with speed-reached bit10 */
 /* 驱动层停止标志：Master_RequestStop() 置，周期里查 */
@@ -81,14 +82,15 @@ static void set_bits(void* entry, uint8_t bits) {
 }
 
 /* 建一张伺服槽；spindle 为真须补速度 PDO，HAL 要求主轴必须有速度 */
-static void build_servo_slot(int idx, int slave, DEVICE_TYPE type, int spindle) {
+static void build_servo_slot(int idx, int slave, int axis, DEVICE_TYPE type, int spindle) {
     DeviceSlot* s = &s_slots[idx];
     memset(s, 0, sizeof(*s));
     s->type = type;
     s->slave_pos = slave;
-    s->axis_index = 0;
-    s->vendor_id = 0x1234u;
-    s->product_code = spindle ? 0x9001u : 0x9002u;
+    s->axis_index = axis;
+    s->vendor_id = type == GREE_AXIS4_TYPE ? 2252u : 0x1234u;
+    s->product_code = type == GREE_AXIS4_TYPE ? 2973639698u :
+                      spindle ? 0x9001u : 0x9002u;
     s->revision = 1u;
     s->serial = (uint32_t)(1000 + slave);
     snprintf(s->name, sizeof(s->name), "%s", spindle ? "SIM spindle" : "SIM feed");
@@ -160,21 +162,32 @@ int ethercat_init(const MasterConfig* cfg) {
 
     /* CNC_RT_SIM_FAULT=<从站号>：该轴上电即处于 Fault */
     const char* fault_slave = getenv("CNC_RT_SIM_FAULT");
+    const char* gree4 = getenv("CNC_RT_SIM_GREE4");
+    const int four_in_one = gree4 && atoi(gree4);
 
     build_panel_slot(0, SIM_SLAVE_PANEL);
     build_io_slot(1, SIM_SLAVE_IO);
-    build_servo_slot(2, SIM_SLAVE_SPINDLE, SERVO_TYPE, 1);
+    s_slave_count = four_in_one ? 3 : SIM_SLOT_COUNT;
+    build_servo_slot(2, SIM_SLAVE_SPINDLE, 0,
+                     four_in_one ? GREE_AXIS4_TYPE : SERVO_TYPE, 1);
     if (s_csv_reached) s_servo[2].op_mode = DS402_MODE_CSV;
-    build_servo_slot(3, SIM_SLAVE_X, SERVO_TYPE, 0);
-    build_servo_slot(4, SIM_SLAVE_Y, SERVO_TYPE, 0);
-    build_servo_slot(5, SIM_SLAVE_Z, SERVO_TYPE, 0);
+    build_servo_slot(3, four_in_one ? SIM_SLAVE_SPINDLE : SIM_SLAVE_X,
+                     four_in_one ? 1 : 0,
+                     four_in_one ? GREE_AXIS4_TYPE : SERVO_TYPE, 0);
+    build_servo_slot(4, four_in_one ? SIM_SLAVE_SPINDLE : SIM_SLAVE_Y,
+                     four_in_one ? 2 : 0,
+                     four_in_one ? GREE_AXIS4_TYPE : SERVO_TYPE, 0);
+    build_servo_slot(5, four_in_one ? SIM_SLAVE_SPINDLE : SIM_SLAVE_Z,
+                     four_in_one ? 3 : 0,
+                     four_in_one ? GREE_AXIS4_TYPE : SERVO_TYPE, 0);
     memset(s_identity, 0, sizeof(s_identity));
     for (int i = 0; i < SIM_SLOT_COUNT; ++i) {
-        s_identity[i].ID = s_slots[i].vendor_id;
-        s_identity[i].CODE = s_slots[i].product_code;
-        s_identity[i].Revision = s_slots[i].revision;
-        s_identity[i].Serial = s_slots[i].serial;
-        s_identity[i].type = s_slots[i].type;
+        DEVICE_BASIC_INFO* id = &s_identity[s_slots[i].slave_pos];
+        id->ID = s_slots[i].vendor_id;
+        id->CODE = s_slots[i].product_code;
+        id->Revision = s_slots[i].revision;
+        id->Serial = s_slots[i].serial;
+        id->type = s_slots[i].type;
     }
 
     /* 全零面板输入等于"急停一直按着"、会拒掉所有复位事件，故默认置"未按下"；
@@ -237,13 +250,13 @@ int ethercat_close(void) {
     return 0;
 }
 
-int Master_SlaveCount(void) { return s_opened ? SIM_SLOT_COUNT : 0; }
+int Master_SlaveCount(void) { return s_opened ? s_slave_count : 0; }
 
 const char* Master_StartupError(void) { return ""; }
 
 const DEVICE_BASIC_INFO* device_identity_get(int pos) {
     static const DEVICE_BASIC_INFO empty;
-    return s_opened && pos >= 0 && pos < SIM_SLOT_COUNT ? &s_identity[pos] : &empty;
+    return s_opened && pos >= 0 && pos < s_slave_count ? &s_identity[pos] : &empty;
 }
 
 void Master_RequestStop(void) { atomic_store(&s_stop_requested, 1); }

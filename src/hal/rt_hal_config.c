@@ -223,7 +223,7 @@ void rt_hal_config_print(const HalCConfig* cfg) {
     printf("周期 %u us, 启动预算 %u ms, 周期超时 %u ms, DC=%d\n",
            cfg->cycle_us, cfg->start_timeout_ms, cfg->cycle_timeout_ms, cfg->dc_enable);
 
-    printf("-- 轴绑定 --\n");
+    printf("-- 启动前轴绑定预设 --\n");
     for (int i = 0; i < cfg->axis_count; ++i) {
         const HalCAxisCfg* a = &cfg->axes[i];
         printf("  进给 #%d: 从站 %d 轴 %d -> HAL ID %d, %s, 当量 %.6g/%.6g, enc_off %.6g, 每转计数 %d%s\n",

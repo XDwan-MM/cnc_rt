@@ -220,6 +220,16 @@ int rt_hal_start(char* err, uint32_t err_len) {
     const int32_t rc = hal_context_start(s_ctx, err, err_len);
     if (rc) { log_hs("hal_context_start", -1, rc); return rc; }
 
+    static const char* const names[RT_HAL_AXIS_COUNT] = {"X", "Y", "Z", "SP"};
+    for (int i = 0; i < RT_HAL_AXIS_COUNT; ++i) {
+        HalCCapability capability;
+        const int axis = rt_hal_config_hal_axis((RtHalAxisSlot)i);
+        if (axis >= 0 &&
+            hal_axis_capability(s_ctx, (HalAxisId)axis, HAL_FUNC_POSITION, &capability) == HAL_OK)
+            printf("[HAL] 生效轴绑定 %s: 从站 %d 轴 %d\n", names[i],
+                   capability.slave_pos, capability.axis_index);
+    }
+
     /* 问一次映像段长并缓存；失败不致命（按 0 处理 = 不下发 IO） */
     s_x_size = s_y_size = 0;
     (void)hal_io_image_size(s_ctx, &s_x_size, &s_y_size);
