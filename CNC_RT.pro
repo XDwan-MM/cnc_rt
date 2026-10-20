@@ -62,6 +62,7 @@ unix:!macx {
 include(lib/cncshm/api/apishm.pri)
 unix:!macx: LIBS += "$$PWD/lib/cncshm/bin/libshm.a"
 else: LIBS += -L"$$PWD/lib/cncshm/bin/" -lshm
+unix:!macx: PRE_TARGETDEPS += $$PWD/lib/cncshm/bin/libshm.a
 INCLUDEPATH += $$PWD/lib/cncshm/api $$PWD/lib/cncshm
 
 # 添加译码
@@ -101,6 +102,7 @@ INCLUDEPATH += /opt/GreeMaster/include/libGREEMASTER/
 # HAL 的头与静态库作为 vendored 副本放在 lib/cnc_hal/ 下，不引用外部路径、
 # 不依赖环境变量。HAL 改了之后跑 lib/cnc_hal/sync.sh 重新同步（来源记在 SYNCED.txt）。
 LIBS += -L"$$PWD/lib/cnc_hal/lib" -lcnc_hal
+PRE_TARGETDEPS += $$PWD/lib/cnc_hal/lib/libcnc_hal.a
 INCLUDEPATH += $$PWD/lib/cnc_hal/include
 
 

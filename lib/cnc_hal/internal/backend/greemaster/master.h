@@ -44,7 +44,7 @@ int  Master_Interrupted(void);
 #define DEVICES_JSON_PATH NULL
 #endif
 
-#define PARAM_CHANG 0          /* 是否修改主站参数 */
+#define PARAM_CHANG 1          /* 是否修改主站参数 */
 
 /* 握手前的 REG/SDO 交互窗口（GM_Wait_Pilot_Data_Response）；尚未实现。 */
 #define OP_PRE_REG_EN 0
