@@ -340,10 +340,14 @@ static void read_from_hal()
         rt_data->chan_data[0].act_vel = sqrt(vx * vx + vy * vy + vz * vz);
     }
 
+    /* 只有 CSP 攻丝复位停车**进行中**才需要等主轴位置（两者同一拍重建才不打架）；
+     * 停车结束后 reset_stop 字段会一并清掉，进给轴的重建不再被主轴绑架。 */
+    const bool reset_tap_stop =
+        spl_context.reset_stop_pending && spl_context.reset_stop_csp;
     if (!update_pos_flag && feed_positions_valid &&
-        (!spl_context.reset_stop_csp || spindle_position_valid))
+        (!reset_tap_stop || spindle_position_valid))
     {
-        // 报警复位后用最新带补偿反馈，重建未补偿坐标基准。
+        // 报警复位后用最新反馈，重建未补偿坐标基准。
         rebuild_axis_positions_from_feedback();
         handwheel_resync_position();
         update_pos_flag = 1;

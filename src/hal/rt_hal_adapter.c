@@ -714,6 +714,8 @@ int rt_hal_fault_reset_settled(int* any_timeout) {
     if (!s_snap_valid) return 0;
     if (any_timeout) *any_timeout = 0;
     for (int i = 0; i < RT_HAL_AXIS_COUNT; ++i) {
+        /* 没绑定 HAL 轴的槽位永远等不到复位终态，直接跳过，否则收口永远不成立。 */
+        if (rt_hal_config_hal_axis((RtHalAxisSlot)i) < 0) continue;
         /* 请求还没被 PDO 线程取走 → 没收口 */
         if (s_req_reset[i]) return 0;
         if (s_snap_reset[i] == HAL_RESET_DONE) continue;
