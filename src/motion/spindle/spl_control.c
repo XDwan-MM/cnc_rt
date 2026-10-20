@@ -1795,9 +1795,13 @@ static void spindle_update_m29(void)
         return;
     }
 
+    /* M19 完成后紧接着 M29 时，会先释放旧定向、再重新定向：RELEASING 是正常过渡。
+     * 原实现把 RELEASING 无条件判成失败，导致 M19→M29 必报"主轴定向失败"并撤销使能。
+     * 释放迟迟收不了尾由 spindle_update_orient_state() 的释放超时兜底；
+     * 真正失败只认"回到空闲且没有待发定向请求"。 */
     if (spl_context.m29_phase == SPINDLE_M29_ORIENTING &&
-        (spl_context.orient_phase == SPINDLE_ORIENT_RELEASING ||
-         spl_context.orient_phase == SPINDLE_ORIENT_IDLE))
+        spl_context.orient_phase == SPINDLE_ORIENT_IDLE &&
+        !spl_context.orient_request_pending)
     {
         LOG(LOG_LEVEL_ERR,
             "M29主轴定向失败：orient_phase=%d status_word=0x%04X "
@@ -1805,6 +1809,7 @@ static void spindle_update_m29(void)
             spl_context.orient_phase, spl_drv_status_word(),
             spl_drv_actual_vel());
         spl_context.m29_phase = SPINDLE_M29_ERROR;
+        spl_context.orient_request_pending = false;
         spl_context.reset_requires_start = true;
         spindle_clear_velocity_arrival();   /* 新指令/安全事件：清旧到速完成 */
         spl_context.start_request_pending = false;
