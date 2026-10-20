@@ -73,8 +73,8 @@ LIBS += -L"$$PWD/lib/kinematic/bin/" -lkinematic
 INCLUDEPATH += $$PWD/lib/kinematic/include $$PWD/lib/kinematic
 
 # 添加nurbs库
- LIBS += -L"$$PWD/lib/nurbs/bin/" -lnurbsfit
- INCLUDEPATH += $$PWD/lib/nurbs/include $$PWD/lib/nurbsfit
+LIBS += -L"$$PWD/lib/nurbs/bin/" -lnurbsfit
+INCLUDEPATH += $$PWD/lib/nurbs/include $$PWD/lib/nurbsfit
 
 # 添加误差补偿库
 LIBS += -L"$$PWD/lib/CNC_ErrorComp/lib" -lCNC_ErrorComp

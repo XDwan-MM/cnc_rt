@@ -205,7 +205,6 @@ static void block_deal_parser_block(PLAN_BLOCK* parser_block, PLAN_BLOCK* pretre
         pretreat_queue->pre_pos = pretreat_block->end_pos;
         pretreat_queue->pre_vec = pretreat_block->end_vec;
         pretreat_queue->pre_startpos = pretreat_block->start_pos;
-        pretreat_queue->pre_vec = pretreat_block->end_vec;
         break;
     }
 }
@@ -231,7 +230,7 @@ static void block_deal_outlier(PLAN_BLOCK* pretreat_block, PLAN_BLOCK* treat_blo
 
             // 更新上一段终点，长度，
             last_block=queue_peak_pre_tail(treat_queue);
-            last_block->end_pos=pretreat_block->start_pos;
+            last_block->end_pos=pretreat_block->end_pos;
             block_cal_length(last_block);
             // 更新下一段起点，长度，
             next_block=queue_peak(pretreat_queue);
@@ -293,7 +292,7 @@ static GNC_RES block_fixturnning_point()
             fix_queue->pre_pos = fix_block->end_pos;
             fix_queue->pre_vec = fix_block->end_vec;
             fix_queue->pre_startpos = fix_block->start_pos;
-            cycle_tp->pos_cmd_data.blocknum++;
+            rt_data->path_data.fix_blocknum++;
         }
     }
     return GNC_CAL_SUCCESS;
@@ -317,7 +316,7 @@ static GNC_RES block_unif_by_nurbs()
             // 如果前瞻队列已满，提前结束
         if (queue_is_full(unif_queue))
             return GNC_OPERATOR_SUCCESS;
-            
+
         if(queue_get_size(fix_queue)==1)
         {
             treat_block = queue_peak(fix_queue);
@@ -505,6 +504,8 @@ static GNC_RES block_unif_by_nurbs()
 
                 queue_push(nurbs_temp_queue, treat_block);
                 queue_pop(fix_queue);
+                if (queue_get_size(nurbs_temp_queue) >= 40)
+                    break;
             }
             return GNC_OPERATOR_SUCCESS;
         }
@@ -577,7 +578,7 @@ static void block_deal_nurbs_enable(PLAN_BLOCK* pretreat_block, PLAN_QUEUE *temp
     if (rt_data->chan_data[0].nurbs_enable)
     {
         // 逆行点修复
-        if(cycle_tp->pos_cmd_data.blocknum > 3){
+        if( rt_data->path_data.fix_blocknum > 3){
             block_fix_pos(pretreat_block, rt_data->chan_data[0].l_theta_thre, rt_data->chan_data[0].theta_thre, temp);
         }
     }
@@ -700,7 +701,7 @@ static int block_cal_segment(PLAN_BLOCK* pretreat_block, double seg_theta_thre,P
         pretreat_block->isContinue=0;
         return 0;
     }
-    if(cycle_tp->pos_cmd_data.blocknum >1)
+    if( rt_data->path_data.fix_blocknum >1)
     if (fabs((queue_peak_pre_tail(temp)->length)/pretreat_block->length)>20|| fabs((queue_peak_pre_tail(temp)->length)/pretreat_block->length)<0.05)
     {
         pretreat_block->isContinue=0;

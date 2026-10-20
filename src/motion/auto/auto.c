@@ -792,7 +792,8 @@ static bool auto_check_program_end(){
 }
 
 static bool auto_is_program_end(){
-    return !rt_get_chan_state(0, CHAN_IS_PARSERING) && queue_is_empty(plan_queue) && queue_is_empty(unif_queue) && queue_is_empty(treat_queue) && queue_is_empty(pretreat_queue) && queue_is_empty(parser_queue);
+    return !rt_get_chan_state(0, CHAN_IS_PARSERING) && queue_is_empty(plan_queue) && queue_is_empty(unif_queue)
+    && queue_is_empty(fix_queue) && queue_is_empty(treat_queue) && queue_is_empty(pretreat_queue) && queue_is_empty(parser_queue);
 }
 
 static void auto_check_error_line(){

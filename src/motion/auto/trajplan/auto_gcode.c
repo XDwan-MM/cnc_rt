@@ -129,7 +129,6 @@ void auto_execute_pos_cmd(){
     cycle_tp->pos_cmd_data.current_pos.x = rt_data->axis_data[AXIS_X].wcs_cmd_pos_cur = interp_pos.x;
     cycle_tp->pos_cmd_data.current_pos.y = rt_data->axis_data[AXIS_Y].wcs_cmd_pos_cur = interp_pos.y;
     cycle_tp->pos_cmd_data.current_pos.z = rt_data->axis_data[AXIS_Z].wcs_cmd_pos_cur = interp_pos.z;
-
 }
 
 static bool auto_pos_cmd_cycle_is_finished(){
@@ -409,7 +408,6 @@ void cycle_tp_reset_pos_cmd_data(){
     cycle_tp->pos_cmd_data.target_distance = 0.0;
     cycle_tp->pos_cmd_data.u_current = 0.0;
     cycle_tp->pos_cmd_data.u_next = 0.0;
-    cycle_tp->pos_cmd_data.blocknum = 1;//计数器，程序开启时重置
 }
 
 void cycle_tp_reset_dwell_cmd_data(){
