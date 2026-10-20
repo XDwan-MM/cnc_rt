@@ -92,6 +92,8 @@ lib/kinematic/test/
 lib/nurbs/*.c
 lib/circleSmooth/*.c
 
+
+./build3.sh
 # data
 data/
 
