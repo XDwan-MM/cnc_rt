@@ -24,6 +24,7 @@ static void task_handle_enable_event(PLC_EVENT *event_data);
 static void task_handle_reset_event(PLC_EVENT *event_data);
 static void task_handle_hmi_event(PLC_EVENT *event_data);
 static void task_handle_external_decel_event(PLC_EVENT *event_data);
+static void task_handle_mpg_external_decel_event(PLC_EVENT *event_data);
 static bool task_external_decel_enabled(int function);
 static void task_handle_spd_ori_event(PLC_EVENT *event_data);
 
@@ -131,6 +132,11 @@ static GNC_RES task_handle_plc_event(PLC_EVENT *event_data)
                 event_data->external_decel_payload.active);
         }
         task_handle_external_decel_event(event_data);
+        break;
+    }
+    case PLC_EV_MSG_MPG_EXTERNAL_DECEL:
+    {
+        task_handle_mpg_external_decel_event(event_data);
         break;
     }
     default:
@@ -878,6 +884,15 @@ static void task_handle_external_decel_event(PLC_EVENT *event_data)
     {
         rt_data->nc_event = active ? SYS_EVENT_EXTERNAL_DECEL_NEG_ON : SYS_EVENT_EXTERNAL_DECEL_NEG_OFF;
     }
+}
+
+static void task_handle_mpg_external_decel_event(PLC_EVENT *event_data)
+{
+    if (event_data == NULL || rt_data == NULL)
+        return;
+
+    rt_data->sys_state[SYS_IS_MPG_EX_DEC_ENABLE] =
+        (event_data->mpg_external_decel_payload.enable != 0);
 }
 
 static bool task_external_decel_enabled(int function)

@@ -329,9 +329,11 @@ static double mpg_get_external_decel_velocity(int axis, int direction)
     double limit;
     int direction_index;
 
-    /* 总开关关闭、轴无效或方向不明确时，不施加外部速度限制。 */
+    /* 总开关或G23.3许可关闭、轴无效或方向不明确时，不施加外部速度限制。 */
     if (rt_data == NULL || !mpg_axis_is_valid(axis) ||
-        !rt_data->chan_data[0].ex_dec_enable || (direction != 1 && direction != -1))
+        !rt_data->chan_data[0].ex_dec_enable ||
+        !rt_data->sys_state[SYS_IS_MPG_EX_DEC_ENABLE] ||
+        (direction != 1 && direction != -1))
         return HUGE_VAL;
 
     /*
