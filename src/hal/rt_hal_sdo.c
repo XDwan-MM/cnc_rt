@@ -6,10 +6,12 @@
 #define RT_SDO_QUEUE_SIZE 8
 
 typedef enum { SDO_FREE, SDO_QUEUED, SDO_ACTIVE, SDO_DONE } SdoState;
+typedef enum { SDO_AXIS, SDO_SLAVE } SdoTarget;
 typedef struct {
     SdoState state;
     uint32_t id;
-    int slave_pos;
+    int target_id;
+    SdoTarget target;
     uint16_t index;
     uint8_t subindex;
     uint8_t write;
@@ -54,12 +56,15 @@ void rt_hal_sdo_stop(void) {
     pthread_mutex_unlock(&s_mutex);
 }
 
-static int submit(int slave_pos, uint16_t index, uint8_t subindex,
+static int submit(SdoTarget target, int target_id, uint16_t index, uint8_t subindex,
                    const void* data, uint32_t size, uint32_t timeout_ms,
                    uint32_t* request_id, int write) {
     if (!request_id || (size != 1 && size != 2 && size != 4) ||
         !timeout_ms || timeout_ms > RT_HAL_SDO_MAX_TIMEOUT_MS ||
-        slave_pos < 0 || (write && !data)) return HAL_ERROR_ARGUMENT;
+        target_id < 0 || (write && !data)) return HAL_ERROR_ARGUMENT;
+    if (target == SDO_AXIS &&
+        (target_id >= RT_HAL_AXIS_COUNT || index < 0x6000u || index > 0x67FFu))
+        return HAL_ERROR_ARGUMENT;
     pthread_mutex_lock(&s_mutex);
     if (!s_accepting) {
         pthread_mutex_unlock(&s_mutex);
@@ -72,7 +77,8 @@ static int submit(int slave_pos, uint16_t index, uint8_t subindex,
         if (++s_next_id == 0) ++s_next_id;
         req->id = s_next_id;
         req->state = SDO_QUEUED;
-        req->slave_pos = slave_pos;
+        req->target_id = target_id;
+        req->target = target;
         req->index = index;
         req->subindex = subindex;
         req->write = write;
@@ -88,15 +94,26 @@ static int submit(int slave_pos, uint16_t index, uint8_t subindex,
     return HAL_ERROR_BUSY;
 }
 
-int rt_hal_sdo_submit_read(int slave_pos, uint16_t index, uint8_t subindex,
+int rt_hal_sdo_submit_read(RtHalAxisSlot slot, uint16_t index, uint8_t subindex,
                            uint32_t size, uint32_t timeout_ms, uint32_t* request_id) {
-    return submit(slave_pos, index, subindex, NULL, size, timeout_ms, request_id, 0);
+    return submit(SDO_AXIS, slot, index, subindex, NULL, size, timeout_ms, request_id, 0);
 }
 
-int rt_hal_sdo_submit_write(int slave_pos, uint16_t index, uint8_t subindex,
+int rt_hal_sdo_submit_write(RtHalAxisSlot slot, uint16_t index, uint8_t subindex,
                             const void* data, uint32_t size, uint32_t timeout_ms,
                             uint32_t* request_id) {
-    return submit(slave_pos, index, subindex, data, size, timeout_ms, request_id, 1);
+    return submit(SDO_AXIS, slot, index, subindex, data, size, timeout_ms, request_id, 1);
+}
+
+int rt_hal_sdo_submit_slave_read(int slave_pos, uint16_t index, uint8_t subindex,
+                                 uint32_t size, uint32_t timeout_ms, uint32_t* request_id) {
+    return submit(SDO_SLAVE, slave_pos, index, subindex, NULL, size, timeout_ms, request_id, 0);
+}
+
+int rt_hal_sdo_submit_slave_write(int slave_pos, uint16_t index, uint8_t subindex,
+                                  const void* data, uint32_t size, uint32_t timeout_ms,
+                                  uint32_t* request_id) {
+    return submit(SDO_SLAVE, slave_pos, index, subindex, data, size, timeout_ms, request_id, 1);
 }
 
 int rt_hal_sdo_take_result(uint32_t request_id, void* data, uint32_t size, int* result) {
@@ -145,11 +162,19 @@ void* rt_hal_sdo_worker(void* arg) {
         s_requests[slot].state = SDO_ACTIVE;
         pthread_mutex_unlock(&s_mutex);
 
-        const int rc = req.write ?
-            rt_hal_sdo_write(req.slave_pos, req.index, req.subindex,
-                             req.data, req.size, req.timeout_ms) :
-            rt_hal_sdo_read(req.slave_pos, req.index, req.subindex,
-                            req.data, req.size, req.timeout_ms);
+        int rc;
+        if (req.target == SDO_AXIS)
+            rc = req.write ?
+                rt_hal_axis_sdo_write((RtHalAxisSlot)req.target_id, req.index, req.subindex,
+                                      req.data, req.size, req.timeout_ms) :
+                rt_hal_axis_sdo_read((RtHalAxisSlot)req.target_id, req.index, req.subindex,
+                                     req.data, req.size, req.timeout_ms);
+        else
+            rc = req.write ?
+                rt_hal_sdo_write(req.target_id, req.index, req.subindex,
+                                 req.data, req.size, req.timeout_ms) :
+                rt_hal_sdo_read(req.target_id, req.index, req.subindex,
+                                req.data, req.size, req.timeout_ms);
 
         pthread_mutex_lock(&s_mutex);
         s_requests[slot].result = s_stopping ? HAL_ERROR_STOPPED : rc;

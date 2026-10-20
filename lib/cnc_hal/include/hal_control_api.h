@@ -69,6 +69,13 @@ int32_t hal_sdo_read(HalContext* c, int32_t slave_pos, uint16_t index,
 int32_t hal_sdo_write(HalContext* c, int32_t slave_pos, uint16_t index,
                       uint8_t subindex, const void* data, uint32_t size, uint32_t timeout_ms);
 
+/* 按逻辑轴访问标准轴对象：index 传第一轴的基础对象号 0x6000..0x67FF。
+ * 多轴从站由 HAL 按轴序号加 0x800；厂商对象或非轴设备请用上面的物理从站接口。 */
+int32_t hal_axis_sdo_read(HalContext* c, HalAxisId axis, uint16_t index,
+                          uint8_t subindex, void* data, uint32_t size, uint32_t timeout_ms);
+int32_t hal_axis_sdo_write(HalContext* c, HalAxisId axis, uint16_t index,
+                           uint8_t subindex, const void* data, uint32_t size, uint32_t timeout_ms);
+
 /**
  * @brief stop + free，一步收尾；c 可为 NULL
  */

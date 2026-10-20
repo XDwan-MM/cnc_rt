@@ -1,6 +1,7 @@
 #pragma once
 #include <stdint.h>
 #include "hal_config_api.h"
+#include "rt_hal_config.h"
 
 #define RT_HAL_SDO_MAX_TIMEOUT_MS 10000u
 
@@ -14,11 +15,18 @@ int rt_hal_sdo_prepare(void);
 void rt_hal_sdo_stop(void);
 void* rt_hal_sdo_worker(void* arg);
 
-int rt_hal_sdo_submit_read(int slave_pos, uint16_t index, uint8_t subindex,
+/* 轴请求传 RT 轴槽和第一轴基础对象号 0x6000..0x67FF。 */
+int rt_hal_sdo_submit_read(RtHalAxisSlot slot, uint16_t index, uint8_t subindex,
                            uint32_t size, uint32_t timeout_ms, uint32_t* request_id);
-int rt_hal_sdo_submit_write(int slave_pos, uint16_t index, uint8_t subindex,
+int rt_hal_sdo_submit_write(RtHalAxisSlot slot, uint16_t index, uint8_t subindex,
                             const void* data, uint32_t size, uint32_t timeout_ms,
                             uint32_t* request_id);
+/* 非轴设备或厂商对象：明确指定物理从站及原始对象号，不做轴偏移。 */
+int rt_hal_sdo_submit_slave_read(int slave_pos, uint16_t index, uint8_t subindex,
+                                 uint32_t size, uint32_t timeout_ms, uint32_t* request_id);
+int rt_hal_sdo_submit_slave_write(int slave_pos, uint16_t index, uint8_t subindex,
+                                  const void* data, uint32_t size, uint32_t timeout_ms,
+                                  uint32_t* request_id);
 /* 未完成返回 BUSY；完成返回 OK，执行结果写入 *result，取走后 ID 失效。
  * 读成功才复制 data；读的 size 须与提交时一致，写的 size 为 0。 */
 int rt_hal_sdo_take_result(uint32_t request_id, void* data, uint32_t size, int* result);

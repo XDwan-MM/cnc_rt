@@ -38,6 +38,11 @@ int rt_hal_running(void);
 
 /* 底层同步 SDO 调用，由 rt_hal_sdo_worker 使用。业务侧通过 rt_hal_sdo.h
  * 提交请求并取结果；不得从 PDO/运动周期线程直接调用本接口。 */
+int rt_hal_axis_sdo_read(RtHalAxisSlot slot, uint16_t index, uint8_t subindex,
+                         void* data, uint32_t size, uint32_t timeout_ms);
+int rt_hal_axis_sdo_write(RtHalAxisSlot slot, uint16_t index, uint8_t subindex,
+                          const void* data, uint32_t size, uint32_t timeout_ms);
+/* 物理从站接口仅用于非轴设备或维护。 */
 int rt_hal_sdo_read(int slave_pos, uint16_t index, uint8_t subindex,
                     void* data, uint32_t size, uint32_t timeout_ms);
 int rt_hal_sdo_write(int slave_pos, uint16_t index, uint8_t subindex,

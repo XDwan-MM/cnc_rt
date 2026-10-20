@@ -266,6 +266,22 @@ void rt_hal_shutdown(void) {
 
 int rt_hal_running(void) { return s_running; }
 
+int rt_hal_axis_sdo_read(RtHalAxisSlot slot, uint16_t index, uint8_t subindex,
+                         void* data, uint32_t size, uint32_t timeout_ms) {
+    const int axis = rt_hal_config_hal_axis(slot);
+    if (axis < 0) return HAL_ERROR_ARGUMENT;
+    if (!s_ctx || !s_running) return HAL_ERROR_NOT_RUNNING;
+    return hal_axis_sdo_read(s_ctx, (HalAxisId)axis, index, subindex, data, size, timeout_ms);
+}
+
+int rt_hal_axis_sdo_write(RtHalAxisSlot slot, uint16_t index, uint8_t subindex,
+                          const void* data, uint32_t size, uint32_t timeout_ms) {
+    const int axis = rt_hal_config_hal_axis(slot);
+    if (axis < 0) return HAL_ERROR_ARGUMENT;
+    if (!s_ctx || !s_running) return HAL_ERROR_NOT_RUNNING;
+    return hal_axis_sdo_write(s_ctx, (HalAxisId)axis, index, subindex, data, size, timeout_ms);
+}
+
 int rt_hal_sdo_read(int slave_pos, uint16_t index, uint8_t subindex,
                     void* data, uint32_t size, uint32_t timeout_ms) {
     if (!s_ctx || !s_running) return HAL_ERROR_NOT_RUNNING;
