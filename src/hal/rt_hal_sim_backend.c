@@ -360,6 +360,50 @@ int Master_ServoWrite(int slot, DevDictRole role, uint32_t value) {
     }
 }
 
+int Master_SdoTransfer(int slave_pos, uint16_t index, uint8_t subindex,
+                       void* data, uint16_t size, int write, uint32_t timeout_ms) {
+    (void)timeout_ms;
+    if (!s_opened || atomic_load(&s_stop_requested)) return -4;
+    if (!data || subindex != 0 || (size != 1 && size != 2 && size != 4)) return -3;
+
+    int slot = -1;
+    for (int i = 0; i < SIM_SLOT_COUNT; ++i)
+        if (s_slots[i].slave_pos == slave_pos && s_slots[i].type == SERVO_TYPE) {
+            slot = i;
+            break;
+        }
+    if (slot < 0) return -3;
+
+    DevDictRole role;
+    uint16_t expected_size;
+    switch (index) {
+    case 0x6040: role = DEV_DICT_ROLE_CONTROL_WORD; expected_size = 2; break;
+    case 0x6041: role = DEV_DICT_ROLE_STATUS_WORD; expected_size = 2; break;
+    case 0x603F: role = DEV_DICT_ROLE_ERROR_CODE; expected_size = 2; break;
+    case 0x6060: role = DEV_DICT_ROLE_OP_MODE; expected_size = 1; break;
+    case 0x6061: role = DEV_DICT_ROLE_MODE_DISPLAY; expected_size = 1; break;
+    case 0x6064: role = DEV_DICT_ROLE_ACTUAL_POS; expected_size = 4; break;
+    case 0x606C: role = DEV_DICT_ROLE_ACTUAL_SPEED; expected_size = 4; break;
+    case 0x6077: role = DEV_DICT_ROLE_ACTUAL_TORQUE; expected_size = 2; break;
+    case 0x607A: role = DEV_DICT_ROLE_TARGET_POS; expected_size = 4; break;
+    case 0x60FF: role = DEV_DICT_ROLE_TARGET_SPEED; expected_size = 4; break;
+    default: return -3;
+    }
+    if (size != expected_size) return -3;
+    if (write) {
+        if (index != 0x6040 && index != 0x6060 && index != 0x607A && index != 0x60FF)
+            return -3;
+        uint32_t value = 0;
+        memcpy(&value, data, size);
+        return Master_ServoWrite(slot, role, value) ? -3 : 0;
+    }
+    if (index == 0x6040 || index == 0x607A || index == 0x60FF) return -3;
+    uint32_t value = 0;
+    if (Master_ServoRead(slot, role, &value)) return -3;
+    memcpy(data, &value, size);
+    return 0;
+}
+
 /* 与真实 servo_step.c 同构：预置目标 → 改模式 → 写控制字，顺序不能变；漏掉写控制字
  * 会让 DS402 状态机空转（使能/去使能/故障复位都推不动）。 */
 int Master_ServoStep(int slot, Ds402Request req, uint16_t mode, uint16_t* out) {
