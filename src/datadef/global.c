@@ -119,13 +119,14 @@ void shm_var_update(){
                 setVarAxisDouble(AXIS_X, VAR_AXIS_PROG_POS_EX, var_axis[0][VAR_AXIS_CMD_POS_WCS_EX].value.f, 0);
                 setVarAxisDouble(AXIS_Y, VAR_AXIS_PROG_POS_EX, var_axis[1][VAR_AXIS_CMD_POS_WCS_EX].value.f, 0);
                 setVarAxisDouble(AXIS_Z, VAR_AXIS_PROG_POS_EX, var_axis[2][VAR_AXIS_CMD_POS_WCS_EX].value.f, 0);
+                // 剩余移动量
+                crds_remain = 0;
             }else{
                 setVarAxisDouble(AXIS_X, VAR_AXIS_PROG_POS_EX, cycle_tp->plan_block->end_pos.x, 0);
                 setVarAxisDouble(AXIS_Y, VAR_AXIS_PROG_POS_EX, cycle_tp->plan_block->end_pos.y, 0);
                 setVarAxisDouble(AXIS_Z, VAR_AXIS_PROG_POS_EX, cycle_tp->plan_block->end_pos.z, 0);
+                crds_remain = var_axis[i][VAR_AXIS_PROG_POS_EX].value.f - rt_data->axis_data[i].wcs_cmd_pos_cur;
             }
-            // 剩余移动量
-            crds_remain = var_axis[i][VAR_AXIS_PROG_POS_EX].value.f - rt_data->axis_data[i].wcs_cmd_pos_cur;
         }else{
             crds_remain = 0;
         }
