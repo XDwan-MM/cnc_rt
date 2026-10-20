@@ -97,6 +97,7 @@ void plc_g_signal_scan_cycle(void)
     /* G23.3高电平允许外部减速作用于手轮，首次扫描同步当前状态。 */
     if (is_first_scan || SIGNAL_BIT_CHANGED(curr_g.g_regs[23], last_g.g_regs[23], 3))
     {
+        LOG(LOG_LEVEL_INFO, "扫描到G23信号发生变化");
         plc_dispatch_event(PLC_EV_MSG_MPG_EXTERNAL_DECEL, GET_BIT(curr_g.g_regs[23], 3) ? 1 : 0, 0, 0, 0);
     }
 
