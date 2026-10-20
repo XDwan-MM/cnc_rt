@@ -53,6 +53,7 @@ typedef enum
     SYS_IS_RIGID,               // 刚性攻丝
     SYS_IS_RIGID_RETURN,        // 攻丝回退
     SYS_IS_RIGID_RETURN_FINISH, // 刚性攻丝返回完成
+    SYS_IS_MPG_EX_DEC_ENABLE,   // G23.3允许外部减速作用于手轮
 } SysStateIndex;
 
 // 路径和轨迹两个线程使用

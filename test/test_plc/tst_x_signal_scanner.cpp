@@ -6,6 +6,7 @@
 #include "plc_g_signal_scanner.h"
 #include "plc_x_signal_scanner.h"
 #include "regapi.h"
+#include "task.h"
 #include "test_env.h"
 
 namespace {
@@ -80,6 +81,29 @@ TEST_F(TestPlcXSignalScanner, GEstopKeepsResetEventBehavior)
     EXPECT_EQ(event.reset_payload.reset_type, 0);
 
     /* 急停保持释放时不重复发送复位事件。 */
+    plc_g_signal_scan_cycle();
+    EXPECT_TRUE(event_queue_is_empty(event_queue));
+}
+
+TEST_F(TestPlcXSignalScanner, G23Dot3ControlsMpgExternalDecelerationPermission)
+{
+    /* 建立 G23.3 的初始快照，随后验证低电平和高电平事件。 */
+    plc_g_signal_scan_cycle();
+    event_queue_reset(event_queue);
+    rt_data->sys_state[SYS_IS_MPG_EX_DEC_ENABLE] = false;
+
+    setRegValue8(REG_G, 23, static_cast<char>(0xF7));
+    plc_g_signal_scan_cycle();
+    ASSERT_EQ(event_queue_get_size(event_queue), 1);
+    ASSERT_EQ(task_mq_proc(), GNC_OPERATOR_SUCCESS);
+    EXPECT_FALSE(rt_data->sys_state[SYS_IS_MPG_EX_DEC_ENABLE]);
+
+    setRegValue8(REG_G, 23, static_cast<char>(0xFF));
+    plc_g_signal_scan_cycle();
+    ASSERT_EQ(event_queue_get_size(event_queue), 1);
+    ASSERT_EQ(task_mq_proc(), GNC_OPERATOR_SUCCESS);
+    EXPECT_TRUE(rt_data->sys_state[SYS_IS_MPG_EX_DEC_ENABLE]);
+
     plc_g_signal_scan_cycle();
     EXPECT_TRUE(event_queue_is_empty(event_queue));
 }
