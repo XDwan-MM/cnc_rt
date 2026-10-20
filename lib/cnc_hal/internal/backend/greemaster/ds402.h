@@ -51,7 +51,7 @@ typedef enum {
 /* 推进方向。DS402_REQ_ENABLE == 0：零初始化的请求表默认就是它。 */
 typedef enum {
     DS402_REQ_ENABLE = 0,     /* 朝 OperationEnabled 推（默认） */
-    DS402_REQ_DISABLE,        /* 停在 SwitchedOn（可收指令、不带载） */
+    DS402_REQ_DISABLE,        /* 降到 Ready to switch on（0x0F→0x07→0x06 关断，电机可手转） */
     DS402_REQ_DROP_VOLTAGE,   /* 断电 */
     DS402_REQ_FAULT_RESET,    /* 清错。只在 Fault 时写一次 0x80 */
     DS402_REQ_NONE,           /* 什么都不做 */
@@ -147,10 +147,15 @@ static inline Ds402Step Ds402_NextStepReq(uint16_t status_word, uint16_t current
         return s;
     
     case DS402_REQ_DISABLE:
-        /* 目标：停在 SwitchedOn */
+        /* 目标：Ready to switch on（与旧驱动层下使能终点一致）。
+         * 0x0F 使能中先写 0x07 退回 SwitchedOn，再从 SwitchedOn 写 0x06 关断。
+         * 停在 SwitchedOn 时功率级仍带电，四合一主轴会保持、手转不动。 */
         if ((status_word & DS402_SW_MASK_OP_ENABLED) == DS402_SW_VAL_OP_ENABLED) {
             s.kind         = DS402_STEP_DISABLE_OP;
             s.control_word = DS402_CW_SWITCH_ON;
+        } else if ((status_word & DS402_SW_MASK_SWITCHED_ON) == DS402_SW_VAL_SWITCHED_ON) {
+            s.kind         = DS402_STEP_SHUTDOWN;
+            s.control_word = DS402_CW_SHUTDOWN;
         }
         return s;
     case DS402_REQ_DROP_VOLTAGE:
