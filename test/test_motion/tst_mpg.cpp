@@ -215,6 +215,7 @@ TEST_F(TestMpg, PositiveAndNegativeLimitsRejectMatchingCountDirection)
 TEST_F(TestMpg, ExternalDecelerationUsesMinimumEnabledPositiveLimit)
 {
     rt_data->chan_data[0].ex_dec_enable = true;
+    rt_data->sys_state[SYS_IS_MPG_EX_DEC_ENABLE] = true;
     rt_data->chan_data[0].ex_dec2_enable = true;
     rt_data->chan_data[0].ex_dec3_enable = true;
     rt_data->chan_data[0].ex_dec4_enable = true;
@@ -240,6 +241,7 @@ TEST_F(TestMpg, ExternalDecelerationUsesMinimumEnabledPositiveLimit)
 TEST_F(TestMpg, ExternalDecelerationIgnoresOppositeDirectionAndRestoresBaseSpeed)
 {
     rt_data->chan_data[0].ex_dec_enable = true;
+    rt_data->sys_state[SYS_IS_MPG_EX_DEC_ENABLE] = true;
     rt_data->chan_data[0].ex_dec2_enable = true;
     rt_data->axis_data[AXIS_X].mpg_ex_dec1_vel = 1.0;
     rt_data->axis_data[AXIS_X].mpg_ex_dec2_vel = 0.25;
@@ -273,6 +275,22 @@ TEST_F(TestMpg, ExternalDecelerationIgnoresOppositeDirectionAndRestoresBaseSpeed
 TEST_F(TestMpg, ExternalDecelerationGlobalSwitchDisablesAllFunctions)
 {
     rt_data->chan_data[0].ex_dec_enable = false;
+    rt_data->axis_data[AXIS_X].mpg_ex_dec1_vel = 0.0;
+    rt_data->axis_data[AXIS_X].status.external_decel_active[0][0] = true;
+
+    configure_mpg_input(0, HANDWHEEL_AXIS_X, HANDWHEEL_RATE_X1);
+    handle_mpg_cmd();
+    configure_mpg_input(4000, HANDWHEEL_AXIS_X, HANDWHEEL_RATE_X1);
+    handle_mpg_cmd();
+    run_mpg_cycles(20);
+
+    EXPECT_GT(rt_data->axis_data[AXIS_X].cmd_vel, 0.0);
+}
+
+TEST_F(TestMpg, MpgExternalDecelerationStateDisablesAllFunctions)
+{
+    rt_data->chan_data[0].ex_dec_enable = true;
+    rt_data->sys_state[SYS_IS_MPG_EX_DEC_ENABLE] = false;
     rt_data->axis_data[AXIS_X].mpg_ex_dec1_vel = 0.0;
     rt_data->axis_data[AXIS_X].status.external_decel_active[0][0] = true;
 
