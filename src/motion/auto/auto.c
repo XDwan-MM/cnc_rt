@@ -38,11 +38,11 @@ static void auro_reset_stop_skip();
 static void auto_check_feed_override_event();
 static void auto_check_rapid_override_event();
 
-/* 阻止缓冲：已弹出的停止块 ID（轨迹线程私有） */
+// 阻止缓冲：已弹出的停止块 ID
 static unsigned int s_buf_stop_popped_id = 0;
 static int s_buf_stop_lost_ticks = 0;
 
-/* 活性兜底宽限：目标块一直没弹出、流水线又全空，说明它不可能再执行。 */
+// 活性兜底宽限：目标块一直没弹出、流水线又全空，说明它不可能再执行。 
 #define AUTO_BUFSTOP_LOST_TICKS 2000
 
 static bool auto_buf_stop_pipeline_empty(void)
@@ -1056,12 +1056,7 @@ static void auto_pop_current_block()
     queue_pop(plan_queue);
 }
 
-/* 阻止缓冲放行事件：和 G31 的 CHAN_IS_MOTION_SYNC 同构。
- * 停止块出队时按 ID 记下"已弹出"，这里把带 ID 的"真放行"发布给译码器：
- *   M 码：块出队且不处于暂停中（M00/单步暂停要等循环启动）；
- *   G53 ：块出队即放行；
- *   复位：直接放行；
- *   兜底：块一直没弹出且队列已排空，按已执行放行，避免译码器停死。 */
+/* 阻止缓冲放行事件*/
 static void auto_update_buf_stop()
 {
     unsigned int target = parser_buf_stop_target_id();
@@ -1091,7 +1086,6 @@ static void auto_update_buf_stop()
         return;
     }
 
-    /* 活性兜底：M00 暂停时块已经弹出，不会走到这里。 */
     if (auto_buf_stop_pipeline_empty())
     {
         if (++s_buf_stop_lost_ticks > AUTO_BUFSTOP_LOST_TICKS)

@@ -13,13 +13,6 @@
 #include "ncitpstopdef.h"
 #include "bufstop.h"
 
-/* 译码器暂时不会再产出新块：程序结束，或停在 G31/阻止缓冲等待上。
- * 流水线收尾必须把停在队列里的最后一块放出去执行，否则会死锁。 */
-static bool noMoreBlocks(void)
-{
-    return rt_data->chan_state[0][CHAN_IS_PARSERING] == false
-        || parser_hasNoMoreBlocks();
-}
 
 static void block_cal_pos(PLAN_BLOCK* parser_block, PLAN_BLOCK* current_block, POS* start_pos);
 static void block_cal_circle_vector(PLAN_BLOCK* current_block);
@@ -39,6 +32,7 @@ static int block_cal_segment(PLAN_BLOCK* pretreat_block, double seg_theta_thre,P
 static void block_fix_pos(PLAN_BLOCK* pretreat_block, double l_theta_thre ,double theta_thre, PLAN_QUEUE* temp);
 static bool is_length_valid(PLAN_BLOCK* parser_block);
 static void block_deal_nurbs_enable(PLAN_BLOCK* pretreat_block,PLAN_QUEUE* temp);
+static bool noMoreBlocks(void);
 
 /// @brief 将译码结果转换成插补段
 GNC_RES chan_add_block(){
@@ -1180,4 +1174,11 @@ void block_cal_max_vel(PLAN_BLOCK* current_block){
         default:
             break;
     }
+}
+
+/// @brief 程序结束或译码器暂时暂停（G31等待运动同步指令、阻止缓冲指令）
+static bool noMoreBlocks(void)
+{
+    return rt_data->chan_state[0][CHAN_IS_PARSERING] == false
+        || parser_hasNoMoreBlocks();
 }

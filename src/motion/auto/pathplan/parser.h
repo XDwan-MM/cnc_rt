@@ -43,10 +43,10 @@ typedef enum{
 
 // 阻止译码器缓冲状态
 typedef struct{
-    int code;        // 诊断用：M 码号或 G 值
+    int code;        // M 码号或 G 值
     int is_g;        // 0 = M码；1 = G53
     int hold;        // 是否处于"阻止译码推进"阶段
-    unsigned int id; // 当前等待的停止块 ID（0=无）。跨线程，用 __atomic 读写
+    unsigned int id; // 当前等待的停止块 ID（0=无）。
 } BufStop;
 
 static inline bool buf_stop_active(const BufStop *s) { return s->id != 0; }

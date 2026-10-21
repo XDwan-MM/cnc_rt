@@ -29,7 +29,7 @@ static void parser_clear_buf_stop();
 
 PARSER_DATA* parser_data;
 
-/* 阻止缓冲的 M 码配置：与库侧 ncitpstopdef.h 同源 */
+/* 阻止缓冲的 M 码配置 */
 static ItpBufStopMCodeCfg s_bufStopCfg;
 static bool s_bufStopCfgLoaded = false;
 
@@ -39,7 +39,7 @@ static_assert(ITP_PAR_STOP_BUF_MCODE_10     == PAR_NCU_PARSER_STOP_BUF_MCODE_10,
 static_assert(ITP_PAR_STOP_BUF_MCODE_R1_MIN == PAR_NCU_PARSER_STOP_BUF_MCODE_R1_MIN, "参数号不一致");
 static_assert(ITP_PAR_STOP_BUF_MCODE_R6_MAX == PAR_NCU_PARSER_STOP_BUF_MCODE_R6_MAX, "参数号不一致");
 
-/*! 译码器读参数的回调（库侧 reloadBufStopMCodeCfg 用它读 507~528） */
+/*! 译码器读参数的回调*/
 int t_getParamValue(int parId, double *val)
 {
     if (val == NULL || parId < 0 || parId >= PAR_NCU_TOTAL)
@@ -77,8 +77,7 @@ bool parser_isBufStopMCode(int m_code)
     return itp_isBufStopMCode(&s_bufStopCfg, m_code);
 }
 
-/* G 码里只有 G53 走阻止缓冲记录；G31 走自己的 GNC_PARSER_WAIT 路径。
- * （G31/G53 都要在路径规划里禁止合并，见 pathplan.c） */
+// 判断是否是阻止缓冲G代码 
 static bool parser_is_hold_gcode(int unmodal)
 {
     return itp_isBufStopGCode(unmodal) && unmodal != ITP_UNMODAL_STOP_SKIP;
@@ -115,8 +114,7 @@ void parser_buf_stop_publish_passed(unsigned int id)
 {
     rt_set_buf_stop_passed(id);
 }
-
-/* 译码器暂时不会再产出新块：G31 等待、阻止缓冲等待都算。 */
+/// @brief 判断译码器是否暂时不会产生新块 
 bool parser_hasNoMoreBlocks(void)
 {
     if (parser_data == NULL)
@@ -145,38 +143,9 @@ void rt_clear_rigid_return_param(void)
     ItpClearRigidReturnParam();
 }
 
-static void parser_macro_init()
-{
-    for (int i = 0; i < 30000; ++i) {
-        parser_data->cmv[i] = 0;
-    }
-    parser_data->cmv[18004] = 0.1;  // 设置半径值超差
-    parser_data->cmv[17031] = 0.0;  // 设置坐标旋转1轴运动计算方式
-    parser_data->cmv[5410] = -90.0; // 设置坐标旋转默认角度
-    parser_data->cmv[17028] = 1.0;  // 默认米制单位
-    parser_data->cmv[8132] = 1.0;   // 激活比例缩放功能G51
-    parser_data->cmv[8077] = 10.0;  // 设置渐开线插补误差最大值
-    parser_data->cmv[5114] = 0.5;   // G73钻深孔,D默认值
-    parser_data->cmv[5115] = 1.0;   // G83深孔加工循环,D默认值
-
-    // 坐标偏置 todo:待shm更新后直接用，不用再赋值
-    for (int a = 0; a < 3; ++a)
-    {
-        getCrdsValue(CRDS_TYPE_EXT, a, &parser_data->cmv[5201 + a]);
-    }
-    for (int t = 0; t < 6; ++t)
-    {
-        for (int a = 0; a < 3; ++a)
-        {
-            getCrdsValue(CRDS_TYPE_G5X + t, a, &parser_data->cmv[5221 + t * 20 + a]);
-        }
-    }
-}
-
 void parser_new(){
     parser_data = new PARSER_DATA();
     // 设置译码参数
-    parser_macro_init();
     parser_data->parser_state = PARSER_IDLE;
     parser_data->buf_stop_next_id = 0;
     parser_clear_buf_stop();
@@ -190,10 +159,8 @@ GNC_RES parser_init(NC_MODE nc_mode)
     parser_data->parser_state = PARSER_READING;
     parser_clear_buf_stop();
     // 设置宏定义
-    parser_macro_init();
     ItpCfgGetMacroVarCB(t_macroVarGetValue);
     ItpCfgSetMacroVarCB(t_macroVarSetValue);
-    /* 阻止缓冲：库侧读 507~528 参数用这两个回调 */
     ItpCfgGetParamCB(t_getParamValue);
     ItpCfgSetParamCB(t_setParamValue);
     parser_loadBufStopCfg();
@@ -466,9 +433,9 @@ void parser_run_mode(){
 }
 
 GNC_RES parser_reading(){
-    /* 停在阻止缓冲块上：等轨迹线程按 ID 放行（见 parser_waiting_for_bufstop） */
+    
     if (parser_data->bufstop.hold)
-    {
+    {// 停在阻止缓冲块上,等轨迹线程按 ID 放行
         parser_data->parser_state = PARSER_WAITING_FOR_BUFSTOP;
         return GNC_CAL_SUCCESS;
     }
@@ -486,7 +453,6 @@ GNC_RES parser_reading(){
     }
     if (parser_data->itp_datas.count <= 0)
     {
-        /* 译码缓冲已空：与库侧 reloadBufStopMCodeCfg() 的刷新时机对齐 */
         parser_loadBufStopCfg();
         res = parser_handle_recieve(nullptr, &parser_data->itp_state, &parser_data->itp_line_no);
         parser_check_res(res);
@@ -504,8 +470,7 @@ GNC_RES parser_reading(){
     }
     if (res == GNC_PARSER_WAIT)
     {
-        /* 本段还记了停止块：先等 G31 完成；G31 结束后状态机回到 READING，
-         * 下一次进入这里会看到 hold，再切到 PARSER_WAITING_FOR_BUFSTOP。 */
+
         if (parser_data->bufstop.hold)
             return res;
         ItpNextLine();
@@ -765,7 +730,7 @@ static GNC_RES parser_handle_mcode(pmc_data* motion_data, NcItpState *itp_state,
     {
         return GNC_DATA_FULL;
     }
-    /* 阻止缓冲的 M 码：记录 ID，块带着 ID 入队 */
+    // 阻止缓冲的 M 码：记录 ID
     if (parser_isBufStopMCode(motion_data->m_code))
     {
         unsigned int id = PLAN_BLOCK_BUF_STOP_TAG
@@ -816,11 +781,10 @@ GNC_RES parser_waiting_for_motion() {
     return GNC_CAL_SUCCESS;
 }
 
-/* 阻止缓冲等待：只等轨迹线程按 ID 放行。
- * 放行事件带 ID，上一轮/别的停止块的放行不会被误接受。 */
+// 阻止缓冲等待
 static GNC_RES parser_waiting_for_bufstop()
 {
-    /* hold 残留但没有目标块（例如预处理置位后没生成块）：直接放行 */
+
     if (!buf_stop_active(&parser_data->bufstop))
     {
         buf_stop_hold_done(&parser_data->bufstop);
@@ -834,7 +798,6 @@ static GNC_RES parser_waiting_for_bufstop()
     bool passed = rt_get_chan_state(0, CHAN_IS_BUFSTOP_PASSED);
     if (passed && rt_get_buf_stop_passed_id() != target)
     {
-        /* 上一轮/别的停止块的放行，丢掉 */
         rt_clear_buf_stop_passed();
         passed = false;
     }

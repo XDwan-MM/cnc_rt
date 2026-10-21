@@ -143,7 +143,7 @@ void rt_update_rerun_row(){
 /// @brief 构建回断点程序段
 void create_rerun_block(PLAN_BLOCK* rerun_block){
     memcpy(rerun_block, &rerun_data->break_block, sizeof(PLAN_BLOCK));
-    /* 断点块不是阻止缓冲的停止块，清掉可能继承的调度 ID */
+    // 断点块不是阻止缓冲的停止块，清掉可能继承的调度 ID 
     PLAN_BLOCK_BUF_STOP_ID(rerun_block) = 0;
     memcpy(&rerun_block->end_pos, &rerun_data->breakpoint, sizeof(POS));
     // 以空运行速度移动到断点位置

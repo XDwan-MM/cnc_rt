@@ -127,13 +127,7 @@ typedef struct
     MOVE_AXIS move_axis;
 }PLAN_BLOCK;
 
-/* 阻止缓冲调度 ID：0=普通块；非0=停止块。
- *
- * 不能给 PLAN_BLOCK 加新字段：circleSmooth/nurbsfit 是预编译库，按当前
- * sizeof(PLAN_BLOCK) 编的。NURBS_DATA.startlineno 目前没有被任何代码使用，
- * 且停止块只可能是 M 码或 G31/G53（不会成为 NURBS 段），所以借它存 ID。
- * 流水线搬运是 memcpy，ID 随块原样保留；停止块还必须禁止合并/剔除。
- * 最高位打标签，避免和 NURBS 库可能写入的正常行号相撞。 */
+// 阻止缓冲调度 ID：0=普通块；非0=停止块。
 #define PLAN_BLOCK_BUF_STOP_TAG   0x80000000u
 #define PLAN_BLOCK_BUF_STOP_ID(blk) ((blk)->nurbs_data.startlineno)
 
