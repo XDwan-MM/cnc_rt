@@ -1,8 +1,8 @@
-同步自   : /home/mxh/CNC/HAL
-提交     : 02b8d82
-提交说明 : 增加进给轴线速度反馈
-同步时间 : 2026-10-17T12:25:55+08:00
-ABI      : 7u.3u
+同步自   : /home/mxh/CNC/cnc_hal
+提交     : 623bcf5
+提交说明 : 下使能终点改回 Ready to switch on（恢复 VTS400 旧驱动层行为）
+同步时间 : 2026-10-20T21:15:28+08:00
+ABI      : 8u.3u
 公共头   : 5 个
 内部头   : 9 个
-设备字典 : devices.json sha256=bd9286db76e7d44c
+设备字典 : devices.json sha256=f65db141b952c6fd

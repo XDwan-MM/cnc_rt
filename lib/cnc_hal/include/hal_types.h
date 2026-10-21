@@ -14,7 +14,7 @@
 
 #include <stdint.h>
 
-#define HAL_C_ABI_MAJOR  7u     /* 契约/语义版本：函数增删、返回码含义变 */
+#define HAL_C_ABI_MAJOR  8u     /* 契约/语义版本：函数增删、返回码含义变 */
 #define HAL_C_ABI_MINOR  3u     /* 结构布局版本：字段增删改序 */
 
 /* ---- HAL 发行版本 ---- */
@@ -68,7 +68,7 @@ typedef struct {
 #define HAL_WRAP_MODULAR      1   /* 模循环（主轴：模每转脉冲数） */
 
 /* 急停时对该轴做什么。0 无效，必须由机床配置显式选择。 */
-#define HAL_ESTOP_DISABLE_OPERATION 1   /* 只去使能：停在 SwitchedOn（写 0x07，可收指令、不带载） */
+#define HAL_ESTOP_DISABLE_OPERATION 1   /* 去使能：0x07 退回 SwitchedOn 后 0x06 关断，停在 Ready to switch on */
 #define HAL_ESTOP_DISABLE_VOLTAGE   2   /* 撤销电压（写 0x00，断电），最彻底 */
 /* 主轴期望模式：HAL 自己的取值，与驱动器 0x6060 不同（映射见括号） */
 #define HAL_SPINDLE_CSV 0               /* 速度模式，映射到 0x6060 = 9 */

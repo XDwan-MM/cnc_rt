@@ -80,6 +80,7 @@ HEADERS += \
     ../src/datadef/record_queue.h \
     ../src/hal/rt_hal_config.h \
     ../src/hal/rt_hal_adapter.h \
+    ../src/hal/rt_hal_sdo.h \
     ../src/motion/auto/auto.h \
     ../src/motion/auto/trajplan/auto_gcode.h \
     ../src/motion/auto/trajplan/auto_mst.h \
@@ -133,6 +134,7 @@ SOURCES += \
     ../src/datadef/record_queue.c \
     ../src/hal/rt_hal_config.c \
     ../src/hal/rt_hal_adapter.c \
+    ../src/hal/rt_hal_sdo.c \
     ../src/hal/rt_hal_sim_backend.c \
     ../src/motion/auto/auto.c \
     ../src/motion/auto/trajplan/auto_gcode.c \

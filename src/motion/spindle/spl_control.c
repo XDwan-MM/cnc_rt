@@ -49,6 +49,7 @@ static void spindle_handle_rotation(spindle_context_t *context,
 static bool spindle_validate_start_request(const spindle_context_t *context);
 static bool spindle_report_missing_speed_alarm(const char *message);
 static double spindle_get_selected_speed(const spindle_context_t *context);
+static void spindle_reset_stop_clear(void);
 
 /* ---- HAL 访问器（方案 B）：按需现查 HAL 快照，不留持久镜像 ----
  * HAL 没有的（target_vel / target_pos / req_mode）才是 RT 本地量（s_spl_*）；
@@ -265,7 +266,7 @@ void spindle_control_update(void)
         (spl_context.spl_event == SPINDLE_EVENT_RELEASE_ORIENT);
 
     if (spl_context.reset_stop_pending && spindle_reset_stop_abort_required())
-        spl_context.reset_stop_pending = false;
+        spindle_reset_stop_clear();
     if (rt_data->nc_event == SYS_EVENT_HMI_RESET &&
         !spl_context.reset_stop_pending && !spl_context.reset_requires_start &&
         !spindle_reset_stop_abort_required() &&
@@ -1351,6 +1352,17 @@ static bool spindle_reset_stop_abort_required(void)
             nc_reset->reset_trigger != HMI_RESET);
 }
 
+/* 复位停车收口（成功/失败/中止共用）：四个字段一起清。原来只清 pending，
+ * reset_stop_csp 一直留着，会让 emcmot 的坐标重建条件长期依赖主轴位置。 */
+static void spindle_reset_stop_clear(void)
+{
+    spl_context.reset_stop_pending = false;
+    spl_context.reset_stop_csp = false;
+    spl_context.reset_stop_feed_axis = -1;
+    spl_context.reset_stop_cycles = 0;
+    spl_context.reset_stop_stable_cycles = 0;
+}
+
 static void spindle_update_reset_stop(void)
 {
     HalCAxisStatus axis;
@@ -1360,19 +1372,24 @@ static void spindle_update_reset_stop(void)
     const int status_rc = rt_hal_axis_status(RT_HAL_AXIS_SP, &axis);
     const int feed_rc = csp ?
         rt_hal_axis_status((RtHalAxisSlot)spl_context.reset_stop_feed_axis, &feed) : HAL_OK;
+    /* **不看 axis.enabled**：故障复位链路本身就会把轴拉成未使能（HAL 契约"复位终态
+     * 一律未使能"），把它算成"受控停车失败"等于每次报警复位都再报一条报警。
+     * 已断使能的轴停不住也无需停，按收口处理。 */
     if (++spl_context.reset_stop_cycles >= SPINDLE_RESET_STOP_TIMEOUT_CYCLES ||
-        status_rc != HAL_OK || !axis.speed_valid || !axis.enabled ||
+        status_rc != HAL_OK || !axis.speed_valid ||
         mode != (csp ? HAL_SPINDLE_CSP : HAL_SPINDLE_CSV) ||
         (csp && (!axis.position_valid || feed_rc != HAL_OK ||
                  !feed.position_valid || !feed.linear_speed_valid)))
     {
-        LOG(LOG_LEVEL_ERR, "HMI复位主轴受控停车失败：CSP=%d mode=%d status_rc=%d feed_rc=%d cycles=%u",
-            csp, mode, status_rc, feed_rc, spl_context.reset_stop_cycles);
-        spl_context.reset_stop_pending = false;
+        LOG(LOG_LEVEL_ERR, "HMI复位主轴受控停车失败：CSP=%d mode=%d status_rc=%d feed_rc=%d cycles=%u enabled=%d",
+            csp, mode, status_rc, feed_rc, spl_context.reset_stop_cycles, (int)axis.enabled);
+        spindle_reset_stop_clear();
         spl_drv_disable();
         setAlarm(ALARM_AX, ALARM_ERROR, SPINDLE_ALARM_RESET_STOP_TIMEOUT);
         return;
     }
+    if (!axis.enabled)
+        LOG(LOG_LEVEL_WARN, "HMI复位：轴已不在使能态（故障复位链路所致），按收口继续");
 
     if (csp)
     {
@@ -1400,8 +1417,8 @@ static void spindle_update_reset_stop(void)
 
     if (spl_context.reset_stop_stable_cycles >= SPINDLE_M29_STABLE_CYCLES)
     {
-        spl_context.reset_stop_pending = false;
         if (csp) update_pos_flag = 0;
+        spindle_reset_stop_clear();
         spl_drv_disable();
         LOG(LOG_LEVEL_INFO, "HMI复位：主轴已停稳，撤销使能");
     }
@@ -1528,19 +1545,22 @@ static double spindle_get_selected_speed(const spindle_context_t *context)
     return context->command_speed;
 }
 
-static double spindle_calculate_target_velocity(const spindle_context_t *context)
+double spindle_cnc_target_speed(double command_speed)
 {
-    /* 应用主轴倍率和最大转速限制，并按 CW/CCW 输出带符号速度。 */
     const double max_speed = fabs(rt_data->axis_data[AXIS_SP].spdl_max_speed);
     const double override = var_chan[0][VAR_CHAN_SPDL_OVERRIDE].value.f / 100.0;
-    double target_speed = fabs(spindle_get_selected_speed(context));
+    return fmin(max_speed, fabs(command_speed) * fmax(0.0, override));
+}
 
+static double spindle_calculate_target_velocity(const spindle_context_t *context)
+{
+    /* CNC S 值与 PLC 输出共用同一有效目标；PLC 速度源不应用 CNC 倍率。 */
+    double target_speed;
     if (context->speed_source == SPINDLE_SPEED_SOURCE_CNC)
-    {
-        target_speed *= fmax(0.0, override);
-    }
-
-    target_speed = fmin(max_speed, target_speed);
+        target_speed = spindle_cnc_target_speed(spindle_get_selected_speed(context));
+    else
+        target_speed = fmin(fabs(rt_data->axis_data[AXIS_SP].spdl_max_speed),
+                            fabs(spindle_get_selected_speed(context)));
     if (context->spl_state == SPINDLE_CCW)
     {
         target_speed = -target_speed;
@@ -1775,9 +1795,13 @@ static void spindle_update_m29(void)
         return;
     }
 
+    /* M19 完成后紧接着 M29 时，会先释放旧定向、再重新定向：RELEASING 是正常过渡。
+     * 原实现把 RELEASING 无条件判成失败，导致 M19→M29 必报"主轴定向失败"并撤销使能。
+     * 释放迟迟收不了尾由 spindle_update_orient_state() 的释放超时兜底；
+     * 真正失败只认"回到空闲且没有待发定向请求"。 */
     if (spl_context.m29_phase == SPINDLE_M29_ORIENTING &&
-        (spl_context.orient_phase == SPINDLE_ORIENT_RELEASING ||
-         spl_context.orient_phase == SPINDLE_ORIENT_IDLE))
+        spl_context.orient_phase == SPINDLE_ORIENT_IDLE &&
+        !spl_context.orient_request_pending)
     {
         LOG(LOG_LEVEL_ERR,
             "M29主轴定向失败：orient_phase=%d status_word=0x%04X "
@@ -1785,6 +1809,7 @@ static void spindle_update_m29(void)
             spl_context.orient_phase, spl_drv_status_word(),
             spl_drv_actual_vel());
         spl_context.m29_phase = SPINDLE_M29_ERROR;
+        spl_context.orient_request_pending = false;
         spl_context.reset_requires_start = true;
         spindle_clear_velocity_arrival();   /* 新指令/安全事件：清旧到速完成 */
         spl_context.start_request_pending = false;

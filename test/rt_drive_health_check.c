@@ -38,6 +38,10 @@ void hal_error_text(int32_t code, char *out, uint32_t size)
 { (void)code; if (size) out[0] = '\0'; }
 int rt_hal_fault_reset_settled(int *timeout)
 { *timeout = reset_timeout; return settled; }
+int rt_hal_fault_reset_state(RtHalAxisSlot slot, int32_t *out)
+{ (void)slot; *out = settled ? HAL_RESET_DONE : HAL_RESET_PENDING; return HAL_OK; }
+int rt_hal_config_hal_axis(RtHalAxisSlot slot) { return (int)slot; }
+int rt_hal_config_is_spindle(RtHalAxisSlot slot) { return slot == RT_HAL_AXIS_SP; }
 int rt_hal_request_fault_reset(RtHalAxisSlot slot)
 { (void)slot; ++reset_requests; return request_error; }
 int rt_hal_request_axis_enable(RtHalAxisSlot slot, int on)
@@ -72,6 +76,8 @@ int main(void)
     }
     publish();
     assert(healthy() && !spindle_fault());
+    for (int i = 0; i < 5100; ++i) alarm_poll_hal();
+    assert(!alarms[132]); // Prolonged absence of enable is diagnostic only.
     for (int i = 0; i < RT_HAL_AXIS_COUNT; ++i) {
         feedback[i].error_code = 0x1234;
         publish();
@@ -112,13 +118,13 @@ int main(void)
     memset(enabled, -1, sizeof(enabled));
     hal_axis_intent_poll();
     assert(enabled[0] == -1); // Never cancel an in-flight reset with disable.
-    settled = 1; // HAL DONE alone is insufficient; 603F must read 0.
+    settled = 1; // HAL reset completion and drive fault feedback are separate.
     alarm_poll_hal();
-    assert(s_reset_waiting && alarms[30]);
+    assert(!s_reset_waiting && alarms[30]);
     feedback[0].error_code = 0;
     feedback[0].raw_status = 0x08;
     alarm_poll_hal();
-    assert(s_reset_waiting && alarms[30]);
+    assert(!s_reset_waiting && alarms[30]);
     feedback[0].raw_status = 0x27;
     alarm_poll_hal();
     assert(!s_reset_waiting && !alarms[30]);
@@ -136,6 +142,7 @@ int main(void)
     publish();
     hal_axis_intent_poll();
     assert(enabled[0] == 0 && enabled[1] == 1);
+    settled = 0;
     handle_alarm_cmd();
     s_reset_started.tv_sec -= 7;
     alarm_poll_hal();

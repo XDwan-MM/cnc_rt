@@ -133,6 +133,7 @@ bool spindle_request_m29_no_orient(void);
 bool spindle_m29_is_ready(void);
 bool spindle_reset_stop_pending(void);
 void spindle_clear_velocity_arrival(void);   /* 新指令/复位/定向/M29 入口调用 */
+double spindle_cnc_target_speed(double command_speed); /* CNC S 值经倍率和上限后的转速，rpm */
 bool spindle_velocity_is_ready(void);        /* F45.3 的唯一查询入口（只读） */
 void spindle_complete_m29(void);
 

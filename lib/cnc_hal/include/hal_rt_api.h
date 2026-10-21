@@ -43,7 +43,7 @@ int32_t hal_rt_commit_cycle(HalContext* c);
 
 /**
  * @brief 使能 / 去使能一根进给轴
- * 去使能停在 SwitchedOn（可收指令、不带载）；断电用 hal_rt_axis_estop。
+ * 去使能降到 Ready to switch on（0x0F→0x07→0x06 关断，电机可手转）；断电用 hal_rt_axis_estop。
  * 已有撤销电压覆盖时 on=0 保持断电；显式 on=1 或受理故障复位可解除覆盖，同拍停止优先。
  * 请求变化会丢弃该轴未提交的运动指令并取消定向；恢复运动须重新下发目标。
  * @param on 1 = 使能，0 = 去使能；其它值拒绝
