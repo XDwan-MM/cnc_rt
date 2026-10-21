@@ -89,6 +89,27 @@ void rt_set_chan_state(int chan_index, ChanStateIndex state, bool value){
     pthread_mutex_unlock(&rt_data->mutex);
 }
 
+void rt_set_buf_stop_passed(unsigned int id){
+    pthread_mutex_lock(&rt_data->mutex);
+    rt_data->buf_stop_passed_id = id;
+    rt_data->chan_state[0][CHAN_IS_BUFSTOP_PASSED] = true;
+    pthread_mutex_unlock(&rt_data->mutex);
+}
+
+unsigned int rt_get_buf_stop_passed_id(void){
+    pthread_mutex_lock(&rt_data->mutex);
+    unsigned int id = rt_data->buf_stop_passed_id;
+    pthread_mutex_unlock(&rt_data->mutex);
+    return id;
+}
+
+void rt_clear_buf_stop_passed(void){
+    pthread_mutex_lock(&rt_data->mutex);
+    rt_data->buf_stop_passed_id = 0;
+    rt_data->chan_state[0][CHAN_IS_BUFSTOP_PASSED] = false;
+    pthread_mutex_unlock(&rt_data->mutex);
+}
+
 bool rt_get_chan_state(int chan_index, ChanStateIndex state){
     if(chan_index < 0 || chan_index >= SYS_CHAN_NUM || state >= CHAN_STATE_NUM || state < 0){
         return false;

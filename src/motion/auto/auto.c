@@ -13,6 +13,7 @@
 #include "tapreturn.h"
 #include "sysprog.h"
 #include "pathplan.h"
+#include "bufstop.h"
 
 static void auto_check_error_line();
 static void auto_update_state();
@@ -31,10 +32,31 @@ static void auto_update_var();
 static bool auto_is_program_end();
 static bool auto_check_program_end();
 static void auto_pop_current_block();
+static void auto_update_buf_stop();
 static void auto_set_stop_skip_macro();
 static void auro_reset_stop_skip();
 static void auto_check_feed_override_event();
 static void auto_check_rapid_override_event();
+
+/* 阻止缓冲：已弹出的停止块 ID（轨迹线程私有） */
+static unsigned int s_buf_stop_popped_id = 0;
+static int s_buf_stop_lost_ticks = 0;
+
+/* 活性兜底宽限：目标块一直没弹出、流水线又全空，说明它不可能再执行。 */
+#define AUTO_BUFSTOP_LOST_TICKS 2000
+
+static bool auto_buf_stop_pipeline_empty(void)
+{
+    if (parser_queue == NULL || pretreat_queue == NULL || treat_queue == NULL
+        || fix_queue == NULL || nurbs_temp_queue == NULL || unif_queue == NULL
+        || plan_queue == NULL)
+        return false;
+
+    return queue_is_empty(parser_queue) && queue_is_empty(pretreat_queue)
+        && queue_is_empty(treat_queue) && queue_is_empty(fix_queue)
+        && queue_is_empty(nurbs_temp_queue) && queue_is_empty(unif_queue)
+        && queue_is_empty(plan_queue);
+}
 
 void handle_auto_cmd(){
     // 更新状态
@@ -48,6 +70,8 @@ void handle_auto_cmd(){
     trace_publisher_publish_current(0);
     // 更新阶段
     auto_update_stage();
+    // 阻止缓冲：停止块出队后发布放行事件
+    auto_update_buf_stop();
     // 检查程序结束
     auto_check_program_end();
 }
@@ -979,6 +1003,9 @@ static void auto_reset_run(){
     rt_set_chan_state(0, CHAN_IS_PARSER_RERUN, false);
     rt_set_chan_state(0, CHAN_IS_PARSERING, false);
     rt_set_chan_state(0, CHAN_IS_MOTION_SYNC, false);
+    rt_clear_buf_stop_passed();
+    s_buf_stop_popped_id = 0;
+    s_buf_stop_lost_ticks = 0;
     setVarChanInt(0, VAR_CHAN_IS_RUNNING, 0, 0);
     setVarChanInt(0, VAR_CHAN_IS_MOVING, 0, 0);
     setVarChanInt(0, VAR_CHAN_IS_PROGEND, 1, 0);
@@ -1017,8 +1044,67 @@ static void auto_update_var(){
 
 static void auto_pop_current_block()
 {
+    /* 按 ID 认块：只有弹出的就是当前等待的那一块，才记"已执行"。
+     * 不按 M/G 码匹配，块在后续阶段被展开/合并也不会认错。 */
+    unsigned int target = parser_buf_stop_target_id();
+    if (target != 0 && cycle_tp->plan_block != NULL
+        && (unsigned int)PLAN_BLOCK_BUF_STOP_ID(cycle_tp->plan_block) == target)
+    {
+        s_buf_stop_popped_id = target;
+    }
     trace_publisher_complete(0);
     queue_pop(plan_queue);
+}
+
+/* 阻止缓冲放行事件：和 G31 的 CHAN_IS_MOTION_SYNC 同构。
+ * 停止块出队时按 ID 记下"已弹出"，这里把带 ID 的"真放行"发布给译码器：
+ *   M 码：块出队且不处于暂停中（M00/单步暂停要等循环启动）；
+ *   G53 ：块出队即放行；
+ *   复位：直接放行；
+ *   兜底：块一直没弹出且队列已排空，按已执行放行，避免译码器停死。 */
+static void auto_update_buf_stop()
+{
+    unsigned int target = parser_buf_stop_target_id();
+    if (target == 0)
+    {
+        s_buf_stop_popped_id = 0;
+        s_buf_stop_lost_ticks = 0;
+        return;
+    }
+
+    if (cycle_tp->exec_state == EXEC_RESET)
+    {
+        s_buf_stop_popped_id = 0;
+        s_buf_stop_lost_ticks = 0;
+        parser_buf_stop_publish_passed(target);
+        return;
+    }
+
+    if (s_buf_stop_popped_id == target)
+    {
+        s_buf_stop_lost_ticks = 0;
+        /* ID 低 bit = 1 表示 G53；M 码在暂停中要等循环启动 */
+        if (!(target & 1u) && cycle_tp->exec_state == EXEC_PAUSING)
+            return;
+        s_buf_stop_popped_id = 0;
+        parser_buf_stop_publish_passed(target);
+        return;
+    }
+
+    /* 活性兜底：M00 暂停时块已经弹出，不会走到这里。 */
+    if (auto_buf_stop_pipeline_empty())
+    {
+        if (++s_buf_stop_lost_ticks > AUTO_BUFSTOP_LOST_TICKS)
+        {
+            LOG(LOG_LEVEL_WARN, "阻止缓冲目标块丢失：id=%u，按已执行放行", target);
+            s_buf_stop_lost_ticks = 0;
+            parser_buf_stop_publish_passed(target);
+        }
+    }
+    else
+    {
+        s_buf_stop_lost_ticks = 0;
+    }
 }
 
 static void auro_reset_stop_skip(){
