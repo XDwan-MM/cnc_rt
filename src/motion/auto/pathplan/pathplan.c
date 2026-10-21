@@ -126,6 +126,12 @@ static void block_deal_run_row(PLAN_BLOCK* parser_block, PLAN_BLOCK* pretreat_bl
     {
     // 再启动行号前
     case BEFORE_THE_RERUN_ROW:
+        {
+            //再启动如果丢掉的阻止缓冲块，阻止缓冲直接按照ID进行放行
+            unsigned int buf_stop_id = (unsigned int)PLAN_BLOCK_BUF_STOP_STOP_ID(parser_block);
+            if(buf_stop_id !=0)
+                parser_buf_stop_publish_passed(buf_stop_id);
+        }
         queue_pop(parser_queue);
         break;
 
