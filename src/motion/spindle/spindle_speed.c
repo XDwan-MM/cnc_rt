@@ -183,12 +183,24 @@ bool spindle_velocity_is_ready(void)
 
 void spindle_internal_publish_status(void)
 {
-    /* DEBUG 模式显示规划器速度，实时模式显示实际写入驱动器的目标速度。 */
+    /*
+     * 调试构建显示规划器速度（便于离线看斜坡）；实时构建发布驱动器实际
+     * 反馈转速，供 HMI 显示和 PLC 的 SPGET 指令使用。
+     * VAR_CHAN_ACT_SPDL_SPEED 是 fBit64，必须按 double 写：写 int 会让
+     * PLC 的 SPGET 判 type != DOUBLE_TYPE 而拒绝，实际速度永远读不到。
+     */
 #ifdef DEBUG_MODE_ENABLED
     setVarChanInt(0, VAR_CHAN_S_CODE,
                   (int32_t)g_spindle.velocity_planner.current_vel, 0);
 #else
-    setVarChanInt(0, VAR_CHAN_S_CODE, g_spindle_hal.target_velocity, 0);
+    const double actual_rpm = spindle_hal_actual_velocity();
+
+    /* 读反馈失败时保留上一次的值：把 NaN 写进 PLC/HMI 的浮点变量会污染
+     * 后续比较（SPGET 会把 NaN 当有效速度）。 */
+    if (isfinite(actual_rpm))
+    {
+        (void)setVarChanDouble(0, VAR_CHAN_S_CODE, actual_rpm, 0);
+    }
 #endif
 }
 

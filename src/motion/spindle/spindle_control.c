@@ -52,6 +52,7 @@ void spindle_control_update(void)
     if (spindle_internal_m29_no_orient_preparing())
     {
         spindle_internal_update_m29_no_orient();
+        spindle_internal_publish_status();
         spindle_internal_publish_rigid_state();
         return;
     }
@@ -103,6 +104,7 @@ void spindle_control_update(void)
             g_spindle.reset_stop_csp = mode == HAL_SPINDLE_CSP;
             g_spindle.reset_stop_feed_axis = feed_axis;
             g_spindle.reset_stop_cycles = 0;
+            g_spindle.reset_stop_idle_cycles = 0;
             g_spindle.reset_stop_stable_cycles = 0;
             LOG(LOG_LEVEL_INFO, "HMI复位：主轴保持%s受控停车",
                 g_spindle.reset_stop_csp ? "CSP攻丝同步" : "CSV速度斜坡");
@@ -199,7 +201,8 @@ void spindle_control_update(void)
     spindle_internal_update_m29_feedback();
     /* 根据安全状态、定向状态和速度状态决定使能、模式及 60FF 目标值。 */
     spindle_update_driver_control();
-    /* 将软件速度目标发布到 HMI 变量，供显示和诊断使用。 */
+    /* 将主轴实际反馈速度发布到 HMI/PLC 变量，供显示和 SPGET 使用。 */
+    spindle_internal_publish_status();
     /* 刚性攻丝方式的状态（F76.3 的来源）每拍跟着 M29 阶段走。 */
     spindle_internal_publish_rigid_state();
 }

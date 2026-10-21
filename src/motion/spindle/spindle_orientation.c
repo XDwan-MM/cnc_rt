@@ -79,8 +79,17 @@ void spindle_begin_m19(void)
 void spindle_request_orientation(bool active)
 {
     spindle_internal_clear_velocity_arrival();
-    g_spindle.start_request_pending = false;
-    g_spindle.deferred_start_pending = false;
+
+    /* 只有"开始定向"才取消排队的启动请求；"释放定向"必须保留：
+     * 定向期间收到的 M3/M4 存在 deferred_start 里，等释放完成后执行。
+     * 以前两条分支都清，导致 M19 完成后同一扫描里按下的 M4 被丢掉
+     * （现场表现为定向后主轴反转不转、随后主轴被去使能）。 */
+    if (active)
+    {
+        g_spindle.start_request_pending = false;
+        g_spindle.deferred_start_pending = false;
+    }
+
     g_spindle.pending_event = active ?
         SPINDLE_EVENT_ORIENT : SPINDLE_EVENT_RELEASE_ORIENT;
 }
@@ -269,6 +278,8 @@ static void spindle_orientation_apply_deferred_start(void)
         g_spindle.command_state = g_spindle.deferred_start_state;
         g_spindle.command_speed = g_spindle.deferred_start_speed;
         g_spindle.start_request_pending = true;
+        LOG(LOG_LEVEL_DEBUG, "定向释放：执行定向期间排队的启动，方向=%d 速度=%.0f",
+            (int)g_spindle.command_state, g_spindle.command_speed);
     }
     g_spindle.deferred_start_pending = false;
 

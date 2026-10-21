@@ -134,8 +134,9 @@ typedef struct
     bool reset_stop_pending;
     bool reset_stop_csp;
     int reset_stop_feed_axis;
-    uint32_t reset_stop_cycles;
-    uint32_t reset_stop_stable_cycles;
+    uint32_t reset_stop_cycles;             /* 停车总拍数（诊断用） */
+    uint32_t reset_stop_idle_cycles;        /* 插补已空闲后的拍数（停车第二段看门狗） */
+    uint32_t reset_stop_stable_cycles;      /* 速度连续为零的拍数 */
 
     /* 定向期间收到的启动请求，在释放完成后再执行。 */
     bool start_request_pending;
