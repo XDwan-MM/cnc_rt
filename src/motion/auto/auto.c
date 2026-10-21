@@ -1027,7 +1027,8 @@ static void auto_update_var(){
         setVarChanValue(0, VAR_CHAN_MODAL, i, &set_modal, 0);
     }
     // 运行行号
-    setVarChanInt(0, VAR_CHAN_RUN_ROW, cycle_tp->plan_block->line_number, 0);
+    if(cycle_tp->plan_block->line_number >= 0)
+        setVarChanInt(0, VAR_CHAN_RUN_ROW, cycle_tp->plan_block->line_number, 0);
     // LOG(LOG_LEVEL_DEBUG, "line number:%d type:%d", cycle_tp->plan_block->line_number, cycle_tp->plan_block->type);
     // 速度
     switch (cycle_tp->plan_block->mode)
@@ -1078,8 +1079,8 @@ static void auto_update_buf_stop()
     if (s_buf_stop_popped_id == target)
     {
         s_buf_stop_lost_ticks = 0;
-        /* ID 低 bit = 1 表示 G53；M 码在暂停中要等循环启动 */
-        if (!(target & 1u) && cycle_tp->exec_state == EXEC_PAUSING)
+        
+        if (cycle_tp->exec_state == EXEC_PAUSING)
             return;
         s_buf_stop_popped_id = 0;
         parser_buf_stop_publish_passed(target);

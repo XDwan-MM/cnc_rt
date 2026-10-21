@@ -476,6 +476,12 @@ GNC_RES parser_reading(){
         ItpNextLine();
         return res;
     }
+    
+    if (parser_data->bufstop.hold)
+    {
+        parser_data->parser_state = PARSER_WAITING_FOR_BUFSTOP;
+        return res;
+    }
     if (ItpIsOver())
     {
         // LOG(LOG_LEVEL_WARN, "译码结束");
@@ -485,11 +491,7 @@ GNC_RES parser_reading(){
         }
         return GNC_PARSER_OVER_AND_WAIT;
     }
-    if (parser_data->bufstop.hold)
-    {
-        parser_data->parser_state = PARSER_WAITING_FOR_BUFSTOP;
-        return res;
-    }
+
     ItpNextLine();
     return res;
 }
