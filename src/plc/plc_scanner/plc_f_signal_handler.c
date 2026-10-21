@@ -4,10 +4,9 @@
 #include "global.h"
 #include "regapi.h"
 #include "regdata.h"
-#include "spl_control.h"
-#include "spl_orient.h"
+#include "spindle_control.h"
 #include <hmisysapi.h>
-#include "alarmapi.h"
+#include <math.h>
 #include "reset.h"
 #include "ref.h"
 
@@ -17,9 +16,9 @@ static void plc_output_home();
 static void plc_output_auto();
 static void plc_output_reset();
 static void plc_output_axis_status();
-static void plc_output_spl_vel_status();
-static void plc_output_spl_orient_status();
-static void plc_output_spl_vel();
+static void plc_output_spindle_velocity_status();
+static void plc_output_spindle_orientation_status();
+static void plc_output_spindle_command_speed();
 static void plc_output_rigid();
 
 void plc_f_signal_handler_cycle()
@@ -30,9 +29,9 @@ void plc_f_signal_handler_cycle()
     plc_output_home();
     plc_output_reset();
     plc_output_axis_status();
-    plc_output_spl_vel_status();
-    plc_output_spl_orient_status();
-    plc_output_spl_vel();
+    plc_output_spindle_velocity_status();
+    plc_output_spindle_orientation_status();
+    plc_output_spindle_command_speed();
     plc_output_rigid();
 }
 
@@ -354,9 +353,12 @@ static void plc_output_axis_status()
     }
 }
 
-static void plc_output_spl_vel_status()
+static void plc_output_spindle_velocity_status()
 {
-    //　主轴速度到达信号F45.3
+    double actual_velocity;
+    bool feedback_valid;
+
+    /* 主轴速度到达信号 F45.3。 */
     /* 只查询，不反向改任何主轴控制状态：到速/完成反馈完全由主轴控制层判定
      * （停止完成、复位/急停、定向窗口、M29、模式切换、待启动请求都在
      * spindle_velocity_is_ready() 里统一屏蔽）。以前这里会强制置
@@ -370,16 +372,13 @@ static void plc_output_spl_vel_status()
     {
         clearRegBit(REG_F, 45, 3);
     }
-//    if(spl_data.spl_vel_state == SPINDLE_VEL_ZERO)
-//    {
-//        setRegBit(REG_F, 45, 1);
-//    }
-//    else
-//    {
-//        clearRegBit(REG_F, 45, 1);
-//    }
-    //　主轴零速信号F45.1：独立反映实际零速，不参与完成状态
-    if (fabs(rt_hal_spindle_rpm()) < 5.0)
+
+    /* 主轴零速信号 F45.1 独立反映有效的实际速度反馈。读取失败时
+     * 必须清零，不能把通信失败返回的默认值误判为主轴已经停止。 */
+    feedback_valid =
+        (rt_hal_spindle_speed(RT_HAL_AXIS_SP, &actual_velocity) == HAL_OK &&
+         isfinite(actual_velocity));
+    if (feedback_valid && fabs(actual_velocity) < 5.0)
     {
         setRegBit(REG_F, 45, 1);
     }
@@ -389,11 +388,11 @@ static void plc_output_spl_vel_status()
     }
 }
 
-static void plc_output_spl_orient_status()
+static void plc_output_spindle_orientation_status()
 {
     /* F45.7 是普通 M19 定向完成信号；M29 的完成由 auto_mst.c 用
      * PLC FIN + NC CSP 就绪的双条件握手判定，不在这里发布。 */
-    if (spl_orient_is_done() && !spl_context.m29_active)
+    if (spindle_orientation_is_done())
     {
         setRegBit(REG_F, 45, 7);
     }
@@ -403,20 +402,13 @@ static void plc_output_spl_orient_status()
     }
 }
 
-static void plc_output_spl_vel()
+static void plc_output_spindle_command_speed()
 {
     uint8_t bytes[4];
     double command_speed;
     uint32_t vel;
 
-    if (spl_context.speed_source == SPINDLE_SPEED_SOURCE_PLC)
-    {
-        command_speed = spl_context.plc_speed;
-    }
-    else
-    {
-        command_speed = spl_context.command_speed;
-    }
+    command_speed = spindle_get_command_speed();
     vel = (uint32_t)fabs(command_speed);
 
     bytes[0] = (uint8_t)(vel & 0xff);

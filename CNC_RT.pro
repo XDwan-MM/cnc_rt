@@ -139,10 +139,9 @@ HEADERS += \
     src/motion/auto/pathplan/parser.h \
     src/motion/auto/pathplan/pathplan.h \
     src/motion/auto/pathplan/hmi_request.h \
-    src/motion/spindle/spl_control.h \
-    src/motion/spindle/spl_orient.h \
-    src/motion/spindle/spl_vel_planner.h \
-    src/motion/spindle/spl_pos_planner.h \
+    src/motion/spindle/spindle_control.h \
+    src/motion/spindle/spindle_internal.h \
+    src/motion/spindle/spindle_velocity_planner.h \
     src/motion/emcmot.h \
     src/motion/manual/mpg/mpg.h \
     src/motion/manual/mpg/mpg_planner.h \
@@ -199,10 +198,13 @@ SOURCES += \
     src/motion/auto/pathplan/parser.cpp \
     src/motion/auto/pathplan/pathplan.c \
     src/motion/auto/pathplan/hmi_request.c \
-    src/motion/spindle/spl_control.c \
-    src/motion/spindle/spl_orient.c \
-    src/motion/spindle/spl_vel_planner.c \
-    src/motion/spindle/spl_pos_planner.c \
+    src/motion/spindle/spindle_control.c \
+    src/motion/spindle/spindle_hal.c \
+    src/motion/spindle/spindle_m29.c \
+    src/motion/spindle/spindle_safety.c \
+    src/motion/spindle/spindle_speed.c \
+    src/motion/spindle/spindle_orientation.c \
+    src/motion/spindle/spindle_velocity_planner.c \
     src/motion/emcmot.cpp \
     src/motion/manual/mpg/mpg.c \
     src/motion/manual/mpg/mpg_planner.c \

@@ -4,8 +4,7 @@
 #include "hmi_scanner.h"
 #include "regapi.h"
 #include "servosampleevents.h"
-#include "spl_control.h"
-#include "spl_orient.h"
+#include "spindle_control.h"
 #include <alarmapi.h>
 #include <hmisysapi.h>
 #include <stdlib.h>
@@ -114,7 +113,6 @@ static GNC_RES task_handle_plc_event(PLC_EVENT *event_data)
     case PLC_EV_MSG_SPD_ORI:
     {
         task_handle_spd_ori_event(event_data);
-        // spl_orient_request();
         break;
     }
     case PLC_EV_MSG_EXTERNAL_DECEL:
@@ -267,123 +265,35 @@ static void task_handle_feed_event(PLC_EVENT *event_data)
 
 static void task_handle_spl_event(PLC_EVENT *event_data)
 {
-    LOG(LOG_LEVEL_INFO, "处理主轴事件 动作%d", event_data->spindle_payload.direction);
-    if (event_data->spindle_payload.direction == 1)
+    const int direction = event_data->spindle_payload.direction;
+
+    LOG(LOG_LEVEL_INFO, "处理主轴事件 动作%d", direction);
+    if (direction > 0)
     {
-        LOG(LOG_LEVEL_INFO, "处理主轴正转事件");
-        if (spl_context.m29_active ||
-            (spl_context.m29_phase != SPINDLE_M29_IDLE &&
-             spl_context.m29_phase != SPINDLE_M29_READY))
-        {
-            LOG(LOG_LEVEL_INFO, "M29进行中，忽略主轴正转事件");
-            return;
-        }
-        spindle_clear_velocity_arrival();   /* 新指令：先清上一条的到速完成 */
-        if (spl_context.orient_phase != SPINDLE_ORIENT_IDLE ||
-            spl_context.orient_request_pending ||
-            spl_context.orient_release_pending)
-        {
-            spl_context.deferred_start_pending = true;
-            spl_context.deferred_start_state = SPINDLE_CW;
-            spl_context.deferred_start_speed = spl_context.mcp_target_speed;
-            return;
-        }
-        spl_context.spl_event = SPINDLE_EVENT_CW;
-        spl_context.command_speed = spl_context.mcp_target_speed;
-        // spl_context.mcp_target_speed = cycle_tp->plan_block->mst_data.spindle.speed;
-        // spl_context.mcode_feedback = false;
-        // spl_context.m19_active = false;
-        // spl_context.orient_hold_stop = false;
-        spl_context.command_state = SPINDLE_CW;
-        spl_context.start_request_pending = true;
+        (void)spindle_request_manual_run(SPINDLE_CW);
     }
-    if (event_data->spindle_payload.direction == -1)
+    else if (direction < 0)
     {
-        LOG(LOG_LEVEL_INFO, "处理主轴反转事件");
-        if (spl_context.m29_active ||
-            (spl_context.m29_phase != SPINDLE_M29_IDLE &&
-             spl_context.m29_phase != SPINDLE_M29_READY))
-        {
-            LOG(LOG_LEVEL_INFO, "M29进行中，忽略主轴反转事件");
-            return;
-        }
-        spindle_clear_velocity_arrival();   /* 新指令：先清上一条的到速完成 */
-        if (spl_context.orient_phase != SPINDLE_ORIENT_IDLE ||
-            spl_context.orient_request_pending ||
-            spl_context.orient_release_pending)
-        {
-            spl_context.deferred_start_pending = true;
-            spl_context.deferred_start_state = SPINDLE_CCW;
-            spl_context.deferred_start_speed = spl_context.mcp_target_speed;
-            return;
-        }
-        spl_context.spl_event = SPINDLE_EVENT_CCW;
-        spl_context.command_speed = spl_context.mcp_target_speed;
-        // spl_context.mcp_target_speed = cycle_tp->plan_block->mst_data.spindle.speed;
-        // spl_context.mcode_feedback = false;
-        // spl_context.m19_active = false;
-        // spl_context.orient_hold_stop = false;
-        spl_context.command_state = SPINDLE_CCW;
-        spl_context.start_request_pending = true;
+        (void)spindle_request_manual_run(SPINDLE_CCW);
     }
-    if (event_data->spindle_payload.direction == 0)
+    else
     {
-        LOG(LOG_LEVEL_INFO, "处理主轴停止事件");
-        spindle_clear_velocity_arrival();   /* 新指令/安全事件：先清上一条的到速完成 */
-
-        /*
-         * 显式停止请求一律先取消排队中的启动请求，**再**判"要不要打断当前控制"。
-         * 下面两处提前返回（M29 进行中 / 定向进行中）只表示"不打断"，不代表
-         * 停止请求没发生：以前把清理放在返回之后，定向期间排队的 M3/M4 会在
-         * 定向释放交接时被重新启动起来。
-         */
-        spl_context.command_speed = 0.0;
-        spl_context.command_state = SPINDLE_STOP;
-        spl_context.start_request_pending = false;
-        spl_context.deferred_start_pending = false;
-
-        if (spl_context.m29_active ||
-            (spl_context.m29_phase != SPINDLE_M29_IDLE &&
-             spl_context.m29_phase != SPINDLE_M29_READY))
-        {
-            LOG(LOG_LEVEL_INFO, "M29进行中，忽略普通主轴停止事件");
-            return;
-        }
-
-        /*
-         * M19 通常会同时改变 G29.6 和 G70.6。定向上升沿可能先到达，
-         * 随后的 G29.6 下降沿只是定向前的停转请求，不能覆盖尚未处理
-         * 的 SPINDLE_EVENT_ORIENT；定向流程本身已经会停止主轴。
-         */
-        if (spl_context.spl_event == SPINDLE_EVENT_ORIENT ||
-            spl_context.orient_phase != SPINDLE_ORIENT_IDLE ||
-            spl_context.orient_request_pending)
-        {
-            return;
-        }
-
-        spl_context.spl_event = SPINDLE_EVENT_STOP;
+        spindle_request_stop();
     }
 }
 
 static void task_handle_spd_ori_event(PLC_EVENT *event_data)
 {
-    LOG(LOG_LEVEL_INFO, "处理主轴定向事件 动作%d", event_data->spd_ori_payload.p1);
-    // 推送主轴定向事件
-    if (event_data->spd_ori_payload.p1 == 1)
+    const int action = event_data->spd_ori_payload.p1;
+
+    LOG(LOG_LEVEL_INFO, "处理主轴定向事件 动作%d", action);
+    if (action > 0)
     {
-        /* 定向请求接管主轴：旧的到速反馈与排队的启动请求都要取消，
-         * 免得定向完成后把它们当成新指令放行。 */
-        spindle_clear_velocity_arrival();
-        spl_context.start_request_pending = false;
-        spl_context.deferred_start_pending = false;
-        spl_context.spl_event = SPINDLE_EVENT_ORIENT;
+        spindle_request_orientation(true);
     }
-    // 推送主轴定向释放事件
-    if (event_data->spd_ori_payload.p1 == -1)
+    else if (action < 0)
     {
-        spindle_clear_velocity_arrival();
-        spl_context.spl_event = SPINDLE_EVENT_RELEASE_ORIENT;
+        spindle_request_orientation(false);
     }
 }
 

@@ -18,7 +18,7 @@
 #include "rerun.h"
 #include "reset.h"
 #include "rt_sem.h"
-#include "spl_control.h"
+#include "spindle_control.h"
 #include "stored_stroke_check.h"
 #include "straightness_comp.h"
 #include <alarmapi.h>
@@ -334,7 +334,7 @@ static void read_from_hal()
     }
 
     if (!update_pos_flag && feed_positions_valid &&
-        (!spl_context.reset_stop_csp || spindle_position_valid))
+        (!spindle_reset_stop_uses_csp() || spindle_position_valid))
     {
         // 报警复位后用最新带补偿反馈，重建未补偿坐标基准。
         rebuild_axis_positions_from_feedback();

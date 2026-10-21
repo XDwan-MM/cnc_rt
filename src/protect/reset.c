@@ -2,7 +2,7 @@
 #include "rt_hal_adapter.h"
 #include "rerun.h"
 #include "rt_data.h"
-#include "spl_control.h"
+#include "spindle_control.h"
 #include "tapreturn.h"
 #include "global.h"
 #include <hmisysapi.h>

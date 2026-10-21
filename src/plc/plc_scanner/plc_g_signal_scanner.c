@@ -2,7 +2,7 @@
 #include "global.h"
 #include "regapi.h"       /**< 寄存器访问 API */
 #include "signal_utils.h" /**< 边沿检测宏定义 */
-#include "spl_control.h"
+#include "spindle_control.h"
 #include <hmisysapi.h>
 #include <string.h>
 
@@ -606,16 +606,16 @@ static void process_spindle_speed_command(const G_INPUT_MAP *curr_g)
         par_axis[AXIS_SP][PAR_SPDL_MAX_SPEED].value.val_real;
 
     /* G32/G33 的模拟量编码按机床最大主轴速度换算为 rpm。 */
-    spl_context.plc_speed = spindle_max_speed * raw_speed / 4095.0;
+    spindle_set_plc_speed(spindle_max_speed * raw_speed / 4095.0);
 
     /* G33.7=0：使用 CNC/M 代码速度；G33.7=1：使用 PLC 速度。 */
     if (GET_BIT(curr_g->g_regs[33], 7))
     {
-        spl_context.speed_source = SPINDLE_SPEED_SOURCE_PLC;
+        spindle_set_speed_source(SPINDLE_SPEED_SOURCE_PLC);
     }
     else
     {
-        spl_context.speed_source = SPINDLE_SPEED_SOURCE_CNC;
+        spindle_set_speed_source(SPINDLE_SPEED_SOURCE_CNC);
     }
 }
 

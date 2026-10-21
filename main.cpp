@@ -19,7 +19,7 @@
 #include <QTextStream>
 #include "sysapi.h"
 #include <alarmapi.h>
-#include "spl_control.h"
+#include "spindle_control.h"
 
 static char version[64];
 static int sys_start_rt = 0;
@@ -106,7 +106,7 @@ int main() {
     };
     RT_LOG(INFO,  "初始化全局变量成功");
     LOG(LOG_LEVEL_INFO, "初始化全局变量成功");
-    spl_context_init(&spl_context);
+    spindle_init();
     // 初始化PLC单例
     PlcTask::instance();
     RT_LOG(INFO,  "初始化PLC单例成功");
