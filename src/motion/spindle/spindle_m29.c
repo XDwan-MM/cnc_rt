@@ -431,41 +431,65 @@ void spindle_internal_update_m29(void)
         return;
     }
 
-    if (g_spindle.m29_phase == SPINDLE_M29_ORIENTING &&
-        (g_spindle.orient_phase == SPINDLE_ORIENT_RELEASING ||
-         g_spindle.orient_phase == SPINDLE_ORIENT_IDLE))
+    if (g_spindle.m29_phase == SPINDLE_M29_ORIENTING)
     {
-        LOG(LOG_LEVEL_ERR,
-            "M29主轴定向失败：orient_phase=%d status_word=0x%04X "
-            "actual_vel=%.0f",
-            g_spindle.orient_phase, spindle_hal_status_word(),
-            spindle_hal_actual_velocity());
-        g_spindle.m29_phase = SPINDLE_M29_ERROR;
-        g_spindle.m29_feedback_stable = false;
-        g_spindle.reset_requires_start = true;
-        spindle_internal_clear_velocity_arrival();   /* 新指令/安全事件：清旧到速完成 */
-        g_spindle.start_request_pending = false;
-        g_spindle.orient_hold_stop = true;
-        g_spindle.command_speed = 0.0;
-        g_spindle.command_state = SPINDLE_STOP;
-        return;
-    }
+        switch (g_spindle.orient_phase)
+        {
+        case SPINDLE_ORIENT_DONE:
+            /* 定向已完成：交给 M29 释放后切 CSP。 */
+            if (spindle_orientation_release())
+            {
+                g_spindle.m29_phase = SPINDLE_M29_RELEASING;
+                g_spindle.orient_phase = SPINDLE_ORIENT_RELEASING;
+            }
+            else
+            {
+                g_spindle.m29_phase = SPINDLE_M29_ERROR;
+                g_spindle.m29_feedback_stable = false;
+                g_spindle.reset_requires_start = true;
+                spindle_internal_clear_velocity_arrival();   /* 新指令/安全事件：清旧到速完成 */
+                g_spindle.orient_hold_stop = true;
+            }
+            break;
 
-    if (g_spindle.m29_phase == SPINDLE_M29_ORIENTING &&
-        g_spindle.orient_phase == SPINDLE_ORIENT_DONE)
-    {
-        if (spindle_orientation_release())
-        {
-            g_spindle.m29_phase = SPINDLE_M29_RELEASING;
-            g_spindle.orient_phase = SPINDLE_ORIENT_RELEASING;
-        }
-        else
-        {
-            g_spindle.m29_phase = SPINDLE_M29_ERROR;
-            g_spindle.m29_feedback_stable = false;
-            g_spindle.reset_requires_start = true;
-            spindle_internal_clear_velocity_arrival();   /* 新指令/安全事件：清旧到速完成 */
-            g_spindle.orient_hold_stop = true;
+        case SPINDLE_ORIENT_RELEASING:
+            /* M19 刚结束时 PLC 会在 FIN 后拉低 G70.6（定向释放），
+             * 这是 M19→M29 连写的正常时序，不是 M29 定向失败：
+             * 等释放收尾，下一拍 orient_phase 回到 IDLE 后由 M29
+             * 自己重新发起一次定向（见下面的 IDLE 分支）。 */
+            break;
+
+        case SPINDLE_ORIENT_IDLE:
+            if (g_spindle.reset_requires_start)
+            {
+                /* 定向状态机已经判超时/失败并置了 2100：不能再无限重试。 */
+                LOG(LOG_LEVEL_ERR,
+                    "M29主轴定向失败：定向状态机已超时/失败 "
+                    "status_word=0x%04X actual_vel=%.0f",
+                    spindle_hal_status_word(), spindle_hal_actual_velocity());
+                g_spindle.m29_phase = SPINDLE_M29_ERROR;
+                g_spindle.m29_feedback_stable = false;
+                spindle_internal_clear_velocity_arrival();   /* 新指令/安全事件：清旧到速完成 */
+                g_spindle.start_request_pending = false;
+                g_spindle.orient_hold_stop = true;
+                g_spindle.command_speed = 0.0;
+                g_spindle.command_state = SPINDLE_STOP;
+                break;
+            }
+            /* 没有现成定向（上一条 M19 的释放已完成，或 M29 的 ORIENT
+             * 请求被 PLC 的释放事件覆盖）：由 M29 重新发起一次定向。
+             * 只置请求标志，提交/重试/超时统一由
+             * spindle_internal_update_orientation() 负责。 */
+            g_spindle.orient_request_pending = true;
+            g_spindle.orient_phase = SPINDLE_ORIENT_WAIT_ZERO;
+            g_spindle.orient_release_pending = false;
+            g_spindle.orient_elapsed_cycles = 0U;
+            spindle_hal_request_torque();
+            break;
+
+        default:
+            /* WAIT_ZERO / RUNNING：等定向完成，不在这里判失败。 */
+            break;
         }
     }
 
