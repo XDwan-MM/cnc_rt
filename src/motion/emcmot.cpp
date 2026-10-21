@@ -24,6 +24,7 @@
 #include <alarmapi.h>
 #include <hmisysapi.h>
 #include <math.h>
+#include "spindle_internal.h"
 
 static void chan_do_period();
 static void smx_do_period();
@@ -47,8 +48,6 @@ void emcmot_test_rebuild_axis_positions_from_feedback()
     update_pos_flag = 1;
 }
 #endif
-
-
 
 const char *mode_names[] = {"编辑", "AUTO", "MDI", "DNC", "手轮", "手动", "回零", "空闲"};
 
@@ -146,6 +145,8 @@ static void axis_write_out()
 
 static void set_operating_mode()
 {
+    NC_MODE previous_mode = rt_data->current_mode;
+
     // 急停拍下时不允许切换模式
     if (rt_get_sys_state(SYS_ESTOP_INPUT))
         return;
@@ -207,6 +208,13 @@ static void set_operating_mode()
         break;
     default:
         break;
+    }
+
+    // 切换完成后进入手轮模式时重建手轮位置基准：
+    // 离开手轮模式后其他模式可能已经移动过机床，不能沿用上一次手轮模式的规划位置。
+    if (previous_mode != MODE_MPG && rt_data->current_mode == MODE_MPG)
+    {
+        handwheel_resync_position();
     }
 }
 
@@ -333,11 +341,16 @@ static void read_from_hal()
         rt_data->chan_data[0].act_vel = sqrt(vx * vx + vy * vy + vz * vz);
     }
 
+    /* 只有 CSP 攻丝复位停车**进行中**才需要等主轴位置（两者同一拍重建才不打架）；
+     * 停车结束后 reset_stop 字段会一并清掉，进给轴的重建不再被主轴绑架。 */
+    const bool reset_tap_stop =
+        g_spindle.reset_stop_pending && g_spindle.reset_stop_csp;
     if (!update_pos_flag && feed_positions_valid &&
         (!spindle_reset_stop_uses_csp() || spindle_position_valid))
     {
-        // 报警复位后用最新带补偿反馈，重建未补偿坐标基准。
+        // 报警复位后用最新反馈，重建未补偿坐标基准。
         rebuild_axis_positions_from_feedback();
+        handwheel_resync_position();
         update_pos_flag = 1;
     }
 }
@@ -349,10 +362,21 @@ static void output_to_hal()
     (void)rt_hal_request_axis_pos(RT_HAL_AXIS_X, rt_data->axis_data[AXIS_X].motor_cmd_pos);
     (void)rt_hal_request_axis_pos(RT_HAL_AXIS_Y, rt_data->axis_data[AXIS_Y].motor_cmd_pos);
     (void)rt_hal_request_axis_pos(RT_HAL_AXIS_Z, rt_data->axis_data[AXIS_Z].motor_cmd_pos);
-    /* 刚性攻丝：把插补算的主轴绝对角度发给驱动器（主轴在 CSP 位置环里跟随）。
-     * 只在"当前块是刚性攻丝"时发 —— 别的时候主轴是速度模式（CSV），写位置会被 HAL 拒。
-     * 角度语义见 interpolate_tap()：从本段起点算起、跨圈累计、反向为负。 */
-    if (cycle_tp->plan_block->type == RIGID_TAP || cycle_tp->plan_block->type == TAP_RETURN)
+    /* M29 对零阶段由主轴状态机保持位置；CSP 受控停车仍需插补同步。
+     * 复位收口后等反馈坐标重建完成，避免旧目标重新下发。 */
+    HalCSpindleStatus spindle;
+    const bool reset_tap_stop = g_spindle.reset_stop_pending &&
+                                g_spindle.reset_stop_csp;
+    const bool reset_active = (nc_reset != NULL && nc_reset->is_resetting) ||
+                              rt_data->nc_event == SYS_EVENT_HMI_RESET ||
+                              rt_data->sys_state[SYS_ESTOP_INPUT] ||
+                              rt_data->sys_state[SYS_IS_ESTOP_ACTIVE] ||
+                              rt_data->sys_state[SYS_IS_ALARMING];
+    if (rt_hal_spindle_status(RT_HAL_AXIS_SP, &spindle) == HAL_OK &&
+        spindle.mode == HAL_SPINDLE_CSP &&
+        (reset_tap_stop ||
+         (update_pos_flag && !reset_active &&
+          g_spindle.m29_phase == SPINDLE_M29_READY)))
         (void)rt_hal_request_axis_pos(RT_HAL_AXIS_SP, rt_data->axis_data[AXIS_SP].wcs_cmd_pos_cur);
 }
 
@@ -505,6 +529,7 @@ static void reset_clean_warning()
         cleanAllAlarm(ALARM_ETHCAT_SV, ALARM_WARNING);
     }
 }
+
 
 static void rebuild_axis_positions_from_feedback()
 {

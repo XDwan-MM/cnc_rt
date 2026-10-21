@@ -12,6 +12,7 @@
 #include "macrovarapi.h"
 #include "tapreturn.h"
 #include "sysprog.h"
+#include "pathplan.h"
 
 static void auto_check_error_line();
 static void auto_update_state();
@@ -791,7 +792,8 @@ static bool auto_check_program_end(){
 }
 
 static bool auto_is_program_end(){
-    return !rt_get_chan_state(0, CHAN_IS_PARSERING) && queue_is_empty(plan_queue) && queue_is_empty(unif_queue) && queue_is_empty(treat_queue) && queue_is_empty(pretreat_queue) && queue_is_empty(parser_queue);
+    return !rt_get_chan_state(0, CHAN_IS_PARSERING) && queue_is_empty(plan_queue) && queue_is_empty(unif_queue)
+    && queue_is_empty(fix_queue) && queue_is_empty(treat_queue) && queue_is_empty(pretreat_queue) && queue_is_empty(parser_queue);
 }
 
 static void auto_check_error_line(){
@@ -908,8 +910,14 @@ void cycle_tp_add_block(){
             break;
         // 处理移动指令 
         default:
+            // 计算切矢
+            block_cal_vector(pretreat_block);
             // 计算两段衔接夹角
             block_cal_angle(pretreat_block, &unif_queue->pre_vec);
+            // 计算运动轴
+            block_cal_move_axis(pretreat_block);
+            // 计算最大速度
+            block_cal_max_vel(pretreat_block);
             unif_queue->pre_vec = pretreat_block->end_vec;
             break;
         }

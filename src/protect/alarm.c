@@ -2,6 +2,7 @@
 #include "rt_data.h"
 #include "rt_hal_adapter.h"   /* HAL 错误码与复位接口 */
 #include "reset.h"
+#include "rt_hal_config.h"
 #include <alarmapi.h>
 #include <hmisysapi.h>
 #include "mpg.h"
@@ -22,6 +23,9 @@
 #define HAL_ALARM_BUSY           130  /* 主站已被占用 */
 #define HAL_ALARM_RESET_TIMEOUT  131  /* 故障复位超时 */
 #define HAL_ALARM_UNKNOWN        139  /* 未归类的 HAL 错误 */
+
+/* 未使能仅作诊断；启动和故障复位后的 DS402 使能过渡不应产生系统报警。 */
+#define AXIS_NOT_ENABLED_LOG_CYCLES 5000u
 
 static int hal_code_to_alarm(int32_t rc) {
     switch (rc) {
@@ -60,6 +64,31 @@ static struct timespec s_reset_started;
 
 bool alarm_fault_reset_pending(void) {
     return s_reset_waiting || s_reset_failed;
+}
+
+/* 任何一次新的复位动作都解除上一次"故障复位未收口"造成的使能锁定：
+ * 否则收口失败一次就只能重启软件（s_reset_failed 原本只在报警中的复位分支里清）。 */
+void alarm_reset_latch_clear(void) {
+    if (!s_reset_failed) return;
+    s_reset_failed = 0;
+    LOG(LOG_LEVEL_INFO, "新的复位动作：解除上次故障复位失败的使能锁定，允许重试");
+}
+
+/* 复位收口失败时把每轴实际状态打全：区分"请求没被受理"和"还停在 Fault"。 */
+static void alarm_log_reset_axes(const char* why) {
+    for (int i = 0; i < RT_HAL_AXIS_COUNT; ++i) {
+        int32_t rst = -1;
+        HalCAxisStatus st;
+        const int rst_ok = rt_hal_fault_reset_state((RtHalAxisSlot)i, &rst) == HAL_OK;
+        const int st_ok = rt_hal_axis_status((RtHalAxisSlot)i, &st) == HAL_OK;
+        LOG(LOG_LEVEL_ERR, "%s：轴槽 %d reset=%d%s enabled=%d status=0x%04X 603F=0x%04X%s%s",
+            why, i, (int)rst, rst_ok ? "" : "(读失败)",
+            st_ok ? (int)st.enabled : -1,
+            st_ok ? (unsigned)st.raw_status : 0u,
+            st_ok ? (unsigned)st.error_code : 0u,
+            (st_ok && st.error_code_valid) ? "" : "(无故障码)",
+            st_ok ? "" : "[状态读不到]");
+    }
 }
 
 static int drive_feedback_clear(void) {
@@ -164,6 +193,38 @@ static void alarm_poll_drive_errors(void) {
     }
 }
 
+/* 未使能不是驱动故障：仅在持续异常时留下逐轴诊断，不触发复位循环。 */
+static void alarm_poll_axis_not_enabled(void) {
+    static uint32_t s_age[RT_HAL_AXIS_COUNT];
+    static int s_logged[RT_HAL_AXIS_COUNT];
+    const int quiescent = !!(rt_data->sys_state[SYS_ESTOP_INPUT] ||
+                             rt_data->sys_state[SYS_IS_SWITCHING_MODE] ||
+                             rt_hal_cycle_error() != 0 ||
+                             alarm_fault_reset_pending());
+    for (int i = 0; i < RT_HAL_AXIS_COUNT; ++i) {
+        HalCAxisStatus st;
+        const int readable = rt_hal_axis_status((RtHalAxisSlot)i, &st) == HAL_OK;
+        const int expected = !quiescent &&
+            !rt_data->axis_data[i].status.is_disable &&
+            !rt_data->axis_data[i].status.is_error &&
+            (!rt_hal_config_is_spindle((RtHalAxisSlot)i) ||
+             rt_data->axis_data[i].status.spindle_wants_torque);
+        if (!expected || !readable || st.enabled) {
+            s_age[i] = 0;
+            s_logged[i] = 0;
+            continue;
+        }
+        if (s_logged[i] || ++s_age[i] < AXIS_NOT_ENABLED_LOG_CYCLES) continue;
+        s_logged[i] = 1;
+        int32_t reset_state = -1;
+        (void)rt_hal_fault_reset_state((RtHalAxisSlot)i, &reset_state);
+        LOG(LOG_LEVEL_WARN,
+            "HAL 轴槽 %d 持续未使能：status_word=0x%04X 0x603F=0x%04X valid=%d reset=%d",
+            i, (unsigned)st.raw_status, (unsigned)st.error_code,
+            (int)st.error_code_valid, (int)reset_state);
+    }
+}
+
 /* 每拍检查 HAL 侧状态，由运动线程调用（只读适配层快照，不碰 HAL context）。 */
 void alarm_poll_hal() {
     /* 1) 周期循环异常退出，主站已经跑不动了。 */
@@ -173,7 +234,10 @@ void alarm_poll_hal() {
     /* 2) 驱动器故障码（0x603F）→ is_error。 */
     alarm_poll_drive_errors();
 
-    /* 3) 等四轴复位终态与故障反馈清除，外层截止时间防止无限等待。 */
+    /* 2b) 轴槽持续未使能仅记录诊断，不把正常使能过渡当系统报警。 */
+    alarm_poll_axis_not_enabled();
+
+    /* 3) 等四轴复位终态，外层截止时间防止无限等待。 */
     if (!s_reset_waiting) return;
     int timed_out = 0;
     const int settled = rt_hal_fault_reset_settled(&timed_out);
@@ -182,18 +246,23 @@ void alarm_poll_hal() {
     /* 外层六秒：覆盖 HAL 默认五秒之外有请求未受理、快照缺失和残留 603F 的情况。 */
     const double elapsed = (double)(now.tv_sec - s_reset_started.tv_sec) +
                            (double)(now.tv_nsec - s_reset_started.tv_nsec) / 1e9;
-    if (!(settled && timed_out) && !(settled && drive_feedback_clear())) {
+    /* 收口条件只认 HAL 的复位终态：原先还要求"四轴反馈全干净"，任一轴残留 0x603F
+     * 就超时并把整机锁成未使能；残留故障由 alarm_poll_drive_errors() 按轴报 30..33。 */
+    if (!settled) {
         if (elapsed < 6.0) return;
         timed_out = 1;
     }
     s_reset_waiting = 0;
     if (timed_out) {
         s_reset_failed = 1;
+        alarm_log_reset_axes("故障复位未收口");
         /* 边沿发了、驱动器没在配置时间内离开 Fault：与"没复位"是两回事，单独报号。 */
-        LOG(LOG_LEVEL_ERR, "故障复位超时：复位未结束、反馈不可读或 Fault/0x603F 未清除");
+        LOG(LOG_LEVEL_ERR, "故障复位超时：复位未结束或快照不可读");
         setAlarm(ALARM_ETHCAT_SV, ALARM_ERROR, HAL_ALARM_RESET_TIMEOUT);
     } else {
-        LOG(LOG_LEVEL_INFO, "故障复位完成：Fault 与有效故障码均已清除，恢复轴使能意图管理");
+        if (!drive_feedback_clear())
+            LOG(LOG_LEVEL_WARN, "故障复位已收口，但仍有轴反馈未清（按轴报警 30..33 处理，不锁整机）");
+        LOG(LOG_LEVEL_INFO, "故障复位完成：四轴均已离开复位待处理，恢复轴使能意图管理");
     }
 }
 
@@ -266,8 +335,11 @@ void handle_alarm_cmd()
         // 这是链上唯一的复位触发点，缺了它故障消不掉。
         clock_gettime(CLOCK_MONOTONIC, &s_reset_started);
         s_reset_failed = 0;
-        for (int i = 0; i < RT_HAL_AXIS_COUNT; ++i)
+        for (int i = 0; i < RT_HAL_AXIS_COUNT; ++i) {
+            /* 没绑定 HAL 轴的槽位不能发请求：适配层不会取走它，收口判定永远不成立。 */
+            if (rt_hal_config_hal_axis((RtHalAxisSlot)i) < 0) continue;
             alarm_report_hal_error(rt_hal_request_fault_reset((RtHalAxisSlot)i));
+        }
         s_reset_waiting = 1;
         alarm_poll_drive_errors();
         // 复位生效参数

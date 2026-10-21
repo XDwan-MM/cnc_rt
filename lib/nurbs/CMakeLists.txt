@@ -40,6 +40,7 @@ target_include_directories(nurbs PUBLIC
     ${CNC_RT_SRC_DIR}/motion/auto/pathplan
     ${CNC_RT_SRC_DIR}/motion/auto/trajplan
     ${CNC_RT_SRC_DIR}/motion/manual
+    ${CNC_RT_SRC_DIR}/motion/sysprog
     ${CNC_RT_SRC_DIR}/motion/manual/jog
     ${CNC_RT_SRC_DIR}/hal
     ${CNC_RT_SRC_DIR}/plc/plc_scanner

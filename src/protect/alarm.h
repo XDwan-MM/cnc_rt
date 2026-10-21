@@ -20,6 +20,9 @@ void handle_estop_cmd();
 void handle_alarm_cmd();
 bool alarm_fault_reset_pending(void);
 
+/* 任何一次新的复位动作都调用：解除上一次"故障复位未收口"造成的使能锁定。 */
+void alarm_reset_latch_clear(void);
+
 /* 每拍检查 HAL 侧状态，由运动线程调用（只读适配层快照，不碰 HAL context）。 */
 void alarm_poll_hal();
 

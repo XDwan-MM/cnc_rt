@@ -236,6 +236,8 @@ typedef struct
     // 译码错误
     int parser_error_line;
     int parser_error_no;
+    // cy 异常点处理程序计数器
+    int fix_blocknum;
 } PATH_DATA;
 
 typedef struct

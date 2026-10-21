@@ -1,4 +1,5 @@
 #include "reset.h"
+#include "alarm.h"
 #include "rt_hal_adapter.h"
 #include "rerun.h"
 #include "rt_data.h"
@@ -36,6 +37,9 @@ GNC_RES reset_data_reset(){
 /// @brief 触发F1.1的信号来源
 /// @param reset_trigger 
 void nc_set_resetting(RESET_TRIGGER reset_trigger){
+    /* 任何一次新复位都允许重试故障复位：否则收口失败一次后 s_reset_failed
+     * 一直把四轴压在未使能态，只能重启软件。 */
+    alarm_reset_latch_clear();
     nc_reset->reset_trigger = reset_trigger;
     nc_reset->is_resetting = 1;
     LOG(LOG_LEVEL_DEBUG, "复位中F1.1信号来源：%s", reset_trigger_name[reset_trigger]);
@@ -54,6 +58,10 @@ void nc_set_resetting(RESET_TRIGGER reset_trigger){
 /// @brief 完成F1.1的判断
 void nc_set_resetted(){
     if(rt_data->sys_state[SYS_IS_ALARMING] || rt_data->sys_state[SYS_IS_ESTOP_ACTIVE]) return;
+    /* 故障复位环没收口（等待中或上次失败锁定）前不判复位完成：否则 is_resetting
+     * 先落下，循环启动会在轴还没使能时被受理，运动指令全被 HAL 拒收，
+     * 最终只表现为"轴不动 + 跟随误差"。 */
+    if (alarm_fault_reset_pending()) return;
     if (nc_reset->is_resetting && nc_reset->reset_trigger == HMI_RESET &&
         (spindle_reset_stop_pending() || !update_pos_flag)) return;
     switch (rt_data->current_mode) {

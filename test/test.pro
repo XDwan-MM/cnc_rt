@@ -84,6 +84,7 @@ HEADERS += \
     ../src/datadef/record_queue.h \
     ../src/hal/rt_hal_config.h \
     ../src/hal/rt_hal_adapter.h \
+    ../src/hal/rt_hal_sdo.h \
     ../src/motion/auto/auto.h \
     ../src/motion/auto/trajplan/auto_gcode.h \
     ../src/motion/auto/trajplan/auto_mst.h \
@@ -137,6 +138,7 @@ SOURCES += \
     ../src/datadef/record_queue.c \
     ../src/hal/rt_hal_config.c \
     ../src/hal/rt_hal_adapter.c \
+    ../src/hal/rt_hal_sdo.c \
     ../src/hal/rt_hal_sim_backend.c \
     ../src/motion/auto/auto.c \
     ../src/motion/auto/trajplan/auto_gcode.c \
@@ -244,6 +246,9 @@ HEADERS = $$unique(HEADERS)
 contains(DEFINES, DEBUG_MODE_ENABLED) {
     SOURCES -= ../src/master/master_wcf.c
 }
+
+# tst_spindle.cpp 依赖已移除的旧版 driver.h，暂不纳入测试构建。
+SOURCES -= $$PWD/test_motion/tst_spindle.cpp
 
 # tst_homing.cpp 用的是旧版 REF_TP 字段名（is_ref_on / homing_direction /
 # homing_profile / traj_data），跟本工程的 ref.h 对不上——在同事的原始树里

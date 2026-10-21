@@ -6,6 +6,8 @@
 #include "regapi.h"
 #include <hmisysapi.h>  
 #include <alarmapi.h>
+#include <limits.h>
+#include <math.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -16,7 +18,7 @@ static void auto_clear_mstb_signal();
 static void auto_mstb_fin_alert();
 static void auto_mstb_fin_reset();
 static void auto_set_mcode_signal(int index);
-static void auto_set_scode_signal(int index);
+static void auto_set_scode_signal(int speed);
 static void auto_set_tcode_signal(int index);
 static void auto_set_bcode_signal(int index);
 
@@ -337,30 +339,30 @@ static void auto_set_mcode_signal(int index){
     }
 }
 
-static void auto_set_scode_signal(int index){
-    if(cycle_tp->plan_block->mst_data.spindle.speed < REG_8BITE){
-        setRegValue8(REG_F, 22, cycle_tp->plan_block->mst_data.spindle.speed);
+static void auto_set_scode_signal(int speed){
+    if(speed < REG_8BITE){
+        setRegValue8(REG_F, 22, speed);
         setRegValue8(REG_F, 23, 0);
         setRegValue8(REG_F, 24, 0);
         setRegValue8(REG_F, 25, 0);
     } 
-    else if(cycle_tp->plan_block->mst_data.spindle.speed < REG_16BITE){
-        setRegValue8(REG_F, 22, cycle_tp->plan_block->mst_data.spindle.speed & 0xFF);          // 低 8 位
-        setRegValue8(REG_F, 23, (cycle_tp->plan_block->mst_data.spindle.speed >> 8) & 0xFF);   // 高 8 位
+    else if(speed < REG_16BITE){
+        setRegValue8(REG_F, 22, speed & 0xFF);          // 低 8 位
+        setRegValue8(REG_F, 23, (speed >> 8) & 0xFF);   // 高 8 位
         setRegValue8(REG_F, 24, 0);
         setRegValue8(REG_F, 25, 0);
     }
-    else if(cycle_tp->plan_block->mst_data.spindle.speed < REG_24BITE){
-        setRegValue8(REG_F, 22, cycle_tp->plan_block->mst_data.spindle.speed & 0xFF);
-        setRegValue8(REG_F, 23, (cycle_tp->plan_block->mst_data.spindle.speed >> 8) & 0xFF);
-        setRegValue8(REG_F, 24, (cycle_tp->plan_block->mst_data.spindle.speed >> 16) & 0xFF);
+    else if(speed < REG_24BITE){
+        setRegValue8(REG_F, 22, speed & 0xFF);
+        setRegValue8(REG_F, 23, (speed >> 8) & 0xFF);
+        setRegValue8(REG_F, 24, (speed >> 16) & 0xFF);
         setRegValue8(REG_F, 25, 0);
     }
     else{
-        setRegValue8(REG_F, 22, cycle_tp->plan_block->mst_data.spindle.speed & 0xFF);
-        setRegValue8(REG_F, 23, (cycle_tp->plan_block->mst_data.spindle.speed >> 8) & 0xFF);
-        setRegValue8(REG_F, 24, (cycle_tp->plan_block->mst_data.spindle.speed >> 16) & 0xFF);
-        setRegValue8(REG_F, 25, (cycle_tp->plan_block->mst_data.spindle.speed >> 24) & 0xFF);
+        setRegValue8(REG_F, 22, speed & 0xFF);
+        setRegValue8(REG_F, 23, (speed >> 8) & 0xFF);
+        setRegValue8(REG_F, 24, (speed >> 16) & 0xFF);
+        setRegValue8(REG_F, 25, (speed >> 24) & 0xFF);
     }
     // LOG(LOG_LEVEL_DEBUG, "主轴转速 %d", cycle_tp->plan_block->mst_data.spindle.speed);
 }

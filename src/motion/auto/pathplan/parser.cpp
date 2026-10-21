@@ -137,9 +137,11 @@ GNC_RES parser_init(NC_MODE nc_mode)
     tapreturn_refresh_return_param();
 
     // 设置程序段来源
+
     res = parser_set_content(nc_mode);
     if(res != GNC_OPERATOR_SUCCESS) return res;
     rt_set_parser_state(-1, 0);
+    rt_data->path_data.fix_blocknum=1;
     return res;
 }
 

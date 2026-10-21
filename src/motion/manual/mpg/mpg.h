@@ -32,6 +32,13 @@ void handle_mpg_cmd(void);
 /* 急停时清空 MPG 规划状态和速度输出。 */
 void handwheel_handle_estop(void);
 
+/*
+ * 重建手轮位置基准：丢弃规划器里尚未输出的位移，下一周期按实时数据中的
+ * wcs_cmd_pos_cur 重新对齐并从当前硬件计数重新开始（first_pass）。
+ * 由 emcmot 在重新进入手轮模式时调用（离开手轮后其他模式可能已移动过机床）。
+ */
+void handwheel_resync_position(void);
+
 #ifdef __cplusplus
 }
 #endif
