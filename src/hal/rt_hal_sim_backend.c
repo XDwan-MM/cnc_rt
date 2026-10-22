@@ -419,6 +419,16 @@ int Master_SdoTransfer(int slave_pos, uint16_t index, uint8_t subindex,
 
 /* 与真实 servo_step.c 同构：预置目标 → 改模式 → 写控制字，顺序不能变；漏掉写控制字
  * 会让 DS402 状态机空转（使能/去使能/故障复位都推不动）。 */
+ /* HAL 会按驱动器身份给每槽下发模式切换策略（台达 DISABLE_THEN_MODE）；调试后端跟随记录。 */
+static Ds402ModeSwitch s_sim_msw[SIM_SLOT_COUNT];
+
+int Master_ServoSetModeSwitch(int slot, Ds402ModeSwitch how) {
+    if (slot < 0 || slot >= SIM_SLOT_COUNT) return -1;
+    if (how != DS402_MODESW_DISABLE_FIRST && how != DS402_MODESW_IN_PLACE &&
+        how != DS402_MODESW_DISABLE_THEN_MODE) return -1;
+    s_sim_msw[slot] = how;
+    return 0;
+}
 int Master_ServoStep(int slot, Ds402Request req, uint16_t mode, uint16_t* out) {
     if (slot < 0 || slot >= SIM_SLOT_COUNT) return -1;
     SimServo* v = &s_servo[slot];
