@@ -235,6 +235,7 @@ static GNC_RES tp_init(){
 GNC_RES tp_reset(){
     ref_tp_reset();
     cycle_tp_reset();
+    rt_set_chan_state(0, CHAN_IS_PARSER_RESET, true);
     queue_reset(parser_queue);
     queue_reset(pretreat_queue);
     queue_reset(treat_queue);

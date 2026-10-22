@@ -3,16 +3,17 @@
 
 #include "motiondata.h"
 #include "ncitpmacrodef.h"
-
+#include "ncitpstopdef.h"
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 #define PMC_DATA_COUNT_MAX 100     // 单行译码最大结果数
+
 #define ITP_SYS_REF_POINT_MAX (4)
 #define ITP_SYS_AXIS_MAX (6)
 typedef struct {
-    int axisCount;                                            /*!< 每个参考点的轴数，<= ITP_SYS_AXIS_MAX */
+    int axisCount;
     double refPos[ITP_SYS_REF_POINT_MAX][ITP_SYS_AXIS_MAX];   /*!< [参考点序号][轴序号]，机床坐标 */
 } ItpRefPoint;
 
