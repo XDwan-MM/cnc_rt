@@ -76,6 +76,13 @@ int32_t hal_axis_sdo_read(HalContext* c, HalAxisId axis, uint16_t index,
 int32_t hal_axis_sdo_write(HalContext* c, HalAxisId axis, uint16_t index,
                            uint8_t subindex, const void* data, uint32_t size, uint32_t timeout_ms);
 
+/* 非实时线程设置主轴定向位置，pulses 为 32 位原始脉冲值，不做角度换算。
+ * 蓝海华腾写 0x200E:11，四合一写固定对象 0x204B:00，不加轴偏移。
+ * 仅写参数，不触发定向；成功后再由周期线程请求定向。
+ * 生命周期、并发和超时约束同 hal_sdo_write；其他型号返回 UNSUPPORTED。 */
+int32_t hal_spindle_set_orient_pulses(HalContext* c, HalAxisId axis,
+                                    uint32_t pulses, uint32_t timeout_ms);
+
 /**
  * @brief stop + free，一步收尾；c 可为 NULL
  */

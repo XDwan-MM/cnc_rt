@@ -473,6 +473,8 @@ static void take_requests(void) {
     }
 }
 
+
+
 /* 本拍业务等待截止时刻；PLC 与运动共用，各自等一个完整周期会把一拍拖成两拍 */
 static void make_deadline(struct timespec* ts) {
     clock_gettime(CLOCK_REALTIME, ts);
@@ -649,6 +651,14 @@ int rt_hal_axis_status(RtHalAxisSlot slot, HalCAxisStatus* out) {
     if (!s_snap_valid || !s_snap_fresh[slot]) return HAL_ERROR_NOT_RUNNING;
     *out = s_snap_status[slot];
     return HAL_OK;
+}
+
+int rt_hal_spindle_set_orient_pulses(HalAxisId slot, uint32_t pulses, uint32_t timeout_ms) {
+    if (!slot_ok(slot)) return HAL_ERROR_ARGUMENT;
+    //if (!s_snap_valid || !s_snap_fresh[slot]) return HAL_ERROR_NOT_RUNNING;
+    //if (!s_snap_status[slot].position_valid) return HAL_ERROR_UNSUPPORTED;
+    int rc = hal_spindle_set_orient_pulses(s_ctx, slot, pulses, timeout_ms);
+    return rc;
 }
 
 /* speed_valid=0 → UNSUPPORTED，让上层区分"没速度 PDO"和"停着" */

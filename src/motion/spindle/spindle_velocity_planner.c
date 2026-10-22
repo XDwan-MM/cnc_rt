@@ -1,4 +1,4 @@
-#include "spl_vel_planner.h"
+#include "spindle_velocity_planner.h"
 #include <math.h>
 #include <stddef.h>
 
@@ -13,7 +13,7 @@
  * 在目标速度附近来回振荡。enable 为 false 时，目标速度强制为零，
  * 因此同一个函数也可以用于主轴减速停止。
  */
-bool spl_vel_planner_update(spl_vel_planner_t *planner, double period)
+bool spindle_velocity_planner_update(spindle_velocity_planner_t *planner, double period)
 {
     double target_vel;
     double max_delta;
@@ -61,7 +61,7 @@ bool spl_vel_planner_update(spl_vel_planner_t *planner, double period)
     active = (fabs(planner->current_vel) > SPINDLE_VELOCITY_EPSILON);
 
     planner->active = active;
-    
+
     /* 返回本周期更新后是否已经到达有效目标速度。 */
     return fabs(target_vel - planner->current_vel) <= SPINDLE_VELOCITY_EPSILON;
 }

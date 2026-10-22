@@ -92,9 +92,8 @@ HEADERS += \
     ../src/motion/auto/interp/interpolation.h \
     ../src/motion/auto/pathplan/parser.h \
     ../src/motion/auto/pathplan/pathplan.h \
-    ../src/motion/spindle/spl_control.h \
-    ../src/motion/spindle/spl_orient.h \
-    ../src/motion/spindle/spl_pos_planner.h \
+    ../src/motion/spindle/spindle_control.h \
+    ../src/motion/spindle/spindle_velocity_planner.h \
     ../src/motion/emcmot.h \
     ../src/motion/manual/mpg/mpg.h \
     ../src/motion/manual/mpg/mpg_planner.h \
@@ -148,10 +147,13 @@ SOURCES += \
     ../src/motion/auto/interp/interpolation.c \
     ../src/motion/auto/pathplan/parser.cpp \
     ../src/motion/auto/pathplan/pathplan.c \
-    ../src/motion/spindle/spl_control.c \
-    ../src/motion/spindle/spl_orient.c \
-    ../src/motion/spindle/spl_vel_planner.c \
-    ../src/motion/spindle/spl_pos_planner.c \
+    ../src/motion/spindle/spindle_control.c \
+    ../src/motion/spindle/spindle_hal.c \
+    ../src/motion/spindle/spindle_m29.c \
+    ../src/motion/spindle/spindle_safety.c \
+    ../src/motion/spindle/spindle_speed.c \
+    ../src/motion/spindle/spindle_orientation.c \
+    ../src/motion/spindle/spindle_velocity_planner.c \
     ../src/motion/emcmot.cpp \
     ../src/motion/manual/mpg/mpg.c \
     ../src/motion/manual/mpg/mpg_planner.c \
@@ -235,11 +237,6 @@ isEmpty(TEST_SOURCES) {
     }
 } else {
     SOURCES += $$TEST_SOURCES
-}
-
-contains(SOURCES, .*tst_spindle.cpp) {
-    # 单元测试不访问真实 EtherCAT 控制字 PDO。
-    QMAKE_LFLAGS += -Wl,--wrap=Ethercat_Driver_Write_Controlword
 }
 
 SOURCES = $$unique(SOURCES)

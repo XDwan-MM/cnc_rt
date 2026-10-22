@@ -18,12 +18,13 @@
 #include "rerun.h"
 #include "reset.h"
 #include "rt_sem.h"
-#include "spl_control.h"
+#include "spindle_control.h"
 #include "stored_stroke_check.h"
 #include "straightness_comp.h"
 #include <alarmapi.h>
 #include <hmisysapi.h>
 #include <math.h>
+#include "spindle_internal.h"
 
 static void chan_do_period();
 static void smx_do_period();
@@ -343,9 +344,9 @@ static void read_from_hal()
     /* 只有 CSP 攻丝复位停车**进行中**才需要等主轴位置（两者同一拍重建才不打架）；
      * 停车结束后 reset_stop 字段会一并清掉，进给轴的重建不再被主轴绑架。 */
     const bool reset_tap_stop =
-        spl_context.reset_stop_pending && spl_context.reset_stop_csp;
+        g_spindle.reset_stop_pending && g_spindle.reset_stop_csp;
     if (!update_pos_flag && feed_positions_valid &&
-        (!reset_tap_stop || spindle_position_valid))
+        (!spindle_reset_stop_uses_csp() || spindle_position_valid))
     {
         // 报警复位后用最新反馈，重建未补偿坐标基准。
         rebuild_axis_positions_from_feedback();
@@ -364,8 +365,8 @@ static void output_to_hal()
     /* M29 对零阶段由主轴状态机保持位置；CSP 受控停车仍需插补同步。
      * 复位收口后等反馈坐标重建完成，避免旧目标重新下发。 */
     HalCSpindleStatus spindle;
-    const bool reset_tap_stop = spl_context.reset_stop_pending &&
-                                spl_context.reset_stop_csp;
+    const bool reset_tap_stop = g_spindle.reset_stop_pending &&
+                                g_spindle.reset_stop_csp;
     const bool reset_active = (nc_reset != NULL && nc_reset->is_resetting) ||
                               rt_data->nc_event == SYS_EVENT_HMI_RESET ||
                               rt_data->sys_state[SYS_ESTOP_INPUT] ||
@@ -375,7 +376,7 @@ static void output_to_hal()
         spindle.mode == HAL_SPINDLE_CSP &&
         (reset_tap_stop ||
          (update_pos_flag && !reset_active &&
-          spl_context.m29_phase == SPINDLE_M29_READY)))
+          g_spindle.m29_phase == SPINDLE_M29_READY)))
         (void)rt_hal_request_axis_pos(RT_HAL_AXIS_SP, rt_data->axis_data[AXIS_SP].wcs_cmd_pos_cur);
 }
 

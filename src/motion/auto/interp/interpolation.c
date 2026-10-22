@@ -161,12 +161,17 @@ static POS interpolate_tap(PLAN_BLOCK* current_block, double accum_distance, dou
             break;
     }
     // 主轴旋转角度
-    double spl_pos = fmod(target_distance / current_block->rigid_data.screw_offset, current_block->rigid_data.screw_offset);
-    double spl_angle = spl_pos * 360;
-    if(current_block->rigid_data.reverse) spl_angle = - spl_angle;
+    double spindle_position = fmod(
+        target_distance / current_block->rigid_data.screw_offset,
+        current_block->rigid_data.screw_offset);
+    double spindle_angle = spindle_position * 360;
+    if(current_block->rigid_data.reverse)
+    {
+        spindle_angle = -spindle_angle;
+    }
     // 测试
     double sp_wcs_cmd_pos_cur = fmod(rt_data->axis_data[AXIS_SP].wcs_cmd_pos_cur, 360);
-    rt_data->axis_data[AXIS_SP].wcs_cmd_pos_cur += spl_angle;
+    rt_data->axis_data[AXIS_SP].wcs_cmd_pos_cur += spindle_angle;
     // printf("z:%f, sp:%f, 螺距：%f, 同步：%f\n", spl_pos, sp_wcs_cmd_pos_cur, current_block->rigid_data.screw_offset, target_distance / spl_pos);
     return interp_pos;
 }

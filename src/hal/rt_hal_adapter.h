@@ -7,6 +7,7 @@
 #include <stdint.h>
 #include "hal_c_api.h"
 #include "rt_hal_config.h"
+#include "hal_types.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -170,6 +171,7 @@ int rt_hal_io_image_size(uint32_t* x_size, uint32_t* y_size);
  * len >= 512 字节；HAL_ERROR_ARGUMENT = y 为空或 len 不足 512。 */
 int rt_hal_io_set_stop_image(const uint8_t* y, uint32_t len);
 
+int rt_hal_spindle_set_orient_pulses(HalAxisId slot, uint32_t pulses, uint32_t timeout_ms);
 #ifdef __cplusplus
 }
 #endif

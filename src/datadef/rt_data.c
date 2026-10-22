@@ -215,7 +215,7 @@ static void rt_reset_axis_data()
         rt_data->axis_data[i].lmt2_type = par_axis[i][PAR_AX_LMT2_TYPE].value.val_int;                                   // 轴第二级软极限类型
         rt_data->axis_data[i].lmt2_enable = par_axis[i][PAR_AX_LMT2_ENABLE].value.val_int;                               // 轴第二级软极限开启
         rt_data->axis_data[i].lmt3_enable = par_axis[i][PAR_AX_LMT3_ENABLE].value.val_int;                               // 轴第三级软极限开启
-        rt_data->axis_data[i].spl_default_speed = par_axis[i][PAR_AX_DEFAULT_S].value.val_real;                          // 主轴缺省S速度
+        rt_data->axis_data[i].spdl_default_speed = par_axis[i][PAR_AX_DEFAULT_S].value.val_real;                          // 主轴缺省S速度
         rt_data->axis_data[i].spdl_max_speed = par_axis[i][PAR_SPDL_MAX_SPEED].value.val_real;                           // 主轴最大转速 (HMI unit: r/min)
         rt_data->axis_data[i].ex_dec_enable_pos_cut = par_axis[i][PAR_AX_EX_DEC_ENABLE_POS_CUT].value.val_bool;          // 外部减速信号对正向切削进给是否生效
         rt_data->axis_data[i].ex_dec_enable_neg_cut = par_axis[i][PAR_AX_EX_DEC_ENABLE_NEG_CUT].value.val_bool;          // 外部减速信号对负向切削进给是否生效
@@ -254,7 +254,9 @@ static void rt_reboot_axis_data()
         /* 电机每转脉冲数。参数域里没填就是 0——调用方要能区分"没填"和"填了 0"，
          * 所以这里不做任何兜底，兜底放在消费侧（main.cpp 的 fill_hal_params）。 */
         rt_data->axis_data[i].mt_ppr = par_axis[i][PAR_AX_MT_PPR].value.val_int;
+        rt_data->axis_data[i].spdl_orient_pos = par_axis[i][PAR_AX_SP_ORI_POS].value.val_real;
     }
+    printf("rt_data->axis_data[AXIS_SP].spdl_orient_pos=%f\n",rt_data->axis_data[AXIS_SP].spdl_orient_pos);
 }
 
 void rt_set_zero_vel_params(){
@@ -276,3 +278,4 @@ void rt_set_axis_zero_vel_params(AXIS_TYPE axis_type){
     rt_data->axis_data[axis_type].cmd_acc = 0;
     rt_data->axis_data[axis_type].cmd_jk = 0;
 }
+

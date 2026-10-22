@@ -178,7 +178,7 @@ typedef struct
     int lmt2_type;                      // 第二级正软极限类型
     int lmt2_enable;                    // 第二级正软极限开启
     int lmt3_enable;                    // 第三级负软极限开启
-    double spl_default_speed;           // 主轴缺省速度
+    double spdl_default_speed;          // 主轴缺省速度
     double spdl_max_speed;              // 主轴最大转速(r/min)
     bool ex_dec_enable_pos_cut;         // 外部减速信号对正向切削进给是否生效
     bool ex_dec_enable_neg_cut;         // 外部减速信号对负向切削进给是否生效
@@ -203,6 +203,7 @@ typedef struct
      * 不同：这个是电机侧的每转脉冲数，HAL 用它做模循环展开的模。
      * 参数域里没填时为 0，此时 HAL 侧退回用 pm_pulse（见 main.cpp 的说明）。 */
     int mt_ppr;
+    double spdl_orient_pos;             // 主轴定向位置
     // 内部
     double act_vel;                     // 轴实际速度
     double act_acc;                     // 轴实际加速度

@@ -131,7 +131,7 @@ void hal_axis_intent_poll() {
         const RtHalAxisSlot slot = (RtHalAxisSlot)i;
         const int disabled = rt_data->axis_data[i].status.is_disable ||
                              rt_data->axis_data[i].status.is_error || s_reset_failed;
-        /* 主轴可自己要求这拍不带力矩（spl_control.c 的 spl_drv_enable/disable）；
+        /* 主轴可自己要求这拍不带力矩（spindle_control.c 的 spl_drv_enable/disable）；
          * 它只能**减**力矩不能加：急停与轴屏蔽永远赢。 */
         const int spindle_off = (slot == RT_HAL_AXIS_SP) &&
                                 !rt_data->axis_data[i].status.spindle_wants_torque;
