@@ -679,6 +679,17 @@ GNC_RES parser_waiting_to_end() {
     return GNC_PARSER_OVER_AND_WAIT;
 }
 
+/// @brief 判断译码器是否暂时不会产生新块 
+bool parser_hasNoMoreBlocks(void)
+{
+    if (parser_data == NULL)
+        return true;
+
+    return parser_data->parser_state == PARSER_WAITING_FOR_MOTION
+        || parser_data->parser_state == PARSER_WAITING_FOR_IO;
+}
+
+
 void parser_reset(){
     ItpReset();
     parser_data->parser_state = PARSER_IDLE;
@@ -686,6 +697,7 @@ void parser_reset(){
     rt_set_chan_state(0, CHAN_IS_MOTION_SYNC, false);
     rt_set_chan_state(0, CHAN_IS_PARSER_RERUN, false);
 }
+
 
 int t_macroVarGetValue(int no, double *mac)
 {
