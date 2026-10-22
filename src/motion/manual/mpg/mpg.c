@@ -40,11 +40,11 @@ static double mpg_get_external_decel_velocity(int axis, int direction);
 static double mpg_get_velocity_limit(int axis, const mpg_planner_t *planner);
 static void mpg_update_active_axis(void);
 
-// ljw
+// 机械锁住：请求/生效分离；事件只改请求，停稳后由周期末尾的检查点落生效位
 static bool handwheel_is_mac_lock_switching(void);
-static void handwheel_stop_chasing(mpg_planner_t *tp);
 static bool handwheel_motion_is_stopped(void);
 static void handwheel_update_mac_lock(void);
+static void handwheel_apply_mac_lock_if_stopped(void);
 
 /* 外部函数定义 */
 
@@ -88,6 +88,9 @@ void handle_mpg_cmd(void)
     if (rt_data == NULL || rt_data->sys_state[SYS_IS_ESTOP_ACTIVE])
         return;
 
+    /* 机械锁住：先处理本周期开关事件。事件只改“请求”，生效位由周期末尾的检查点落。 */
+    handwheel_update_mac_lock();
+
     /* 轴选择位于 bits 3..7，倍率选择位于 bits 0..2；解码后再做轴槽位校验。 */
     HW_Get_Count(&mpg_hardware_count);
     HW_Get_Axis_And_Rate(&mpg_switch_word);
@@ -109,6 +112,8 @@ void handle_mpg_cmd(void)
         }
         /* 保留当前有效轴的速度/位置输出，或在没有有效轴时清零通道速度。 */
         mpg_update_active_axis();
+        /* 无效轴选（OFF/非法编码）也必须落一次锁住状态，否则待处理的切换会一直挂着。 */
+        handwheel_apply_mac_lock_if_stopped();
         return;
     }
 
@@ -180,11 +185,28 @@ void handle_mpg_cmd(void)
      * 再计算当前方向的最终速度上限并推进规划器。外部减速只影响速度规划，信号
      * 解除后恢复基础速度也通过同一加速度斜坡完成，不会瞬间改变速度。
      */
-    mpg_planner_update_target(planner);
+    if (handwheel_is_mac_lock_switching())
+    {
+        /*
+         * 机械锁住正在切换（请求≠生效）：不再接收新的手轮位移——本周期计数直接作废，
+         * 目标位置收至当前位置，让上面的既有加速度斜坡把速度降到 0。
+         * 停稳后由周期末尾的检查点落生效位，所以这里不碰 READY。
+         */
+        planner->count = mpg_hardware_count;
+        planner->previous_count = mpg_hardware_count;
+        planner->target_position = planner->current_position;
+        mpg_context.last_count_direction[selected_axis] = 0;
+    }
+    else
+    {
+        mpg_planner_update_target(planner);
+    }
     planner->max_velocity = mpg_get_velocity_limit(selected_axis, planner);
     mpg_planner_step(planner, rt_data->ncu_data.cycle);
     planner->reference_position = planner->current_position;
     mpg_update_axis_output(selected_axis);
+    /* 周期末尾：当前轴已停稳则让机械锁住的生效位跟随请求 */
+    handwheel_apply_mac_lock_if_stopped();
 }
 
 void handwheel_resync_position(void)
@@ -197,10 +219,10 @@ void handwheel_resync_position(void)
      * 不能沿用上一次手轮会话的规划位置（否则回到手轮的第一个周期会产生位置跳变）。
      */
 
-    // valid_axis = -1;
-    // valid_rate = -1;
-    // mpg_enable = false;
-    // mpg_initialized = false;
+    mpg_context.selected_axis = -1;
+    mpg_context.selected_multiplier = -1;
+    mpg_context.enabled = false;
+    mpg_context.initialized = false;
 }
 
 /* 内部函数定义 */
@@ -455,26 +477,45 @@ static void mpg_update_active_axis(void)
 
 /*
  * 机械锁住请求与实际生效状态不一致：正在锁住或正在解除。
- * 此时 handle_mpg_cmd() 不再接收新的手轮位移、并把目标追平当前位置让规划器停稳，
- * 停稳后 handwheel_update_mac_lock() 才让 READY 跟随 ON。
+ * 此时 handle_mpg_cmd() 不再接收新的手轮位移、并把目标收至当前位置让规划器停稳，
+ * 停稳后由周期末尾的 handwheel_apply_mac_lock_if_stopped() 让 READY 跟随 ON。
  */
 static bool handwheel_is_mac_lock_switching(void)
 {
     return rt_data->sys_state[SYS_IS_MAC_LOCK] != rt_data->sys_state[SYS_IS_MAC_LOCK_READY];
 }
 
-/* 锁住状态切换期间停止追赶已有目标：目标位置对齐当前规划位置，由规划器按斜坡停稳 */
-static void handwheel_stop_chasing(mpg_planner_t *tp)
-{
-    // tp->pos_cmd = tp->curr_pos;
-}
-
-/* 当前轴选的规划器是否已停稳（锁住状态切换的判定条件）；无有效轴选视为已停稳 */
+/*
+ * 手轮是否已停稳（锁住切换的判定条件）。
+ * 判据用规划器的 active 标志（速度高于静止阈值时由 mpg_planner_step() 维护），
+ * 这里不另外采样速度；还没有建立过有效轴选时视为已停稳。
+ */
 static bool handwheel_motion_is_stopped(void)
 {
-    // if (!mpg_initialized || valid_axis < 0 || valid_axis >= 5)
-    //     return true;
-    // return fabs(simple_tp[valid_axis].curr_vel) < JOG_SPEED_THRESHOLD;
+    if (!mpg_context.initialized || !mpg_axis_is_valid(mpg_context.selected_axis))
+        return true;
+    return !mpg_context.planner_by_axis[mpg_context.selected_axis].active;
+}
+
+/*
+ * 周期末尾的检查点：手轮停稳时让“生效位”跟随“请求位”。
+ * 与自动模式同一套路——auto_update_stage() 也是在“本段结束 / 没有运动指令”的分支里
+ * 无条件写 READY，而不是每个周期去采样速度判断能不能切换。
+ */
+static void handwheel_apply_mac_lock_if_stopped(void)
+{
+    bool lock_request;
+
+    if (!handwheel_motion_is_stopped())
+        return;                                     /* 还在按斜坡减速：下一周期再看 */
+
+    lock_request = rt_data->sys_state[SYS_IS_MAC_LOCK];
+    /* 只有真的变化才打日志，避免停稳后每周期刷屏；赋值本身与 auto 一样是无条件的 */
+    if (rt_data->sys_state[SYS_IS_MAC_LOCK_READY] != lock_request)
+    {
+        LOG(LOG_LEVEL_INFO, "手动模式机械锁住%s", lock_request ? "生效" : "解除");
+    }
+    rt_data->sys_state[SYS_IS_MAC_LOCK_READY] = lock_request;
 }
 
 /*
@@ -488,22 +529,6 @@ static bool handwheel_motion_is_stopped(void)
  */
 static void handwheel_update_mac_lock(void)
 {
-    bool lock_request;
-    bool lock_effective;
-
-    /*
-     * 先按“上一周期结束时的请求/生效状态”判断能不能切换，再处理本周期的开关事件
-     * （与自动模式一致），这样 ON=1,READY=0 / ON=0,READY=1 过渡态至少存在一个周期。
-     */
-    lock_request = rt_data->sys_state[SYS_IS_MAC_LOCK];
-    lock_effective = rt_data->sys_state[SYS_IS_MAC_LOCK_READY];
-
-    /* 请求与实际不一致（正在锁住或正在解除）：先等手轮运动停稳，再切换生效状态 */
-    if (lock_request != lock_effective && handwheel_motion_is_stopped())
-    {
-        rt_data->sys_state[SYS_IS_MAC_LOCK_READY] = lock_request;
-        LOG(LOG_LEVEL_INFO, "手动模式机械锁住%s", lock_request ? "生效" : "解除");
-    }
 
     /* 本周期开关事件：只改“请求” */
     switch (rt_data->nc_event)
