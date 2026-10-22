@@ -14,7 +14,7 @@
  * 3. 以后若想增加 G19 或 G32，只需在此数组末尾添加数字 19, 32 即可，无需改动获取数据的函数。
  */
 static const int SCAN_G_REGS[] = {
-    4,  5,  6,   7,   8,   12,  14,  19,  29,  30,  32,  33,  43,  44,  45,  46,  54,  55,  56, 57, 61,
+    4,  5,  6,   7,   8,   12,  14,  19,  23,  29,  30,  32,  33,  43,  44,  45,  46,  54,  55,  56, 57, 61,
     62, 70, 100, 101, 102, 103, 107, 108, 109, 118, 120, 124, 130, 132, 134, 276, 278, 279, 280, 281, 282, 
     283, 284, 285, 286, 287, 341, 342, 343, 344, /* 已有及外部减速信号地址
                                                                                                   */
@@ -90,6 +90,13 @@ void plc_g_signal_scan_cycle(void)
 
     /* 外部减速信号检测：G 位为0时，对应逻辑轴方向减速生效 */
     process_external_deceleration(&curr_g);
+
+    /* G23.3高电平允许外部减速作用于手轮，首次扫描同步当前状态。 */
+    if (is_first_scan || SIGNAL_BIT_CHANGED(curr_g.g_regs[23], last_g.g_regs[23], 3))
+    {
+        LOG(LOG_LEVEL_INFO, "扫描到G23信号发生变化");
+        plc_dispatch_event(PLC_EV_MSG_MPG_EXTERNAL_DECEL, GET_BIT(curr_g.g_regs[23], 3) ? 1 : 0, 0, 0, 0);
+    }
 
     /* G8.4紧急停止检测 G08.4 = 0急停拍下，G08.4 = 1急停拉起 */
     // 急停按下检测 （状态检测）
@@ -671,6 +678,10 @@ static void plc_dispatch_event(PLC_EVENT_ID id, int p1, int p2, int p3, int p4)
         event.external_decel_payload.axis_num = p2;
         event.external_decel_payload.direction = p3;
         event.external_decel_payload.active = p4;
+        break;
+    case PLC_EV_MSG_MPG_EXTERNAL_DECEL:
+        event.id = id;
+        event.mpg_external_decel_payload.enable = p1;
         break;
     default:
         break;

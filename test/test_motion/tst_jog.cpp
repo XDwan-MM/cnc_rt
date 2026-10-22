@@ -116,6 +116,18 @@ TEST_F(TestJog, PressAndReleasePreserveVelocityRamp)
     EXPECT_DOUBLE_EQ(rt_data->axis_data[AXIS_X].cmd_vel, 0.0);
 }
 
+TEST_F(TestJog, AxisOutputPreservesPreviousCommandPosition)
+{
+    cycle(SYS_EVENT_X_POS_PRESS);
+    const double first_position = rt_data->axis_data[AXIS_X].wcs_cmd_pos_cur;
+    EXPECT_GT(first_position, 0.0);
+    EXPECT_DOUBLE_EQ(rt_data->axis_data[AXIS_X].wcs_cmd_pos_pre, 0.0);
+
+    cycle();
+    EXPECT_DOUBLE_EQ(rt_data->axis_data[AXIS_X].wcs_cmd_pos_pre, first_position);
+    EXPECT_GT(rt_data->axis_data[AXIS_X].wcs_cmd_pos_cur, first_position);
+}
+
 TEST_F(TestJog, ExternalDecelerationUsesRpdVelocityForNormalAndRapidJog)
 {
     rt_data->axis_data[AXIS_X].rpd_ex_dec1_vel = 3.0;

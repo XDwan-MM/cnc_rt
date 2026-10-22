@@ -53,6 +53,7 @@ typedef enum
     SYS_IS_RIGID,               // 刚性攻丝
     SYS_IS_RIGID_RETURN,        // 攻丝回退
     SYS_IS_RIGID_RETURN_FINISH, // 刚性攻丝返回完成
+    SYS_IS_MPG_EX_DEC_ENABLE,   // G23.3允许外部减速作用于手轮
 } SysStateIndex;
 
 // 路径和轨迹两个线程使用
@@ -185,6 +186,12 @@ typedef struct
     double rpd_ex_dec3_vel;             // 外部减速3对快速进给的减速速度
     double rpd_ex_dec4_vel;             // 外部减速4对快速进给的减速速度
     double rpd_ex_dec5_vel;             // 外部减速5对快速进给的减速速度
+    
+    double mpg_ex_dec1_vel;             // 外部减速1对手轮进给的减速速度
+    double mpg_ex_dec2_vel;             // 外部减速2对手轮进给的减速速度
+    double mpg_ex_dec3_vel;             // 外部减速3对手轮进给的减速速度
+    double mpg_ex_dec4_vel;             // 外部减速4对手轮进给的减速速度
+    double mpg_ex_dec5_vel;             // 外部减速5对手轮进给的减速速度
     // 重启生效
     double pm_munit;                    // 电子齿轮比分子(mm)。um→mm 后可能带小数，
                                         // 存 int 会截断（5500um=5.5mm 会变成 5）——
