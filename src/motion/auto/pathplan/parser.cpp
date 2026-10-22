@@ -1,4 +1,6 @@
 #include "parser.h"
+#include "bufstop.h"
+#include "ncitpstopdef.h"
 #include "global.h"
 #include "hmi_request.h"
 #include <hmisysapi.h>
@@ -19,8 +21,112 @@ static GNC_RES parser_handle_gcode(pmc_data* motion_data, NcItpState *itp_state,
 static GNC_RES parser_handle_null(NcItpState *itp_state, int *line_no);
 static GNC_RES parser_set_content(NC_MODE nc_mode);
 static bool parser_check_res(GNC_RES res);
+static GNC_RES parser_waiting_for_bufstop();
+static bool parser_is_hold_gcode(int unmodal);
+static void parser_loadBufStopCfg();
+static void buf_stop_record(BufStop *s, unsigned int id, int code, int is_g);
+static void parser_clear_buf_stop();
 
 PARSER_DATA* parser_data;
+
+/* 阻止缓冲的 M 码配置 */
+static ItpBufStopMCodeCfg s_bufStopCfg;
+static bool s_bufStopCfgLoaded = false;
+
+/* 防漂移：头文件里手写的参数号必须和 cncshm 的枚举一致 */
+static_assert(ITP_PAR_STOP_BUF_MCODE_1      == PAR_NCU_PARSER_STOP_BUF_MCODE_1,      "参数号不一致");
+static_assert(ITP_PAR_STOP_BUF_MCODE_10     == PAR_NCU_PARSER_STOP_BUF_MCODE_10,     "参数号不一致");
+static_assert(ITP_PAR_STOP_BUF_MCODE_R1_MIN == PAR_NCU_PARSER_STOP_BUF_MCODE_R1_MIN, "参数号不一致");
+static_assert(ITP_PAR_STOP_BUF_MCODE_R6_MAX == PAR_NCU_PARSER_STOP_BUF_MCODE_R6_MAX, "参数号不一致");
+
+/*! 译码器读参数的回调*/
+int t_getParamValue(int parId, double *val)
+{
+    if (val == NULL || parId < 0 || parId >= PAR_NCU_TOTAL)
+        return -1;
+    *val = (double)par_ncu[parId].value.val_int;
+    return 0;
+}
+
+int t_setParamValue(int parId, double val)
+{
+    (void)parId;
+    (void)val;
+    return 0;
+}
+
+static void parser_loadBufStopCfg()
+{
+    memset(&s_bufStopCfg, 0, sizeof(s_bufStopCfg));
+    for (int i = 0; i < 10; ++i)
+    {
+        s_bufStopCfg.single[i] = par_ncu[PAR_NCU_PARSER_STOP_BUF_MCODE_1 + i].value.val_int;
+    }
+    for (int r = 0; r < 6; ++r)
+    {
+        s_bufStopCfg.rangeMin[r] = par_ncu[PAR_NCU_PARSER_STOP_BUF_MCODE_R1_MIN + r * 2].value.val_int;
+        s_bufStopCfg.rangeMax[r] = par_ncu[PAR_NCU_PARSER_STOP_BUF_MCODE_R1_MAX + r * 2].value.val_int;
+    }
+    s_bufStopCfgLoaded = true;
+}
+
+bool parser_isBufStopMCode(int m_code)
+{
+    if (!s_bufStopCfgLoaded)
+        parser_loadBufStopCfg();
+    return itp_isBufStopMCode(&s_bufStopCfg, m_code);
+}
+
+// 判断是否是阻止缓冲G代码 
+static bool parser_is_hold_gcode(int unmodal)
+{
+    return itp_isBufStopGCode(unmodal) && unmodal != ITP_UNMODAL_STOP_SKIP;
+}
+
+static void buf_stop_record(BufStop *s, unsigned int id, int code, int is_g)
+{
+    s->code = code;
+    s->is_g = is_g;
+    s->hold = 1;
+    __atomic_store_n(&s->id, id, __ATOMIC_RELEASE);
+    rt_clear_buf_stop_passed();
+}
+
+static void parser_clear_buf_stop()
+{
+    buf_stop_clear(&parser_data->bufstop);
+    rt_clear_buf_stop_passed();
+}
+
+unsigned int parser_buf_stop_target_id(void)
+{
+    if (parser_data == NULL)
+        return 0;
+    return __atomic_load_n(&parser_data->bufstop.id, __ATOMIC_ACQUIRE);
+}
+
+bool parser_buf_stop_active(void)
+{
+    return parser_buf_stop_target_id() != 0;
+}
+
+void parser_buf_stop_publish_passed(unsigned int id)
+{
+    rt_set_buf_stop_passed(id);
+}
+/// @brief 判断译码器是否暂时不会产生新块 
+bool parser_hasNoMoreBlocks(void)
+{
+    if (parser_data == NULL)
+        return true;
+
+    if (parser_data->bufstop.hold && buf_stop_active(&parser_data->bufstop))
+        return true;
+
+    return parser_data->parser_state == PARSER_WAITING_FOR_MOTION
+        || parser_data->parser_state == PARSER_WAITING_FOR_IO
+        || parser_data->parser_state == PARSER_WAITING_FOR_BUFSTOP;
+}
 
 void rt_set_rigid_return_param(double r_plane_z, double pitch, int reverse, int valid)
 {
@@ -37,39 +143,12 @@ void rt_clear_rigid_return_param(void)
     ItpClearRigidReturnParam();
 }
 
-static void parser_macro_init()
-{
-    for (int i = 0; i < 30000; ++i) {
-        parser_data->cmv[i] = 0;
-    }
-    parser_data->cmv[18004] = 0.1;  // 设置半径值超差
-    parser_data->cmv[17031] = 0.0;  // 设置坐标旋转1轴运动计算方式
-    parser_data->cmv[5410] = -90.0; // 设置坐标旋转默认角度
-    parser_data->cmv[17028] = 1.0;  // 默认米制单位
-    parser_data->cmv[8132] = 1.0;   // 激活比例缩放功能G51
-    parser_data->cmv[8077] = 10.0;  // 设置渐开线插补误差最大值
-    parser_data->cmv[5114] = 0.5;   // G73钻深孔,D默认值
-    parser_data->cmv[5115] = 1.0;   // G83深孔加工循环,D默认值
-
-    // 坐标偏置 todo:待shm更新后直接用，不用再赋值
-    for (int a = 0; a < 3; ++a)
-    {
-        getCrdsValue(CRDS_TYPE_EXT, a, &parser_data->cmv[5201 + a]);
-    }
-    for (int t = 0; t < 6; ++t)
-    {
-        for (int a = 0; a < 3; ++a)
-        {
-            getCrdsValue(CRDS_TYPE_G5X + t, a, &parser_data->cmv[5221 + t * 20 + a]);
-        }
-    }
-}
-
 void parser_new(){
     parser_data = new PARSER_DATA();
     // 设置译码参数
-    parser_macro_init();
     parser_data->parser_state = PARSER_IDLE;
+    parser_data->buf_stop_next_id = 0;
+    parser_clear_buf_stop();
     rt_set_parser_state(-1, 0);
 }
 
@@ -78,10 +157,13 @@ GNC_RES parser_init(NC_MODE nc_mode)
     GNC_RES res = GNC_OPERATOR_SUCCESS;
     ItpReset();
     parser_data->parser_state = PARSER_READING;
+    parser_clear_buf_stop();
     // 设置宏定义
-    parser_macro_init();
     ItpCfgGetMacroVarCB(t_macroVarGetValue);
     ItpCfgSetMacroVarCB(t_macroVarSetValue);
+    ItpCfgGetParamCB(t_getParamValue);
+    ItpCfgSetParamCB(t_setParamValue);
+    parser_loadBufStopCfg();
     // 是否跳过注释段
     ItpSetBlockSkipEnable(rt_get_sys_state(SYS_IS_BLOCK_SKIP));
     // 刀偏
@@ -342,12 +424,21 @@ void parser_run_mode(){
             res = parser_waiting_to_end();
             CHECK_RES(parser_check_res(res));
             break;
+        case PARSER_WAITING_FOR_BUFSTOP:
+            parser_waiting_for_bufstop();
+            break;
         default:
             break;
     }
 }
 
 GNC_RES parser_reading(){
+    
+    if (parser_data->bufstop.hold)
+    {// 停在阻止缓冲块上,等轨迹线程按 ID 放行
+        parser_data->parser_state = PARSER_WAITING_FOR_BUFSTOP;
+        return GNC_CAL_SUCCESS;
+    }
     GNC_RES res = GNC_CAL_SUCCESS;
     ItpGetMotionData(&parser_data->itp_datas);
     ItpGetState(&parser_data->itp_state);
@@ -362,6 +453,7 @@ GNC_RES parser_reading(){
     }
     if (parser_data->itp_datas.count <= 0)
     {
+        parser_loadBufStopCfg();
         res = parser_handle_recieve(nullptr, &parser_data->itp_state, &parser_data->itp_line_no);
         parser_check_res(res);
         // if (res == ?)
@@ -378,7 +470,16 @@ GNC_RES parser_reading(){
     }
     if (res == GNC_PARSER_WAIT)
     {
+
+        if (parser_data->bufstop.hold)
+            return res;
         ItpNextLine();
+        return res;
+    }
+    
+    if (parser_data->bufstop.hold)
+    {
+        parser_data->parser_state = PARSER_WAITING_FOR_BUFSTOP;
         return res;
     }
     if (ItpIsOver())
@@ -389,7 +490,8 @@ GNC_RES parser_reading(){
             return GNC_PARSER_OVER;
         }
         return GNC_PARSER_OVER_AND_WAIT;
-    } 
+    }
+
     ItpNextLine();
     return res;
 }
@@ -480,6 +582,7 @@ static GNC_RES parser_handle_null(NcItpState *itp_state, int *line_no){
 static GNC_RES parser_handle_gcode(pmc_data* motion_data, NcItpState *itp_state, int *line_no)
 {
     PLAN_BLOCK plan_block ;
+    PLAN_BLOCK_BUF_STOP_ID(&plan_block) = 0;   // 默认普通块；G53 时下面改写
     // 插补类型
     switch(motion_data->interp){
         case PMC_G00:
@@ -579,6 +682,14 @@ static GNC_RES parser_handle_gcode(pmc_data* motion_data, NcItpState *itp_state,
     // }
     // LOG(LOG_LEVEL_DEBUG, "no %d end pos %f %f %f mode %d type:%d fv %f", plan_block.line_number, motion_data->position.x, motion_data->position.y, motion_data->position.z, plan_block.mode, plan_block.type, plan_block.feed_vel);
     // ======= 测试 ===========
+    /* G53 停止块：记录 ID，块带着 ID 入队。G31 不在这里记（走 GNC_PARSER_WAIT） */
+    if (parser_is_hold_gcode(itp_state->modal[0]))
+    {
+        unsigned int id = PLAN_BLOCK_BUF_STOP_TAG
+                        | ((++parser_data->buf_stop_next_id) << 1) | 1u;
+        PLAN_BLOCK_BUF_STOP_ID(&plan_block) = (int)id;
+        buf_stop_record(&parser_data->bufstop, id, itp_state->modal[0], 1);
+    }
     queue_push(parser_queue, &plan_block);
     if(plan_block.mode == pmc_mode::PMC_MODE_STOPSKIP) return GNC_PARSER_WAIT;
 
@@ -587,6 +698,7 @@ static GNC_RES parser_handle_gcode(pmc_data* motion_data, NcItpState *itp_state,
 
 static GNC_RES parser_handle_mcode(pmc_data* motion_data, NcItpState *itp_state, int *line_no){
     PLAN_BLOCK plan_block;
+    PLAN_BLOCK_BUF_STOP_ID(&plan_block) = 0;   // 默认普通块；命中停止码时下面改写
     // 子程序调用M98和M99
     if(motion_data->m_code == 98 || motion_data->m_code == 99){
         return GNC_OPERATOR_SUCCESS;
@@ -619,6 +731,14 @@ static GNC_RES parser_handle_mcode(pmc_data* motion_data, NcItpState *itp_state,
     if (queue_is_full(parser_queue))
     {
         return GNC_DATA_FULL;
+    }
+    // 阻止缓冲的 M 码：记录 ID
+    if (parser_isBufStopMCode(motion_data->m_code))
+    {
+        unsigned int id = PLAN_BLOCK_BUF_STOP_TAG
+                        | ((++parser_data->buf_stop_next_id) << 1);
+        PLAN_BLOCK_BUF_STOP_ID(&plan_block) = (int)id;
+        buf_stop_record(&parser_data->bufstop, id, motion_data->m_code, 0);
     }
     queue_push(parser_queue, &plan_block);
     return GNC_OPERATOR_SUCCESS;
@@ -663,6 +783,37 @@ GNC_RES parser_waiting_for_motion() {
     return GNC_CAL_SUCCESS;
 }
 
+// 阻止缓冲等待
+static GNC_RES parser_waiting_for_bufstop()
+{
+
+    if (!buf_stop_active(&parser_data->bufstop))
+    {
+        buf_stop_hold_done(&parser_data->bufstop);
+        parser_data->parser_state = PARSER_READING;
+        ItpNextLine();
+        return GNC_CAL_SUCCESS;
+    }
+
+    unsigned int target = __atomic_load_n(&parser_data->bufstop.id,
+                                          __ATOMIC_ACQUIRE);
+    bool passed = rt_get_chan_state(0, CHAN_IS_BUFSTOP_PASSED);
+    if (passed && rt_get_buf_stop_passed_id() != target)
+    {
+        rt_clear_buf_stop_passed();
+        passed = false;
+    }
+    if (!passed)
+        return GNC_CAL_SUCCESS;         // 停止块还没运行完，接着等
+
+    rt_clear_buf_stop_passed();
+    buf_stop_hold_done(&parser_data->bufstop);
+    buf_stop_release(&parser_data->bufstop);
+    parser_data->parser_state = PARSER_READING;
+    ItpNextLine();                      // 停止块执行完毕，开始译下一段
+    return GNC_CAL_SUCCESS;
+}
+
 GNC_RES parser_waiting_to_end() {
     GNC_RES res = GNC_CAL_SUCCESS;
     int start_index = parser_data->interp_list_index;
@@ -679,19 +830,9 @@ GNC_RES parser_waiting_to_end() {
     return GNC_PARSER_OVER_AND_WAIT;
 }
 
-/// @brief 判断译码器是否暂时不会产生新块 
-bool parser_hasNoMoreBlocks(void)
-{
-    if (parser_data == NULL)
-        return true;
-
-    return parser_data->parser_state == PARSER_WAITING_FOR_MOTION
-        || parser_data->parser_state == PARSER_WAITING_FOR_IO;
-}
-
-
 void parser_reset(){
     ItpReset();
+    parser_clear_buf_stop();
     parser_data->parser_state = PARSER_IDLE;
     rt_set_chan_state(0, CHAN_IS_PARSERING, false);
     rt_set_chan_state(0, CHAN_IS_MOTION_SYNC, false);

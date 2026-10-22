@@ -127,6 +127,10 @@ typedef struct
     MOVE_AXIS move_axis;
 }PLAN_BLOCK;
 
+// 阻止缓冲调度 ID：0=普通块；非0=停止块。
+#define PLAN_BLOCK_BUF_STOP_TAG   0x80000000u
+#define PLAN_BLOCK_BUF_STOP_ID(blk) ((blk)->nurbs_data.startlineno)
+
 // 循环队列
 typedef struct
 {

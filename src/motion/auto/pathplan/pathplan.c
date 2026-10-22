@@ -10,6 +10,9 @@
 #include <alarmapi.h>
 #include "nurbsfit.h"
 #include "circle_smooth.h"
+#include "ncitpstopdef.h"
+#include "bufstop.h"
+
 
 static void block_cal_pos(PLAN_BLOCK* parser_block, PLAN_BLOCK* current_block, POS* start_pos);
 static void block_cal_circle_vector(PLAN_BLOCK* current_block);
@@ -30,14 +33,7 @@ static void block_fix_pos(PLAN_BLOCK* pretreat_block, double l_theta_thre ,doubl
 static bool is_length_valid(PLAN_BLOCK* parser_block);
 static void block_deal_nurbs_enable(PLAN_BLOCK* pretreat_block,PLAN_QUEUE* temp);
 
-extern bool parser_hasNoMoreBlocks(void);
-
-/// @brief 程序结束或译码器暂时暂停（G31等待运动同步指令、阻止缓冲指令）
-static bool noMoreBlocks(void)
-{
-    return !rt_data->chan_state[0][CHAN_IS_PARSERING] || parser_hasNoMoreBlocks();
-}
-
+static bool noMoreBlocks(void);
 
 /// @brief 将译码结果转换成插补段
 GNC_RES chan_add_block(){
@@ -68,7 +64,7 @@ GNC_RES pretreat_block()
     PLAN_BLOCK* treat_block;
 
     //结束逻辑：
-    if (noMoreBlocks()&&queue_is_empty(treat_queue))
+    if (noMoreBlocks()&&queue_is_empty(parser_queue))
     {
         // 如果一致性队列已满，提前结束
         if(queue_is_full(treat_queue)) return GNC_DATA_FULL;
@@ -131,6 +127,12 @@ static void block_deal_run_row(PLAN_BLOCK* parser_block, PLAN_BLOCK* pretreat_bl
     {
     // 再启动行号前
     case BEFORE_THE_RERUN_ROW:
+        {
+            //再启动如果丢掉的阻止缓冲块，阻止缓冲直接按照ID进行放行
+            unsigned int buf_stop_id = (unsigned int)PLAN_BLOCK_BUF_STOP_ID(parser_block);
+            if(buf_stop_id !=0)
+                parser_buf_stop_publish_passed(buf_stop_id);
+        }
         queue_pop(parser_queue);
         break;
 
@@ -320,7 +322,7 @@ static GNC_RES block_unif_by_nurbs()
         return GNC_OPERATOR_SUCCESS;
     
     //结束逻辑：
-    if (noMoreBlocks()&&queue_is_empty(treat_queue))
+    if (noMoreBlocks() && queue_is_empty(treat_queue))
     {
             // 如果前瞻队列已满，提前结束
         if (queue_is_full(unif_queue))
@@ -576,6 +578,9 @@ static GNC_RES block_unif_by_treat()
 
 
 static bool is_length_valid(PLAN_BLOCK* parser_block){
+    /* G31/G53 是语义边界，不能被小线段剔除 */
+    if (itp_isBufStopGCode(parser_block->state.modal[0]))
+        return true;
     if((parser_block->length != 0) && (parser_block->length <= rt_data->chan_data[0].l_min_thre))
     {
         return false;
@@ -584,6 +589,9 @@ static bool is_length_valid(PLAN_BLOCK* parser_block){
 } 
 
 static void block_deal_nurbs_enable(PLAN_BLOCK* pretreat_block, PLAN_QUEUE *temp){
+    /* G31/G53 不做逆行点修复/合并 */
+    if (itp_isBufStopGCode(pretreat_block->state.modal[0]))
+        return;
     if (rt_data->chan_data[0].nurbs_enable)
     {
         // 逆行点修复
@@ -705,6 +713,13 @@ static void block_cal_curvature(PLAN_BLOCK* current_block, POS* pre_start_pos, P
 
 //新增长度比
 static int block_cal_segment(PLAN_BLOCK* pretreat_block, double seg_theta_thre,PLAN_QUEUE *temp){
+    /* G31/G53 是语义边界：不允许与前后段合并、不转 NURBS。
+     * 否则停止块 ID/探针语义会被合并块覆盖。只保护这两个码。 */
+    if (itp_isBufStopGCode(pretreat_block->state.modal[0]))
+    {
+        pretreat_block->isContinue = 0;
+        return 0;
+    }
     if ((pretreat_block->angle_rad>(seg_theta_thre*PI/180.0))||(pretreat_block->angle_rad==0))
     {   
         pretreat_block->isContinue=0;
@@ -1166,4 +1181,11 @@ void block_cal_max_vel(PLAN_BLOCK* current_block){
         default:
             break;
     }
+}
+
+/// @brief 程序结束或译码器暂时暂停（G31等待运动同步指令、阻止缓冲指令）
+static bool noMoreBlocks(void)
+{
+    return rt_data->chan_state[0][CHAN_IS_PARSERING] == false
+        || parser_hasNoMoreBlocks();
 }

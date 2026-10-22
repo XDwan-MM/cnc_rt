@@ -64,6 +64,7 @@ typedef enum
     CHAN_IS_PARSER_RERUN,       // 译码器是否运行中 is_parser_running
     CHAN_IS_FIRST_RUN,          // 是否为第一次运行 is_first_run
     CHAN_IS_MOTION_SYNC,        // 等待运动完成同步握手
+    CHAN_IS_BUFSTOP_PASSED,     // 阻止缓冲：某个停止块已运行完（与 MOTION_SYNC 同构）
 } ChanStateIndex;
 
 typedef struct
@@ -248,6 +249,7 @@ typedef struct
     NC_MODE current_mode;
     bool sys_state[SYS_STATE_NUM];
     bool chan_state[SYS_CHAN_NUM][CHAN_STATE_NUM];
+    unsigned int buf_stop_passed_id;   // 放行事件对应的停止块 ID（0=无）
     PATH_DATA path_data;
     pthread_mutex_t mutex;
     // 参数
@@ -266,6 +268,10 @@ void rt_set_sys_state(SysStateIndex state, bool value);
 bool rt_get_sys_state(SysStateIndex state);
 void rt_set_chan_state(int chan_index, ChanStateIndex state, bool value);
 bool rt_get_chan_state(int chan_index, ChanStateIndex state);
+/* 阻止缓冲放行事件：带 ID，避免上一轮的放行被误当成这一轮 */
+void rt_set_buf_stop_passed(unsigned int id);
+unsigned int rt_get_buf_stop_passed_id(void);
+void rt_clear_buf_stop_passed(void);
 void rt_set_zero_vel_params();
 void rt_set_axis_zero_vel_params(AXIS_TYPE axis_type);
 
