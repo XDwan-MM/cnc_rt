@@ -229,15 +229,12 @@ static bool spindle_report_missing_speed_alarm(const char *message)
 
 static double spindle_calculate_target_velocity(const spindle_context_t *context)
 {
-    /* 应用主轴倍率和最大转速限制，并按 CW/CCW 输出带符号速度。 */
+    /* 对当前选定速度源统一应用主轴倍率和最大转速限制，再按 CW/CCW 输出符号。 */
     const double max_speed = fabs(rt_data->axis_data[AXIS_SP].spdl_max_speed);
     const double override = var_chan[0][VAR_CHAN_SPDL_OVERRIDE].value.f / 100.0;
     double target_speed = fabs(spindle_internal_get_selected_speed(context));
 
-    if (context->speed_source == SPINDLE_SPEED_SOURCE_CNC)
-    {
-        target_speed *= fmax(0.0, override);
-    }
+    target_speed *= fmax(0.0, override);
 
     target_speed = fmin(max_speed, target_speed);
     if (context->run_state == SPINDLE_CCW)

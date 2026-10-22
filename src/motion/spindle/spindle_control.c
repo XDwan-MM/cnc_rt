@@ -34,7 +34,7 @@ static void spindle_update_command_event(void);
 static void spindle_process_event(spindle_context_t *context);
 static void spindle_handle_stop(spindle_context_t *context);
 static void spindle_update_driver_control(void);
-static void spindle_disable_driver(void);
+static bool spindle_handle_driver_safety_state(void);
 static void spindle_disable_driver_before_operation(void);
 
 /* 外部函数定义 */
@@ -559,39 +559,8 @@ static void spindle_update_driver_control(void)
 {
     bool velocity_control_ready = false;
 
-    /* 急停、驱动器 Fault 和未进入受控停车的复位立即下使能。
-     * 0x0008 是状态字的 Fault 位。 */
-    if ((spindle_internal_reset_or_estop_active() && !g_spindle.reset_stop_pending) ||
-        rt_data->sys_state[SYS_ESTOP_INPUT] ||
-        (spindle_hal_status_word() & 0x0008U) != 0U)
+    if (spindle_handle_driver_safety_state())
     {
-        g_spindle.run_state = SPINDLE_STOP;
-        g_spindle.velocity_planner.enable = false;
-        g_spindle.velocity_planner.target_vel = 0.0;
-        g_spindle.velocity_planner.current_vel = 0.0;
-        g_spindle.velocity_planner.active = false;
-        /* 安全停机不是“到速”：禁止沿用急停前的 ARRIVED/FIN 状态。 */
-        g_spindle.velocity_state = SPINDLE_VELOCITY_ZERO;
-        g_spindle_hal.target_velocity = 0;
-        (void)rt_hal_request_spindle_speed(RT_HAL_AXIS_SP, 0.0, 0);   /* 停转 */
-        /* 急停/Fault 不等待 CSP->CSV，直接清闩锁并请求下使能。 */
-        spindle_hal_mode_switch_reset();
-        g_spindle.csv_switch_pending = false;
-        /* CSP 下没有速度目标可用，复位/急停先把期望模式扳回 CSV，
-         * 免得下次 M3 还要再切一次。HAL 只记期望模式，急停中的轴不会因此被使能。 */
-        if (spindle_internal_reset_or_estop_active() &&
-            (spindle_hal_mode() == HAL_SPINDLE_CSP ||
-             g_spindle_hal.requested_mode == HAL_SPINDLE_CSP) &&
-            !(g_spindle_hal.requested_mode == HAL_SPINDLE_CSV && spindle_hal_mode_switch_is_done()))
-        {
-            if (spindle_hal_request_mode(HAL_SPINDLE_CSV) != HAL_OK)
-            {
-                LOG(LOG_LEVEL_ERR,
-                    "复位/急停后切回CSV失败：status_word=0x%04X",
-                    spindle_hal_status_word());
-            }
-        }
-        spindle_hal_release_torque();
         return;
     }
 
@@ -769,6 +738,51 @@ static void spindle_update_driver_control(void)
     }
 }
 
+static bool spindle_handle_driver_safety_state(void)
+{
+    bool reset_or_estop_active;
+    bool should_force_disable;
+
+    reset_or_estop_active = spindle_internal_reset_or_estop_active();
+    should_force_disable =
+        ((reset_or_estop_active && !g_spindle.reset_stop_pending) ||
+         rt_data->sys_state[SYS_ESTOP_INPUT] ||
+         (spindle_hal_status_word() & 0x0008U) != 0U);
+    if (!should_force_disable)
+    {
+        return false;
+    }
+
+    /* 安全停车优先于普通控制；不得保留规划速度或旧的到速完成状态。 */
+    g_spindle.run_state = SPINDLE_STOP;
+    g_spindle.velocity_planner.enable = false;
+    g_spindle.velocity_planner.target_vel = 0.0;
+    g_spindle.velocity_planner.current_vel = 0.0;
+    g_spindle.velocity_planner.active = false;
+    g_spindle.velocity_state = SPINDLE_VELOCITY_ZERO;
+    g_spindle_hal.target_velocity = 0;
+    (void)rt_hal_request_spindle_speed(RT_HAL_AXIS_SP, 0.0, 0);
+
+    /* 安全停车取消异步模式事务；CSP 状态下还要恢复 CSV 请求，供下次启动使用。 */
+    spindle_hal_mode_switch_reset();
+    g_spindle.csv_switch_pending = false;
+    if (spindle_internal_reset_or_estop_active() &&
+        (spindle_hal_mode() == HAL_SPINDLE_CSP ||
+         g_spindle_hal.requested_mode == HAL_SPINDLE_CSP) &&
+        !(g_spindle_hal.requested_mode == HAL_SPINDLE_CSV &&
+          spindle_hal_mode_switch_is_done()))
+    {
+        if (spindle_hal_request_mode(HAL_SPINDLE_CSV) != HAL_OK)
+        {
+            LOG(LOG_LEVEL_ERR,
+                "复位/急停后切回CSV失败：status_word=0x%04X",
+                spindle_hal_status_word());
+        }
+    }
+    spindle_hal_release_torque();
+    return true;
+}
+
 static void spindle_handle_stop(spindle_context_t *context)
 {
     spindle_internal_clear_velocity_arrival();   /* 新指令：清旧到速完成 */
@@ -835,7 +849,9 @@ static void spindle_handle_stop(spindle_context_t *context)
             context->csv_switch_pending = true;
         }
         else
-        spindle_hal_release_torque();
+        {
+            spindle_hal_release_torque();
+        }
         return;
     }
 
@@ -870,13 +886,6 @@ static void spindle_disable_driver_before_operation(void)
 {
     /* 驱动器尚未进入 Operation Enabled 时，不能做受控减速，只能清零并下使能。 */
     (void)rt_hal_request_spindle_speed(RT_HAL_AXIS_SP, 0.0, 0);   /* 停转 */
-    spindle_disable_driver();
-}
-
-static void spindle_disable_driver(void)
-{
-    /* 停止只撤销使能、不清期望模式：HAL 侧期望模式仍是 CSV（6060/6061 = 0x09），
-     * 后续 M3/M4 直接重新使能即可。 */
     spindle_hal_release_torque();
 }
 
