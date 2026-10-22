@@ -71,22 +71,30 @@ void nc_set_resetted(){
             if(nc_reset->is_resetting && cycle_tp->exec_state == EXEC_IDLE && IsEqualTo(rt_hal_spindle_rpm(), 0)){
                 nc_reset->is_resetted = 1;
                 rt_data_reset();
+                // 主轴下使能
+                int ret = rt_hal_request_axis_enable(RT_HAL_AXIS_SP, 0);
+                LOG(LOG_LEVEL_INFO, "主轴下使能状态%d", ret);
                 if (nc_reset->reset_trigger == HMI_RESET) {
                     tapreturn_update(NULL);
                     tapreturn_refresh_return_param();
                 }
                 rerun_data_reset();
+                
             }
             break;
         case MODE_HOMING: // 回零
             if(nc_reset->is_resetting && !var_chan[0][VAR_CHAN_IS_HOMING].value.i && IsEqualTo(rt_hal_spindle_rpm(), 0)){
                 nc_reset->is_resetted = 1;
                 rt_data_reset();
+                // 主轴下使能
+                int ret = rt_hal_request_axis_enable(RT_HAL_AXIS_SP, 0);
+                LOG(LOG_LEVEL_INFO, "主轴下使能状态%d", ret);
                 if (nc_reset->reset_trigger == HMI_RESET) {
                     tapreturn_update(NULL);
                     tapreturn_refresh_return_param();
                 }
                 rerun_data_reset();
+
             }
             break;
         case MODE_JOG: // 点动
@@ -97,6 +105,9 @@ void nc_set_resetted(){
             if(nc_reset->is_resetting && IsEqualTo(rt_hal_spindle_rpm(), 0)){
                 nc_reset->is_resetted = 1;
                 rt_data_reset();
+                // 主轴下使能
+                int ret = rt_hal_request_axis_enable(RT_HAL_AXIS_SP, 0);
+                LOG(LOG_LEVEL_INFO, "主轴下使能状态%d", ret);
                 if (nc_reset->reset_trigger == HMI_RESET) {
                     tapreturn_update(NULL);
                     tapreturn_refresh_return_param();

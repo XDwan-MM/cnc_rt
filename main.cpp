@@ -19,6 +19,8 @@
 #include <QTextStream>
 #include "sysapi.h"
 #include <alarmapi.h>
+#include "rt_hal_adapter.h"
+#include "hal_types.h"
 #include "spindle_control.h"
 
 static char version[64];
@@ -169,12 +171,20 @@ int main() {
         RT_LOG_CLOSE();
         return -1;
     }
+   
     RT_LOG(INFO, "创建所有线程成功");
     LOG(LOG_LEVEL_INFO, "创建所有线程成功");
     // 发送实时初始化完成信号 (通知界面：实时系统初始化完成)
     setSysCommInt(SYS_START_RT_FINISH, 1, 0);
     RT_LOG(INFO, "发送实时启动完成信号");
     LOG(LOG_LEVEL_INFO, "发送实时启动完成信号");
+
+    int ret = rt_hal_spindle_set_orient_pulses((HalAxisId)3, (int)rt_data->axis_data[AXIS_SP].spdl_orient_pos, 5000);
+    printf("SDO发送主轴定向位置成功:ret = %d\n", ret);
+    if(ret == 0)
+    {
+        LOG(LOG_LEVEL_INFO, "SDO发送主轴定向位置成功");
+    }
 
     // 注册ctrl+C
     signal(SIGINT, sigint_handler);

@@ -154,7 +154,7 @@ int rt_hal_config_build(HalCConfig* out, char* err, uint32_t err_len) {
 
     /* ABI 闸门必须拦在编译期：HalCAxisStatus 是出参、没有 struct_size 可查，HAL 加字段
      * 时 validate() 查不出来，而 RT 备的是栈上小一号的结构体 → 写坏栈。 */
-#if HAL_C_ABI_MAJOR != 8u || HAL_C_ABI_MINOR != 3u
+#if HAL_C_ABI_MAJOR != 9u || HAL_C_ABI_MINOR != 3u
 #  error "HAL ABI 与 rt_hal_config 预期不符（期望 8.3）：先读 HAL/include/hal_types.h 的版本说明，再改这一行"
 #endif
 

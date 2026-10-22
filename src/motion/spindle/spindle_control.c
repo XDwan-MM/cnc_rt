@@ -232,7 +232,7 @@ void spindle_init(void)
     g_spindle.velocity_state = SPINDLE_VELOCITY_ZERO;
     g_spindle.speed_source = SPINDLE_SPEED_SOURCE_CNC;
     g_spindle.remembered_program_speed =
-        rt_data->axis_data[AXIS_SP].spl_default_speed;
+        rt_data->axis_data[AXIS_SP].spdl_default_speed;
     spindle_hal_init();
 }
 

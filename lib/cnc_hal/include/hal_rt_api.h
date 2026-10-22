@@ -142,6 +142,16 @@ int32_t hal_rt_spindle_write_speed(HalContext* c, HalAxisId id, double rpm, int3
 int32_t hal_rt_spindle_read_speed(HalContext* c, HalAxisId id, double* rpm);
 
 /**
+ * @brief 读主轴零速信号（最近一次采样的状态字 bit8）
+ * 仅适用于已确认 bit8 为零速信号的驱动器，如四合一、蓝海华腾。
+ * 不按转速推算，不表示无故障或已下使能。
+ * @param id 逻辑主轴号，不接受进给轴
+ * @param is_zero 成功时 1 = 零速，0 = 非零速；失败时保持原值
+ * @return 0 = 成功；HAL_ERROR_NOT_RUNNING = 尚未采样；其余见文件头
+ */
+int32_t hal_rt_spindle_read_zero_speed(HalContext* c, HalAxisId id, int32_t* is_zero);
+
+/**
  * @brief 读最近一次采样的主轴状态
  * @param id  逻辑轴号，且必须是主轴
  * @param out 转速侧快照
