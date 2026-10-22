@@ -32,6 +32,7 @@ static int block_cal_segment(PLAN_BLOCK* pretreat_block, double seg_theta_thre,P
 static void block_fix_pos(PLAN_BLOCK* pretreat_block, double l_theta_thre ,double theta_thre, PLAN_QUEUE* temp);
 static bool is_length_valid(PLAN_BLOCK* parser_block);
 static void block_deal_nurbs_enable(PLAN_BLOCK* pretreat_block,PLAN_QUEUE* temp);
+
 static bool noMoreBlocks(void);
 
 /// @brief 将译码结果转换成插补段
@@ -63,7 +64,7 @@ GNC_RES pretreat_block()
     PLAN_BLOCK* treat_block;
 
     //结束逻辑：
-    if (noMoreBlocks() && queue_is_empty(parser_queue))
+    if (noMoreBlocks()&&queue_is_empty(parser_queue))
     {
         // 如果一致性队列已满，提前结束
         if(queue_is_full(treat_queue)) return GNC_DATA_FULL;

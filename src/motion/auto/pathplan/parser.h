@@ -89,6 +89,7 @@ GNC_RES parser_init(NC_MODE nc_mode);
 GNC_RES parser_reading();
 void parser_reset();
 void parser_run_mode();
+bool parser_hasNoMoreBlocks(void);
 
 #ifdef __cplusplus
 }

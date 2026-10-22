@@ -839,6 +839,7 @@ void parser_reset(){
     rt_set_chan_state(0, CHAN_IS_PARSER_RERUN, false);
 }
 
+
 int t_macroVarGetValue(int no, double *mac)
 {
     // todo: 待更新shm后，将以下内容改为从shm获取
