@@ -121,6 +121,8 @@ void spindle_control_update(void)
     {
         /* 急停解除后必须等待新的 M3/M4，不能恢复急停前的旧速度。 */
         g_spindle.reset_requires_start = true;
+        g_spindle.run_authorized = false;
+        g_spindle.program_run_authorized = false;
         spindle_internal_clear_velocity_arrival();   /* 新指令/安全事件：清旧到速完成 */
         g_spindle.start_request_pending = false;
         g_spindle.orient_request_pending = false;
@@ -143,6 +145,8 @@ void spindle_control_update(void)
         (nc_reset != NULL && nc_reset->is_resetting))
     {
         g_spindle.reset_requires_start = true;
+        g_spindle.run_authorized = false;
+        g_spindle.program_run_authorized = false;
         spindle_internal_clear_velocity_arrival();   /* 新指令/安全事件：清旧到速完成 */
         g_spindle.start_request_pending = false;
         g_spindle.deferred_start_pending = false;
@@ -240,6 +244,7 @@ bool spindle_request_program_run(spindle_state_t direction, double speed)
     g_spindle.orient_hold_stop = false;
     g_spindle.command_state = direction;
     g_spindle.start_request_pending = true;
+    g_spindle.program_run_authorized = true;
     g_spindle.deferred_start_pending = false;
     return true;
 }
@@ -249,6 +254,12 @@ bool spindle_request_manual_run(spindle_state_t direction)
     if (direction != SPINDLE_CW && direction != SPINDLE_CCW)
     {
         return false;
+    }
+
+    /* 程序 M3/M4 已授权时，PLC 方向边沿不能覆盖程序方向或速度源目标。 */
+    if (g_spindle.program_run_authorized)
+    {
+        return true;
     }
 
     /* M29 准备过程中主轴控制权属于刚性攻丝状态机，普通方向信号不能
@@ -277,6 +288,7 @@ bool spindle_request_manual_run(spindle_state_t direction)
     g_spindle.command_speed = g_spindle.remembered_program_speed;
     g_spindle.command_state = direction;
     g_spindle.start_request_pending = true;
+    g_spindle.program_run_authorized = false;
     return true;
 }
 
@@ -287,6 +299,8 @@ void spindle_request_stop(void)
      * 立即执行普通 M5，也不能在稍后释放时重新播放已经作废的启动请求。 */
     g_spindle.command_speed = 0.0;
     g_spindle.command_state = SPINDLE_STOP;
+    g_spindle.run_authorized = false;
+    g_spindle.program_run_authorized = false;
     g_spindle.start_request_pending = false;
     g_spindle.deferred_start_pending = false;
 
@@ -343,17 +357,7 @@ void spindle_internal_handle_rotation(spindle_context_t *context,
         context->m29_feedback_stable = false;
     }
 
-    /* 校验速度后切换逻辑方向、选择 CSV 模式，并允许驱动器重新使能。 */
-    const double selected_speed = spindle_internal_get_selected_speed(context);
-
-    /* M3/M4 S0 与 M5 等价。 */
-    if (isfinite(selected_speed) &&
-        fabs(selected_speed) <= SPINDLE_SPEED_EPSILON)
-    {
-        spindle_handle_stop(context);
-        return;
-    }
-
+    /* 零速是有效运行授权；只拒绝缺省或非有限的速度输入。 */
     if (!spindle_internal_validate_start_request(context))
     {
         return;
@@ -364,6 +368,7 @@ void spindle_internal_handle_rotation(spindle_context_t *context,
      * 后才允许使能主轴，防止旧的 PLC 方向信号自动恢复。
      */
     context->run_state = state;
+    context->run_authorized = true;
     if (context->reset_requires_start && !context->start_request_pending)
     {
         return;
@@ -399,17 +404,6 @@ static void spindle_update_command_event(void)
         return;
     }
 
-    /* command_speed 与 plc_speed 二选一，具体来源由 speed_source 决定。 */
-    const double selected_speed = spindle_internal_get_selected_speed(&g_spindle);
-    const double target_speed = isfinite(selected_speed) ?
-        fabs(selected_speed) : 0.0;
-    const spindle_state_t direction =
-        (g_spindle.command_state == SPINDLE_CCW) ? SPINDLE_CCW :
-        (g_spindle.command_state == SPINDLE_CW) ? SPINDLE_CW :
-        g_spindle.run_state;
-    const double signed_target =
-        direction == SPINDLE_CCW ? -target_speed : target_speed;
-
     if (g_spindle.reset_requires_start &&
         !g_spindle.start_request_pending)
     {
@@ -422,38 +416,11 @@ static void spindle_update_command_event(void)
      * 只清请求、不恢复旧完成位；之后由 spindle_update_planner_state() 按实际反馈重新确认。 */
     if (g_spindle.start_request_pending)
     {
-        if (target_speed <= SPINDLE_SPEED_EPSILON)
-        {
-            /* M3/M4 S0 与 M5 等价：交给停止流程把命令字段归位并做停止判定。 */
-            g_spindle.pending_event = SPINDLE_EVENT_STOP;
-            return;
-        }
-        if (fabs(signed_target - g_spindle.velocity_planner.target_vel) <=
-            SPINDLE_SPEED_EPSILON)
-        {
-            g_spindle.start_request_pending = false;
-            return;
-        }
-    }
-
-    if (fabs(signed_target - g_spindle.velocity_planner.target_vel) <=
-        SPINDLE_SPEED_EPSILON)
-    {
+        g_spindle.pending_event = g_spindle.command_state == SPINDLE_CCW ?
+            SPINDLE_EVENT_CCW : SPINDLE_EVENT_CW;
         return;
     }
-
-    if (target_speed <= SPINDLE_SPEED_EPSILON)
-    {
-        g_spindle.pending_event = SPINDLE_EVENT_STOP;
-    }
-    else if (direction == SPINDLE_CCW)
-    {
-        g_spindle.pending_event = SPINDLE_EVENT_CCW;
-    }
-    else
-    {
-        g_spindle.pending_event = SPINDLE_EVENT_CW;
-    }
+    /* 已经授权后，速度每周期由规划器直接跟随所选速度源，不重复生成启动事件。 */
 }
 
 static void spindle_process_event(spindle_context_t *context)
@@ -521,6 +488,8 @@ static void spindle_process_event(spindle_context_t *context)
         context->deferred_start_pending = false;
         context->command_state = SPINDLE_STOP;
         context->command_speed = 0.0;
+        context->run_authorized = false;
+        context->program_run_authorized = false;
         /* 显式 M19/M29 定向请求可以解除复位后的“等待新启动”锁。 */
         context->reset_requires_start = false;
         context->orient_request_pending = false;
@@ -807,6 +776,8 @@ static void spindle_handle_stop(spindle_context_t *context)
     context->deferred_start_pending = false;
     context->command_state = SPINDLE_STOP;
     context->command_speed = 0.0;
+    context->run_authorized = false;
+    context->program_run_authorized = false;
     /*
      * 停止事件只撤销速度目标。普通 M5 和 HMI 复位的 CSV 停车保持驱动器使能，
      * 急停/Fault 则直接下使能；CSP 攻丝复位由插补继续下发同步位置。

@@ -98,11 +98,6 @@ bool spindle_internal_validate_start_request(const spindle_context_t *context)
         return spindle_report_missing_speed_alarm(
             "主轴速度值缺省，请先在MDI中执行M3/M4指令。");
     }
-    if (fabs(context->remembered_program_speed) <= SPINDLE_SPEED_EPSILON)
-    {
-        return spindle_report_missing_speed_alarm(
-            "主轴速度值缺省，请先在MDI中执行M3/M4指令。");
-    }
 
     return true;
 }
@@ -256,6 +251,13 @@ static void spindle_update_planner_state(spindle_context_t *context)
     if (!context->velocity_planner.active)
     {
         context->velocity_state = SPINDLE_VELOCITY_ZERO;
+        if (context->run_authorized &&
+            context->velocity_planner.target_vel == 0.0 &&
+            spindle_is_velocity_arrived())
+        {
+            context->velocity_state = SPINDLE_VELOCITY_ARRIVED;
+            spindle_internal_report_mcode_complete();
+        }
         return;
     }
     if (arrived)
@@ -278,23 +280,26 @@ static void spindle_update_planner_state(spindle_context_t *context)
 
 static bool spindle_is_velocity_arrived(void)
 {
-    /* 到速必须同时满足 CSV、Operation Enabled（状态字 0x27）、非零和误差带条件。 */
+    HalCAxisStatus axis;
+    const int status_result = rt_hal_axis_status(RT_HAL_AXIS_SP, &axis);
+
+    /* 到速必须满足 CSV、Operation Enabled、有效反馈和目标误差带条件。 */
     if (spindle_velocity_feedback_blocked() || !spindle_is_rotating())
     {
         return false;
     }
     const double target = g_spindle.velocity_planner.current_vel;
-    const double actual = (double)spindle_hal_actual_velocity();
+    const double actual = status_result == HAL_OK ? axis.actual_speed_rpm : NAN;
     const double tolerance = fmax(SPINDLE_SPEED_ARRIVAL_MIN_TOL,
                                   fabs(target) * SPINDLE_SPEED_ARRIVAL_TOL);
 
     /*
-     * 606C 实际速度和 60FF 目标速度必须来自同一 CSV 单位。除误差带外
-     * 还要求实际速度非零，避免驱动器未使能或电机未转时误发 M3 FIN。
-     * 状态字 0x006F == 0x0027（Operation Enabled）与 enabled 双查，
-     * 避免 HAL 使能镜像滞后时用旧反馈误判到速。
+     * 零目标要求有效反馈确认为零；非零目标还要求实际转速非零并处于
+     * 误差带内。状态字 0x006F == 0x0027（Operation Enabled）与 enabled
+     * 双查，避免 HAL 使能镜像滞后时用旧反馈误判到速。
      */
-    if (!isfinite(target))
+    if (!isfinite(target) || status_result != HAL_OK || !axis.speed_valid ||
+        !isfinite(actual))
     {
         return false;
     }
@@ -304,8 +309,11 @@ static bool spindle_is_velocity_arrived(void)
         return false;
     }
 
-    if (fabs(target) <= SPINDLE_SPEED_EPSILON ||
-        fabs(actual) <= SPINDLE_ACTUAL_SPEED_EPSILON)
+    if (fabs(target) <= SPINDLE_SPEED_EPSILON)
+    {
+        return fabs(actual) <= SPINDLE_ACTUAL_ZERO_EPSILON;
+    }
+    if (fabs(actual) <= SPINDLE_ACTUAL_SPEED_EPSILON)
     {
         return false;
     }

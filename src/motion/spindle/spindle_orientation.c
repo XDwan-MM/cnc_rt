@@ -72,6 +72,8 @@ void spindle_begin_m19(void)
     g_spindle.orient_hold_stop = true;
     g_spindle.command_speed = 0.0;
     g_spindle.command_state = SPINDLE_STOP;
+    g_spindle.run_authorized = false;
+    g_spindle.program_run_authorized = false;
     g_spindle.start_request_pending = false;
     g_spindle.deferred_start_pending = false;
 }
@@ -79,7 +81,9 @@ void spindle_begin_m19(void)
 void spindle_request_orientation(bool active)
 {
     spindle_internal_clear_velocity_arrival();
-
+    /* 定向接管主轴控制权，不能保留普通 M3/M4 授权。 */
+    g_spindle.run_authorized = false;
+    g_spindle.program_run_authorized = false;
     /* 只有"开始定向"才取消排队的启动请求；"释放定向"必须保留：
      * 定向期间收到的 M3/M4 存在 deferred_start 里，等释放完成后执行。
      * 以前两条分支都清，导致 M19 完成后同一扫描里按下的 M4 被丢掉
@@ -89,7 +93,6 @@ void spindle_request_orientation(bool active)
         g_spindle.start_request_pending = false;
         g_spindle.deferred_start_pending = false;
     }
-
     g_spindle.pending_event = active ?
         SPINDLE_EVENT_ORIENT : SPINDLE_EVENT_RELEASE_ORIENT;
 }
