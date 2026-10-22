@@ -72,6 +72,8 @@ void spindle_begin_m19(void)
     g_spindle.orient_hold_stop = true;
     g_spindle.command_speed = 0.0;
     g_spindle.command_state = SPINDLE_STOP;
+    g_spindle.run_authorized = false;
+    g_spindle.program_run_authorized = false;
     g_spindle.start_request_pending = false;
     g_spindle.deferred_start_pending = false;
 }
@@ -79,6 +81,8 @@ void spindle_begin_m19(void)
 void spindle_request_orientation(bool active)
 {
     spindle_internal_clear_velocity_arrival();
+    g_spindle.run_authorized = false;
+    g_spindle.program_run_authorized = false;
     g_spindle.start_request_pending = false;
     g_spindle.deferred_start_pending = false;
     g_spindle.pending_event = active ?

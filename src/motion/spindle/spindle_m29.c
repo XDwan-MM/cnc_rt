@@ -71,6 +71,8 @@ void spindle_request_m29(void)
     g_spindle.pending_event = SPINDLE_EVENT_ORIENT;
     g_spindle.command_speed = 0.0;
     g_spindle.command_state = SPINDLE_STOP;
+    g_spindle.run_authorized = false;
+    g_spindle.program_run_authorized = false;
     g_spindle.start_request_pending = false;
 }
 
@@ -195,6 +197,8 @@ bool spindle_request_m29_no_orient(void)
     g_spindle.pending_event = SPINDLE_EVENT_NONE;
     g_spindle.command_state = SPINDLE_STOP;
     g_spindle.run_state = SPINDLE_STOP;
+    g_spindle.run_authorized = false;
+    g_spindle.program_run_authorized = false;
     g_spindle.command_speed = 0.0;
     g_spindle.velocity_planner.current_vel = axis.actual_speed_rpm;
     g_spindle.velocity_planner.target_vel = 0.0;
@@ -407,6 +411,8 @@ void spindle_complete_m29(void)
     g_spindle.orient_hold_stop = true;
     g_spindle.command_state = SPINDLE_STOP;
     g_spindle.command_speed = 0.0;
+    g_spindle.run_authorized = false;
+    g_spindle.program_run_authorized = false;
     spindle_internal_clear_velocity_arrival();   /* 清旧到速反馈 + F45.3 */
 }
 

@@ -103,6 +103,10 @@ typedef struct
     spindle_state_t command_state;
     spindle_velocity_state_t velocity_state;
     spindle_event_t pending_event;
+    /* M3/M4 的运行授权与速度目标分离；零速时授权仍可保持驱动器使能。 */
+    bool run_authorized;
+    /* 仅程序 M3/M4 授权屏蔽 PLC 方向边沿，纯手动运行仍可沿用原换向语义。 */
+    bool program_run_authorized;
 
     /* CNC/PLC 速度输入，单位均为 rpm。 */
     double command_speed;
