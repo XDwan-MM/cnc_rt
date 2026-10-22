@@ -17,10 +17,12 @@ spindle_hal_state_t g_spindle_hal = {
     .mode_switch_state = SPINDLE_MODE_SWITCH_IDLE,
     .mode_switch_result = HAL_OK
 };
+static int s_last_hal_error[7] = { HAL_OK };
 
 /* 内部函数声明 */
 
 static void spindle_hal_poll_mode_switch(void);
+static int spindle_hal_log_hal_result(const char *api_name, int result, unsigned int call_site);
 
 /* 外部函数定义 */
 
@@ -37,8 +39,10 @@ void spindle_hal_init(void)
 int spindle_hal_is_enabled(void)
 {
     HalCAxisStatus status;
+    int result;
 
-    if (rt_hal_axis_status(RT_HAL_AXIS_SP, &status) != HAL_OK)
+    result = rt_hal_axis_status(RT_HAL_AXIS_SP, &status);
+    if (spindle_hal_log_hal_result("rt_hal_axis_status", result, 0U) != HAL_OK)
     {
         return 0;
     }
@@ -48,8 +52,10 @@ int spindle_hal_is_enabled(void)
 int spindle_hal_mode(void)
 {
     HalCSpindleStatus status;
+    int result;
 
-    if (rt_hal_spindle_status(RT_HAL_AXIS_SP, &status) != HAL_OK)
+    result = rt_hal_spindle_status(RT_HAL_AXIS_SP, &status);
+    if (spindle_hal_log_hal_result("rt_hal_spindle_status", result, 1U) != HAL_OK)
     {
         return -1;
     }
@@ -59,8 +65,10 @@ int spindle_hal_mode(void)
 double spindle_hal_actual_velocity(void)
 {
     double velocity = 0.0;
+    int result;
 
-    if (rt_hal_spindle_speed(RT_HAL_AXIS_SP, &velocity) != HAL_OK)
+    result = rt_hal_spindle_speed(RT_HAL_AXIS_SP, &velocity);
+    if (spindle_hal_log_hal_result("rt_hal_spindle_speed", result, 2U) != HAL_OK)
     {
         /* NaN 会使所有“已到速/已停稳”比较失败，避免通信失败被误判为零速。 */
         return NAN;
@@ -71,8 +79,10 @@ double spindle_hal_actual_velocity(void)
 double spindle_hal_actual_position(void)
 {
     HalCSpindleStatus status;
+    int result;
 
-    if (rt_hal_spindle_status(RT_HAL_AXIS_SP, &status) != HAL_OK)
+    result = rt_hal_spindle_status(RT_HAL_AXIS_SP, &status);
+    if (spindle_hal_log_hal_result("rt_hal_spindle_status", result, 3U) != HAL_OK)
     {
         /* 位置未知时不能通过 CSP 位置保持和 M29 完成判定。 */
         return NAN;
@@ -83,8 +93,10 @@ double spindle_hal_actual_position(void)
 uint16_t spindle_hal_status_word(void)
 {
     HalCAxisStatus status;
+    int result;
 
-    if (rt_hal_axis_status(RT_HAL_AXIS_SP, &status) != HAL_OK)
+    result = rt_hal_axis_status(RT_HAL_AXIS_SP, &status);
+    if (spindle_hal_log_hal_result("rt_hal_axis_status", result, 4U) != HAL_OK)
     {
         /* 读取失败按 Fault 处理，安全仲裁必须优先停止主轴。 */
         return 0x0008U;
@@ -95,8 +107,10 @@ uint16_t spindle_hal_status_word(void)
 int spindle_hal_orientation_state(void)
 {
     int32_t state = HAL_ORIENT_NONE;
+    int result;
 
-    if (rt_hal_spindle_orient_state(RT_HAL_AXIS_SP, &state) != HAL_OK)
+    result = rt_hal_spindle_orient_state(RT_HAL_AXIS_SP, &state);
+    if (spindle_hal_log_hal_result("rt_hal_spindle_orient_state", result, 5U) != HAL_OK)
     {
         /* -1 不等于任何合法定向阶段，调用方不会误认为已经释放。 */
         return -1;
@@ -147,9 +161,12 @@ void spindle_hal_mode_switch_reset(void)
 
 int spindle_hal_request_mode(int mode)
 {
+    int result;
+
     /* 即使实际模式已经匹配也继续提交请求，避免 HAL 中尚有反向模式请求。 */
-    g_spindle_hal.mode_switch_result =
-        rt_hal_request_spindle_mode(RT_HAL_AXIS_SP, (HalSpindleMode)mode);
+    result = rt_hal_request_spindle_mode(RT_HAL_AXIS_SP, (HalSpindleMode)mode);
+    g_spindle_hal.mode_switch_result = spindle_hal_log_hal_result(
+        "rt_hal_request_spindle_mode", result, 6U);
     if (g_spindle_hal.mode_switch_result != HAL_OK)
     {
         g_spindle_hal.mode_switch_state = SPINDLE_MODE_SWITCH_ERROR;
@@ -171,4 +188,22 @@ static void spindle_hal_poll_mode_switch(void)
     {
         g_spindle_hal.mode_switch_state = SPINDLE_MODE_SWITCH_DONE;
     }
+}
+
+static int spindle_hal_log_hal_result(const char *api_name, int result, unsigned int call_site)
+{
+    if (result != HAL_OK)
+    {
+        if (s_last_hal_error[call_site] != result)
+        {
+            LOG(LOG_LEVEL_ERR, "主轴 HAL 调用失败：%s axis=%d result=%d",
+                api_name, RT_HAL_AXIS_SP, result);
+            s_last_hal_error[call_site] = result;
+        }
+    }
+    else
+    {
+        s_last_hal_error[call_site] = HAL_OK;
+    }
+    return result;
 }
