@@ -2,7 +2,7 @@
 #include "plan_queue.h"
 #include "global.h"
 #include <varapi.h>
-#include "spl_control.h"
+#include "spindle_control.h"
 #include "regapi.h"
 #include <hmisysapi.h>  
 #include <alarmapi.h>
@@ -101,17 +101,7 @@ void auto_execute_mstb_cmd(){
         }
         return;
     }
-// #ifdef DEBUG_MODE_ENABLED
-//     /* 仿真模式没有外部 PLC 将 F45.3 回送为 G4.3，使用主轴内部完成反馈。 */
-//     if (!cycle_tp->mstb_cmd_data.signal_fin &&
-//         (cycle_tp->plan_block->mst_data.m_code == M03 ||
-//          cycle_tp->plan_block->mst_data.m_code == M04 ||
-//          cycle_tp->plan_block->mst_data.m_code == M05) &&
-//         spl_context.mcode_feedback)
-//     {
-//         cycle_tp->mstb_cmd_data.signal_fin = true;
-//     }
-// #endif
+
     // FIN为1时，nc侧将MF选通信号置为0
     if(cycle_tp->mstb_cmd_data.signal_fin){
         // 完成信号宽幅时间，缺省值2ms
@@ -157,62 +147,28 @@ static void auto_deal_mstb(){
             cycle_tp->target_stage = PROGRAM_END;
             break;
         case M03: // 主轴正转
-            setRegValue8(REG_F, 10, 0x03);
-            spindle_clear_velocity_arrival();   /* 新指令：清上一条的到速完成 */
-            spl_context.command_speed = cycle_tp->plan_block->mst_data.spindle.speed;
-            spl_context.mcp_target_speed = cycle_tp->plan_block->mst_data.spindle.speed;
-            spl_context.mcode_feedback = false;
-            spl_context.m19_active = false;
-            spl_context.orient_hold_stop = false;
-            spl_context.command_state = SPINDLE_CW;
-            spl_context.start_request_pending = true;
-            /* 新指令取消排队中的延迟启动。 */
-            spl_context.deferred_start_pending = false;
-            auto_set_scode_signal((int)fmin((double)INT_MAX,
-                                              spindle_cnc_target_speed(spl_context.command_speed)));
+            setRegValue8(REG_F, 10, 0x03); 
+            (void)spindle_request_program_run(
+                SPINDLE_CW, cycle_tp->plan_block->mst_data.spindle.speed);
+            auto_set_scode_signal(i);
             break;
         case M04: // 主轴反转
-            setRegValue8(REG_F, 10, 0x04);
-            spindle_clear_velocity_arrival();   /* 新指令：清上一条的到速完成 */
-            spl_context.command_speed = cycle_tp->plan_block->mst_data.spindle.speed;
-            spl_context.mcp_target_speed = cycle_tp->plan_block->mst_data.spindle.speed;
-            spl_context.mcode_feedback = false;
-            spl_context.m19_active = false;
-            spl_context.orient_hold_stop = false;
-            spl_context.command_state = SPINDLE_CCW;
-            spl_context.start_request_pending = true;
-            /* 新指令取消排队中的延迟启动。 */
-            spl_context.deferred_start_pending = false;
-            auto_set_scode_signal((int)fmin((double)INT_MAX,
-                                              spindle_cnc_target_speed(spl_context.command_speed)));
+            setRegValue8(REG_F, 10, 0x04); 
+            (void)spindle_request_program_run(
+                SPINDLE_CCW, cycle_tp->plan_block->mst_data.spindle.speed);
+            auto_set_scode_signal(i);
             break;
         case M05: // 主轴停止
             setRegValue8(REG_F, 10, 0x05);
-            spindle_clear_velocity_arrival();   /* 新指令：清上一条的到速完成 */
-            spl_context.command_speed = 0.0;
-            spl_context.command_state = SPINDLE_STOP;
-            spl_context.mcode_feedback = false;
-            spl_context.m19_active = false;
-            spl_context.orient_hold_stop = false;
-            spl_context.start_request_pending = false;
-            /* 停止取消排队中的延迟启动。 */
-            spl_context.deferred_start_pending = false;
-            auto_set_scode_signal(cycle_tp->plan_block->mst_data.spindle.speed);
+            spindle_request_stop();
+            auto_set_scode_signal(i);
             break;
         case M06: // 不输出M代码信号：1、M99，M98，M198；2、调用子程序的M代码；3、调用用户宏程序的M代码
-            spl_context.mcode_feedback = false;
             auto_set_tcode_signal(i);
             break;    
         case M19: // 主轴定向
             setRegValue8(REG_F, 10, 0x13); 
-            spindle_clear_velocity_arrival();   /* 新指令：清上一条的到速完成 */
-            spl_context.m19_active = true;
-            spl_context.orient_hold_stop = true;
-            spl_context.command_speed = 0.0;
-            spl_context.command_state = SPINDLE_STOP;
-            spl_context.start_request_pending = false;
-            /* 定向接管主轴，取消排队中的延迟启动。 */
-            spl_context.deferred_start_pending = false;
+            spindle_begin_m19();
             /* G70.6 上升沿由 PLC 扫描器统一转换为 SPINDLE_EVENT_ORIENT。 */
             break;
         case M29: // 刚性攻丝：将主轴定向，并且到CSP模式上使能       
@@ -225,7 +181,7 @@ static void auto_deal_mstb(){
                 if (!spindle_request_m29_no_orient()) {
                     rt_data->sys_state[SYS_IS_RIGID] = 0;
                     auto_clear_mstb_signal();
-                    setAlarm(ALARM_AX, ALARM_ERROR, SPINDLE_ALARM_M29_PREP_REJECT);
+                    spindle_report_m29_prepare_rejected();
                     rt_set_chan_state(0, CHAN_IS_PARSER_RESET, true);
                     cycle_tp->mstb_cmd_data.finished = true;
                     return;
@@ -449,9 +405,7 @@ static void auto_m29_diag_tick(bool complete)
 {
     MSTB_CMD_DATA *cmd = &cycle_tp->mstb_cmd_data;
 
-    if (complete || !spl_context.m29_active ||
-        spl_context.m29_phase == SPINDLE_M29_IDLE ||
-        spl_context.m29_phase == SPINDLE_M29_ERROR)
+    if (complete || !spindle_m29_is_active() || spindle_m29_has_error())
     {
 
         cmd->m29_wait_cycles = 0;
@@ -465,52 +419,14 @@ static void auto_m29_diag_tick(bool complete)
         return;
     }
 
-    // 调试信息（M29 每秒诊断行）先注释掉：只服务于它的取值与两行 LOG 一并注释
-    // bool g43 = false, f70 = false, f457 = false, f763 = false;
-    // bool f451 = false, f453 = false;
-    // char m_code = 0, g70 = 0, g29 = 0;
-    spindle_m29_diag_t diag;
-
-    spindle_m29_diag_info(&diag);
-    // getRegBit(REG_G, 4, 3, &g43);      /* PLC FIN */
-    // getRegBit(REG_F, 7, 0, &f70);      /* MF 选通（本次指令） */
-    // getRegBit(REG_F, 45, 7, &f457);    /* 主轴定向完成 */
-    // getRegBit(REG_F, 76, 3, &f763);    /* 刚性攻丝方式中 */
-    // getRegBit(REG_F, 45, 1, &f451);
-    // getRegBit(REG_F, 45, 3, &f453);
-    // const int m_code_ok = getRegValue8(REG_F, 10, &m_code) == 0;
-    // const int g70_ok = getRegValue8(REG_G, 70, &g70) == 0;
-    // const int g29_ok = getRegValue8(REG_G, 29, &g29) == 0;
-
-    // LOG(LOG_LEVEL_WARN,
-    //     "M29等待握手 %ds：PLC侧 FIN锁存=%d 低电平见过=%d 宽度=%d/%d G4.3=%d "
-    //     "F7.0=%d 本次MF=%d | NC侧 phase=%d ready=%d orient_phase=%d orient_state=%d "
-    //     "模式切换=%d(rc=%d req=%d) 实际模式=%d 使能=%d 状态字=0x%04X | F45.7=%d F76.3=%d",
-    //     cmd->m29_wait_cycles / M29_DIAG_PERIOD_CYCLES,
-    //     cmd->m29_fin_latched ? 1 : 0, cmd->m29_fin_low_seen ? 1 : 0,
-    //     cmd->tfin_count, par_chan[0][PAR_CH_TFIN_DELEY].value.val_int,
-    //     g43 ? 1 : 0, f70 ? 1 : 0, cmd->signal_mf ? 1 : 0,
-    //     diag.m29_phase, diag.ready ? 1 : 0, diag.orient_phase, diag.orient_state,
-    //     diag.ms_state, diag.ms_result, diag.ms_req_mode, diag.act_mode,
-    //     diag.enabled, (unsigned)diag.status_word, f457 ? 1 : 0, f763 ? 1 : 0);
-    // LOG(LOG_LEVEL_WARN,
-    //     "M29运动及PLC信号：planned_rpm=%.3f target_rpm=%.3f actual_rpm=%.3f "
-    //     "target_deg=%.3f actual_deg=%.3f F45.1=%d F45.3=%d F10=%d G70=%d G29=%d "
-    //     "command_state=%d command_speed=%.3f start_pending=%d deferred_pending=%d",
-    //     diag.planned_rpm, diag.target_rpm, diag.actual_rpm, diag.target_deg, diag.actual_deg,
-    //     f451, f453, m_code_ok ? (int)(unsigned char)m_code : -1,
-    //     g70_ok ? (int)(unsigned char)g70 : -1, g29_ok ? (int)(unsigned char)g29 : -1,
-    //     spl_context.command_state, spl_context.command_speed,
-    //     spl_context.start_request_pending, spl_context.deferred_start_pending);
-
     if (cmd->m29_wait_cycles >= M29_DIAG_TIMEOUT_CYCLES && !cmd->m29_wait_alarmed)
     {
         cmd->m29_wait_alarmed = true;
         LOG(LOG_LEVEL_ERR,
               "M29握手超时（%ds）：PLC FIN锁存=%d NC就绪=%d，触发错误报警停止程序。",
               M29_DIAG_TIMEOUT_CYCLES / M29_DIAG_PERIOD_CYCLES,
-              cmd->m29_fin_latched, diag.ready);
-        setAlarm(ALARM_AX, ALARM_ERROR, SPINDLE_ALARM_M29_FIN_TIMEOUT);
+              cmd->m29_fin_latched, spindle_m29_is_ready());
+        spindle_report_m29_handshake_timeout();
     }
 }
 
@@ -519,7 +435,7 @@ static void auto_m29_diag_tick(bool complete)
 static bool auto_m29_handshake_complete(bool selected_before_cycle)
 {
     MSTB_CMD_DATA *cmd = &cycle_tp->mstb_cmd_data;
-    if (!spl_context.m29_active || spl_context.m29_phase == SPINDLE_M29_ERROR)
+    if (!spindle_m29_is_active() || spindle_m29_has_error())
     {
         cmd->m29_fin_latched = false;
         cmd->m29_fin_low_seen = false;
@@ -544,9 +460,9 @@ static bool auto_m29_handshake_complete(bool selected_before_cycle)
             {
                 cmd->m29_fin_latched = true;
                 LOG(LOG_LEVEL_INFO,
-                    "M29锁存PLC FIN：F7.0=%d G4.3=%d width_cycles=%d phase=%d ready=%d",
+                    "M29锁存PLC FIN：F7.0=%d G4.3=%d width_cycles=%d ready=%d",
                     selected_before_cycle, cmd->signal_fin, cmd->tfin_count,
-                    spl_context.m29_phase, spindle_m29_is_ready());
+                    spindle_m29_is_ready());
             }
             else
             {

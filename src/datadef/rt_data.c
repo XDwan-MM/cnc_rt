@@ -255,3 +255,4 @@ void rt_set_axis_zero_vel_params(AXIS_TYPE axis_type){
     rt_data->axis_data[axis_type].cmd_acc = 0;
     rt_data->axis_data[axis_type].cmd_jk = 0;
 }
+
