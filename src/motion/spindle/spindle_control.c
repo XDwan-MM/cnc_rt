@@ -36,6 +36,7 @@ static void spindle_handle_stop(spindle_context_t *context);
 static void spindle_update_driver_control(void);
 static bool spindle_handle_driver_safety_state(void);
 static void spindle_disable_driver_before_operation(void);
+static bool spindle_is_in_csp_mode(void);
 
 /* 外部函数定义 */
 
@@ -48,6 +49,9 @@ static void spindle_disable_driver_before_operation(void);
 void spindle_control_update(void)
 {
     bool release_orient_event;
+    bool csp_mode;
+
+    csp_mode = spindle_is_in_csp_mode();
 
     if (spindle_internal_m29_no_orient_preparing())
     {
@@ -60,12 +64,12 @@ void spindle_control_update(void)
     release_orient_event =
         (g_spindle.pending_event == SPINDLE_EVENT_RELEASE_ORIENT);
 
-    if (g_spindle.reset_stop_pending &&
+    if (!csp_mode && g_spindle.reset_stop_pending &&
         spindle_internal_reset_stop_abort_required())
     {
         g_spindle.reset_stop_pending = false;
     }
-    if (rt_data->nc_event == SYS_EVENT_HMI_RESET &&
+    if (!csp_mode && rt_data->nc_event == SYS_EVENT_HMI_RESET &&
         !g_spindle.reset_stop_pending && !g_spindle.reset_requires_start &&
         !spindle_internal_reset_stop_abort_required() &&
         spindle_hal_is_enabled())
@@ -116,8 +120,9 @@ void spindle_control_update(void)
      * 新事件，随后更新定向、驱动器控制和对外状态，避免本周期刚检测
      * 到急停又被后续的普通启动逻辑覆盖。
      */
-    if (rt_data->sys_state[SYS_IS_ESTOP_ACTIVE] ||
-        (spindle_hal_status_word() & 0x0008U) != 0U)
+    if (!csp_mode &&
+        (rt_data->sys_state[SYS_IS_ESTOP_ACTIVE] ||
+         (spindle_hal_status_word() & 0x0008U) != 0U))
     {
         /* 急停解除后必须等待新的 M3/M4，不能恢复急停前的旧速度。 */
         g_spindle.reset_requires_start = true;
@@ -141,8 +146,9 @@ void spindle_control_update(void)
         spindle_orientation_abort();
     }
 
-    if ((rt_data->nc_event == SYS_EVENT_HMI_RESET) ||
-        (nc_reset != NULL && nc_reset->is_resetting))
+    if (!csp_mode &&
+        ((rt_data->nc_event == SYS_EVENT_HMI_RESET) ||
+         (nc_reset != NULL && nc_reset->is_resetting)))
     {
         g_spindle.reset_requires_start = true;
         g_spindle.run_authorized = false;
@@ -176,7 +182,8 @@ void spindle_control_update(void)
         spindle_hal_mode_switch_reset();
     }
 
-    if (spindle_internal_stop_is_required(&g_spindle) && !release_orient_event)
+    if (!csp_mode && spindle_internal_stop_is_required(&g_spindle) &&
+        !release_orient_event)
     {
         g_spindle.pending_event = SPINDLE_EVENT_STOP;
     }
@@ -186,7 +193,7 @@ void spindle_control_update(void)
         spindle_update_command_event();
     }
 
-    if (g_spindle.reset_requires_start &&
+    if (!csp_mode && g_spindle.reset_requires_start &&
         !g_spindle.start_request_pending &&
         (g_spindle.pending_event == SPINDLE_EVENT_CW ||
          g_spindle.pending_event == SPINDLE_EVENT_CCW))
@@ -564,7 +571,7 @@ static void spindle_update_driver_control(void)
         return;
     }
 
-    if (g_spindle.reset_stop_pending)
+    if (g_spindle.reset_stop_pending && !spindle_is_in_csp_mode())
     {
         spindle_internal_update_reset_stop();
         return;
@@ -702,6 +709,16 @@ static void spindle_update_driver_control(void)
         return;
     }
 
+    /*
+     * CSP 正常运行时，位置目标由插补线程独占发布。M29/定向阶段和
+     * CSV-CSP 模式交接已在前面处理；除此之外不发速度目标、不做普通
+     * 停止收尾，也不改写插补下发的位置目标。
+     */
+    if (spindle_is_in_csp_mode() && !g_spindle.csv_switch_pending)
+    {
+        return;
+    }
+
     if (spindle_hal_mode() == HAL_SPINDLE_CSV && spindle_hal_is_enabled())
     {
         velocity_control_ready = true;
@@ -743,6 +760,12 @@ static bool spindle_handle_driver_safety_state(void)
     bool reset_or_estop_active;
     bool should_force_disable;
 
+    /* CSP 运行安全由插补/驱动器上层负责，主轴模块不在这里改写目标或使能。 */
+    if (spindle_is_in_csp_mode())
+    {
+        return false;
+    }
+
     reset_or_estop_active = spindle_internal_reset_or_estop_active();
     should_force_disable =
         ((reset_or_estop_active && !g_spindle.reset_stop_pending) ||
@@ -783,6 +806,12 @@ static bool spindle_handle_driver_safety_state(void)
     return true;
 }
 
+static bool spindle_is_in_csp_mode(void)
+{
+    /* 仅以 HAL 实际反馈判定当前模式；请求中的目标模式不代表已进入 CSP。 */
+    return spindle_hal_mode() == HAL_SPINDLE_CSP;
+}
+
 static void spindle_handle_stop(spindle_context_t *context)
 {
     spindle_internal_clear_velocity_arrival();   /* 新指令：清旧到速完成 */
@@ -802,34 +831,13 @@ static void spindle_handle_stop(spindle_context_t *context)
     context->velocity_planner.enable = false;
     context->velocity_planner.target_vel = 0.0;
 
-    if (context->reset_stop_pending && context->reset_stop_csp)
+    if (context->reset_stop_pending && context->reset_stop_csp &&
+        !spindle_is_in_csp_mode())
         return;
 
     if (spindle_hal_mode() == HAL_SPINDLE_CSP)
     {
         bool preserve_m29_request;
-
-        /*
-         * 复位/急停不能等待 CSP->CSV 的正常减速握手。CSP 下没有速度
-         * 目标可供本模块执行受控减速，继续发起模式切换会把 target_pos
-         * 锁在当前反馈位置并可能长期卡在切换状态，复位后主轴仍保持
-         * 使能。此时立即清零目标并下使能，由驱动器安全状态机接管停车。
-         */
-        if (spindle_internal_reset_or_estop_active())
-        {
-            context->m29_active = false;
-            context->m29_phase = SPINDLE_M29_IDLE;
-            context->m29_feedback_stable = false;
-            context->csv_switch_pending = false;
-            context->command_state = SPINDLE_STOP;
-            /* 复位必须取消尚未完成的 CSP/CSV 模式切换。 */
-            spindle_hal_mode_switch_reset();
-            g_spindle_hal.target_position = spindle_hal_actual_position();
-            (void)rt_hal_request_axis_pos(RT_HAL_AXIS_SP, spindle_hal_actual_position());
-            spindle_hal_release_torque();
-            (void)rt_hal_request_spindle_speed(RT_HAL_AXIS_SP, 0.0, 0);   /* 停转 */
-            return;
-        }
 
         if (spindle_hal_mode_switch_is_pending())
         {
