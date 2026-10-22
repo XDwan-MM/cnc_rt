@@ -214,7 +214,8 @@ int32_t hal_rt_spindle_estop(HalContext* c, HalAxisId id);
 
 /**
  * @brief 请求切换主轴运行模式（CSP / CSV）
- * 只改期望模式，不动使能状态；实际切换在之后的 begin 完成（默认先退回 SwitchedOn 再写 0x6060）。
+ * 只改期望模式，不动使能状态；实际切换在之后的 begin 完成（默认先退回 SwitchedOn 再写 0x6060；
+ * 台达单轴按驱动器身份自动改为退到 Ready 再写）。
  * 期望模式变化时才丢弃未提交的运动指令并取消定向；重复调用无副作用。
  * @param id   逻辑轴号，且必须是主轴
  * @param mode HAL_SPINDLE_CSP 或 HAL_SPINDLE_CSV

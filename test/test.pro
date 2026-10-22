@@ -54,6 +54,10 @@ INCLUDEPATH += $$PWD/../lib/kinematic/include $$PWD/../lib/kinematic
 LIBS += -L"$$PWD/../lib/CNC_ErrorComp/lib" -lCNC_ErrorComp
 INCLUDEPATH += $$PWD/../lib/CNC_ErrorComp/include $$PWD/../lib/CNC_ErrorComp
 
+# 路径规划依赖圆弧平滑头文件和静态库。
+LIBS += -L"$$PWD/../lib/circleSmooth/bin" -lcircleSmooth
+INCLUDEPATH += $$PWD/../lib/circleSmooth/include $$PWD/../lib/circleSmooth
+
 # HAL 的头与静态库（vendored，见 lib/cnc_hal/sync.sh）。
 # 测试跑的是 debug 构建，所以驱动层用 HAL 的内存桩，还要看得到 HAL 内部头。
 LIBS += -L"$$PWD/../lib/cnc_hal/lib" -lcnc_hal
@@ -92,7 +96,8 @@ HEADERS += \
     ../src/motion/spindle/spl_orient.h \
     ../src/motion/spindle/spl_pos_planner.h \
     ../src/motion/emcmot.h \
-    ../src/motion/manual/handwheel.h \
+    ../src/motion/manual/mpg/mpg.h \
+    ../src/motion/manual/mpg/mpg_planner.h \
     ../src/motion/manual/ref.h \
     ../src/motion/manual/jog/jog.h \
     ../src/motion/manual/jog/jog_planner.h \
@@ -148,7 +153,8 @@ SOURCES += \
     ../src/motion/spindle/spl_vel_planner.c \
     ../src/motion/spindle/spl_pos_planner.c \
     ../src/motion/emcmot.cpp \
-    ../src/motion/manual/handwheel.c \
+    ../src/motion/manual/mpg/mpg.c \
+    ../src/motion/manual/mpg/mpg_planner.c \
     ../src/motion/manual/ref.c \
     ../src/motion/manual/jog/jog.c \
     ../src/motion/manual/jog/jog_planner.c \
@@ -188,6 +194,8 @@ INCLUDEPATH += \
     ../src/motion/auto/interp \
     ../src/motion/auto/trajplan \
     ../src/motion/manual/jog \
+    ../src/motion/manual/mpg \
+    ../src/motion/sysprog \
     ../src/motion/spindle \
     ../src/motion/manual \
     ../src/motion/servo_sample \
@@ -241,6 +249,9 @@ HEADERS = $$unique(HEADERS)
 contains(DEFINES, DEBUG_MODE_ENABLED) {
     SOURCES -= ../src/master/master_wcf.c
 }
+
+# tst_spindle.cpp 依赖已移除的旧版 driver.h，暂不纳入测试构建。
+SOURCES -= $$PWD/test_motion/tst_spindle.cpp
 
 # tst_homing.cpp 用的是旧版 REF_TP 字段名（is_ref_on / homing_direction /
 # homing_profile / traj_data），跟本工程的 ref.h 对不上——在同事的原始树里

@@ -6,7 +6,7 @@
 #include "debug_mode.h"
 #include "ferror_control.h"
 #include "global.h"
-#include "handwheel.h"
+#include "mpg.h"
 #include "hmisysapi.h"
 #include "ref.h"
 #include "rt_hal_adapter.h"

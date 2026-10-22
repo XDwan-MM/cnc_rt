@@ -658,6 +658,7 @@ static void jog_process_axis(int axis, bool is_rapid, bool global_fatal, bool re
 {
     jog_axis_t *jog_axis;
     jog_direction_t desired_direction;
+    double previous_position;
 
     jog_axis = &jog_context.axis[axis];
 
@@ -677,6 +678,8 @@ static void jog_process_axis(int axis, bool is_rapid, bool global_fatal, bool re
     jog_execute_axis(axis, jog_axis, is_rapid);
 
     /* 规划器是 JOG 的唯一运动输出源。 */
+    previous_position = rt_data->axis_data[axis].wcs_cmd_pos_cur;
+    rt_data->axis_data[axis].wcs_cmd_pos_pre = previous_position;
     rt_data->axis_data[axis].wcs_cmd_pos_cur = jog_axis->planner.curr_pos;
     rt_data->axis_data[axis].cmd_vel = jog_axis->planner.curr_vel;
 }

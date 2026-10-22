@@ -39,6 +39,7 @@ typedef enum
     PLC_EV_MSG_ENANLE,
     PLC_EV_MSG_SPD_ORI,        /**< 主轴定向 */
     PLC_EV_MSG_EXTERNAL_DECEL, /**< 外部减速事件 */
+    PLC_EV_MSG_MPG_EXTERNAL_DECEL, /**< G23.3手轮外部减速许可 */
 
     // todo: 后续HMI按键事件得从plc事件分开
     PLC_EV_MSG_HMI, /**< HMI按键事件 */
@@ -155,6 +156,11 @@ typedef struct
     int active;
 } PLC_EV_MSG_EXTERNAL_DECEL_PAYLOAD;
 
+typedef struct
+{
+    int enable;
+} PLC_EV_MSG_MPG_EXTERNAL_DECEL_PAYLOAD;
+
 // todo: 后续HMI按键事件得从plc事件分开
 typedef struct
 {
@@ -179,6 +185,7 @@ typedef struct
         PLC_EV_MSG_ENABLE_PAYLOAD enable_payload;
         PLC_EV_MSG_SPD_ORI_PAYLOAD spd_ori_payload;
         PLC_EV_MSG_EXTERNAL_DECEL_PAYLOAD external_decel_payload;
+        PLC_EV_MSG_MPG_EXTERNAL_DECEL_PAYLOAD mpg_external_decel_payload;
 
         // todo: 后续HMI按键事件得从plc事件分开
         PLC_EV_MSG_HMI_PAYLOAD hmi_payload;
