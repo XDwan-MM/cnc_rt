@@ -337,7 +337,9 @@ void spindle_internal_handle_rotation(spindle_context_t *context,
         context->m29_phase = SPINDLE_M29_IDLE;
         context->m29_feedback_stable = false;
         context->command_state = state;
-        context->command_speed = spindle_internal_get_selected_speed(context);
+        /* command_speed 始终保存 NC 最近一次 S 指令；PLC 速度只通过
+         * spindle_internal_get_selected_speed() 参与运行目标计算，不能
+         * 覆盖 F22~F25 要输出的 NC 指令速度。 */
         /* 新的 M3/M4 明确取得控制权，解除 M29 完成后的停止锁。 */
         context->orient_hold_stop = false;
         context->reset_requires_start = false;

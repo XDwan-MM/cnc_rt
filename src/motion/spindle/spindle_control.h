@@ -59,8 +59,17 @@ void spindle_set_plc_speed(double speed);
 /** 选择 CNC 或 PLC 速度输入。 */
 void spindle_set_speed_source(spindle_speed_source_t source);
 
-/** 获取当前用于 PLC 速度显示的未带方向指令值，单位 rpm。 */
+/** 获取按 G33.7 选择后的当前主轴速度值，单位 rpm。 */
 double spindle_get_command_speed(void);
+
+/**
+ * @brief 获取最近一次 M3/M4 的 NC 指令 S 速度，单位 rpm。
+ *
+ * 该接口不受 G33.7 和 M5 影响，始终返回 NC 侧最近一次记录的 S 值。
+ * PLC F22~F25 输出的是 NC 指令数据，必须使用此接口，不能使用当前
+ * 速度源选择后的目标速度，也不能使用主轴实际反馈速度。
+ */
+double spindle_get_program_command_speed(void);
 
 /** 普通 M29：定向后切换 CSP。 */
 void spindle_request_m29(void);

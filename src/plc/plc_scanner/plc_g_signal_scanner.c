@@ -578,17 +578,19 @@ static void process_spindle_speed_command(const G_INPUT_MAP *curr_g)
 
 static uint16_t read_spindle_speed_command_raw(const G_INPUT_MAP *curr_g)
 {
-    uint16_t low_bits = 0;
-    uint16_t high_bits = 0;
+    uint16_t low_bits;
+    uint16_t high_bits;
 
-    for (int bit = 0; bit < 8; bit++)
-    {
-        low_bits |= (uint16_t)(GET_BIT(curr_g->g_regs[32], bit) & 1) << bit;
-        high_bits |= (uint16_t)(GET_BIT(curr_g->g_regs[33], bit) & 1) << bit;
-    }
+    /*
+     * G32.0~G32.7 对应速度值 bit0~bit7；
+     * G33.0~G33.3 对应速度值 bit8~bit11；
+     * G33.7 是速度源选择信号，不属于速度值。
+     * 因此 12 位原始值范围为 0~4095，不能按 5 位偏移拼接。
+     */
+    low_bits = (uint16_t)curr_g->g_regs[32] & 0x00FFU;
+    high_bits = (uint16_t)curr_g->g_regs[33] & 0x000FU;
 
-    /* G32/G33 的编码格式由 PLC 接口协议定义，保留原始位拼接方式。 */
-    return (uint16_t)((high_bits & 0x0F) << 5) | (low_bits & 0xFF);
+    return (uint16_t)(low_bits | (uint16_t)(high_bits << 8));
 }
 
 /** @brief 从寄存器系统同步数据到本地结构体

@@ -67,3 +67,21 @@ TEST_F(SpindleZeroSpeedAuthorizationTest, ManualDirectionRemainsAvailableWithout
     EXPECT_EQ(g_spindle.pending_event, SPINDLE_EVENT_CCW);
     EXPECT_FALSE(g_spindle.program_run_authorized);
 }
+
+TEST_F(SpindleZeroSpeedAuthorizationTest, ProgramCommandSpeedIsIndependentOfPlcSpeedSource)
+{
+    ASSERT_TRUE(spindle_request_program_run(SPINDLE_CW, 1000.0));
+    spindle_set_plc_speed(2500.0);
+    spindle_set_speed_source(SPINDLE_SPEED_SOURCE_PLC);
+
+    EXPECT_DOUBLE_EQ(spindle_get_command_speed(), 2500.0);
+    EXPECT_DOUBLE_EQ(spindle_get_program_command_speed(), 1000.0);
+}
+
+TEST_F(SpindleZeroSpeedAuthorizationTest, ProgramCommandSpeedRemainsLatestSAfterStop)
+{
+    ASSERT_TRUE(spindle_request_program_run(SPINDLE_CCW, 1000.0));
+    spindle_request_stop();
+
+    EXPECT_DOUBLE_EQ(spindle_get_program_command_speed(), 1000.0);
+}

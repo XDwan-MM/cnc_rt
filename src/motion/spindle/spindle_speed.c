@@ -51,6 +51,11 @@ double spindle_get_command_speed(void)
         g_spindle.plc_speed : g_spindle.command_speed;
 }
 
+double spindle_get_program_command_speed(void)
+{
+    return g_spindle.remembered_program_speed;
+}
+
 void spindle_internal_update_velocity(void)
 {
     /*

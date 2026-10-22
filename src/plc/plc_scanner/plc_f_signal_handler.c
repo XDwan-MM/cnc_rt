@@ -408,7 +408,9 @@ static void plc_output_spindle_command_speed()
     double command_speed;
     uint32_t vel;
 
-    command_speed = spindle_get_command_speed();
+    /* F22~F25 是 NC 侧 S 指令输出，不能随 G33.7 切换成 PLC 速度，
+     * 也不能输出主轴实际反馈速度。 */
+    command_speed = spindle_get_program_command_speed();
     vel = (uint32_t)fabs(command_speed);
 
     bytes[0] = (uint8_t)(vel & 0xff);
