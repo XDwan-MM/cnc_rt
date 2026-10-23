@@ -39,7 +39,6 @@ static void compute_error_comp();
 static void calcul_mac_cmd_pos();
 static void reset_clean_warning();
 static void rebuild_axis_positions_from_feedback();
-static void handle_rigid_return_event();
 
 #ifdef UNIT_TEST
 void emcmot_test_rebuild_axis_positions_from_feedback()
@@ -120,7 +119,7 @@ static void chan_do_period()
 
 // 运动同步控制
 static void smx_do_period()
-{ 
+{
     // 主轴同步
 
     // 重叠控制
