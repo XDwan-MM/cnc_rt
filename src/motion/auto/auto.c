@@ -10,6 +10,10 @@
 #include "trace_publisher.h"
 #include "ncitpmacrodef.h"
 #include "macrovarapi.h"
+#include "tapreturn.h"
+#include "sysprog.h"
+#include "pathplan.h"
+#include "bufstop.h"
 
 static void auto_check_error_line();
 static void auto_update_state();
@@ -28,8 +32,31 @@ static void auto_update_var();
 static bool auto_is_program_end();
 static bool auto_check_program_end();
 static void auto_pop_current_block();
+static void auto_update_buf_stop();
 static void auto_set_stop_skip_macro();
 static void auro_reset_stop_skip();
+static void auto_check_feed_override_event();
+static void auto_check_rapid_override_event();
+
+// 阻止缓冲：已弹出的停止块 ID
+static unsigned int s_buf_stop_popped_id = 0;
+static int s_buf_stop_lost_ticks = 0;
+
+// 活性兜底宽限：目标块一直没弹出、流水线又全空，说明它不可能再执行。 
+#define AUTO_BUFSTOP_LOST_TICKS 2000
+
+static bool auto_buf_stop_pipeline_empty(void)
+{
+    if (parser_queue == NULL || pretreat_queue == NULL || treat_queue == NULL
+        || fix_queue == NULL || nurbs_temp_queue == NULL || unif_queue == NULL
+        || plan_queue == NULL)
+        return false;
+
+    return queue_is_empty(parser_queue) && queue_is_empty(pretreat_queue)
+        && queue_is_empty(treat_queue) && queue_is_empty(fix_queue)
+        && queue_is_empty(nurbs_temp_queue) && queue_is_empty(unif_queue)
+        && queue_is_empty(plan_queue);
+}
 
 void handle_auto_cmd(){
     // 更新状态
@@ -45,6 +72,8 @@ void handle_auto_cmd(){
     auto_update_stage();
     //运行中刷新程序再启动断电块
     rerun_snapshot_position(cycle_tp->plan_block);
+    // 阻止缓冲：停止块出队后发布放行事件
+    auto_update_buf_stop();
     // 检查程序结束
     auto_check_program_end();
 }
@@ -97,6 +126,7 @@ static void auto_update_state(){
                 case PROGRAM_RUNNING:
                 case BLOCK_PAUSED:
                 case BLOCK_BREAKPOINT:
+                case BLOCK_ARRIVE_2_END:
                     cycle_tp->running_stage = BLOCK_BREAKPOINT;
                     break;
                 default:
@@ -116,6 +146,7 @@ static void auto_update_state(){
             case PROGRAM_RUNNING:
             case BLOCK_PAUSED:
             case BLOCK_BREAKPOINT:
+            case BLOCK_ARRIVE_2_END:
                 cycle_tp->running_stage = BLOCK_BREAKPOINT;
                 break;
             default:
@@ -153,6 +184,7 @@ static void auto_update_state(){
                 case PROGRAM_RUNNING:
                 case BLOCK_PAUSED:
                 case BLOCK_BREAKPOINT:
+                case BLOCK_ARRIVE_2_END:
                     cycle_tp->running_stage = BLOCK_BREAKPOINT;
                     break;
                 default:
@@ -187,6 +219,7 @@ static void auto_update_state(){
             case PROGRAM_RUNNING:
             case BLOCK_PAUSED:
             case BLOCK_BREAKPOINT:
+            case BLOCK_ARRIVE_2_END:
                 cycle_tp->running_stage = BLOCK_BREAKPOINT;
                 break;
             default:
@@ -217,7 +250,6 @@ static void auto_check_event(){
         case EXEC_RESET:
         case EXEC_IDLE:
             cycle_tp->trigger_event = SINGLE_BLOCK_ENABLE;
-            rt_data->sys_state[SYS_IS_SINGLE_BLOCK] = true;
             break;
         }
         break;
@@ -231,7 +263,6 @@ static void auto_check_event(){
         case EXEC_RESET:
         case EXEC_IDLE:
             cycle_tp->trigger_event = NONE_EVENT;
-            rt_data->sys_state[SYS_IS_SINGLE_BLOCK] = false;
             break;
         }
         break;
@@ -256,7 +287,6 @@ static void auto_check_event(){
         case EXEC_RESET:
         case EXEC_IDLE:
             cycle_tp->trigger_event = DRY_RUN_ENABLE;
-            rt_data->sys_state[SYS_IS_DRY_RUN] = true;
             break;
         }
         break;
@@ -281,7 +311,6 @@ static void auto_check_event(){
         case EXEC_RESET:
         case EXEC_IDLE:
             cycle_tp->trigger_event = NONE_EVENT;
-            rt_data->sys_state[SYS_IS_DRY_RUN] = false;
             break;
         }
         break;
@@ -295,7 +324,6 @@ static void auto_check_event(){
         case EXEC_RESET:
         case EXEC_IDLE:
             cycle_tp->trigger_event = MAC_LOCK_ENABLE;
-            rt_data->sys_state[SYS_IS_MAC_LOCK_ON] = true;
             break;
         }
         break;
@@ -309,7 +337,6 @@ static void auto_check_event(){
         case EXEC_RESET:
         case EXEC_IDLE:
             cycle_tp->trigger_event = NONE_EVENT;
-            rt_data->sys_state[SYS_IS_MAC_LOCK_ON] = false;
             break;
         }
         break;    
@@ -333,8 +360,8 @@ static void auto_check_event(){
         {
         case EXEC_RUNNING:
             cycle_tp->running_stage = BLOCK_BREAKPOINT;
+            break;
         default:
-            rt_set_sys_state(SYS_IS_IT_LOCK, true);
             break;
         }
         break;
@@ -358,8 +385,8 @@ static void auto_check_event(){
         {
         case EXEC_RUNNING:
             cycle_tp->running_stage = BLOCK_BREAKPOINT;
+            break;
         default:
-            rt_set_sys_state(SYS_IS_IT_LOCK, false);
             break;
         }
         break;   
@@ -369,8 +396,8 @@ static void auto_check_event(){
         {
         case EXEC_RUNNING:
             cycle_tp->running_stage = BLOCK_BREAKPOINT;
+            break;
         default:
-            rt_set_sys_state(SYS_IS_BSL_LOCK, true);
             break;
         }
         break;
@@ -380,8 +407,8 @@ static void auto_check_event(){
         {
         case EXEC_RUNNING:
             cycle_tp->running_stage = BLOCK_BREAKPOINT;
+            break;
         default:
-            rt_set_sys_state(SYS_IS_BSL_LOCK, false);
             break;
         }
         break;
@@ -391,8 +418,8 @@ static void auto_check_event(){
         {
         case EXEC_RUNNING:
             cycle_tp->running_stage = BLOCK_BREAKPOINT;
+            break;
         default:
-            rt_set_sys_state(SYS_IS_CSL_LOCK, true);
             break;
         }
         break;
@@ -402,24 +429,21 @@ static void auto_check_event(){
         {
         case EXEC_RUNNING:
             cycle_tp->running_stage = BLOCK_BREAKPOINT;
+            break;
         default:
-            rt_set_sys_state(SYS_IS_CSL_LOCK, false);
             break;
         }
         break;
     case SYS_EVENT_BLOCK_SKIP_ON:
         LOG(LOG_LEVEL_INFO, "自动模式处理开启跳段");
         cycle_tp->trigger_event = BLOCK_SKIP_ENABLE;
-        rt_set_sys_state(SYS_IS_BLOCK_SKIP, true);
         break;    
     case SYS_EVENT_BLOCK_SKIP_OFF:
         LOG(LOG_LEVEL_INFO, "自动模式处理关闭跳段");
         cycle_tp->trigger_event = NONE_EVENT;
-        rt_set_sys_state(SYS_IS_BLOCK_SKIP, false);
         break;
     case SYS_EVENT_STOP_SKIP_ON:
         LOG(LOG_LEVEL_INFO, "自动模式处理跳转信号");
-        rt_set_sys_state(SYS_IS_STOP_SKIP, true);
         switch (cycle_tp->exec_state)
         {
         case EXEC_RUNNING:
@@ -439,79 +463,81 @@ static void auto_check_event(){
         break;
     case SYS_EVENT_STOP_SKIP_OFF:
         LOG(LOG_LEVEL_INFO, "自动模式处理跳转信号");
-        rt_set_sys_state(SYS_IS_STOP_SKIP, false);
         break;
-    case SYS_EVENT_FEED_OVERRIDE:
-        LOG(LOG_LEVEL_INFO, "自动模式处理进给倍率切换");
+    case SYS_EVENT_RIGID_RETURN_ON:
         switch (cycle_tp->exec_state)
         {
-        case EXEC_RUNNING:
-            switch(cycle_tp->exec_cmd){
-            case DO_CHOP_CMD:
-            case DO_HOME_CMD:
-                cycle_tp->running_stage = BLOCK_BREAKPOINT;
+        case EXEC_IDLE:
+            switch (rt_data->current_mode)
+            {
+            case MODE_MDI: // MDI模式下响应攻丝回退事件
+                {
+                    LOG(LOG_LEVEL_INFO, "MDI模式处理开启攻丝回退");
+                    rt_data->sys_state[SYS_IS_RIGID_RETURN] = 1;
+                    rt_data->sys_state[SYS_IS_RIGID_RETURN_FINISH] = 0;
+                    tapreturn_update(cycle_tp->plan_block);
+                    if(!sysprog_arm(SYS_PROG_RIGID_RETURN))
+                    {
+                        rt_data->sys_state[SYS_IS_RIGID_RETURN_FINISH] = 1;
+                        setAlarm(ALARM_PS, ALARM_WARNING, TAPRET_ALARM_NO_RECORD);
+                        LOG(LOG_LEVEL_WARN, "攻丝回退条件不满足（无攻丝记录或不在孔内）");
+                        break;
+                    }    
+                    // 开始攻丝回退
+                    if(check_is_program_rerun()) break;
+                    tapreturn_clear_alarms();
+                    auto_start_run();
+                    cycle_tp->exec_state = EXEC_RUNNING;
+                    cycle_tp->running_stage = PROGRAM_START;
+                }
                 break;
-            case DO_TAP_CMD:  // 攻丝模式不受倍率影响
-            case DO_SKIP_CMD: // 跳转不受倍率影响
-            case DO_DWELL_CMD:
-            case DO_MSTB_CMD:
             default:
                 break;
             }
-            break;
-        case EXEC_PAUSING:
-        case EXEC_RESET:
-        case EXEC_IDLE:
-            break;
-        }
-        break;
-    case SYS_EVENT_RIGID_RETURN_ON:
-        switch (cycle_tp->plan_block->type)
-        {
-        case TAP_RETURN:
-            break;
-        default:
-            break;
-        }
-        switch (rt_data->current_mode)
-        {
-        case MODE_MDI: // MDI模式下响应攻丝回退事件
-            rt_data->sys_state[SYS_IS_RIGID_RERTURN] = 1;
-            LOG(LOG_LEVEL_INFO, "自动模式处理开启攻丝回退");
             break;
         default:
             break;
         }
         break;
     case SYS_EVENT_RIGID_RETURN_OFF:
-        switch (rt_data->current_mode)
-        {
-        case MODE_MDI:
-            rt_data->sys_state[SYS_IS_RIGID_RERTURN] = 0;
-            LOG(LOG_LEVEL_INFO, "自动模式关闭结束攻丝回退");
-            break;
-        default:
-            break;
-        }
-        break;
-    case SYS_EVENT_RAPID_OVERRIDE:
-        LOG(LOG_LEVEL_INFO, "自动模式处理快速进给倍率切换");
+        rt_data->sys_state[SYS_IS_RIGID_RETURN] = 0;
         switch (cycle_tp->exec_state)
         {
         case EXEC_RUNNING:
-            switch(cycle_tp->exec_cmd){
-            case DO_MOVE_CMD:
-                cycle_tp->running_stage = BLOCK_BREAKPOINT;
+            switch (rt_data->current_mode)
+            {
+            case MODE_MDI:
+                LOG(LOG_LEVEL_INFO, "MDI模式关闭结束攻丝回退");
+                sysprog_cleanup();
+                // 取消攻丝回退
+                cycle_tp->exec_state = EXEC_RESET;
+                switch (cycle_tp->running_stage)
+                {
+                case PROGRAM_RUNNING:
+                case BLOCK_PAUSED:
+                case BLOCK_BREAKPOINT:
+                case BLOCK_ARRIVE_2_END:
+                    cycle_tp->running_stage = BLOCK_BREAKPOINT;
+                    break;
+                default:
+                    break; 
+                }
                 break;
             default:
                 break;
             }
             break;
-        case EXEC_PAUSING:
-        case EXEC_RESET:
-        case EXEC_IDLE:
+        default:
             break;
         }
+        break;
+    case SYS_EVENT_FEED_OVERRIDE:
+        LOG(LOG_LEVEL_INFO, "自动模式处理进给倍率切换");
+        auto_check_feed_override_event();
+        break;
+    case SYS_EVENT_RAPID_OVERRIDE:
+        LOG(LOG_LEVEL_INFO, "自动模式处理快速进给倍率切换");
+        auto_check_rapid_override_event();
         break;
     default:
         break;
@@ -620,7 +646,6 @@ static void auto_update_stage(){
     {
     case DO_MOVE_CMD:
     case DO_CHOP_CMD:
-    case DO_TAP_CMD:
         if(auto_pos_cmd_is_finished()) {
             cycle_tp->running_stage = cycle_tp->target_stage;
             switch (cycle_tp->target_stage)
@@ -635,13 +660,53 @@ static void auto_update_stage(){
                 if (rt_data->sys_state[SYS_IS_SINGLE_BLOCK]) {
                     cycle_tp->exec_state = EXEC_PAUSING;
                 }
-                if (rt_data->sys_state[SYS_IS_MAC_LOCK_ON]) rt_data->sys_state[SYS_IS_MAC_LOCK_READY] = true;
-                else rt_data->sys_state[SYS_IS_MAC_LOCK_READY] = false;
+                rt_data->sys_state[SYS_IS_MAC_LOCK_READY] = rt_data->sys_state[SYS_IS_MAC_LOCK];
                 break;
             case BLOCK_PAUSED:
             case PROGRAM_WAIT:
-                if (rt_data->sys_state[SYS_IS_MAC_LOCK_ON]) rt_data->sys_state[SYS_IS_MAC_LOCK_READY] = true;
-                else rt_data->sys_state[SYS_IS_MAC_LOCK_READY] = false;
+                rt_data->sys_state[SYS_IS_MAC_LOCK_READY] = rt_data->sys_state[SYS_IS_MAC_LOCK];
+                break;
+            default:
+                break;
+            }
+        }
+        break;
+    case DO_TAP_CMD:
+        if(auto_pos_cmd_is_finished()) {
+            cycle_tp->running_stage = cycle_tp->target_stage;
+            switch (cycle_tp->target_stage)
+            {
+            case BLOCK_STOP_2_END:
+                auto_pop_current_block();
+                tapreturn_update(cycle_tp->plan_block);
+                switch (cycle_tp->plan_block->type)
+                {
+                case TAP_RETURN:
+                    rt_data->sys_state[SYS_IS_RIGID_RETURN_FINISH] = 1;
+                    rt_data->sys_state[SYS_IS_RIGID] = 0;
+                    break;
+                default:
+                    break;
+                }
+                cycle_tp->exec_cmd = DO_NULL_CMD;
+                cycle_tp->target_stage = PROGRAM_WAIT;
+                if (rt_data->sys_state[SYS_IS_SINGLE_BLOCK]) {
+                    cycle_tp->exec_state = EXEC_PAUSING;
+                }
+                rt_data->sys_state[SYS_IS_MAC_LOCK_READY] = rt_data->sys_state[SYS_IS_MAC_LOCK];
+                break;
+            case BLOCK_PAUSED:
+                tapreturn_update(cycle_tp->plan_block);
+                switch (cycle_tp->plan_block->type)
+                {
+                case TAP_RETURN:
+                    rt_data->sys_state[SYS_IS_RIGID_RETURN_FINISH] = 1;
+                    rt_data->sys_state[SYS_IS_RIGID] = 0;
+                    break;
+                default:
+                    break;
+                }
+                rt_data->sys_state[SYS_IS_MAC_LOCK_READY] = rt_data->sys_state[SYS_IS_MAC_LOCK];
                 break;
             default:
                 break;
@@ -661,14 +726,12 @@ static void auto_update_stage(){
                 if (rt_data->sys_state[SYS_IS_SINGLE_BLOCK]) {
                     cycle_tp->exec_state = EXEC_PAUSING;
                 }
-                if (rt_data->sys_state[SYS_IS_MAC_LOCK_ON]) rt_data->sys_state[SYS_IS_MAC_LOCK_READY] = true;
-                else rt_data->sys_state[SYS_IS_MAC_LOCK_READY] = false;
+                rt_data->sys_state[SYS_IS_MAC_LOCK_READY] = rt_data->sys_state[SYS_IS_MAC_LOCK];
                 break;
             case BLOCK_PAUSED:
             case PROGRAM_WAIT:
                 auto_set_stop_skip_macro();
-                if (rt_data->sys_state[SYS_IS_MAC_LOCK_ON]) rt_data->sys_state[SYS_IS_MAC_LOCK_READY] = true;
-                else rt_data->sys_state[SYS_IS_MAC_LOCK_READY] = false;
+                rt_data->sys_state[SYS_IS_MAC_LOCK_READY] = rt_data->sys_state[SYS_IS_MAC_LOCK];
                 break;
             default:
                 break;
@@ -678,8 +741,7 @@ static void auto_update_stage(){
     case DO_DWELL_CMD:
         if(auto_dwell_cmd_is_finished()) {
             cycle_tp->running_stage = cycle_tp->target_stage;
-            if (rt_data->sys_state[SYS_IS_MAC_LOCK_ON]) rt_data->sys_state[SYS_IS_MAC_LOCK_READY] = true;
-            else rt_data->sys_state[SYS_IS_MAC_LOCK_READY] = false;
+            rt_data->sys_state[SYS_IS_MAC_LOCK_READY] = rt_data->sys_state[SYS_IS_MAC_LOCK];
             switch (cycle_tp->target_stage)
             {
             case BLOCK_ARRIVE_2_END:
@@ -701,8 +763,7 @@ static void auto_update_stage(){
     case DO_MSTB_CMD:
         if(auto_mstb_cmd_is_finished()){
             cycle_tp->running_stage = cycle_tp->target_stage;
-            if (rt_data->sys_state[SYS_IS_MAC_LOCK_ON]) rt_data->sys_state[SYS_IS_MAC_LOCK_READY] = true;
-            else rt_data->sys_state[SYS_IS_MAC_LOCK_READY] = false;
+            rt_data->sys_state[SYS_IS_MAC_LOCK_READY] = rt_data->sys_state[SYS_IS_MAC_LOCK];
             switch (cycle_tp->target_stage)
             {
             case BLOCK_ARRIVE_2_END:
@@ -724,8 +785,7 @@ static void auto_update_stage(){
     case DO_NULL_CMD:
     default:
         cycle_tp->running_stage = cycle_tp->target_stage;
-        if (rt_data->sys_state[SYS_IS_MAC_LOCK_ON]) rt_data->sys_state[SYS_IS_MAC_LOCK_READY] = true;
-        else rt_data->sys_state[SYS_IS_MAC_LOCK_READY] = false;
+        rt_data->sys_state[SYS_IS_MAC_LOCK_READY] = rt_data->sys_state[SYS_IS_MAC_LOCK];
         switch (cycle_tp->target_stage)
         {
         case BLOCK_STOP_2_END:
@@ -761,7 +821,8 @@ static bool auto_check_program_end(){
 }
 
 static bool auto_is_program_end(){
-    return !rt_get_chan_state(0, CHAN_IS_PARSERING) && queue_is_empty(plan_queue) && queue_is_empty(unif_queue) && queue_is_empty(treat_queue) && queue_is_empty(pretreat_queue) && queue_is_empty(parser_queue);
+    return !rt_get_chan_state(0, CHAN_IS_PARSERING) && queue_is_empty(plan_queue) && queue_is_empty(unif_queue)
+    && queue_is_empty(fix_queue) && queue_is_empty(treat_queue) && queue_is_empty(pretreat_queue) && queue_is_empty(parser_queue);
 }
 
 static void auto_check_error_line(){
@@ -817,6 +878,8 @@ static void auto_get_next_cmd(){
                              cycle_tp->exec_cmd == DO_TAP_CMD);
     auto_update_var();
     rerun_track_current_row(cycle_tp->plan_block);
+    // 记录刚性攻丝参数
+    if(tapreturn_record(cycle_tp->plan_block)) rt_clear_rigid_return_param();
 }
 
 static void auto_update_cur_cmd(){
@@ -866,6 +929,27 @@ void cycle_tp_add_block(){
         // 如果预处理队列无数据，提前结束
         if(queue_is_empty(unif_queue)) break;
         pretreat_block = queue_peak(unif_queue);
+        switch (pretreat_block->mode)
+        {
+        // 处理空包和非移动指令
+        case PMC_MODE_NULL:
+        case PMC_MODE_M_CMD:
+        case PMC_MODE_PAUSE:
+            pretreat_block->angle_rad = PI;
+            break;
+        // 处理移动指令 
+        default:
+            // 计算切矢
+            block_cal_vector(pretreat_block);
+            // 计算两段衔接夹角
+            block_cal_angle(pretreat_block, &unif_queue->pre_vec);
+            // 计算运动轴
+            block_cal_move_axis(pretreat_block);
+            // 计算最大速度
+            block_cal_max_vel(pretreat_block);
+            unif_queue->pre_vec = pretreat_block->end_vec;
+            break;
+        }
         queue_push(plan_queue, pretreat_block);
         queue_pop(unif_queue);  
     }
@@ -923,16 +1007,20 @@ static void auto_reset_run(){
     queue_reset(pretreat_queue);
     queue_reset(parser_queue);
     cycle_tp_reset();
-    trace_publisher_reset(0);
     rt_set_chan_state(0, CHAN_IS_PARSER_RESET, true);
     rt_set_chan_state(0, CHAN_IS_PARSER_RERUN, false);
     rt_set_chan_state(0, CHAN_IS_PARSERING, false);
     rt_set_chan_state(0, CHAN_IS_MOTION_SYNC, false);
+    rt_clear_buf_stop_passed();
+    s_buf_stop_popped_id = 0;
+    s_buf_stop_lost_ticks = 0;
     setVarChanInt(0, VAR_CHAN_IS_RUNNING, 0, 0);
     setVarChanInt(0, VAR_CHAN_IS_MOVING, 0, 0);
     setVarChanInt(0, VAR_CHAN_IS_PROGEND, 1, 0);
     setVarChanInt(0, VAR_CHAN_CYCLE, 0, 0);
     setVarChanInt(0, VAR_CHAN_HOLD, 0, 0);
+    sysprog_cleanup();
+    trace_publisher_reset(0);
     rt_set_zero_vel_params();
     rerun_record_if_interrupted(cycle_tp->plan_block);
 }
@@ -947,7 +1035,8 @@ static void auto_update_var(){
         setVarChanValue(0, VAR_CHAN_MODAL, i, &set_modal, 0);
     }
     // 运行行号
-    setVarChanInt(0, VAR_CHAN_RUN_ROW, cycle_tp->plan_block->line_number, 0);
+    if(cycle_tp->plan_block->line_number >= 0)
+        setVarChanInt(0, VAR_CHAN_RUN_ROW, cycle_tp->plan_block->line_number, 0);
     // LOG(LOG_LEVEL_DEBUG, "line number:%d type:%d", cycle_tp->plan_block->line_number, cycle_tp->plan_block->type);
     // 速度
     switch (cycle_tp->plan_block->mode)
@@ -964,8 +1053,61 @@ static void auto_update_var(){
 
 static void auto_pop_current_block()
 {
+    /* 按 ID 认块：只有弹出的就是当前等待的那一块，才记"已执行"。
+     * 不按 M/G 码匹配，块在后续阶段被展开/合并也不会认错。 */
+    unsigned int target = parser_buf_stop_target_id();
+    if (target != 0 && cycle_tp->plan_block != NULL
+        && (unsigned int)PLAN_BLOCK_BUF_STOP_ID(cycle_tp->plan_block) == target)
+    {
+        s_buf_stop_popped_id = target;
+    }
     trace_publisher_complete(0);
     queue_pop(plan_queue);
+}
+
+/* 阻止缓冲放行事件*/
+static void auto_update_buf_stop()
+{
+    unsigned int target = parser_buf_stop_target_id();
+    if (target == 0)
+    {
+        s_buf_stop_popped_id = 0;
+        s_buf_stop_lost_ticks = 0;
+        return;
+    }
+
+    if (cycle_tp->exec_state == EXEC_RESET)
+    {
+        s_buf_stop_popped_id = 0;
+        s_buf_stop_lost_ticks = 0;
+        parser_buf_stop_publish_passed(target);
+        return;
+    }
+
+    if (s_buf_stop_popped_id == target)
+    {
+        s_buf_stop_lost_ticks = 0;
+        
+        if (cycle_tp->exec_state == EXEC_PAUSING)
+            return;
+        s_buf_stop_popped_id = 0;
+        parser_buf_stop_publish_passed(target);
+        return;
+    }
+
+    if (auto_buf_stop_pipeline_empty())
+    {
+        if (++s_buf_stop_lost_ticks > AUTO_BUFSTOP_LOST_TICKS)
+        {
+            LOG(LOG_LEVEL_WARN, "阻止缓冲目标块丢失：id=%u，按已执行放行", target);
+            s_buf_stop_lost_ticks = 0;
+            parser_buf_stop_publish_passed(target);
+        }
+    }
+    else
+    {
+        s_buf_stop_lost_ticks = 0;
+    }
 }
 
 static void auro_reset_stop_skip(){
@@ -1064,15 +1206,52 @@ void cycle_tp_reset(){
     cycle_tp->plan_block->type = UNKNOWN;
     cycle_tp->ncu_cycle = rt_data->ncu_data.cycle;
     cycle_tp->velplan_mode = rt_data->chan_data->vplan_mode;
-    cycle_tp->max_rapid_vel = MIN3(MIN(rt_data->axis_data[0].max_rapid_vel, rt_data->axis_data[0].jog_lowspd), MIN(rt_data->axis_data[1].max_rapid_vel, rt_data->axis_data[1].jog_lowspd), MIN(rt_data->axis_data[2].max_rapid_vel, rt_data->axis_data[2].jog_lowspd));
-    cycle_tp->max_rapid_acc = MIN3(rt_data->axis_data[0].max_rapid_acc, rt_data->axis_data[1].max_rapid_acc, rt_data->axis_data[2].max_rapid_acc);
-    cycle_tp->max_rapid_jerk = MIN3(rt_data->axis_data[0].max_rapid_jk, rt_data->axis_data[1].max_rapid_jk, rt_data->axis_data[2].max_rapid_jk);
-    cycle_tp->max_feed_vel = MIN3(rt_data->axis_data[0].max_feed_vel, rt_data->axis_data[1].max_feed_vel, rt_data->axis_data[2].max_feed_vel);
-    cycle_tp->max_feed_acc = MIN3(rt_data->axis_data[0].max_feed_acc, rt_data->axis_data[1].max_feed_acc, rt_data->axis_data[2].max_feed_acc);
-    cycle_tp->max_feed_jerk = MIN3(rt_data->axis_data[0].max_feed_jk, rt_data->axis_data[1].max_feed_jk, rt_data->axis_data[2].max_feed_jk);
     cycle_tp_reset_pos_cmd_data();
     cycle_tp_reset_dwell_cmd_data();
     cycle_tp_mstb_cmd_data_reset();
+}
+
+static void auto_check_rapid_override_event(){
+    switch (cycle_tp->exec_state)
+    {
+    case EXEC_RUNNING:
+        switch(cycle_tp->exec_cmd){
+        case DO_MOVE_CMD:
+            cycle_tp->running_stage = BLOCK_BREAKPOINT;
+            break;
+        default:
+            break;
+        }
+        break;
+    case EXEC_PAUSING:
+    case EXEC_RESET:
+    case EXEC_IDLE:
+        break;
+    }
+}
+
+static void auto_check_feed_override_event(){
+    switch (cycle_tp->exec_state)
+    {
+    case EXEC_RUNNING:
+        switch(cycle_tp->exec_cmd){
+        case DO_CHOP_CMD:
+        case DO_HOME_CMD:
+            cycle_tp->running_stage = BLOCK_BREAKPOINT;
+            break;
+        case DO_TAP_CMD:  // 攻丝模式不受倍率影响
+        case DO_SKIP_CMD: // 跳转不受倍率影响
+        case DO_DWELL_CMD:
+        case DO_MSTB_CMD:
+        default:
+            break;
+        }
+        break;
+    case EXEC_PAUSING:
+    case EXEC_RESET:
+    case EXEC_IDLE:
+        break;
+    }
 }
 
 // 编辑模式下复位，光标回到首行

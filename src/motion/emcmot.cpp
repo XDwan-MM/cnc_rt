@@ -4,15 +4,13 @@
 #include "backlash_comp.h"
 #include "comp_data.h"
 #include "debug_mode.h"
-#include "driver.h"
-#include "egear_ratio.h"
 #include "ferror_control.h"
 #include "global.h"
-#include "handwheel.h"
+#include "mpg.h"
 #include "hmisysapi.h"
 #include "ref.h"
+#include "rt_hal_adapter.h"
 #include "jog.h"
-#include "master_wcf.h"
 #include "parser.h"
 #include "pathplan.h"
 #include "pitch_comp.h"
@@ -20,28 +18,28 @@
 #include "rerun.h"
 #include "reset.h"
 #include "rt_sem.h"
-#include "spl_control.h"
+#include "spindle_control.h"
 #include "stored_stroke_check.h"
 #include "straightness_comp.h"
 #include <alarmapi.h>
 #include <hmisysapi.h>
 #include <math.h>
+#include "spindle_internal.h"
 
 static void chan_do_period();
 static void smx_do_period();
 static void axis_write_out();
 static void check_for_fault();
 static void set_operating_mode();
-static void handle_nc_event();
 static void get_cmd_pos();
 static void update_status();
 static void output_to_hal();
 static void read_from_hal();
 static void compute_error_comp();
 static void calcul_mac_cmd_pos();
-static void manual_unset_sys_state();
 static void reset_clean_warning();
 static void rebuild_axis_positions_from_feedback();
+static void handle_rigid_return_event();
 
 #ifdef UNIT_TEST
 void emcmot_test_rebuild_axis_positions_from_feedback()
@@ -51,9 +49,6 @@ void emcmot_test_rebuild_axis_positions_from_feedback()
 }
 #endif
 
-// 绝对式电机编码器位置(指令，反馈)
-static int32_t x_cmd_pulse_pos, y_cmd_pulse_pos, z_cmd_pulse_pos, sp_cmd_pulse_pos;
-static int32_t x_act_pulse_pos, y_act_pulse_pos, z_act_pulse_pos, sp_act_pulse_pos;
 const char *mode_names[] = {"编辑", "AUTO", "MDI", "DNC", "手轮", "手动", "回零", "空闲"};
 
 // 轨迹规划
@@ -116,8 +111,6 @@ static void chan_do_period()
         check_ferror_fault();
         // 判断运动模式
         set_operating_mode();
-        // 处理系统事件
-        handle_nc_event();
         // 主轴控制
         spindle_control_update();
         // 根据运动模式计算运动位置
@@ -152,6 +145,8 @@ static void axis_write_out()
 
 static void set_operating_mode()
 {
+    NC_MODE previous_mode = rt_data->current_mode;
+
     // 急停拍下时不允许切换模式
     if (rt_get_sys_state(SYS_ESTOP_INPUT))
         return;
@@ -213,6 +208,13 @@ static void set_operating_mode()
         break;
     default:
         break;
+    }
+
+    // 切换完成后进入手轮模式时重建手轮位置基准：
+    // 离开手轮模式后其他模式可能已经移动过机床，不能沿用上一次手轮模式的规划位置。
+    if (previous_mode != MODE_MPG && rt_data->current_mode == MODE_MPG)
+    {
+        handwheel_resync_position();
     }
 }
 
@@ -294,57 +296,88 @@ static void check_for_fault()
 
 static void read_from_hal()
 {
-// 读取实际位置
-#ifdef DEBUG_MODE_ENABLED
-    rt_data->axis_data[AXIS_X].motor_act_pos = rt_data->axis_data[AXIS_X].motor_cmd_pos;
-    rt_data->axis_data[AXIS_Y].motor_act_pos = rt_data->axis_data[AXIS_Y].motor_cmd_pos;
-    rt_data->axis_data[AXIS_Z].motor_act_pos = rt_data->axis_data[AXIS_Z].motor_cmd_pos;
-    rt_data->axis_data[AXIS_SP].motor_act_pos = rt_data->axis_data[AXIS_SP].motor_cmd_pos;
-#else
-    // 计算进给轴位置
-    Hal_Driver_Get_Actual_Pos(&x_axis_driver, &x_act_pulse_pos);
-    rt_data->axis_data[AXIS_X].motor_act_pos = pulses_to_position(&rt_data->axis_data[AXIS_X], x_act_pulse_pos);
-    Hal_Driver_Get_Actual_Pos(&y_axis_driver, &y_act_pulse_pos);
-    rt_data->axis_data[AXIS_Y].motor_act_pos = pulses_to_position(&rt_data->axis_data[AXIS_Y], y_act_pulse_pos);
-    Hal_Driver_Get_Actual_Pos(&z_axis_driver, &z_act_pulse_pos);
-    rt_data->axis_data[AXIS_Z].motor_act_pos = pulses_to_position(&rt_data->axis_data[AXIS_Z], z_act_pulse_pos);
-    // todo：计算旋转轴角度
-    Hal_Driver_Get_Actual_Pos(&spindle_driver, &sp_act_pulse_pos);
-    // rt_data->axis_data[AXIS_SP].motor_act_pos = pulses_to_position(&rt_data->axis_data[AXIS_SP], sp_act_pulse_pos);
-#endif
-    // 电机脉冲
-    rt_data->axis_data[AXIS_X].enc_cntr = x_act_pulse_pos;
-    rt_data->axis_data[AXIS_Y].enc_cntr = y_act_pulse_pos;
-    rt_data->axis_data[AXIS_Z].enc_cntr = z_act_pulse_pos;
-    rt_data->axis_data[AXIS_SP].enc_cntr = sp_cmd_pulse_pos;
-    // 读取实际速度
-    rt_data->axis_data[AXIS_X].act_vel = x_axis_driver.actual_vel;
-    rt_data->axis_data[AXIS_Y].act_vel = y_axis_driver.actual_vel;
-    rt_data->axis_data[AXIS_Z].act_vel = z_axis_driver.actual_vel;
-    rt_data->axis_data[AXIS_SP].act_vel = spindle_driver.actual_vel;
-    // 进给值实际合成速度，不包含主轴
-    rt_data->chan_data[0].act_vel = sqrt(pow(x_axis_driver.actual_vel, 2) + pow(y_axis_driver.actual_vel, 2) +
-                                         pow(z_axis_driver.actual_vel, 2));
+    /* HAL 给的就是用户单位（mm）——脉冲换算与 enc_off 语义都由 HAL 完成，
+     * 这里不再调 pulses_to_position()，也不重复加减 enc_off。 */
+    double pos = 0.0;
+    bool feed_positions_valid = true;
+    if (rt_hal_axis_pos(RT_HAL_AXIS_X, &pos) == HAL_OK)
+        rt_data->axis_data[AXIS_X].motor_act_pos = pos;
+    else feed_positions_valid = false;
+    if (rt_hal_axis_pos(RT_HAL_AXIS_Y, &pos) == HAL_OK)
+        rt_data->axis_data[AXIS_Y].motor_act_pos = pos;
+    else feed_positions_valid = false;
+    if (rt_hal_axis_pos(RT_HAL_AXIS_Z, &pos) == HAL_OK)
+        rt_data->axis_data[AXIS_Z].motor_act_pos = pos;
+    else feed_positions_valid = false;
+    const bool spindle_position_valid =
+        rt_hal_axis_pos(RT_HAL_AXIS_SP, &pos) == HAL_OK;
+    if (spindle_position_valid)
+        rt_data->axis_data[RT_HAL_AXIS_SP].motor_act_pos = pos;
 
-    if (!update_pos_flag)
+
+    /* enc_cntr：HAL 不提供原始反馈计数，置 0。仅用于显示，不参与保护判断。 */
+    rt_data->axis_data[AXIS_X].enc_cntr = 0;
+    rt_data->axis_data[AXIS_Y].enc_cntr = 0;
+    rt_data->axis_data[AXIS_Z].enc_cntr = 0;
+    rt_data->axis_data[AXIS_SP].enc_cntr = 0;
+
+    /* 进给轴读 HAL 换算后的 mm/min；主轴仍读 rpm。 */
+    const RtHalAxisSlot feed_slot[3] = {RT_HAL_AXIS_X, RT_HAL_AXIS_Y, RT_HAL_AXIS_Z};
+    const int feed_axis[3] = {AXIS_X, AXIS_Y, AXIS_Z};
+    for (int i = 0; i < 3; ++i) {
+        double mm_min = 0.0;
+        if (rt_hal_axis_speed_mm_min(feed_slot[i], &mm_min) != HAL_OK) mm_min = 0.0;
+        rt_data->axis_data[feed_axis[i]].act_vel = mm_min;
+    }
+    /* 主轴：HalCSpindleStatus.actual_speed，rpm（HAL 已按 speed_unit 换算）。 */
+    double spd = 0.0;
+    if (rt_hal_spindle_speed(RT_HAL_AXIS_SP, &spd) == HAL_OK)
+        rt_data->axis_data[AXIS_SP].act_vel = spd;
+    /* 进给轴实际合成速度（不含主轴）：三轴 mm/min 的欧氏模。纯显示量，不参与保护判断。 */
     {
-        // 报警复位后用最新带补偿反馈，重建未补偿坐标基准。
+        const double vx = rt_data->axis_data[AXIS_X].act_vel;
+        const double vy = rt_data->axis_data[AXIS_Y].act_vel;
+        const double vz = rt_data->axis_data[AXIS_Z].act_vel;
+        rt_data->chan_data[0].act_vel = sqrt(vx * vx + vy * vy + vz * vz);
+    }
+
+    /* 只有 CSP 攻丝复位停车**进行中**才需要等主轴位置（两者同一拍重建才不打架）；
+     * 停车结束后 reset_stop 字段会一并清掉，进给轴的重建不再被主轴绑架。 */
+    const bool reset_tap_stop =
+        g_spindle.reset_stop_pending && g_spindle.reset_stop_csp;
+    if (!update_pos_flag && feed_positions_valid &&
+        (!spindle_reset_stop_uses_csp() || spindle_position_valid))
+    {
+        // 报警复位后用最新反馈，重建未补偿坐标基准。
         rebuild_axis_positions_from_feedback();
+        handwheel_resync_position();
         update_pos_flag = 1;
     }
 }
 
 static void output_to_hal()
 {
-    // 发送给驱动器
-    x_cmd_pulse_pos = position_to_pulses(&rt_data->axis_data[AXIS_X], rt_data->axis_data[AXIS_X].motor_cmd_pos);
-    Hal_Driver_Set_Target_Pos(&x_axis_driver, x_cmd_pulse_pos);
-    y_cmd_pulse_pos = position_to_pulses(&rt_data->axis_data[AXIS_Y], rt_data->axis_data[AXIS_Y].motor_cmd_pos);
-    Hal_Driver_Set_Target_Pos(&y_axis_driver, y_cmd_pulse_pos);
-    z_cmd_pulse_pos = position_to_pulses(&rt_data->axis_data[AXIS_Z], rt_data->axis_data[AXIS_Z].motor_cmd_pos);
-    Hal_Driver_Set_Target_Pos(&z_axis_driver, z_cmd_pulse_pos);
-    // 编码器位置打印
-    // printf("Z_PULSE_cmd%d Z_PULSE_act%d\n",z_cmd_pulse_pos, z_act_pulse_pos);
+    /* 以用户单位（mm）发布命令，只放进适配层的按拍缓冲；真正的写入由 PDO 线程
+     * 在 commit 前完成。台账未清时适配层会拒收，此处有意忽略返回值。 */
+    (void)rt_hal_request_axis_pos(RT_HAL_AXIS_X, rt_data->axis_data[AXIS_X].motor_cmd_pos);
+    (void)rt_hal_request_axis_pos(RT_HAL_AXIS_Y, rt_data->axis_data[AXIS_Y].motor_cmd_pos);
+    (void)rt_hal_request_axis_pos(RT_HAL_AXIS_Z, rt_data->axis_data[AXIS_Z].motor_cmd_pos);
+    /* M29 对零阶段由主轴状态机保持位置；CSP 受控停车仍需插补同步。
+     * 复位收口后等反馈坐标重建完成，避免旧目标重新下发。 */
+    HalCSpindleStatus spindle;
+    const bool reset_tap_stop = g_spindle.reset_stop_pending &&
+                                g_spindle.reset_stop_csp;
+    const bool reset_active = (nc_reset != NULL && nc_reset->is_resetting) ||
+                              rt_data->nc_event == SYS_EVENT_HMI_RESET ||
+                              rt_data->sys_state[SYS_ESTOP_INPUT] ||
+                              rt_data->sys_state[SYS_IS_ESTOP_ACTIVE] ||
+                              rt_data->sys_state[SYS_IS_ALARMING];
+    if (rt_hal_spindle_status(RT_HAL_AXIS_SP, &spindle) == HAL_OK &&
+        spindle.mode == HAL_SPINDLE_CSP &&
+        (reset_tap_stop ||
+         (update_pos_flag && !reset_active &&
+          g_spindle.m29_phase == SPINDLE_M29_READY)))
+        (void)rt_hal_request_axis_pos(RT_HAL_AXIS_SP, rt_data->axis_data[AXIS_SP].wcs_cmd_pos_cur);
 }
 
 static void compute_error_comp()
@@ -497,40 +530,6 @@ static void reset_clean_warning()
     }
 }
 
-/// @brief 所有模式下都统一处理的事件
-static void handle_nc_event(){
-    manual_unset_sys_state();
-    switch (rt_data->nc_event)
-    {
-    case SYS_EVENT_PROGRAM_RESTART_ON:
-        rt_set_sys_state(SYS_IS_PROG_RESTAR, true);
-        break;
-    case SYS_EVENT_PROGRAM_RESTART_OFF:
-        rt_set_sys_state(SYS_IS_PROG_RESTAR, false);
-        break;
-    case SYS_EVENT_BLOCK_SKIP_ON:
-        rt_set_sys_state(SYS_IS_BLOCK_SKIP, true);
-        break;
-    case SYS_EVENT_BLOCK_SKIP_OFF:
-        rt_set_sys_state(SYS_IS_BLOCK_SKIP, false);
-        break;
-    default:
-        break;
-    }
-}
-
-static void manual_unset_sys_state()
-{
-    if (rt_data->current_mode == MODE_MDI || rt_data->current_mode == MODE_MEM || rt_data->current_mode == MODE_DNC)
-        return;
-    // todo：手动模式暂不支持机械锁住和所有轴互锁
-    if (rt_data->sys_state[SYS_IS_MAC_LOCK_READY])
-        rt_data->sys_state[SYS_IS_MAC_LOCK_READY] = false;
-    if (rt_data->sys_state[SYS_IS_MAC_LOCK_ON])
-        rt_data->sys_state[SYS_IS_MAC_LOCK_ON] = false;
-    if (rt_data->sys_state[SYS_IS_IT_LOCK])
-        rt_data->sys_state[SYS_IS_IT_LOCK] = false;
-}
 
 static void rebuild_axis_positions_from_feedback()
 {
@@ -538,6 +537,7 @@ static void rebuild_axis_positions_from_feedback()
     for (int i = 0; i < SYS_AXES_NUM; i++)
     {
         rt_data->axis_data[i].motor_cmd_pos = rt_data->axis_data[i].motor_act_pos;
+        rt_data->axis_data[i].motor_act_pos_pre = rt_data->axis_data[i].motor_act_pos;
         double uncompensated_pos;
         // printf("total_comp_cal %f\n", rt_data->axis_data[i].total_comp_cal);
         uncompensated_pos = rt_data->axis_data[i].motor_act_pos - rt_data->axis_data[i].total_comp_cal;

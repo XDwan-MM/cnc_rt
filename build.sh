@@ -124,6 +124,12 @@ build_all() {
     else
         echo -e "  实时版本: ${RED}[FAIL]${NC}"
     fi
+
+    # 有任一档失败就以非 0 返回：以前这里固定返回 0，于是
+    #   ./build.sh && ./test/xxx.sh
+    # 会把"编译失败"当成功继续往下跑，回归用的还是上一版二进制。
+    # （2026-10-10 踩到：HAL ABI 闸门报 #error，build.sh 却报成功。）
+    [ $debug_ok -eq 1 ] && [ $release_ok -eq 1 ]
 }
 
 run() {

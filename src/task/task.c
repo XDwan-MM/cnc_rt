@@ -4,8 +4,7 @@
 #include "hmi_scanner.h"
 #include "regapi.h"
 #include "servosampleevents.h"
-#include "spl_control.h"
-#include "spl_orient.h"
+#include "spindle_control.h"
 #include <alarmapi.h>
 #include <hmisysapi.h>
 #include <stdlib.h>
@@ -24,6 +23,7 @@ static void task_handle_enable_event(PLC_EVENT *event_data);
 static void task_handle_reset_event(PLC_EVENT *event_data);
 static void task_handle_hmi_event(PLC_EVENT *event_data);
 static void task_handle_external_decel_event(PLC_EVENT *event_data);
+static void task_handle_mpg_external_decel_event(PLC_EVENT *event_data);
 static bool task_external_decel_enabled(int function);
 static void task_handle_spd_ori_event(PLC_EVENT *event_data);
 
@@ -113,7 +113,6 @@ static GNC_RES task_handle_plc_event(PLC_EVENT *event_data)
     case PLC_EV_MSG_SPD_ORI:
     {
         task_handle_spd_ori_event(event_data);
-        // spl_orient_request();
         break;
     }
     case PLC_EV_MSG_EXTERNAL_DECEL:
@@ -131,6 +130,11 @@ static GNC_RES task_handle_plc_event(PLC_EVENT *event_data)
                 event_data->external_decel_payload.active);
         }
         task_handle_external_decel_event(event_data);
+        break;
+    }
+    case PLC_EV_MSG_MPG_EXTERNAL_DECEL:
+    {
+        task_handle_mpg_external_decel_event(event_data);
         break;
     }
     default:
@@ -261,117 +265,35 @@ static void task_handle_feed_event(PLC_EVENT *event_data)
 
 static void task_handle_spl_event(PLC_EVENT *event_data)
 {
-    LOG(LOG_LEVEL_INFO, "处理主轴事件 动作%d", event_data->spindle_payload.direction);
-    if (event_data->spindle_payload.direction == 1)
+    const int direction = event_data->spindle_payload.direction;
+
+    LOG(LOG_LEVEL_INFO, "处理主轴事件 动作%d", direction);
+    if (direction > 0)
     {
-        LOG(LOG_LEVEL_INFO, "处理主轴正转事件");
-        if (spl_context.m29_active ||
-            (spl_context.m29_phase != SPINDLE_M29_IDLE &&
-             spl_context.m29_phase != SPINDLE_M29_READY))
-        {
-            LOG(LOG_LEVEL_INFO, "M29进行中，忽略主轴正转事件");
-            return;
-        }
-        spindle_clear_velocity_arrival();
-        if (spl_context.orient_phase != SPINDLE_ORIENT_IDLE ||
-            spl_context.orient_request_pending ||
-            spl_context.orient_release_pending)
-        {
-            spl_context.deferred_start_pending = true;
-            spl_context.deferred_start_state = SPINDLE_CW;
-            spl_context.deferred_start_speed = spl_context.mcp_target_speed;
-            return;
-        }
-        spl_context.spl_event = SPINDLE_EVENT_CW;
-        spl_context.command_speed = spl_context.mcp_target_speed;
-        // spl_context.mcp_target_speed = cycle_tp->plan_block->mst_data.spindle.speed;
-        // spl_context.mcode_feedback = false;
-        // spl_context.m19_active = false;
-        // spl_context.orient_hold_stop = false;
-        spl_context.command_state = SPINDLE_CW;
-        spl_context.start_request_pending = true;
+        (void)spindle_request_manual_run(SPINDLE_CW);
     }
-    if (event_data->spindle_payload.direction == -1)
+    else if (direction < 0)
     {
-        LOG(LOG_LEVEL_INFO, "处理主轴反转事件");
-        if (spl_context.m29_active ||
-            (spl_context.m29_phase != SPINDLE_M29_IDLE &&
-             spl_context.m29_phase != SPINDLE_M29_READY))
-        {
-            LOG(LOG_LEVEL_INFO, "M29进行中，忽略主轴反转事件");
-            return;
-        }
-        spindle_clear_velocity_arrival();
-        if (spl_context.orient_phase != SPINDLE_ORIENT_IDLE ||
-            spl_context.orient_request_pending ||
-            spl_context.orient_release_pending)
-        {
-            spl_context.deferred_start_pending = true;
-            spl_context.deferred_start_state = SPINDLE_CCW;
-            spl_context.deferred_start_speed = spl_context.mcp_target_speed;
-            return;
-        }
-        spl_context.spl_event = SPINDLE_EVENT_CCW;
-        spl_context.command_speed = spl_context.mcp_target_speed;
-        // spl_context.mcp_target_speed = cycle_tp->plan_block->mst_data.spindle.speed;
-        // spl_context.mcode_feedback = false;
-        // spl_context.m19_active = false;
-        // spl_context.orient_hold_stop = false;
-        spl_context.command_state = SPINDLE_CCW;
-        spl_context.start_request_pending = true;
+        (void)spindle_request_manual_run(SPINDLE_CCW);
     }
-    if (event_data->spindle_payload.direction == 0)
+    else
     {
-        LOG(LOG_LEVEL_INFO, "处理主轴停止事件");
-
-        if (spl_context.m29_active ||
-            (spl_context.m29_phase != SPINDLE_M29_IDLE &&
-             spl_context.m29_phase != SPINDLE_M29_READY))
-        {
-            LOG(LOG_LEVEL_INFO, "M29进行中，忽略普通主轴停止事件");
-            return;
-        }
-
-        /*
-         * M19 通常会同时改变 G29.6 和 G70.6。定向上升沿可能先到达，
-         * 随后的 G29.6 下降沿只是定向前的停转请求，不能覆盖尚未处理
-         * 的 SPINDLE_EVENT_ORIENT；定向流程本身已经会停止主轴。
-         */
-        if (spl_context.spl_event == SPINDLE_EVENT_ORIENT ||
-            spl_context.orient_phase != SPINDLE_ORIENT_IDLE ||
-            spl_context.orient_request_pending)
-        {
-            return;
-        }
-
-        spl_context.spl_event = SPINDLE_EVENT_STOP;
-        spl_context.command_speed = 0.0;
-        // spl_context.mcode_feedback = false;
-        // spl_context.m19_active = false;
-        // spl_context.orient_hold_stop = false;
-        spl_context.command_state = SPINDLE_STOP;
-        spl_context.start_request_pending = false;
-        spl_context.deferred_start_pending = false;
-        spindle_clear_velocity_arrival();
+        spindle_request_stop();
     }
 }
 
 static void task_handle_spd_ori_event(PLC_EVENT *event_data)
 {
-    LOG(LOG_LEVEL_INFO, "处理主轴定向事件 动作%d", event_data->spd_ori_payload.p1);
-    // 推送主轴定向事件
-    if (event_data->spd_ori_payload.p1 == 1)
+    const int action = event_data->spd_ori_payload.p1;
+
+    LOG(LOG_LEVEL_INFO, "处理主轴定向事件 动作%d", action);
+    if (action > 0)
     {
-        spindle_clear_velocity_arrival();
-        spl_context.start_request_pending = false;
-        spl_context.deferred_start_pending = false;
-        spl_context.spl_event = SPINDLE_EVENT_ORIENT;
+        spindle_request_orientation(true);
     }
-    // 推送主轴定向释放事件
-    if (event_data->spd_ori_payload.p1 == -1)
+    else if (action < 0)
     {
-        spindle_clear_velocity_arrival();
-        spl_context.spl_event = SPINDLE_EVENT_RELEASE_ORIENT;
+        spindle_request_orientation(false);
     }
 }
 
@@ -460,11 +382,13 @@ static void task_handle_enable_event(PLC_EVENT *event_data)
         if (event_data->enable_payload.enable_state)
         {
             rt_data->nc_event = SYS_EVENT_PROGRAM_RESTART_ON;
+            rt_set_sys_state(SYS_IS_PROG_RESTAR, true);
             LOG(LOG_LEVEL_INFO, "处理程序再启动开启事件");
         }
         else
         {
             rt_data->nc_event = SYS_EVENT_PROGRAM_RESTART_OFF;
+            rt_set_sys_state(SYS_IS_PROG_RESTAR, false);
             LOG(LOG_LEVEL_INFO, "处理程序再启动关闭事件");
         }
         break;
@@ -472,11 +396,13 @@ static void task_handle_enable_event(PLC_EVENT *event_data)
         if (event_data->enable_payload.enable_state)
         {
             rt_data->nc_event = SYS_EVENT_BLOCK_SKIP_ON;
+            rt_set_sys_state(SYS_IS_BLOCK_SKIP, true);
             LOG(LOG_LEVEL_INFO, "处理跳段开启事件");
         }
         else
         {
             rt_data->nc_event = SYS_EVENT_BLOCK_SKIP_OFF;
+            rt_set_sys_state(SYS_IS_BLOCK_SKIP, false);
             LOG(LOG_LEVEL_INFO, "处理跳段关闭事件");
         }
         break;
@@ -484,11 +410,13 @@ static void task_handle_enable_event(PLC_EVENT *event_data)
         if (event_data->enable_payload.enable_state)
         {
             rt_data->nc_event = SYS_EVENT_DRY_RUN_ON;
+            rt_set_sys_state(SYS_IS_DRY_RUN, true);
             LOG(LOG_LEVEL_INFO, "处理空运行开启事件");
         }
         else
         {
             rt_data->nc_event = SYS_EVENT_DRY_RUN_OFF;
+            rt_set_sys_state(SYS_IS_DRY_RUN, false);
             LOG(LOG_LEVEL_INFO, "处理空运行关闭事件");
         }
         break;
@@ -496,11 +424,13 @@ static void task_handle_enable_event(PLC_EVENT *event_data)
         if (event_data->enable_payload.enable_state)
         {
             rt_data->nc_event = SYS_EVENT_MAC_LOCK_ON;
+            rt_set_sys_state(SYS_IS_MAC_LOCK, true);
             LOG(LOG_LEVEL_INFO, "处理机床锁住开启事件");
         }
         else
         {
             rt_data->nc_event = SYS_EVENT_MAC_LOCK_OFF;
+            rt_set_sys_state(SYS_IS_MAC_LOCK, false);
             LOG(LOG_LEVEL_INFO, "处理机床锁住关闭事件");
         }
         break;
@@ -508,11 +438,13 @@ static void task_handle_enable_event(PLC_EVENT *event_data)
         if (event_data->enable_payload.enable_state)
         {
             rt_data->nc_event = SYS_EVENT_IT_ON;
+            rt_set_sys_state(SYS_IS_IT_LOCK, true);
             LOG(LOG_LEVEL_INFO, "处理所有轴互锁开启事件");
         }
         else
         {
             rt_data->nc_event = SYS_EVENT_IT_OFF;
+            rt_set_sys_state(SYS_IS_IT_LOCK, false);
             LOG(LOG_LEVEL_INFO, "处理所有轴互锁关闭事件");
         }
         break;
@@ -532,11 +464,13 @@ static void task_handle_enable_event(PLC_EVENT *event_data)
         if (event_data->enable_payload.enable_state)
         {
             rt_data->nc_event = SYS_EVENT_BSL_ON;
+            rt_set_sys_state(SYS_IS_BSL_LOCK, true);
             LOG(LOG_LEVEL_INFO, "处理程序段开始互锁开启事件");
         }
         else
         {
             rt_data->nc_event = SYS_EVENT_BSL_OFF;
+            rt_set_sys_state(SYS_IS_BSL_LOCK, false);
             LOG(LOG_LEVEL_INFO, "处理程序段开始互锁关闭事件");
         }
         break;
@@ -544,11 +478,13 @@ static void task_handle_enable_event(PLC_EVENT *event_data)
         if (event_data->enable_payload.enable_state)
         {
             rt_data->nc_event = SYS_EVENT_CSL_ON;
+            rt_set_sys_state(SYS_IS_CSL_LOCK, true);
             LOG(LOG_LEVEL_INFO, "处理切削程序段开始互锁开启事件");
         }
         else
         {
             rt_data->nc_event = SYS_EVENT_CSL_OFF;
+            rt_set_sys_state(SYS_IS_CSL_LOCK, false);
             LOG(LOG_LEVEL_INFO, "处理切削程序段开始互锁关闭事件");
         }
         break;
@@ -556,11 +492,13 @@ static void task_handle_enable_event(PLC_EVENT *event_data)
         if (event_data->enable_payload.enable_state)
         {
             rt_data->nc_event = SYS_EVENT_IT1_ON;
+            rt_set_sys_state(SYS_IS_IT1_LOCK, true);
             LOG(LOG_LEVEL_INFO, "处理轴1互锁开启事件");
         }
         else
         {
             rt_data->nc_event = SYS_EVENT_IT1_OFF;
+            rt_set_sys_state(SYS_IS_IT1_LOCK, false);
             LOG(LOG_LEVEL_INFO, "处理轴1互锁关闭事件");
         }
         break;
@@ -568,11 +506,13 @@ static void task_handle_enable_event(PLC_EVENT *event_data)
         if (event_data->enable_payload.enable_state)
         {
             rt_data->nc_event = SYS_EVENT_IT2_ON;
+            rt_set_sys_state(SYS_IS_IT2_LOCK, true);
             LOG(LOG_LEVEL_INFO, "处理轴2互锁开启事件");
         }
         else
         {
             rt_data->nc_event = SYS_EVENT_IT2_OFF;
+            rt_set_sys_state(SYS_IS_IT2_LOCK, false);
             LOG(LOG_LEVEL_INFO, "处理轴2互锁关闭事件");
         }
         break;
@@ -580,11 +520,13 @@ static void task_handle_enable_event(PLC_EVENT *event_data)
         if (event_data->enable_payload.enable_state)
         {
             rt_data->nc_event = SYS_EVENT_IT3_ON;
+            rt_set_sys_state(SYS_IS_IT3_LOCK, true);
             LOG(LOG_LEVEL_INFO, "处理轴3互锁开启事件");
         }
         else
         {
             rt_data->nc_event = SYS_EVENT_IT3_OFF;
+            rt_set_sys_state(SYS_IS_IT3_LOCK, false);
             LOG(LOG_LEVEL_INFO, "处理轴3互锁关闭事件");
         }
         break;
@@ -740,11 +682,13 @@ static void task_handle_enable_event(PLC_EVENT *event_data)
         if (event_data->enable_payload.enable_state)
         {
             rt_data->nc_event = SYS_EVENT_SINGLE_BLOCK_ON;
+            rt_set_sys_state(SYS_IS_SINGLE_BLOCK, true);
             LOG(LOG_LEVEL_INFO, "处理单段开启事件");
         }
         else
         {
             rt_data->nc_event = SYS_EVENT_SINGLE_BLOCK_OFF;
+            rt_set_sys_state(SYS_IS_SINGLE_BLOCK, false);
             LOG(LOG_LEVEL_INFO, "处理单段关闭事件");
         }
         break;
@@ -752,11 +696,13 @@ static void task_handle_enable_event(PLC_EVENT *event_data)
         if (event_data->enable_payload.enable_state)
         {
             rt_data->nc_event = SYS_EVENT_STOP_SKIP_ON;
+            rt_set_sys_state(SYS_IS_STOP_SKIP, true);
             LOG(LOG_LEVEL_INFO, "处理跳转信号开启事件");
         }
         else
         {
             rt_data->nc_event = SYS_EVENT_STOP_SKIP_OFF;
+            rt_set_sys_state(SYS_IS_STOP_SKIP, false);
             LOG(LOG_LEVEL_INFO, "处理跳转信号关闭事件");
         }
         break;
@@ -848,6 +794,15 @@ static void task_handle_external_decel_event(PLC_EVENT *event_data)
     {
         rt_data->nc_event = active ? SYS_EVENT_EXTERNAL_DECEL_NEG_ON : SYS_EVENT_EXTERNAL_DECEL_NEG_OFF;
     }
+}
+
+static void task_handle_mpg_external_decel_event(PLC_EVENT *event_data)
+{
+    if (event_data == NULL || rt_data == NULL)
+        return;
+
+    rt_data->sys_state[SYS_IS_MPG_EX_DEC_ENABLE] =
+        (event_data->mpg_external_decel_payload.enable != 0);
 }
 
 static bool task_external_decel_enabled(int function)

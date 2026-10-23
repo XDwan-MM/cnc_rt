@@ -33,9 +33,14 @@ typedef enum
     SYS_ESTOP_INPUT,            // 系统急停输入
     SYS_IS_ALARMING,            // 是否正在报警中
     SYS_IS_SWITCHING_MODE,      // 是否正在切换模式
-    SYS_IS_MAC_LOCK_ON,         // 机床锁住开启
+    SYS_IS_MAC_LOCK,            // 机床锁住开启
     SYS_IS_MAC_LOCK_READY,      // 机床锁住完成
     SYS_IS_IT_LOCK,             // 所有轴互锁
+    SYS_IS_IT1_LOCK,            // 轴1互锁
+    SYS_IS_IT2_LOCK,            // 轴2互锁
+    SYS_IS_IT3_LOCK,            // 轴3互锁
+    SYS_IS_IT4_LOCK,            // 轴4互锁
+    SYS_IS_IT5_LOCK,            // 轴5互锁
     SYS_IS_BSL_LOCK,            // 程序段开始锁住
     SYS_IS_CSL_LOCK,            // 切削程序段开始锁住
     SYS_IS_DRY_RUN,             // 空运行
@@ -46,7 +51,9 @@ typedef enum
     SYS_IS_PROG_RESTAR,         // 程序再启动
     SYS_IS_STOP_SKIP,           // 外部跳转
     SYS_IS_RIGID,               // 刚性攻丝
-    SYS_IS_RIGID_RERTURN,       // 攻丝回退
+    SYS_IS_RIGID_RETURN,        // 攻丝回退
+    SYS_IS_RIGID_RETURN_FINISH, // 刚性攻丝返回完成
+    SYS_IS_MPG_EX_DEC_ENABLE,   // G23.3允许外部减速作用于手轮
 } SysStateIndex;
 
 // 路径和轨迹两个线程使用
@@ -57,6 +64,7 @@ typedef enum
     CHAN_IS_PARSER_RERUN,       // 译码器是否运行中 is_parser_running
     CHAN_IS_FIRST_RUN,          // 是否为第一次运行 is_first_run
     CHAN_IS_MOTION_SYNC,        // 等待运动完成同步握手
+    CHAN_IS_BUFSTOP_PASSED,     // 阻止缓冲：某个停止块已运行完（与 MOTION_SYNC 同构）
 } ChanStateIndex;
 
 typedef struct
@@ -72,6 +80,10 @@ typedef struct
     bool is_rev_limit;  // 手动负方向限制
     bool plc_is_disable;
     bool is_disable;   // 轴是否被屏蔽
+    /* 主轴侧"这拍想不想带力矩"。**只有主轴会写**（spl_drv_enable/disable），
+     * hal_axis_intent_poll 把它合并进使能意图，而急停与轴屏蔽永远优先。
+     * 初值 0（不带力矩）：要上力矩必须显式要——与 v1.27.1 一致。 */
+    bool spindle_wants_torque;
     bool is_lag_error; // 是否跟随误差报警 1是 0否
     // 外部减速状态：[0~4]功能号，[0]正向减速状态寄存，[1]负向减速状态寄存
     bool external_decel_active[SYS_EXTERNAL_DECEL_FUNCTION_COUNT][SYS_EXTERNAL_DECEL_DIRECTION_COUNT];
@@ -166,7 +178,7 @@ typedef struct
     int lmt2_type;                      // 第二级正软极限类型
     int lmt2_enable;                    // 第二级正软极限开启
     int lmt3_enable;                    // 第三级负软极限开启
-    double spl_default_speed;           // 主轴缺省速度
+    double spdl_default_speed;          // 主轴缺省速度
     double spdl_max_speed;              // 主轴最大转速(r/min)
     bool ex_dec_enable_pos_cut;         // 外部减速信号对正向切削进给是否生效
     bool ex_dec_enable_neg_cut;         // 外部减速信号对负向切削进给是否生效
@@ -175,10 +187,23 @@ typedef struct
     double rpd_ex_dec3_vel;             // 外部减速3对快速进给的减速速度
     double rpd_ex_dec4_vel;             // 外部减速4对快速进给的减速速度
     double rpd_ex_dec5_vel;             // 外部减速5对快速进给的减速速度
+    
+    double mpg_ex_dec1_vel;             // 外部减速1对手轮进给的减速速度
+    double mpg_ex_dec2_vel;             // 外部减速2对手轮进给的减速速度
+    double mpg_ex_dec3_vel;             // 外部减速3对手轮进给的减速速度
+    double mpg_ex_dec4_vel;             // 外部减速4对手轮进给的减速速度
+    double mpg_ex_dec5_vel;             // 外部减速5对手轮进给的减速速度
     // 重启生效
-    int pm_munit;                       // 电子齿轮比分子
+    double pm_munit;                    // 电子齿轮比分子(mm)。um→mm 后可能带小数，
+                                        // 存 int 会截断（5500um=5.5mm 会变成 5）——
+                                        // 当量与"每转位移"都拿它算，必须留小数
     int pm_pulse;                       // 电子齿轮比分母
     double enc_off;                     // 编码器反馈偏置量
+    /* 电机每转脉冲数（参数域 PAR_AX_MT_PPR）。与 pm_pulse（每转**指令**脉冲数）
+     * 不同：这个是电机侧的每转脉冲数，HAL 用它做模循环展开的模。
+     * 参数域里没填时为 0，此时 HAL 侧退回用 pm_pulse（见 main.cpp 的说明）。 */
+    int mt_ppr;
+    double spdl_orient_pos;             // 主轴定向位置
     // 内部
     double act_vel;                     // 轴实际速度
     double act_acc;                     // 轴实际加速度
@@ -193,6 +218,7 @@ typedef struct
     double mac_act_pos;                 // 机床实际位置 = fb_pos_no_comp
     double motor_cmd_pos;               // 驱动器指令位置（带补偿）
     double motor_act_pos;               // 驱动器反馈位置（带补偿）
+    double motor_act_pos_pre;           // 驱动器反馈位置（上一插补）
     double fb_pos_no_comp;              // 反馈位置（去除补偿）
     double pitch_comp_val;              // 当前位置螺距误差补偿值 (单位:mm)
     double backlash_comp_val;           // 当前位置反向间隙补偿值 (单位:mm)
@@ -212,6 +238,8 @@ typedef struct
     // 译码错误
     int parser_error_line;
     int parser_error_no;
+    // cy 异常点处理程序计数器
+    int fix_blocknum;
 } PATH_DATA;
 
 typedef struct
@@ -222,6 +250,7 @@ typedef struct
     NC_MODE current_mode;
     bool sys_state[SYS_STATE_NUM];
     bool chan_state[SYS_CHAN_NUM][CHAN_STATE_NUM];
+    unsigned int buf_stop_passed_id;   // 放行事件对应的停止块 ID（0=无）
     PATH_DATA path_data;
     pthread_mutex_t mutex;
     // 参数
@@ -240,6 +269,10 @@ void rt_set_sys_state(SysStateIndex state, bool value);
 bool rt_get_sys_state(SysStateIndex state);
 void rt_set_chan_state(int chan_index, ChanStateIndex state, bool value);
 bool rt_get_chan_state(int chan_index, ChanStateIndex state);
+/* 阻止缓冲放行事件：带 ID，避免上一轮的放行被误当成这一轮 */
+void rt_set_buf_stop_passed(unsigned int id);
+unsigned int rt_get_buf_stop_passed_id(void);
+void rt_clear_buf_stop_passed(void);
 void rt_set_zero_vel_params();
 void rt_set_axis_zero_vel_params(AXIS_TYPE axis_type);
 

@@ -338,6 +338,8 @@ void create_rerun_block(const PLAN_BLOCK* target, PLAN_BLOCK* rerun_block)
     rerun_block->type       = RAPID;
     rerun_block->line_number = rerun_data->rerun_row;
     // 目标点 = 记录的断点位置
+    // 断点块不是阻止缓冲的停止块，清掉可能继承的调度 ID 
+    PLAN_BLOCK_BUF_STOP_ID(rerun_block) = 0;
     memcpy(&rerun_block->end_pos, &rerun_data->breakpoint, sizeof(POS));
     // 以空运行速度移动到断点位置
     rerun_block->feed_vel   = rt_data->chan_data[0].dryrun_spd;

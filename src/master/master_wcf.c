@@ -118,10 +118,14 @@ int Master_Start(void)
     // Driver_Fault_Reset(&spindle_driver);
 
     /* 进给轴使用 CSP；主轴使用 CSV，但主轴首次启动保持下使能。 */
-    Driver_Request_Mode(&x_axis_driver, DRV_MODE_CSP);
-    Driver_Request_Mode(&y_axis_driver, DRV_MODE_CSP);
-    Driver_Request_Mode(&z_axis_driver, DRV_MODE_CSP);
+    // Driver_Request_Mode(&x_axis_driver, DRV_MODE_CSP);
+    // Driver_Request_Mode(&y_axis_driver, DRV_MODE_CSP);
+    // Driver_Request_Mode(&z_axis_driver, DRV_MODE_CSP);
     // Driver_Request_Mode(&spindle_driver, DRV_MODE_CSV);
+
+    Ethercat_Driver_Write_Mode(&x_axis_driver, DRV_MODE_CSP);
+    Ethercat_Driver_Write_Mode(&y_axis_driver, DRV_MODE_CSP);
+    Ethercat_Driver_Write_Mode(&z_axis_driver, DRV_MODE_CSP);
     Ethercat_Driver_Write_Mode(&spindle_driver, DRV_MODE_CSV);
     Driver_Disable(&spindle_driver);
 

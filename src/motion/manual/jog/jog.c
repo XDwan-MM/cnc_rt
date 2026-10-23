@@ -1,18 +1,20 @@
 #include "jog.h"
 #include "global.h"
 #include "jog_planner.h"
+#include "rt_hal_adapter.h"
 #include <math.h>
 #include <string.h>
-#include "master_wcf.h"
-#include "device.h"
-#include "ethercat_driver_hal.h"
-#include "driver.h"
 
 /*
  * JOG 的公共入口只有周期处理、急停和速度查询；外部减速状态保存在 AxisStatus。
  * 本文件把输入锁存、保护判断、状态迁移、速度计算、规划器和输出
  * 按阶段分开；新增停止条件时优先扩展 stop_reason 或保护判断，
  * 不要再为每一种原因增加一个运动状态。
+ * 
+ * 机械锁住：事件只改“请求” jog_update_mac_lock()
+ * 状态不一致期间由 jog_transition_axis() 的切换分支让点动先停稳，
+ * 全轴空闲时在 jog_update_outputs() 里落“生效”（不做周期性的速度判断）
+ * 它只决定机床指令位置是否累加，不改变点动本身的规划与按键锁存。
  */
 
 typedef enum
@@ -39,6 +41,7 @@ typedef enum
     JOG_STOP_REASON_MODE,
     JOG_STOP_REASON_ALARM,
     JOG_STOP_REASON_RESET,
+    JOG_STOP_REASON_LOCK, // 机械锁住状态切换中，先停止手动运动
 } jog_stop_reason_t;
 
 typedef struct
@@ -86,6 +89,9 @@ static void jog_sync_on_mode_entry(void);
 static void jog_update_key_latches(SYS_EVENT event);
 static jog_direction_t jog_get_requested_direction(const jog_axis_t *axis);
 static bool jog_is_global_fatal_alarm(void);
+static bool jog_is_mac_lock_switching(void);
+static void jog_apply_mac_lock(void);
+static void jog_update_mac_lock(void);
 static double jog_get_axis_acceleration(int axis, bool is_rapid);
 static bool jog_is_hard_limit_active(int axis, jog_direction_t direction);
 static bool jog_is_direction_blocked(int axis, jog_direction_t direction, double max_acc);
@@ -104,6 +110,28 @@ static void jog_execute_axis(int axis, jog_axis_t *jog_axis, bool is_rapid);
 static void jog_process_axis(int axis, bool is_rapid, bool global_fatal, bool reset_requested, bool switching_mode);
 static void jog_update_outputs(void);
 
+/* 基线里这个信号是 master.c 的 reset_sem：驱动器报警复位已发出、还没收口。
+ * HAL 把它拆成了每轴的复位进展，这里逐轴查一遍。 */
+static bool jog_fault_reset_in_progress(void)
+{
+    static const RtHalAxisSlot slots[] = {
+        RT_HAL_AXIS_X, RT_HAL_AXIS_Y, RT_HAL_AXIS_Z, RT_HAL_AXIS_SP
+    };
+    unsigned i;
+
+    for (i = 0; i < sizeof(slots) / sizeof(slots[0]); ++i)
+    {
+        int32_t state = HAL_RESET_NONE;
+        if (rt_hal_fault_reset_state(slots[i], &state) == HAL_OK &&
+            state == HAL_RESET_PENDING)
+        {
+            return true;
+        }
+    }
+
+    return false;
+}
+
 /* 外部函数定义 */
 
 /**
@@ -111,27 +139,6 @@ static void jog_update_outputs(void);
  */
 void handle_jog_cmd(void)
 {
-    // // test mode switch
-    // Hal_Driver_Update(&spindle_driver, true, false);
-    // Ethercat_Driver_Read_Actual_Mode(&spindle_driver);
-    // if(spindle_driver.act_mode != DRV_MODE_CSP)
-    // {
-    //     printf("请求切换CSP模式 主轴驱动器当前实际模式 %d\n", spindle_driver.act_mode);
-    //     // 下使能
-    //     Ethercat_Driver_Write_Controlword(&spindle_driver, DRV_CONTROL_DISABLE_OPERATION);
-    //     // 设置成CSP模式
-    //     Ethercat_Driver_Write_Mode(&spindle_driver, DRV_MODE_CSP);
-    //     // 上使能
-    //     Ethercat_Driver_Write_Controlword(&spindle_driver, DRV_CONTROL_ENABLE_OPERATION);
-
-    // }
-    // if(spindle_driver.act_mode == DRV_MODE_CSP)
-    // {
-    //     printf("主轴驱动器当前实际模式 %d\n", spindle_driver.act_mode);
-    //     // 下使能
-    //     Ethercat_Driver_Write_Controlword(&spindle_driver, DRV_CONTROL_DISABLE_OPERATION);
-    // }
-    
     bool global_fatal;
     bool reset_requested;
     bool switching_mode;
@@ -151,7 +158,10 @@ void handle_jog_cmd(void)
     event = rt_data->nc_event;
     switching_mode = rt_data->sys_state[SYS_IS_SWITCHING_MODE];
     is_rapid = rt_data->sys_state[SYS_IS_RAPID];
-    reset_requested = (event == SYS_EVENT_HMI_RESET || reset_sem);
+    reset_requested = (event == SYS_EVENT_HMI_RESET || jog_fault_reset_in_progress());
+
+    /* 机械锁住：点动模式下由本模块维护请求与生效状态，停稳后生效状态才跟随请求。 */
+    jog_update_mac_lock();
 
     /* 切换模式期间不接受新的 JOG 运动请求，等速度降为零后再离开。 */
     if (switching_mode)
@@ -233,6 +243,60 @@ static void jog_sync_on_mode_entry(void)
             jog_context.axis[i].stop_reason = JOG_STOP_REASON_ALARM;
     }
     jog_context.last_sys_mode = MODE_JOG;
+}
+
+/*
+ * 机械锁住请求与实际生效状态不一致：正在锁住或正在解除。
+ * 此期间由 jog_transition_axis() 的切换分支让点动先按斜坡停稳；
+ * 全轴空闲后由 jog_update_outputs() 落 READY。
+ * 注意：不清理按键锁存，所以切换完成后若键仍按着，点动会继续。
+ */
+static bool jog_is_mac_lock_switching(void)
+{
+    return rt_data->sys_state[SYS_IS_MAC_LOCK] != rt_data->sys_state[SYS_IS_MAC_LOCK_READY];
+}
+
+/*
+ * 机械锁住：请求(ON) 与 生效(READY) 分开，写法与自动模式保持一致。
+ *
+ *   ON=0,READY=0  未锁住
+ *   ON=1,READY=0  已请求锁住：点动先按斜坡停稳（jog_transition_axis() 的切换分支
+ *                 让本轴不再接受新运动 → STOPPING），等全轴空闲才生效
+ *   ON=1,READY=1  锁住生效：calcul_mac_cmd_pos() 不再累加机床指令位置 → 机床不动
+ *   ON=0,READY=1  请求解除：先把（虚拟）运动按同样的斜坡停稳
+ *   ON=0,READY=0  解除完成：机床链从冻结值继续累加，账面与机床的差值保留
+ *
+ * 按键锁存全程保留，所以切换完成后若键还按着，点动会继续。
+ */
+static void jog_apply_mac_lock(void)
+{
+    bool lock_request;
+
+    lock_request = rt_data->sys_state[SYS_IS_MAC_LOCK];
+    /* 只有真的发生变化才打日志，避免全轴空闲时每周期刷屏；赋值本身与 auto 一样是无条件的 */
+    if (rt_data->sys_state[SYS_IS_MAC_LOCK_READY] != lock_request)
+    {
+        LOG(LOG_LEVEL_INFO, "手动模式机械锁住%s", lock_request ? "生效" : "解除");
+    }
+    rt_data->sys_state[SYS_IS_MAC_LOCK_READY] = lock_request;
+}
+
+/* 机械锁住开关事件：只改“请求”，生效状态交给“全轴空闲”的分支去落 */
+static void jog_update_mac_lock(void)
+{
+    switch (rt_data->nc_event)
+    {
+    case SYS_EVENT_MAC_LOCK_ON:
+        LOG(LOG_LEVEL_INFO, "手动模式处理开启机械锁住");
+        rt_data->sys_state[SYS_IS_MAC_LOCK] = true;
+        break;
+    case SYS_EVENT_MAC_LOCK_OFF:
+        LOG(LOG_LEVEL_INFO, "手动模式处理关闭机械锁住");
+        rt_data->sys_state[SYS_IS_MAC_LOCK] = false;
+        break;
+    default:
+        break;
+    }
 }
 
 static void jog_update_key_latches(SYS_EVENT event)
@@ -366,7 +430,7 @@ static void jog_transition_axis(jog_axis_t *axis, int axis_index, jog_direction_
     direction_blocked = jog_is_direction_blocked(axis_index, desired_direction, axis->planner.max_acc);
     same_direction_limit_stop = (axis->stop_reason == JOG_STOP_REASON_LIMIT && desired_direction == axis->direction);
 
-    /* 优先级：复位、全局报警、报警复位锁存，然后才处理模式/按键/限位。 */
+    /* 优先级：复位、全局报警、报警复位锁存，然后才处理模式/机械锁住/按键/限位。 */
     if (reset_requested)
     {
         axis->key.positive = false;
@@ -395,6 +459,21 @@ static void jog_transition_axis(jog_axis_t *axis, int axis_index, jog_direction_
     {
         axis->stop_reason = JOG_STOP_REASON_MODE;
         axis->state = JOG_AXIS_STATE_STOPPING;
+        return;
+    }
+
+    /*
+     * 机械锁住状态切换（ON != READY）：先让本轴按斜坡停稳，停稳后
+     * 全轴空闲后由 jog_update_outputs() 落生效状态。按键锁存保留 —— 切换完成后
+     * 若键还按着，下一周期就会恢复 RUNNING（锁住期间只走账面）。
+     */
+    if (jog_is_mac_lock_switching())
+    {
+        if (axis->state != JOG_AXIS_STATE_IDLE)
+        {
+            axis->stop_reason = JOG_STOP_REASON_LOCK;
+            axis->state = JOG_AXIS_STATE_STOPPING;
+        }
         return;
     }
 
@@ -579,6 +658,7 @@ static void jog_process_axis(int axis, bool is_rapid, bool global_fatal, bool re
 {
     jog_axis_t *jog_axis;
     jog_direction_t desired_direction;
+    double previous_position;
 
     jog_axis = &jog_context.axis[axis];
 
@@ -598,11 +678,13 @@ static void jog_process_axis(int axis, bool is_rapid, bool global_fatal, bool re
     jog_execute_axis(axis, jog_axis, is_rapid);
 
     /* 规划器是 JOG 的唯一运动输出源。 */
+    previous_position = rt_data->axis_data[axis].wcs_cmd_pos_cur;
+    rt_data->axis_data[axis].wcs_cmd_pos_pre = previous_position;
     rt_data->axis_data[axis].wcs_cmd_pos_cur = jog_axis->planner.curr_pos;
     rt_data->axis_data[axis].cmd_vel = jog_axis->planner.curr_vel;
 }
 
-/* 汇总通道速度、限位减速完成标志，并在所有轴空闲后消费事件。 */
+/* 汇总通道速度、限位减速完成标志；全轴空闲时落机械锁住状态并消费事件。 */
 static void jog_update_outputs(void)
 {
     double feed_velocity_squared;
@@ -630,5 +712,10 @@ static void jog_update_outputs(void)
     /* 通道速度是各轴速度的矢量合成，不是各轴速度的代数和。 */
     rt_data->chan_data[0].cmd_vel = sqrt(feed_velocity_squared);
     if (all_axes_idle)
+    {
+        /* 全轴空闲：与 auto_update_stage() 的“没有运动指令”分支对应 ——
+           在这里让机械锁住的生效状态跟随请求（赋值本身无条件，不在这里做条件组合判断） */
+        jog_apply_mac_lock();
         rt_data->nc_event = SYS_EVENT_NONE;
+    }
 }

@@ -12,6 +12,7 @@ extern thread_config_t plc_config;
 extern thread_config_t motion_config;
 extern thread_config_t path_plan_config;
 extern thread_config_t pdo_config;
+extern thread_config_t sdo_config;
 
 // 每个控制器线程的执行函数声明
 void* soft_plc_thread_func(void* arg);

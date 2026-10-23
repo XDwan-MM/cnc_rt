@@ -1,8 +1,13 @@
 #include "reset.h"
+#include "alarm.h"
+#include "rt_hal_adapter.h"
 #include "rerun.h"
 #include "rt_data.h"
+#include "spindle_control.h"
+#include "tapreturn.h"
 #include "global.h"
 #include <hmisysapi.h>
+#include <stdlib.h>
 
 const char* reset_trigger_name[] = {"紧急停止信号ESP", "外部复位信号ERS", "复位&倒带信号RRW", "按下MDI的RESET键"};
 
@@ -32,6 +37,9 @@ GNC_RES reset_data_reset(){
 /// @brief 触发F1.1的信号来源
 /// @param reset_trigger 
 void nc_set_resetting(RESET_TRIGGER reset_trigger){
+    /* 任何一次新复位都允许重试故障复位：否则收口失败一次后 s_reset_failed
+     * 一直把四轴压在未使能态，只能重启软件。 */
+    alarm_reset_latch_clear();
     nc_reset->reset_trigger = reset_trigger;
     nc_reset->is_resetting = 1;
     LOG(LOG_LEVEL_DEBUG, "复位中F1.1信号来源：%s", reset_trigger_name[reset_trigger]);
@@ -50,21 +58,44 @@ void nc_set_resetting(RESET_TRIGGER reset_trigger){
 /// @brief 完成F1.1的判断
 void nc_set_resetted(){
     if(rt_data->sys_state[SYS_IS_ALARMING] || rt_data->sys_state[SYS_IS_ESTOP_ACTIVE]) return;
+    /* 故障复位环没收口（等待中或上次失败锁定）前不判复位完成：否则 is_resetting
+     * 先落下，循环启动会在轴还没使能时被受理，运动指令全被 HAL 拒收，
+     * 最终只表现为"轴不动 + 跟随误差"。 */
+    if (alarm_fault_reset_pending()) return;
+    if (nc_reset->is_resetting && nc_reset->reset_trigger == HMI_RESET &&
+        (spindle_reset_stop_pending() || !update_pos_flag)) return;
     switch (rt_data->current_mode) {
         case MODE_MDI: // MDI
         case MODE_MEM: // 记忆
         case MODE_DNC:
-            if(nc_reset->is_resetting && cycle_tp->exec_state == EXEC_IDLE && IsEqualTo(spindle_driver.actual_vel, 0)){
+            if(nc_reset->is_resetting && cycle_tp->exec_state == EXEC_IDLE && IsEqualTo(rt_hal_spindle_rpm(), 0)){
                 nc_reset->is_resetted = 1;
                 rt_data_reset();
+                // 主轴下使能
+                int ret = rt_hal_request_axis_enable(RT_HAL_AXIS_SP, 0);
+                LOG(LOG_LEVEL_INFO, "主轴下使能状态%d", ret);
+                if (nc_reset->reset_trigger == HMI_RESET) {
+                    tapreturn_update(NULL);
+                    tapreturn_refresh_return_param();
+                }
                 rerun_data_reset_keep_breakpoint();
+                
             }
             break;
         case MODE_HOMING: // 回零
-            if(nc_reset->is_resetting && !var_chan[0][VAR_CHAN_IS_HOMING].value.i && IsEqualTo(spindle_driver.actual_vel, 0)){
+            if(nc_reset->is_resetting && !var_chan[0][VAR_CHAN_IS_HOMING].value.i && IsEqualTo(rt_hal_spindle_rpm(), 0)){
                 nc_reset->is_resetted = 1;
                 rt_data_reset();
+
+                // 主轴下使能
+                int ret = rt_hal_request_axis_enable(RT_HAL_AXIS_SP, 0);
+                LOG(LOG_LEVEL_INFO, "主轴下使能状态%d", ret);
+                if (nc_reset->reset_trigger == HMI_RESET) {
+                    tapreturn_update(NULL);
+                    tapreturn_refresh_return_param();
+                }
                 rerun_data_reset_keep_breakpoint();
+
             }
             break;
         case MODE_JOG: // 点动
@@ -72,9 +103,17 @@ void nc_set_resetted(){
         case MODE_IDLE: // 空闲状态
         case MODE_EDIT: // 编辑
         default: // error
-            if(nc_reset->is_resetting && IsEqualTo(spindle_driver.actual_vel, 0)){
+            if(nc_reset->is_resetting && IsEqualTo(rt_hal_spindle_rpm(), 0)){
                 nc_reset->is_resetted = 1;
                 rt_data_reset();
+
+                // 主轴下使能
+                int ret = rt_hal_request_axis_enable(RT_HAL_AXIS_SP, 0);
+                LOG(LOG_LEVEL_INFO, "主轴下使能状态%d", ret);
+                if (nc_reset->reset_trigger == HMI_RESET) {
+                    tapreturn_update(NULL);
+                    tapreturn_refresh_return_param();
+                }
                 rerun_data_reset_keep_breakpoint();
             }
             break;

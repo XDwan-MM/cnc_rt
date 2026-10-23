@@ -6,6 +6,7 @@
 
 extern RT_DATA* rt_data;
 static void rt_reset_ncu_data();
+static void rt_reset_sys_data();
 static void rt_reset_chan_data();
 static void rt_reset_axis_data();
 static void rt_reboot_ncu_data();
@@ -32,6 +33,9 @@ GNC_RES rt_data_reset(void){
     pthread_mutex_lock(&rt_data->mutex);
     rt_upate_reset_valid_data();
     setVarChanInt(0, VAR_CHAN_IS_PROGEND, 1, 0);
+    rt_data->sys_state[SYS_IS_RIGID] = 0;
+    rt_data->sys_state[SYS_IS_RIGID_RETURN] = 0;
+    rt_data->sys_state[SYS_IS_RIGID_RETURN_FINISH] = 0;
     pthread_mutex_unlock(&rt_data->mutex);
     return GNC_OPERATOR_SUCCESS;
 }
@@ -85,6 +89,27 @@ void rt_set_chan_state(int chan_index, ChanStateIndex state, bool value){
     pthread_mutex_unlock(&rt_data->mutex);
 }
 
+void rt_set_buf_stop_passed(unsigned int id){
+    pthread_mutex_lock(&rt_data->mutex);
+    rt_data->buf_stop_passed_id = id;
+    rt_data->chan_state[0][CHAN_IS_BUFSTOP_PASSED] = true;
+    pthread_mutex_unlock(&rt_data->mutex);
+}
+
+unsigned int rt_get_buf_stop_passed_id(void){
+    pthread_mutex_lock(&rt_data->mutex);
+    unsigned int id = rt_data->buf_stop_passed_id;
+    pthread_mutex_unlock(&rt_data->mutex);
+    return id;
+}
+
+void rt_clear_buf_stop_passed(void){
+    pthread_mutex_lock(&rt_data->mutex);
+    rt_data->buf_stop_passed_id = 0;
+    rt_data->chan_state[0][CHAN_IS_BUFSTOP_PASSED] = false;
+    pthread_mutex_unlock(&rt_data->mutex);
+}
+
 bool rt_get_chan_state(int chan_index, ChanStateIndex state){
     if(chan_index < 0 || chan_index >= SYS_CHAN_NUM || state >= CHAN_STATE_NUM || state < 0){
         return false;
@@ -107,6 +132,7 @@ static void rt_update_reboot_valid_data(){
 /// @brief 复位时生效的par数据，同步更新到实时数据
 static void rt_upate_reset_valid_data(){
     rt_reset_ncu_data();
+    rt_reset_sys_data();
     rt_reset_chan_data();
     rt_reset_axis_data();
     rt_set_zero_vel_params();
@@ -114,6 +140,9 @@ static void rt_upate_reset_valid_data(){
 }
 
 static void rt_reset_ncu_data(){
+}
+
+static void rt_reset_sys_data(){  
 }
 
 static void rt_reset_chan_data()
@@ -186,7 +215,7 @@ static void rt_reset_axis_data()
         rt_data->axis_data[i].lmt2_type = par_axis[i][PAR_AX_LMT2_TYPE].value.val_int;                                   // 轴第二级软极限类型
         rt_data->axis_data[i].lmt2_enable = par_axis[i][PAR_AX_LMT2_ENABLE].value.val_int;                               // 轴第二级软极限开启
         rt_data->axis_data[i].lmt3_enable = par_axis[i][PAR_AX_LMT3_ENABLE].value.val_int;                               // 轴第三级软极限开启
-        rt_data->axis_data[i].spl_default_speed = par_axis[i][PAR_AX_DEFAULT_S].value.val_real;                          // 主轴缺省S速度
+        rt_data->axis_data[i].spdl_default_speed = par_axis[i][PAR_AX_DEFAULT_S].value.val_real;                          // 主轴缺省S速度
         rt_data->axis_data[i].spdl_max_speed = par_axis[i][PAR_SPDL_MAX_SPEED].value.val_real;                           // 主轴最大转速 (HMI unit: r/min)
         rt_data->axis_data[i].ex_dec_enable_pos_cut = par_axis[i][PAR_AX_EX_DEC_ENABLE_POS_CUT].value.val_bool;          // 外部减速信号对正向切削进给是否生效
         rt_data->axis_data[i].ex_dec_enable_neg_cut = par_axis[i][PAR_AX_EX_DEC_ENABLE_NEG_CUT].value.val_bool;          // 外部减速信号对负向切削进给是否生效
@@ -195,6 +224,11 @@ static void rt_reset_axis_data()
         rt_data->axis_data[i].rpd_ex_dec3_vel = CONV_MM_MIN_TO_MM_S(par_axis[i][PAR_AX_RPD_EX_DEC3_VEL].value.val_real); // 快移外部减速3的减速速度(mm/min)
         rt_data->axis_data[i].rpd_ex_dec4_vel = CONV_MM_MIN_TO_MM_S(par_axis[i][PAR_AX_RPD_EX_DEC4_VEL].value.val_real); // 快移外部减速4的减速速度(mm/min)
         rt_data->axis_data[i].rpd_ex_dec5_vel = CONV_MM_MIN_TO_MM_S(par_axis[i][PAR_AX_RPD_EX_DEC5_VEL].value.val_real); // 快移外部减速5的减速速度(mm/min)
+        rt_data->axis_data[i].mpg_ex_dec1_vel = CONV_MM_MIN_TO_MM_S(par_axis[i][PAR_AX_MPG_EX_DEC1_VEL].value.val_real); // 外部减速1对手轮进给的减速速度
+        rt_data->axis_data[i].mpg_ex_dec2_vel = CONV_MM_MIN_TO_MM_S(par_axis[i][PAR_AX_MPG_EX_DEC2_VEL].value.val_real); // 外部减速2对手轮进给的减速速度
+        rt_data->axis_data[i].mpg_ex_dec3_vel = CONV_MM_MIN_TO_MM_S(par_axis[i][PAR_AX_MPG_EX_DEC3_VEL].value.val_real); // 外部减速3对手轮进给的减速速度
+        rt_data->axis_data[i].mpg_ex_dec4_vel = CONV_MM_MIN_TO_MM_S(par_axis[i][PAR_AX_MPG_EX_DEC4_VEL].value.val_real); // 外部减速4对手轮进给的减速速度
+        rt_data->axis_data[i].mpg_ex_dec5_vel = CONV_MM_MIN_TO_MM_S(par_axis[i][PAR_AX_MPG_EX_DEC5_VEL].value.val_real); // 外部减速5对手轮进给的减速速度
     }
 }
 
@@ -217,7 +251,12 @@ static void rt_reboot_axis_data()
         rt_data->axis_data[i].pm_munit = CONV_UM_TO_MM(par_axis[i][PAR_AX_PM_MUNIT].value.val_int); // 轴电子齿轮比分子 (HMI unit: um, | 实时 单位: mm)
         rt_data->axis_data[i].pm_pulse = par_axis[i][PAR_AX_PM_PULSE].value.val_int;                // 轴电子齿轮比分母 (HMI unit: 脉冲)
         rt_data->axis_data[i].enc_off = par_axis[i][PAR_AX_ENC_OFF].value.val_real;                 // 轴编码器反馈偏置量 (HMI unit: mm)
+        /* 电机每转脉冲数。参数域里没填就是 0——调用方要能区分"没填"和"填了 0"，
+         * 所以这里不做任何兜底，兜底放在消费侧（main.cpp 的 fill_hal_params）。 */
+        rt_data->axis_data[i].mt_ppr = par_axis[i][PAR_AX_MT_PPR].value.val_int;
+        rt_data->axis_data[i].spdl_orient_pos = par_axis[i][PAR_AX_SP_ORI_POS].value.val_real;
     }
+    printf("rt_data->axis_data[AXIS_SP].spdl_orient_pos=%f\n",rt_data->axis_data[AXIS_SP].spdl_orient_pos);
 }
 
 void rt_set_zero_vel_params(){
@@ -239,3 +278,4 @@ void rt_set_axis_zero_vel_params(AXIS_TYPE axis_type){
     rt_data->axis_data[axis_type].cmd_acc = 0;
     rt_data->axis_data[axis_type].cmd_jk = 0;
 }
+

@@ -6,7 +6,7 @@
 
 ferror_control_t ferror_control[SYS_AXES_NUM]; // 跟随误差控制器
 
-static const char *axis_names[] = {"X", "Y", "Z"};
+static const char *axis_names[] = {"X", "Y", "Z", "SP"};
 
 enum
 {
@@ -33,6 +33,13 @@ void check_ferror_fault(void)
 
     for (int i = 0; i < SYS_AXES_NUM; i++)
     {
+        /* 主轴不做进给轴口径的跟随误差检查：这里的限值是 mm，主轴的"跟得上没有"
+         * 由驱动器 CSP 负责；主轴被非 NC 指令动过（M19 定向走厂商控制字）必然超限。 */
+        if (i == AXIS_SP)
+        {
+            continue;
+        }
+
         // 控制轴拆卸或者机床锁住不进行检查
         if (rt_data->sys_state[SYS_IS_MAC_LOCK_READY] || rt_data->axis_data[i].status.is_disable)
         {
@@ -126,5 +133,8 @@ static void report_axis_ferror(int axis_index, const ferror_control_t *ferror_ct
         return;
     }
 
-    LOG(LOG_LEVEL_ERR, "%s轴%s跟随误差过大: 指令速度=%.6f, 指令位置=%.6f, 反馈位置=%.6f, 跟随误差=%.6f", axis_names[axis_index], fault_type, vel_cmd, pos_cmd, pos_fb, ferror_ctrl->ferror);
+    const char *axis_name =
+        (axis_index >= 0 && axis_index < (int)(sizeof(axis_names) / sizeof(axis_names[0])))
+            ? axis_names[axis_index] : "?";
+    LOG(LOG_LEVEL_ERR, "%s轴%s跟随误差过大: 指令速度=%.6f, 指令位置=%.6f, 反馈位置=%.6f, 跟随误差=%.6f", axis_name, fault_type, vel_cmd, pos_cmd, pos_fb, ferror_ctrl->ferror);
 }

@@ -1,8 +1,11 @@
 #ifndef TEST_GTEST_COMPAT_GTEST_H_
 #define TEST_GTEST_COMPAT_GTEST_H_
 
+#include <algorithm>
+#include <cmath>
 #include <exception>
 #include <functional>
+#include <limits>
 #include <iostream>
 #include <memory>
 #include <sstream>
@@ -141,6 +144,63 @@ void ExpectNe(const A& actual, const B& expected, const char* actual_expr, const
         std::ostringstream oss;
         oss << "Expected inequality of these values:\n  " << actual_expr << "\n  " << expected_expr
             << "\nBoth are: " << ValueToString(actual);
+        AddFailure(file, line, oss.str(), fatal);
+    }
+}
+
+inline bool DoublesAlmostEqual(double a, double b)
+{
+    if (a == b) {
+        return true;
+    }
+    const double diff = std::fabs(a - b);
+    const double scale = std::max(std::fabs(a), std::fabs(b));
+    return diff <= 4.0 * std::numeric_limits<double>::epsilon() * scale;
+}
+
+template <typename A, typename B>
+void ExpectDoubleEq(const A& actual, const B& expected, const char* actual_expr,
+                    const char* expected_expr, const char* file, int line, bool fatal)
+{
+    const double a = static_cast<double>(actual);
+    const double e = static_cast<double>(expected);
+    if (!DoublesAlmostEqual(a, e)) {
+        std::ostringstream oss;
+        oss << "Expected equality of these values:\n  " << actual_expr << "\n    Which is: " << a
+            << "\n  " << expected_expr << "\n    Which is: " << e;
+        AddFailure(file, line, oss.str(), fatal);
+    }
+}
+
+template <typename A, typename B, typename C>
+void ExpectNear(const A& actual, const B& expected, const C& abs_error, const char* actual_expr,
+                const char* expected_expr, const char* error_expr, const char* file, int line,
+                bool fatal)
+{
+    const double a = static_cast<double>(actual);
+    const double e = static_cast<double>(expected);
+    const double tol = static_cast<double>(abs_error);
+    if (!(std::fabs(a - e) <= tol)) {
+        std::ostringstream oss;
+        oss << "The difference between " << actual_expr << " and " << expected_expr << " is "
+            << (a - e) << ", which exceeds " << error_expr << " (" << tol << ")";
+        AddFailure(file, line, oss.str(), fatal);
+    }
+}
+
+struct LtCmp { template <typename A, typename B> bool operator()(const A& a, const B& b) const { return a < b; } };
+struct LeCmp { template <typename A, typename B> bool operator()(const A& a, const B& b) const { return a <= b; } };
+struct GtCmp { template <typename A, typename B> bool operator()(const A& a, const B& b) const { return a > b; } };
+struct GeCmp { template <typename A, typename B> bool operator()(const A& a, const B& b) const { return a >= b; } };
+
+template <typename A, typename B, typename Cmp>
+void ExpectCmp(const A& actual, const B& expected, const char* actual_expr,
+               const char* expected_expr, const char* op, const char* file, int line, bool fatal)
+{
+    if (!Cmp()(actual, expected)) {
+        std::ostringstream oss;
+        oss << "Expected: (" << actual_expr << ") " << op << " (" << expected_expr << ")\n"
+            << "  Actual: " << ValueToString(actual) << " vs " << ValueToString(expected);
         AddFailure(file, line, oss.str(), fatal);
     }
 }
@@ -357,6 +417,110 @@ public:
         const auto& gtest_expected_value = (expected);                                               \
         ::testing::internal::ExpectNe(gtest_actual_value, gtest_expected_value, #actual, #expected,  \
                                       __FILE__, __LINE__, true);                                     \
+    } while (0)
+#define EXPECT_DOUBLE_EQ(actual, expected)                                                          \
+    do {                                                                                            \
+        const auto& gtest_actual_value = (actual);                                                   \
+        const auto& gtest_expected_value = (expected);                                               \
+        ::testing::internal::ExpectDoubleEq(gtest_actual_value, gtest_expected_value, #actual,       \
+                                            #expected, __FILE__, __LINE__, false);                   \
+    } while (0)
+#define ASSERT_DOUBLE_EQ(actual, expected)                                                          \
+    do {                                                                                            \
+        const auto& gtest_actual_value = (actual);                                                   \
+        const auto& gtest_expected_value = (expected);                                               \
+        ::testing::internal::ExpectDoubleEq(gtest_actual_value, gtest_expected_value, #actual,       \
+                                            #expected, __FILE__, __LINE__, true);                    \
+    } while (0)
+#define EXPECT_NEAR(actual, expected, abs_error)                                                    \
+    do {                                                                                            \
+        const auto& gtest_actual_value = (actual);                                                   \
+        const auto& gtest_expected_value = (expected);                                               \
+        const auto& gtest_abs_error_value = (abs_error);                                             \
+        ::testing::internal::ExpectNear(gtest_actual_value, gtest_expected_value,                    \
+                                        gtest_abs_error_value, #actual, #expected, #abs_error,       \
+                                        __FILE__, __LINE__, false);                                  \
+    } while (0)
+#define ASSERT_NEAR(actual, expected, abs_error)                                                    \
+    do {                                                                                            \
+        const auto& gtest_actual_value = (actual);                                                   \
+        const auto& gtest_expected_value = (expected);                                               \
+        const auto& gtest_abs_error_value = (abs_error);                                             \
+        ::testing::internal::ExpectNear(gtest_actual_value, gtest_expected_value,                    \
+                                        gtest_abs_error_value, #actual, #expected, #abs_error,       \
+                                        __FILE__, __LINE__, true);                                   \
+    } while (0)
+#define EXPECT_LT(actual, expected)                                                                 \
+    do {                                                                                            \
+        const auto& gtest_actual_value = (actual);                                                   \
+        const auto& gtest_expected_value = (expected);                                               \
+        ::testing::internal::ExpectCmp<decltype(gtest_actual_value),                                 \
+            decltype(gtest_expected_value), ::testing::internal::LtCmp>(                             \
+            gtest_actual_value, gtest_expected_value, #actual, #expected, "<",                       \
+            __FILE__, __LINE__, false);                                                              \
+    } while (0)
+#define ASSERT_LT(actual, expected)                                                                 \
+    do {                                                                                            \
+        const auto& gtest_actual_value = (actual);                                                   \
+        const auto& gtest_expected_value = (expected);                                               \
+        ::testing::internal::ExpectCmp<decltype(gtest_actual_value),                                 \
+            decltype(gtest_expected_value), ::testing::internal::LtCmp>(                             \
+            gtest_actual_value, gtest_expected_value, #actual, #expected, "<",                       \
+            __FILE__, __LINE__, true);                                                               \
+    } while (0)
+#define EXPECT_LE(actual, expected)                                                                 \
+    do {                                                                                            \
+        const auto& gtest_actual_value = (actual);                                                   \
+        const auto& gtest_expected_value = (expected);                                               \
+        ::testing::internal::ExpectCmp<decltype(gtest_actual_value),                                 \
+            decltype(gtest_expected_value), ::testing::internal::LeCmp>(                             \
+            gtest_actual_value, gtest_expected_value, #actual, #expected, "<=",                      \
+            __FILE__, __LINE__, false);                                                              \
+    } while (0)
+#define ASSERT_LE(actual, expected)                                                                 \
+    do {                                                                                            \
+        const auto& gtest_actual_value = (actual);                                                   \
+        const auto& gtest_expected_value = (expected);                                               \
+        ::testing::internal::ExpectCmp<decltype(gtest_actual_value),                                 \
+            decltype(gtest_expected_value), ::testing::internal::LeCmp>(                             \
+            gtest_actual_value, gtest_expected_value, #actual, #expected, "<=",                      \
+            __FILE__, __LINE__, true);                                                               \
+    } while (0)
+#define EXPECT_GT(actual, expected)                                                                 \
+    do {                                                                                            \
+        const auto& gtest_actual_value = (actual);                                                   \
+        const auto& gtest_expected_value = (expected);                                               \
+        ::testing::internal::ExpectCmp<decltype(gtest_actual_value),                                 \
+            decltype(gtest_expected_value), ::testing::internal::GtCmp>(                             \
+            gtest_actual_value, gtest_expected_value, #actual, #expected, ">",                       \
+            __FILE__, __LINE__, false);                                                              \
+    } while (0)
+#define ASSERT_GT(actual, expected)                                                                 \
+    do {                                                                                            \
+        const auto& gtest_actual_value = (actual);                                                   \
+        const auto& gtest_expected_value = (expected);                                               \
+        ::testing::internal::ExpectCmp<decltype(gtest_actual_value),                                 \
+            decltype(gtest_expected_value), ::testing::internal::GtCmp>(                             \
+            gtest_actual_value, gtest_expected_value, #actual, #expected, ">",                       \
+            __FILE__, __LINE__, true);                                                               \
+    } while (0)
+#define EXPECT_GE(actual, expected)                                                                 \
+    do {                                                                                            \
+        const auto& gtest_actual_value = (actual);                                                   \
+        const auto& gtest_expected_value = (expected);                                               \
+        ::testing::internal::ExpectCmp<decltype(gtest_actual_value),                                 \
+            decltype(gtest_expected_value), ::testing::internal::GeCmp>(                             \
+            gtest_actual_value, gtest_expected_value, #actual, #expected, ">=",                      \
+            __FILE__, __LINE__, false);                                                              \
+    } while (0)
+#define ASSERT_GE(actual, expected)                                                                 \
+    do {                                                                                            \
+        const auto& gtest_actual_value = (actual);                                                   \
+        const auto& gtest_expected_value = (expected);                                               \
+        ::testing::internal::ExpectCmp<decltype(gtest_actual_value),                                 \
+            decltype(gtest_expected_value), ::testing::internal::GeCmp>(                             \
+            gtest_actual_value, gtest_expected_value, #actual, #expected, ">=",                      \
+            __FILE__, __LINE__, true);                                                               \
     } while (0)
 #define GTEST_SKIP() ::testing::internal::SkipStream(__FILE__, __LINE__)
 #define RUN_ALL_TESTS() ::testing::UnitTest::GetInstance()->Run()

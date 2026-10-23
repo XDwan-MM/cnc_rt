@@ -2,7 +2,7 @@
 #include "global.h"
 #include "regapi.h"       /**< 寄存器访问 API */
 #include "signal_utils.h" /**< 边沿检测宏定义 */
-#include "spl_control.h"
+#include "spindle_control.h"
 #include <hmisysapi.h>
 #include <string.h>
 
@@ -14,7 +14,7 @@
  * 3. 以后若想增加 G19 或 G32，只需在此数组末尾添加数字 19, 32 即可，无需改动获取数据的函数。
  */
 static const int SCAN_G_REGS[] = {
-    4,  5,  6,   7,   8,   12,  14,  19,  29,  30,  32,  33,  43,  44,  45,  46,  54,  55,  56, 57, 61,
+    4,  5,  6,   7,   8,   12,  14,  19,  23,  29,  30,  32,  33,  43,  44,  45,  46,  54,  55,  56, 57, 61,
     62, 70, 100, 101, 102, 103, 107, 108, 109, 118, 120, 124, 130, 132, 134, 276, 278, 279, 280, 281, 282, 
     283, 284, 285, 286, 287, 341, 342, 343, 344, /* 已有及外部减速信号地址
                                                                                                   */
@@ -31,9 +31,6 @@ static bool is_first_scan = true;
 /* ==========================================================================
  * 1. 内部函数声明 (Private Prototypes)
  * ========================================================================== */
-
-// 扫描关于宏变量的 G 信号
-static void plc_macro_g_signal_scan_cycle(const G_INPUT_MAP *curr_g, const G_INPUT_MAP *last_g);
 
 // 扫描关于互锁的 G 信号
 static void plc_lock_g_signal_scan_cycle(const G_INPUT_MAP *curr_g, const G_INPUT_MAP *last_g);
@@ -93,6 +90,13 @@ void plc_g_signal_scan_cycle(void)
 
     /* 外部减速信号检测：G 位为0时，对应逻辑轴方向减速生效 */
     process_external_deceleration(&curr_g);
+
+    /* G23.3高电平允许外部减速作用于手轮，首次扫描同步当前状态。 */
+    if (is_first_scan || SIGNAL_BIT_CHANGED(curr_g.g_regs[23], last_g.g_regs[23], 3))
+    {
+        LOG(LOG_LEVEL_INFO, "扫描到G23信号发生变化");
+        plc_dispatch_event(PLC_EV_MSG_MPG_EXTERNAL_DECEL, GET_BIT(curr_g.g_regs[23], 3) ? 1 : 0, 0, 0, 0);
+    }
 
     /* G8.4紧急停止检测 G08.4 = 0急停拍下，G08.4 = 1急停拉起 */
     // 急停按下检测 （状态检测）
@@ -225,9 +229,6 @@ void plc_g_signal_scan_cycle(void)
     // 扫描关于互锁的 G 信号
     plc_lock_g_signal_scan_cycle(&curr_g, &last_g);
 
-    // 扫描关于宏变量的 G 信号
-    plc_macro_g_signal_scan_cycle(&curr_g, &last_g);
-
     /*step3 更新快照供下一周期使用 */
     last_g = curr_g;
 
@@ -238,43 +239,6 @@ void plc_g_signal_scan_cycle(void)
 /* ==========================================================================
  * 3. 内部函数实现 (Private Implementations)
  * ========================================================================== */
-
-static void plc_macro_g_signal_scan_cycle(const G_INPUT_MAP *curr_g, const G_INPUT_MAP *last_g){
-    // G55~G57
-    for(int i = 54; i < 58; i++){
-        if (SIGNAL_BYTE_CHANGED(curr_g->g_regs[i], last_g->g_regs[i])){
-            for(int j = 0; j < 8; i++){
-                if (SIGNAL_RISING(curr_g->g_regs[i], last_g->g_regs[i], j))
-                {
-                    LOG(LOG_LEVEL_INFO, "扫描到G%d.%d 发生上升沿", i, j);
-                    // TODO:对宏变量进行赋值1
-                }
-                if (SIGNAL_FALLING(curr_g->g_regs[i], last_g->g_regs[i], j))
-                {
-                    LOG(LOG_LEVEL_INFO, "扫描到G%d.%d 发生下降沿", i, j);
-                    // TODO:对宏变量进行赋值0
-                }
-            }
-        } 
-    }
-    // G276~G287
-    for(int i = 276; i < 288; i++){
-        if (SIGNAL_BYTE_CHANGED(curr_g->g_regs[i], last_g->g_regs[i])){
-            for(int j = 0; j < 8; i++){
-                if (SIGNAL_RISING(curr_g->g_regs[i], last_g->g_regs[i], j))
-                {
-                    LOG(LOG_LEVEL_INFO, "扫描到G%d.%d 发生上升沿", i, j);
-                    // TODO:对宏变量进行赋值1
-                }
-                if (SIGNAL_FALLING(curr_g->g_regs[i], last_g->g_regs[i], j))
-                {
-                    LOG(LOG_LEVEL_INFO, "扫描到G%d.%d 发生下降沿", i, j);
-                    // TODO:对宏变量进行赋值0
-                }
-            }
-        }
-    }
-}
 
 static void plc_spindle_g_signal_scan_cycle(const G_INPUT_MAP *curr_g, const G_INPUT_MAP *last_g){
     /* 主轴正反信号检测 (G70.4 主轴反转, G70.5 主轴正转, G29.6 主轴停止信号) */
@@ -599,32 +563,34 @@ static void process_spindle_speed_command(const G_INPUT_MAP *curr_g)
         par_axis[AXIS_SP][PAR_SPDL_MAX_SPEED].value.val_real;
 
     /* G32/G33 的模拟量编码按机床最大主轴速度换算为 rpm。 */
-    spl_context.plc_speed = spindle_max_speed * raw_speed / 4095.0;
+    spindle_set_plc_speed(spindle_max_speed * raw_speed / 4095.0);
 
     /* G33.7=0：使用 CNC/M 代码速度；G33.7=1：使用 PLC 速度。 */
     if (GET_BIT(curr_g->g_regs[33], 7))
     {
-        spl_context.speed_source = SPINDLE_SPEED_SOURCE_PLC;
+        spindle_set_speed_source(SPINDLE_SPEED_SOURCE_PLC);
     }
     else
     {
-        spl_context.speed_source = SPINDLE_SPEED_SOURCE_CNC;
+        spindle_set_speed_source(SPINDLE_SPEED_SOURCE_CNC);
     }
 }
 
 static uint16_t read_spindle_speed_command_raw(const G_INPUT_MAP *curr_g)
 {
-    uint16_t low_bits = 0;
-    uint16_t high_bits = 0;
+    uint16_t low_bits;
+    uint16_t high_bits;
 
-    for (int bit = 0; bit < 8; bit++)
-    {
-        low_bits |= (uint16_t)(GET_BIT(curr_g->g_regs[32], bit) & 1) << bit;
-        high_bits |= (uint16_t)(GET_BIT(curr_g->g_regs[33], bit) & 1) << bit;
-    }
+    /*
+     * G32.0~G32.7 对应速度值 bit0~bit7；
+     * G33.0~G33.3 对应速度值 bit8~bit11；
+     * G33.7 是速度源选择信号，不属于速度值。
+     * 因此 12 位原始值范围为 0~4095，不能按 5 位偏移拼接。
+     */
+    low_bits = (uint16_t)curr_g->g_regs[32] & 0x00FFU;
+    high_bits = (uint16_t)curr_g->g_regs[33] & 0x000FU;
 
-    /* G32/G33 的编码格式由 PLC 接口协议定义，保留原始位拼接方式。 */
-    return (uint16_t)((high_bits & 0x0F) << 5) | (low_bits & 0xFF);
+    return (uint16_t)(low_bits | (uint16_t)(high_bits << 8));
 }
 
 /** @brief 从寄存器系统同步数据到本地结构体
@@ -714,6 +680,10 @@ static void plc_dispatch_event(PLC_EVENT_ID id, int p1, int p2, int p3, int p4)
         event.external_decel_payload.axis_num = p2;
         event.external_decel_payload.direction = p3;
         event.external_decel_payload.active = p4;
+        break;
+    case PLC_EV_MSG_MPG_EXTERNAL_DECEL:
+        event.id = id;
+        event.mpg_external_decel_payload.enable = p1;
         break;
     default:
         break;
