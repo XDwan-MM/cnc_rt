@@ -38,11 +38,8 @@ int Master_SdoTransfer(int slave_pos, uint16_t index, uint8_t subindex,
 int* Master_InterruptFlag(void);
 int  Master_Interrupted(void);
 
-/* 设备字典路径：取 CNC_HAL_DEVICES_JSON 环境变量，未设置时用构建期指定的安装路径。
- * 加载失败会阻止主站启动。 */
-#ifndef DEVICES_JSON_PATH
-#define DEVICES_JSON_PATH NULL
-#endif
+/* 设备字典优先使用可执行文件目录下 ../lib/cnc_hal/lib/devices.json。
+ * 文件不存在时取 CNC_HAL_DEVICES_JSON；访问或解析失败直接阻止启动。 */
 
 #define PARAM_CHANG 1          /* 是否修改主站参数 */
 

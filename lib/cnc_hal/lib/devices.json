@@ -3,6 +3,8 @@
 // 本文件是 device.h 里 device_type_library[] 那张硬编码表的等价转换。
 // revision 暂时保留原表的**精确值**，行为与转换前一致；要放宽的条目
 // 自行改成 "*"（devdict 支持通配）。
+// dc_sync_enable 可选：0=关闭匹配设备的 DC 同步输出，1=允许，默认 1。
+// 总线 dc_enable=0 时全部关闭；同型号同版本的多个从站共用该配置，重启后生效。
 //
 // type 取值（对应 DEVICE_TYPE 枚举）：
 //   "servo"  通用 DS402 伺服
@@ -23,17 +25,18 @@
 {
   "version": 1,
   "devices": [
-    { "vendor_id": 441,        "product_code": 2,          "revision": 0,         "type": "servo", "profile": "ds402", "name": "Sanyo Servo Driver" },
-    { "vendor_id": 477,        "product_code": 271601776,  "revision": 33818120,  "type": "servo", "profile": "ds402", "name": "Delta Servo Driver" },
-    { "vendor_id": 1647,       "product_code": 1614282758, "revision": 65536,     "type": "servo", "profile": "ds402", "name": "Panasonic Servo Driver" },
-    { "vendor_id": 2252,       "product_code": 6,          "revision": 0,         "type": "gree6", "profile": "none",  "name": "Gree axis6 Servo Driver" },
-    { "vendor_id": 2973639698, "product_code": 1,          "revision": 0,         "type": "gree4", "profile": "none",  "name": "Gree axis4 Servo Driver" },
-    { "vendor_id": 2252,       "product_code": 269418498,  "revision": 1,         "type": "panel", "profile": "none",  "name": "Control Panel Module" },
-    { "vendor_id": 2252,       "product_code": 269418497,  "revision": 1,         "type": "io",    "profile": "none",  "name": "IO Module" },
-    { "vendor_id": 1717,       "product_code": 1026,       "revision": 268435457, "type": "servo", "profile": "ds402", "name": "GHSD" },
-    { "vendor_id": 1710,       "product_code": 131073,     "revision": 65536,     "type": "servo", "profile": "ds402", "name": "SPS_ECAT_CoE_02" },
-    { "vendor_id": 1337,       "product_code": 35652353,   "revision": 268435456, "type": "servo", "profile": "ds402", "name": "SGD7S" },
-    { "vendor_id": 2252,       "product_code": 2973639698, "revision": 1,         "type": "gree4", "profile": "none",  "name": "Gree axis4 Servo Driver" },
-    { "vendor_id": 5596774,    "product_code": 40200,      "revision": 2024032400,"type": "servo", "profile": "ds402", "name": "Blue" }
+    { "vendor_id": 441,        "product_code": 2,          "revision": 0,         "type": "servo", "profile": "ds402", "name": "Sanyo Servo Driver", "dc_sync_enable": 1},
+    { "vendor_id": 477,        "product_code": 271601776,  "revision": 33818120,  "type": "servo", "profile": "ds402", "name": "Delta Servo Driver", "dc_sync_enable": 1 },
+    { "vendor_id": 1647,       "product_code": 1614282758, "revision": 65536,     "type": "servo", "profile": "ds402", "name": "Panasonic Servo Driver", "dc_sync_enable": 1 },
+    { "vendor_id": 2252,       "product_code": 6,          "revision": 0,         "type": "gree6", "profile": "none",  "name": "Gree axis6 Servo Driver", "dc_sync_enable": 1 },
+    { "vendor_id": 2973639698, "product_code": 1,          "revision": 0,         "type": "gree4", "profile": "none",  "name": "Gree axis4 Servo Driver", "dc_sync_enable": 1 },
+    { "vendor_id": 2252,       "product_code": 269418498,  "revision": 1,         "type": "panel", "profile": "none",  "name": "Control Panel Module", "dc_sync_enable": 1 },
+    { "vendor_id": 2252,       "product_code": 269418497,  "revision": 1,         "type": "io",    "profile": "none",  "name": "IO Module", "dc_sync_enable": 1 },
+    { "vendor_id": 1717,       "product_code": 1026,       "revision": 268435457, "type": "servo", "profile": "ds402", "name": "GHSD", "dc_sync_enable": 1 },
+    { "vendor_id": 1710,       "product_code": 131073,     "revision": 65536,     "type": "servo", "profile": "ds402", "name": "SPS_ECAT_CoE_02", "dc_sync_enable": 1 },
+    { "vendor_id": 1337,       "product_code": 35652353,   "revision": 268435456, "type": "servo", "profile": "ds402", "name": "SGD7S", "dc_sync_enable": 1 },
+    { "vendor_id": 2252,       "product_code": 2973639698, "revision": 1,         "type": "gree4", "profile": "none",  "name": "Gree axis4 Servo Driver", "dc_sync_enable": 1 },
+    { "vendor_id": 5596774,    "product_code": 40200,      "revision": 2024032400,"type": "servo", "profile": "ds402", "name": "Blue", "dc_sync_enable": 1 },
+    { "vendor_id": 22,         "product_code": 642265184,  "revision": 2101344,   "type": "io",    "profile": "none",  "name": "IO Module", "dc_sync_enable": 0 }
   ]
 }
