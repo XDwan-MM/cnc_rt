@@ -144,8 +144,8 @@ static void block_deal_run_row(PLAN_BLOCK* parser_block, PLAN_BLOCK* pretreat_bl
         rerun_program_changed(parser_block);
         // fanuc恢复辅助功能
         for(int i = 0; i < rerun_data->mst.count; i++){
-            if(queue_is_full(pretreat_block)) break;
-            PLAN_BLOCK* slot = queue_peak_tail(pretreat_block);
+            if(queue_is_full(pretreat_queue)) break;
+            PLAN_BLOCK* slot = queue_peak_tail(pretreat_queue);
             if(slot == NULL) break;
             PLAN_BLOCK mst_blk = {0};
             rerun_make_mst_block(&rerun_data->mst, i, parser_block, &mst_blk);

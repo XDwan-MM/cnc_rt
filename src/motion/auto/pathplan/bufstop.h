@@ -19,6 +19,9 @@ void parser_buf_stop_publish_passed(unsigned int id);
 // 译码器是否暂时不会再产出新块 
 bool parser_hasNoMoreBlocks(void);
 
+// 检查该码是否为M0、M01、M02、M03+阻止缓冲配置的停止码
+bool parser_isBufStopMCode(int m_code);
+
 #ifdef __cplusplus
 }
 #endif

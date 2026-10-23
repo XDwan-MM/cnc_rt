@@ -3,7 +3,8 @@
 #include <hmisysapi.h>
 #include "alarmapi.h"
 #include "cnc_math.h"        
-
+#include "bufstop.h"
+#include "ncitpstopdef.h"
 
 #define RERUN_SNAPSHOT_TICKS (1) //运行时存储数据刷新频率
 
@@ -95,7 +96,8 @@ void rerun_mst_collect(const PLAN_BLOCK* block)
     if (rerun_data == NULL || block == NULL) return;
     MST_RESTORE* r = &rerun_data->mst;
 
-    
+    if(block->mode != PMC_MODE_M_CMD) return;
+
     if (block->mst_data.spindle.speed > 0 &&
         block->mst_data.spindle.speed != r->s[0]) {
         r->s[1] = r->s[0];
@@ -103,9 +105,15 @@ void rerun_mst_collect(const PLAN_BLOCK* block)
     }
 
   
-    if (block->mode != PMC_MODE_M_CMD) return;
     const int m = block->mst_data.m_code;
     if (m < 0) return;
+
+    // 程序控制/文件调用/阻止缓冲的 M 码不参与重演
+    if (m == M00 || m == M01 || m == M02 || m == M30
+        || m == ITP_BUFEXEC_M65 || m == ITP_BUFEXEC_M66
+        || m == ITP_BUFEXEC_M98 || m == ITP_BUFEXEC_M99
+        || parser_isBufStopMCode(m))
+        return;
 
     // 在 M06 上取刀号
     if (m == M06 && block->mst_data.tool_number >= 0) {
@@ -176,7 +184,7 @@ static void rerun_snapshot_row(const PLAN_BLOCK* block)
     rerun_data->break_block.line_number = block->line_number;
     rerun_data->break_block.mode        = block->mode;
     rerun_data->break_block.type        = block->type;
-    rerun_data->break_block.m_code      = block->mst_data.m_code;
+    rerun_data->break_block.m_code      = rerun_block_m_code(block);
     // valid = 这份段信息有效（有行号、有坐标可参考）
     // 但是不等于可以自动再启动—— 能不能自动跳行看 is_mem_rerun，那个只由打断路径置位
     rerun_data->break_block.valid       = true;
@@ -259,6 +267,7 @@ void rerun_record_if_interrupted(const PLAN_BLOCK* block)
 /// @brief 切换模式
 void rerun_update_when_switching(){
     delAlarm(ALARM_CH, ALARM_WARNING, 3);
+    rerun_mst_reset();  //本次再启动重新收集辅助码
     switch (rt_data->target_mode)
     {
     case MODE_MDI:
@@ -461,6 +470,7 @@ void rerun_save_pack(RERUN_SAVE* out)
     out->break_block.line_number = rerun_data->break_block.line_number;
     out->break_block.mode        = (int)rerun_data->break_block.mode;
     out->break_block.type        = (int)rerun_data->break_block.type;
+    out->break_block.m_code      = rerun_data->break_block.m_code;
     memcpy(&out->break_end,     &rerun_data->break_end,     sizeof(POS));
     out->is_mem_rerun        = rerun_data->is_mem_rerun ? 1 : 0;
 }
