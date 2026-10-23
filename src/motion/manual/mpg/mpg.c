@@ -560,15 +560,15 @@ static void handwheel_update_mac_lock(void)
 static void handwheel_update_it_lock(void)
 {
 
-    /* 本周期开关事件：只改“请求” */
+   
     switch (rt_data->nc_event)
     {
     case SYS_EVENT_IT_ON:
-        LOG(LOG_LEVEL_INFO, "手动模式处理开启全轴锁住");
+        LOG(LOG_LEVEL_INFO, "手动模式全轴锁住开启");
         rt_data->sys_state[SYS_IS_MAC_LOCK] = true;
         break;
     case SYS_EVENT_IT_OFF:
-        LOG(LOG_LEVEL_INFO, "手动模式处理关闭全轴锁住");
+        LOG(LOG_LEVEL_INFO, "手动模式全轴锁住关闭");
         rt_data->sys_state[SYS_IS_MAC_LOCK] = false;
         break;
     default:
