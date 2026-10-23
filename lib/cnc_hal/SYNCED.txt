@@ -1,8 +1,8 @@
-同步自   : /home/gree/wcf/platform_test/cnc_hal
-提交     : 9fc1ae3
-提交说明 : 增加蓝海华腾和四合一更改主轴定向角度的接口
-同步时间 : 2026-10-22T18:27:47+08:00
+同步自   : /mnt/e/数控系统项目/1.项目代码/cnc_hal
+提交     : b143095
+提交说明 : 增加dc_sync_enable参数控制从站是否启用DC
+同步时间 : 2026-10-23T11:19:52+08:00
 ABI      : 9u.3u
 公共头   : 5 个
 内部头   : 9 个
-设备字典 : devices.json sha256=f65db141b952c6fd
+设备字典 : devices.json sha256=a6c81191a5822efd
