@@ -13,6 +13,9 @@
 #include "ncitpstopdef.h"
 #include "bufstop.h"
 
+#include "ncitpstopdef.h"
+#include "bufstop.h"
+
 
 static void block_cal_pos(PLAN_BLOCK* parser_block, PLAN_BLOCK* current_block, POS* start_pos);
 static void block_cal_circle_vector(PLAN_BLOCK* current_block);

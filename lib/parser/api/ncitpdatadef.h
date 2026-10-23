@@ -4,6 +4,7 @@
 #include "motiondata.h"
 #include "ncitpmacrodef.h"
 #include "ncitpstopdef.h"
+#include "ncitpstopdef.h"
 #ifdef __cplusplus
 extern "C" {
 #endif

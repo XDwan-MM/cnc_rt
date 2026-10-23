@@ -1,12 +1,17 @@
 #include "reset.h"
 #include "alarm.h"
 #include "rt_hal_adapter.h"
+#include "alarm.h"
+#include "rt_hal_adapter.h"
 #include "rerun.h"
 #include "rt_data.h"
 #include "spindle_control.h"
 #include "tapreturn.h"
+#include "spindle_control.h"
+#include "tapreturn.h"
 #include "global.h"
 #include <hmisysapi.h>
+#include <stdlib.h>
 #include <stdlib.h>
 
 const char* reset_trigger_name[] = {"紧急停止信号ESP", "外部复位信号ERS", "复位&倒带信号RRW", "按下MDI的RESET键"};
@@ -83,6 +88,7 @@ void nc_set_resetted(){
             }
             break;
         case MODE_HOMING: // 回零
+            if(nc_reset->is_resetting && !var_chan[0][VAR_CHAN_IS_HOMING].value.i && IsEqualTo(rt_hal_spindle_rpm(), 0)){
             if(nc_reset->is_resetting && !var_chan[0][VAR_CHAN_IS_HOMING].value.i && IsEqualTo(rt_hal_spindle_rpm(), 0)){
                 nc_reset->is_resetted = 1;
                 rt_data_reset();

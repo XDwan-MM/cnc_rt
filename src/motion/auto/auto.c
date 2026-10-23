@@ -14,6 +14,10 @@
 #include "sysprog.h"
 #include "pathplan.h"
 #include "bufstop.h"
+#include "tapreturn.h"
+#include "sysprog.h"
+#include "pathplan.h"
+#include "bufstop.h"
 
 static void auto_check_error_line();
 static void auto_update_state();

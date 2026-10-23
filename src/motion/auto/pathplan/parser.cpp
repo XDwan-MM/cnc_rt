@@ -27,6 +27,11 @@ static bool parser_is_hold_gcode(int unmodal);
 static void parser_loadBufStopCfg();
 static void buf_stop_record(BufStop *s, unsigned int id, int code, int is_g);
 static void parser_clear_buf_stop();
+static GNC_RES parser_waiting_for_bufstop();
+static bool parser_is_hold_gcode(int unmodal);
+static void parser_loadBufStopCfg();
+static void buf_stop_record(BufStop *s, unsigned int id, int code, int is_g);
+static void parser_clear_buf_stop();
 
 PARSER_DATA* parser_data;
 
