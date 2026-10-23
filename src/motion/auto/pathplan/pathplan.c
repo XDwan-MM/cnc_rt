@@ -896,7 +896,7 @@ static double block_cal_circle_length(PLAN_BLOCK* current_block){
         case CIRCLE_CCW:
             return current_block->circular_data.rad * current_block->circular_data.radius;
         case HELIX_CW:
-        case HELIX_CCW:block_cal_circle_length(current_block);
+        case HELIX_CCW:
             current_block->helical_data.screw_rad = atan2(current_block->helical_data.screw_offset, current_block->circular_data.rad * current_block->circular_data.radius);
             return sqrt(pow(current_block->circular_data.rad * current_block->circular_data.radius, 2) + pow(current_block->helical_data.screw_offset, 2));
         default:
