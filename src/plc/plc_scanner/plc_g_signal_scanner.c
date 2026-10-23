@@ -413,6 +413,34 @@ static void plc_auto_g_signal_scan_cycle(const G_INPUT_MAP *curr_g, const G_INPU
     }
 }
 
+/// @brief  按照G寄存器电平重新同步互锁/锁住等开关状态
+void plc_lock_state_resync(void)
+{
+    G_INPUT_MAP cur;
+    memset(&cur, 0, sizeof(cur));
+    plc_input_fetch_snapshot(&cur);
+
+    /* 所有轴/切削段/程序段开始互锁（G8.0/G8.1/G8.3，0 有效） */
+    rt_set_sys_state(SYS_IS_IT_LOCK,  !GET_BIT(cur.g_regs[8], 0));
+    rt_set_sys_state(SYS_IS_CSL_LOCK, !GET_BIT(cur.g_regs[8], 1));
+    rt_set_sys_state(SYS_IS_BSL_LOCK, !GET_BIT(cur.g_regs[8], 3));
+
+    /* 各轴互锁（G130.0-4，0 有效） */
+    for (int i = 0; i < 5; ++i)
+        rt_set_sys_state((SysStateIndex)(SYS_IS_IT1_LOCK + i),
+                         !GET_BIT(cur.g_regs[130], i));
+
+    /* 机床锁住（G4.1，1 有效）。READY 表示位置输出已按锁住处理：复位时轴已停，
+     * 直接拉到同一电平，避免两者不等把 target_vel 永久压成 0。 */
+    const bool mac_lock = GET_BIT(cur.g_regs[4], 1);
+    rt_set_sys_state(SYS_IS_MAC_LOCK, mac_lock);
+    rt_set_sys_state(SYS_IS_MAC_LOCK_READY, mac_lock);
+
+    /* 跳过信号 G6.6、程序再启动 G6.0（1 有效）：都会直接拦住循环启动/运动 */
+    rt_set_sys_state(SYS_IS_STOP_SKIP,   GET_BIT(cur.g_regs[6], 6));
+    rt_set_sys_state(SYS_IS_PROG_RESTAR, GET_BIT(cur.g_regs[6], 0));
+}
+
 static void plc_lock_g_signal_scan_cycle(const G_INPUT_MAP *curr_g, const G_INPUT_MAP *last_g){
     /* 机床锁住 G4.1 */
     if (SIGNAL_RISING(curr_g->g_regs[4], last_g->g_regs[4], 1))

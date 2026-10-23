@@ -7,6 +7,7 @@
 #include <hmisysapi.h>
 #include "mpg.h"
 #include <time.h>
+#include"plc_g_signal_scanner.h"
 
 /* HAL 错误码 → 报警号。RT 直接用 HAL 的返回值报号。
  * **这些号需要在 HMI 的报警文本表里有对应条目**，否则界面显示未知报警。 */
@@ -329,6 +330,8 @@ void handle_alarm_cmd()
         rt_data_reset();
         // 重置事件
         event_queue_reset(event_queue);
+        // 按当前电平重新同步互锁锁住信号 
+        plc_lock_state_resync();
         // 更新cmd_pos位置
         update_pos_flag = 0;
         // 四轴一起发非阻塞复位请求，由 PDO 线程下发直至离开 Fault 或超时；
