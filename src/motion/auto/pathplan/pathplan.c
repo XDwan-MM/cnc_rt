@@ -915,6 +915,7 @@ static double block_cal_nurbs_length(PLAN_BLOCK *current_block)
             u_vals[i] = (double)i / (num_samples - 1);
         }
         current_block->length  = getlength(u_vals, num_samples,current_block->nurbs_data.control_point, 3, current_block->nurbs_data.U, current_block->nurbs_data.num,current_block->nurbs_data.w);
+        return 0;
     }
     else
     {
@@ -940,7 +941,7 @@ void block_cal_length(PLAN_BLOCK* current_block){
             current_block->length = block_cal_circle_length(current_block);
             break;
         case NURBS:
-            current_block->length = block_cal_nurbs_length(current_block);
+            block_cal_nurbs_length(current_block);
             break;
         default:
             break;
@@ -966,7 +967,7 @@ void block_cal_vector(PLAN_BLOCK* current_block){
         case NURBS:
             POS start_vec, end_vec;
             nurbs_curve_derivative(1, current_block->nurbs_data.control_point, current_block->nurbs_data.w, current_block->nurbs_data.U,current_block->nurbs_data.num, current_block->nurbs_data.k, &end_vec);
-            nurbs_curve_derivative(0, current_block->nurbs_data.control_point, current_block->nurbs_data.w, current_block->nurbs_data.U,current_block->nurbs_data.num, current_block->nurbs_data.k, &end_vec);
+            nurbs_curve_derivative(0, current_block->nurbs_data.control_point, current_block->nurbs_data.w, current_block->nurbs_data.U,current_block->nurbs_data.num, current_block->nurbs_data.k, &start_vec);
             POS_Divide(&end_vec, POS_Norm(end_vec));
             POS_Divide(&start_vec, POS_Norm(start_vec));
             current_block->end_vec = end_vec;
@@ -1085,7 +1086,7 @@ void block_cal_max_vel(PLAN_BLOCK* current_block){
                 current_block->feed_vel = MIN(MIN(rt_data->axis_data[0].jog_lowspd, rt_data->axis_data[1].jog_lowspd), rt_data->axis_data[2].jog_lowspd);
                 current_block->max_vel = MIN(current_block->feed_vel, current_block->param_vel);
                 current_block->max_acc = MIN3(rt_data->axis_data[0].max_rapid_acc, rt_data->axis_data[1].max_rapid_acc, rt_data->axis_data[2].max_rapid_acc);
-                current_block->max_jerk = MIN3(rt_data->axis_data[0].max_rapid_jk, rt_data->axis_data[1].max_rapid_jk, rt_data->axis_data[3].max_rapid_jk);
+                current_block->max_jerk = MIN3(rt_data->axis_data[0].max_rapid_jk, rt_data->axis_data[1].max_rapid_jk, rt_data->axis_data[2].max_rapid_jk);
                 break;
             }
             break;
