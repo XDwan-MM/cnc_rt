@@ -1086,7 +1086,7 @@ void block_cal_max_vel(PLAN_BLOCK* current_block){
                 current_block->feed_vel = MIN(MIN(rt_data->axis_data[0].jog_lowspd, rt_data->axis_data[1].jog_lowspd), rt_data->axis_data[2].jog_lowspd);
                 current_block->max_vel = MIN(current_block->feed_vel, current_block->param_vel);
                 current_block->max_acc = MIN3(rt_data->axis_data[0].max_rapid_acc, rt_data->axis_data[1].max_rapid_acc, rt_data->axis_data[2].max_rapid_acc);
-                current_block->max_jerk = MIN3(rt_data->axis_data[0].max_rapid_jk, rt_data->axis_data[1].max_rapid_jk, rt_data->axis_data[3].max_rapid_jk);
+                current_block->max_jerk = MIN3(rt_data->axis_data[0].max_rapid_jk, rt_data->axis_data[1].max_rapid_jk, rt_data->axis_data[2].max_rapid_jk);
                 break;
             }
             break;
