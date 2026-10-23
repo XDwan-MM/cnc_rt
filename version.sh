@@ -1,1 +1,1 @@
-Version=1.36.5
+Version=1.36.6
