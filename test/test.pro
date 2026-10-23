@@ -47,8 +47,8 @@ LIBS += -L"$$PWD/../lib/kinematic/bin/" -lkinematic
 INCLUDEPATH += $$PWD/../lib/kinematic/include $$PWD/../lib/kinematic
 
 # 添加nurbs库
-# LIBS += -L"$$PWD/lib/nurbs/bin/" -lnurbsfit
-# INCLUDEPATH += $$PWD/lib/nurbs/include $$PWD/lib/nurbsfit
+LIBS += -L"$$PWD/../lib/nurbs/bin/" -lnurbsfit
+INCLUDEPATH += $$PWD/../lib/nurbs/include
 
 # 添加误差补偿库
 LIBS += -L"$$PWD/../lib/CNC_ErrorComp/lib" -lCNC_ErrorComp
@@ -147,6 +147,7 @@ SOURCES += \
     ../src/motion/auto/interp/interpolation.c \
     ../src/motion/auto/pathplan/parser.cpp \
     ../src/motion/auto/pathplan/pathplan.c \
+    ../src/motion/auto/pathplan/hmi_request.c \
     ../src/motion/spindle/spindle_control.c \
     ../src/motion/spindle/spindle_hal.c \
     ../src/motion/spindle/spindle_m29.c \
@@ -162,6 +163,8 @@ SOURCES += \
     ../src/motion/manual/jog/jog_planner.c \
     ../src/motion/servo_sample/servosamplesampler.cpp \
     ../src/motion/rerun/rerun.c \
+    ../src/motion/sysprog/tapreturn.c \
+    ../src/motion/sysprog/sysprog.c \
     ../src/protect/alarm.c \
     ../src/protect/ferror_control.c \
     ../src/protect/stored_stroke_check.c \
