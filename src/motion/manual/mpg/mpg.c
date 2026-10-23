@@ -45,6 +45,8 @@ static bool handwheel_is_mac_lock_switching(void);
 static bool handwheel_motion_is_stopped(void);
 static void handwheel_update_mac_lock(void);
 static void handwheel_apply_mac_lock_if_stopped(void);
+//全轴锁住
+static void handwheel_update_it_lock(void);
 
 /* 外部函数定义 */
 
@@ -83,6 +85,7 @@ void handle_mpg_cmd(void)
     int selected_multiplier;
     int previous_axis;
     mpg_planner_t *planner;
+    bool is_mpg_interlock;
 
     /* 实时数据尚未就绪或系统处于急停时，不读取/推进 MPG；急停清理由专用入口完成。 */
     if (rt_data == NULL || rt_data->sys_state[SYS_IS_ESTOP_ACTIVE])
@@ -90,6 +93,9 @@ void handle_mpg_cmd(void)
 
     /* 机械锁住：先处理本周期开关事件。事件只改“请求”，生效位由周期末尾的检查点落。 */
     handwheel_update_mac_lock();
+    /*是否所有轴互锁*/
+    handwheel_update_it_lock();
+    
 
     /* 轴选择位于 bits 3..7，倍率选择位于 bits 0..2；解码后再做轴槽位校验。 */
     HW_Get_Count(&mpg_hardware_count);
@@ -116,7 +122,11 @@ void handle_mpg_cmd(void)
         handwheel_apply_mac_lock_if_stopped();
         return;
     }
-
+    /*所选轴有效且互锁打开，执行轴停止追踪功能*/
+    is_mpg_interlock = rt_data->sys_state[SYS_IS_IT_LOCK];
+    if(is_mpg_interlock && valid_selection){
+        mpg_stop_axis_chasing(selected_axis);
+    }
     /* 失效后重新启用也视为切换，使被忽略期间的计数不进入目标位置。 */
     selection_changed = (!mpg_context.initialized || !mpg_context.enabled ||
                          selected_axis != mpg_context.selected_axis ||
@@ -205,6 +215,7 @@ void handle_mpg_cmd(void)
     mpg_planner_step(planner, rt_data->ncu_data.cycle);
     planner->reference_position = planner->current_position;
     mpg_update_axis_output(selected_axis);
+    
     /* 周期末尾：当前轴已停稳则让机械锁住的生效位跟随请求 */
     handwheel_apply_mac_lock_if_stopped();
 }
@@ -545,3 +556,23 @@ static void handwheel_update_mac_lock(void)
         break;
     }
 }
+
+static void handwheel_update_it_lock(void)
+{
+
+    /* 本周期开关事件：只改“请求” */
+    switch (rt_data->nc_event)
+    {
+    case SYS_EVENT_IT_ON:
+        LOG(LOG_LEVEL_INFO, "手动模式处理开启全轴锁住");
+        rt_data->sys_state[SYS_IS_MAC_LOCK] = true;
+        break;
+    case SYS_EVENT_IT_OFF:
+        LOG(LOG_LEVEL_INFO, "手动模式处理关闭全轴锁住");
+        rt_data->sys_state[SYS_IS_MAC_LOCK] = false;
+        break;
+    default:
+        break;
+    }
+}
+
