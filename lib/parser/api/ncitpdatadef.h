@@ -4,6 +4,7 @@
 #include "motiondata.h"
 #include "ncitpmacrodef.h"
 #include "ncitpstopdef.h"
+#include "ncitpstopdef.h"
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -13,7 +14,7 @@ extern "C" {
 #define ITP_SYS_REF_POINT_MAX (4)
 #define ITP_SYS_AXIS_MAX (6)
 typedef struct {
-    int axisCount;
+    int axisCount;                                            
     double refPos[ITP_SYS_REF_POINT_MAX][ITP_SYS_AXIS_MAX];   /*!< [参考点序号][轴序号]，机床坐标 */
 } ItpRefPoint;
 
@@ -25,7 +26,7 @@ typedef struct {
     int suv;    // No.5003#1: 起刀类型高位
     int ccc;    // No.19607#2: 外边拐角连接 0=直线 1=圆弧
     int lookAheadSegments;      // 刀补开启时预读段数，缓冲区容量 = 预读段数 + 1
-    ItpRefPoint refPoint;
+    ItpRefPoint refPoint;       // 第1、2、3、4参考点
 } ItpParam_temp;
 
 typedef struct {

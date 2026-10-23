@@ -6,6 +6,7 @@
 #include <hmisysapi.h>
 #include <alarmapi.h>
 #include <string.h> 
+#include "rerun.h"
 #include "tapreturn.h"
 #include "sysprog.h"
 
@@ -21,6 +22,11 @@ static GNC_RES parser_handle_gcode(pmc_data* motion_data, NcItpState *itp_state,
 static GNC_RES parser_handle_null(NcItpState *itp_state, int *line_no);
 static GNC_RES parser_set_content(NC_MODE nc_mode);
 static bool parser_check_res(GNC_RES res);
+static GNC_RES parser_waiting_for_bufstop();
+static bool parser_is_hold_gcode(int unmodal);
+static void parser_loadBufStopCfg();
+static void buf_stop_record(BufStop *s, unsigned int id, int code, int is_g);
+static void parser_clear_buf_stop();
 static GNC_RES parser_waiting_for_bufstop();
 static bool parser_is_hold_gcode(int unmodal);
 static void parser_loadBufStopCfg();
@@ -212,9 +218,15 @@ GNC_RES parser_init(NC_MODE nc_mode)
     ItpSetItpParam(itpParam);
     // 设置机床起点
     double ori_pos_x, ori_pos_y, ori_pos_z;
-    ori_pos_x = rt_data->axis_data[AXIS_X].wcs_cmd_pos_cur;
-    ori_pos_y = rt_data->axis_data[AXIS_Y].wcs_cmd_pos_cur;
-    ori_pos_z = rt_data->axis_data[AXIS_Z].wcs_cmd_pos_cur;
+    if (rerun_data->is_rerun && rerun_data->program_start_valid) {
+        ori_pos_x = rerun_data->program_start.x;
+        ori_pos_y = rerun_data->program_start.y;
+        ori_pos_z = rerun_data->program_start.z;
+    } else {
+        ori_pos_x = rt_data->axis_data[AXIS_X].wcs_cmd_pos_cur;
+        ori_pos_y = rt_data->axis_data[AXIS_Y].wcs_cmd_pos_cur;
+        ori_pos_z = rt_data->axis_data[AXIS_Z].wcs_cmd_pos_cur;
+    }
     ItpSetOriginMacPos(ori_pos_x, ori_pos_y, ori_pos_z, 0);
     tapreturn_refresh_return_param();
 

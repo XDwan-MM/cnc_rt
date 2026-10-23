@@ -14,6 +14,8 @@
 #include <pthread.h>
 #include "tapreturn.h"
 #include "debug_mode.h"
+#include "tapreturn.h"
+#include "debug_mode.h"
 
 // ==============全局变量定义===============
 int update_pos_flag = 0;                // 理论位置读取驱动器位置
@@ -277,6 +279,13 @@ GNC_RES rt_global_init(){
         rt_global_delete();
         return res;
     }
+    res = sysprog_init();
+    if(res != GNC_OPERATOR_SUCCESS){
+        rt_global_delete();
+        return res;
+    }
+    rerun_restore();
+    tapreturn_data_restore();
         res = sysprog_init();
     if(res != GNC_OPERATOR_SUCCESS){
         rt_global_delete();

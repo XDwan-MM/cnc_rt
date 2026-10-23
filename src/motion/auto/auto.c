@@ -14,6 +14,10 @@
 #include "sysprog.h"
 #include "pathplan.h"
 #include "bufstop.h"
+#include "tapreturn.h"
+#include "sysprog.h"
+#include "pathplan.h"
+#include "bufstop.h"
 
 static void auto_check_error_line();
 static void auto_update_state();
@@ -70,6 +74,8 @@ void handle_auto_cmd(){
     trace_publisher_publish_current(0);
     // 更新阶段
     auto_update_stage();
+    //运行中刷新程序再启动断电块
+    rerun_snapshot_position(cycle_tp->plan_block);
     // 阻止缓冲：停止块出队后发布放行事件
     auto_update_buf_stop();
     // 检查程序结束
@@ -806,6 +812,9 @@ static void auto_update_stage(){
 // 检查程序是否结束
 static bool auto_check_program_end(){
     if(auto_is_program_end()) {
+
+        if(cycle_tp->running_stage !=PROGRAM_END ) 
+            rerun_data_reset();
         // 检查程序是否结束
         cycle_tp->running_stage = PROGRAM_END;
         // 检查译码错误
@@ -872,7 +881,7 @@ static void auto_get_next_cmd(){
                              cycle_tp->exec_cmd == DO_CHOP_CMD ||
                              cycle_tp->exec_cmd == DO_TAP_CMD);
     auto_update_var();
-    rerun_data_store(cycle_tp->plan_block);
+    rerun_track_current_row(cycle_tp->plan_block);
     // 记录刚性攻丝参数
     if(tapreturn_record(cycle_tp->plan_block)) rt_clear_rigid_return_param();
 }
@@ -953,6 +962,8 @@ void cycle_tp_add_block(){
 // 自动模式初始化
 static void auto_start_run(){
     // 重置队列
+    rerun_data_clear_breakpoint();
+    rerun_store_program_start();
     queue_reset(plan_queue);
     queue_reset(unif_queue);
     queue_reset(nurbs_temp_queue);
@@ -984,7 +995,7 @@ static void auto_pause_run(){
     setVarChanInt(0, VAR_CHAN_CYCLE, 0, 0);
     setVarChanInt(0, VAR_CHAN_HOLD, 1, 0);
     rt_set_zero_vel_params();
-    rerun_store_breakpoint(cycle_tp->plan_block->is_breakpoint);
+    rerun_store_breakpoint(cycle_tp->plan_block);
 }
 
 static void auto_restart_run(){
@@ -992,6 +1003,7 @@ static void auto_restart_run(){
     setVarChanInt(0, VAR_CHAN_IS_MOVING, 1, 0);
     setVarChanInt(0, VAR_CHAN_CYCLE, 1, 0);
     setVarChanInt(0, VAR_CHAN_HOLD, 0, 0);
+    rerun_data_clear_breakpoint();
 }
 
 static void auto_reset_run(){
@@ -1014,7 +1026,7 @@ static void auto_reset_run(){
     sysprog_cleanup();
     trace_publisher_reset(0);
     rt_set_zero_vel_params();
-    rerun_store_breakpoint(cycle_tp->plan_block->is_breakpoint);
+    rerun_record_if_interrupted(cycle_tp->plan_block);
 }
 
 static void auto_update_var(){
@@ -1154,6 +1166,7 @@ GNC_RES cycle_tp_init(){
 static void auto_handle_alarm(){
     if(cycle_tp->exec_state == EXEC_IDLE) return;
     cycle_tp->exec_state = EXEC_RESET;
+    rerun_mark_interrupted();
     switch (cycle_tp->running_stage)
     {
     case PROGRAM_START:
@@ -1172,6 +1185,7 @@ static void auto_handle_alarm(){
 }
 
 void auto_handle_estop(){
+    rerun_mark_interrupted();
     auto_reset_run();
 }
 
