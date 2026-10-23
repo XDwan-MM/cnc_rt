@@ -273,7 +273,8 @@ bool spindle_request_manual_run(spindle_state_t direction)
      * 抢占。READY 状态例外：新的 M3/M4 会触发 CSP 到 CSV 的安全交接。 */
     if (g_spindle.m29_active ||
         (g_spindle.m29_phase != SPINDLE_M29_IDLE &&
-         g_spindle.m29_phase != SPINDLE_M29_READY))
+         g_spindle.m29_phase != SPINDLE_M29_READY &&
+         g_spindle.m29_phase != SPINDLE_M29_COMPLETE))
     {
         return false;
     }
@@ -313,7 +314,8 @@ void spindle_request_stop(void)
 
     if (g_spindle.m29_active ||
         (g_spindle.m29_phase != SPINDLE_M29_IDLE &&
-         g_spindle.m29_phase != SPINDLE_M29_READY))
+         g_spindle.m29_phase != SPINDLE_M29_READY &&
+         g_spindle.m29_phase != SPINDLE_M29_COMPLETE))
     {
         return;
     }
@@ -325,6 +327,12 @@ void spindle_request_stop(void)
     }
 
     g_spindle.pending_event = SPINDLE_EVENT_STOP;
+}
+
+void spindle_release_torque_request(void)
+{
+    /* 上层复位流程直接接管下使能时，清除使能仲裁器使用的主轴意愿。 */
+    spindle_hal_release_torque();
 }
 
 /**
@@ -362,6 +370,11 @@ void spindle_internal_handle_rotation(spindle_context_t *context,
     if (context->m29_phase == SPINDLE_M29_READY)
     {
         context->m29_active = false;
+        context->m29_phase = SPINDLE_M29_IDLE;
+        context->m29_feedback_stable = false;
+    }
+    else if (context->m29_phase == SPINDLE_M29_COMPLETE)
+    {
         context->m29_phase = SPINDLE_M29_IDLE;
         context->m29_feedback_stable = false;
     }
@@ -453,6 +466,11 @@ static void spindle_process_event(spindle_context_t *context)
         if (context->m29_phase == SPINDLE_M29_READY)
         {
             context->m29_active = false;
+            context->m29_phase = SPINDLE_M29_IDLE;
+            context->m29_feedback_stable = false;
+        }
+        else if (context->m29_phase == SPINDLE_M29_COMPLETE)
+        {
             context->m29_phase = SPINDLE_M29_IDLE;
             context->m29_feedback_stable = false;
         }
@@ -665,7 +683,6 @@ static void spindle_update_driver_control(void)
          * 以前每拍重发一个固定角度，等于把主轴锁死，攻丝转不起来。
          * 这里只把插补的指令角镜像下来，供到位判据与日志使用。 */
         g_spindle_hal.target_position = rt_data->axis_data[AXIS_SP].wcs_cmd_pos_cur;
-                spindle_hal_request_torque();
         return;
     }
 

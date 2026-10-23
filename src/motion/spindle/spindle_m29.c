@@ -404,10 +404,13 @@ void spindle_complete_m29(void)
         return;
     }
 
-    /* PLC 已返回 FIN。握手结束后继续保持 CSP、Operation Enabled 和当前位置；
-     * 后续 M3/M4 会显式退出 READY，并执行安全的 CSP -> CSV 控制权交接。 */
+    /*
+     * PLC 已返回 FIN。READY 只服务于握手期间的就绪判定；完成后转入
+     * COMPLETE，退出 M29 的周期控制分支。CSP 模式保留，位置轨迹与
+     * 驱动使能交由插补及其上层生命周期管理，不再由 M29 重复请求力矩。
+     */
     g_spindle.m29_active = false;
-    g_spindle.m29_phase = SPINDLE_M29_READY;
+    g_spindle.m29_phase = SPINDLE_M29_COMPLETE;
     g_spindle.orient_hold_stop = true;
     g_spindle.command_state = SPINDLE_STOP;
     g_spindle.command_speed = 0.0;

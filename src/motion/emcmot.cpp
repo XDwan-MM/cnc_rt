@@ -375,7 +375,8 @@ static void output_to_hal()
         spindle.mode == HAL_SPINDLE_CSP &&
         (reset_tap_stop ||
          (update_pos_flag && !reset_active &&
-          g_spindle.m29_phase == SPINDLE_M29_READY)))
+          (g_spindle.m29_phase == SPINDLE_M29_READY ||
+           g_spindle.m29_phase == SPINDLE_M29_COMPLETE))))
         (void)rt_hal_request_axis_pos(RT_HAL_AXIS_SP, rt_data->axis_data[AXIS_SP].wcs_cmd_pos_cur);
 }
 
