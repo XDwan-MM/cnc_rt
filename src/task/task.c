@@ -711,11 +711,28 @@ static void task_handle_enable_event(PLC_EVENT *event_data)
         {
             rt_data->nc_event = SYS_EVENT_RIGID_RETURN_ON;
             LOG(LOG_LEVEL_INFO, "处理攻丝回退开启事件");
+            switch (rt_data->current_mode)
+            {
+            case MODE_MDI:
+                break;
+            default:
+                rt_data->sys_state[SYS_IS_RIGID_RETURN] = 1;
+                rt_data->sys_state[SYS_IS_RIGID_RETURN_FINISH] = 1;
+                break;
+            }
         }
         else
         {
             rt_data->nc_event = SYS_EVENT_RIGID_RETURN_OFF;
             LOG(LOG_LEVEL_INFO, "处理攻丝回退关闭事件");
+            switch (rt_data->current_mode)
+            {
+            case MODE_MDI:
+                break;
+            default:
+                rt_data->sys_state[SYS_IS_RIGID_RETURN] = 0;
+                break;
+            }
         }
         break;
     default:
