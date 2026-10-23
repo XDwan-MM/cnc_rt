@@ -85,3 +85,17 @@ TEST_F(SpindleZeroSpeedAuthorizationTest, ProgramCommandSpeedRemainsLatestSAfter
 
     EXPECT_DOUBLE_EQ(spindle_get_program_command_speed(), 1000.0);
 }
+
+TEST_F(SpindleZeroSpeedAuthorizationTest, GeneralAlarmDoesNotAbortControlledResetStop)
+{
+    rt_data->sys_state[SYS_ESTOP_INPUT] = false;
+    rt_data->sys_state[SYS_IS_ESTOP_ACTIVE] = false;
+    rt_data->sys_state[SYS_IS_ALARMING] = false;
+    rt_data->axis_data[AXIS_SP].status.is_disable = false;
+    rt_data->axis_data[AXIS_SP].status.is_error = false;
+    ASSERT_FALSE(spindle_internal_reset_stop_abort_required());
+
+    rt_data->sys_state[SYS_IS_ALARMING] = true;
+
+    EXPECT_FALSE(spindle_internal_reset_stop_abort_required());
+}

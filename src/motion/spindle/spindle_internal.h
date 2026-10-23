@@ -185,7 +185,13 @@ void spindle_internal_handle_rotation(spindle_context_t *context, spindle_state_
 /* 安全仲裁和 HMI 复位受控停车。 */
 bool spindle_internal_stop_is_required(const spindle_context_t *context);
 bool spindle_internal_reset_or_estop_active(void);
+#ifdef __cplusplus
+extern "C" {
+#endif
 bool spindle_internal_reset_stop_abort_required(void);
+#ifdef __cplusplus
+}
+#endif
 void spindle_internal_update_reset_stop(void);
 
 /* CSV 速度规划与完成判定。 */
