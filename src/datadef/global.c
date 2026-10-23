@@ -137,7 +137,7 @@ void shm_var_update(){
         // 相对坐标 = 相对指令位置
         double real_zero = 0.0;
         getVarAxisDouble(i, VAR_AXIS_REAL_ZERO_EX, &real_zero, 0);
-        double real = var_axis[i][VAR_AXIS_CMD_POS_WCS_EX].value.f - real_zero;
+        double real = rt_data->axis_data[i].mac_cmd_pos - real_zero;
         setVarAxisDouble(i, VAR_AXIS_CMD_POS_RCS_EX, real, 0);
         // 机械坐标 = 机床指令位置
         setVarAxisDouble(i, VAR_AXIS_CMD_POS_EX, rt_data->axis_data[i].mac_cmd_pos, 0);
