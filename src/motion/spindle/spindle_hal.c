@@ -1,8 +1,10 @@
+#include "rt_drive_control.h"
+#include "emcmot.h"
 /**
  * @file spindle_hal.c
  * @brief 主轴控制模块访问 HAL 的唯一适配层。
  *
- * 本文件隔离 HAL 状态结构、模式切换请求和主轴力矩意愿。上层状态机只
+ * 本文件隔离 HAL 状态结构与模式切换请求；使能需求交公共管理。上层状态机只
  * 使用带业务含义的函数，不再散落状态字掩码、反馈读取失败默认值和模式
  * 切换闩锁。HAL 的反馈快照在一个 PDO 周期内保持不变，因此同一运动周期
  * 多次查询不会跨越硬件采样边界。
@@ -10,6 +12,7 @@
 
 #include "spindle_internal.h"
 #include "rt_hal_adapter.h"
+#include "alarm.h"
 #include <math.h>
 
 /*
@@ -17,7 +20,7 @@
  * 仍以 HAL 反馈为准；这里仅记录本模块最近一次输出目标和异步请求进度。
  */
 spindle_hal_state_t g_spindle_hal = {
-    .requested_mode = HAL_SPINDLE_CSV,
+    .requested_mode = HAL_AXIS_MODE_CSV,
     .mode_switch_state = SPINDLE_MODE_SWITCH_IDLE,
     .mode_switch_result = HAL_OK
 };
@@ -28,7 +31,7 @@ static int s_last_hal_error[7] = { HAL_OK };
 /* 内部函数声明 */
 
 /* 读取 HAL 模式反馈并推进本地异步模式事务。 */
-static void spindle_hal_poll_mode_switch(void);
+void spindle_hal_poll_mode_switch(void);
 /* 记录 HAL 错误；同一调用点的相同错误只打印一次，成功后允许再次报告。 */
 static int spindle_hal_log_hal_result(const char *api_name, int result, unsigned int call_site);
 
@@ -40,16 +43,19 @@ void spindle_hal_init(void)
      * 初始化本地输出镜像及异步事务状态。HAL 请求本身由 HAL 管理，
      * 此处不代表硬件已切换到 CSV；后续控制流程仍应读取实际反馈确认。
      */
+    motion_spindle_release_position();
+    (void)alarm_spindle_request_torque(false);
+    g_spindle_hal.velocity_submitted=false;
     g_spindle_hal.target_velocity = 0.0;
     g_spindle_hal.target_position = 0.0;
-    g_spindle_hal.requested_mode = HAL_SPINDLE_CSV;
+    g_spindle_hal.requested_mode = HAL_AXIS_MODE_CSV;
     g_spindle_hal.mode_switch_state = SPINDLE_MODE_SWITCH_IDLE;
     g_spindle_hal.mode_switch_result = HAL_OK;
 }
 
 int spindle_hal_is_enabled(void)
 {
-    HalCAxisStatus status;
+    RtHalAxisStatus status;
     int result;
 
     /* 使能状态来自轴状态快照；读取失败时返回未使能，按不可用处理。 */
@@ -63,16 +69,9 @@ int spindle_hal_is_enabled(void)
 
 int spindle_hal_mode(void)
 {
-    HalCSpindleStatus status;
-    int result;
-
-    /* 返回 HAL 当前反馈模式；-1 专用于表示状态读取失败。 */
-    result = rt_hal_spindle_status(RT_HAL_AXIS_SP, &status);
-    if (spindle_hal_log_hal_result("rt_hal_spindle_status", result, 1U) != HAL_OK)
-    {
-        return -1;
-    }
-    return status.mode;
+    HalAxisSnapshot axis;
+    if (spindle_hal_snapshot(&axis)!=HAL_OK || !(axis.feedback_valid&HAL_FEEDBACK_MODE))return -1;
+    return axis.actual_mode;
 }
 
 double spindle_hal_actual_velocity(void)
@@ -92,7 +91,7 @@ double spindle_hal_actual_velocity(void)
 
 double spindle_hal_actual_position(void)
 {
-    HalCSpindleStatus status;
+    RtHalSpindleStatus status;
     int result;
 
     /* HAL 返回的位置以角度表示；读取错误用 NaN 保留“未知”语义。 */
@@ -107,22 +106,22 @@ double spindle_hal_actual_position(void)
 
 uint16_t spindle_hal_status_word(void)
 {
-    HalCAxisStatus status;
+    RtHalAxisStatus status;
     int result;
 
     /* 状态字供安全仲裁检查驱动器故障位。 */
     result = rt_hal_axis_status(RT_HAL_AXIS_SP, &status);
     if (spindle_hal_log_hal_result("rt_hal_axis_status", result, 4U) != HAL_OK)
     {
-        /* 读取失败按 Fault 处理，安全仲裁必须优先停止主轴。 */
-        return 0x0008U;
+        /* 反馈无效由控制入口统一处理；这里不要伪造成驱动器 Fault。 */
+        return 0;
     }
     return status.raw_status;
 }
 
 int spindle_hal_orientation_state(void)
 {
-    int32_t state = HAL_ORIENT_NONE;
+    int32_t state = RT_HAL_ORIENT_NONE;
     int result;
 
     /* 定向状态与普通轴状态分开读取；-1 表示反馈无效，而非某个阶段。 */
@@ -138,35 +137,18 @@ int spindle_hal_orientation_state(void)
 bool spindle_hal_orientation_is_inactive(void)
 {
     /* 只有 HAL 明确报告 NONE 才认为定向已释放，读取失败不会放行。 */
-    return spindle_hal_orientation_state() == HAL_ORIENT_NONE;
-}
-
-void spindle_hal_request_torque(void)
-{
-    /*
-     * 这里只设置主轴的力矩意愿，不直接操作驱动使能。保护/使能仲裁模块
-     * 汇总各轴意愿并应用急停、轴屏蔽等优先条件后，才决定是否真正使能。
-     */
-    rt_data->axis_data[AXIS_SP].status.spindle_wants_torque = true;
-}
-
-void spindle_hal_release_torque(void)
-{
-    /* 撤销主轴力矩意愿；最终硬件使能状态由统一仲裁流程更新。 */
-    rt_data->axis_data[AXIS_SP].status.spindle_wants_torque = false;
+    return spindle_hal_orientation_state() == RT_HAL_ORIENT_NONE;
 }
 
 bool spindle_hal_mode_switch_is_pending(void)
 {
-    /* 查询前先采样模式反馈，使事务状态与当前 HAL 快照同步。 */
-    spindle_hal_poll_mode_switch();
+    /* 只查询本地业务阶段；由控制周期先调用 poll_mode_switch 更新。 */
     return g_spindle_hal.mode_switch_state == SPINDLE_MODE_SWITCH_PENDING;
 }
 
 bool spindle_hal_mode_switch_is_done(void)
 {
-    /* DONE 仅表示反馈模式与最近请求一致，不代表其他运行条件已满足。 */
-    spindle_hal_poll_mode_switch();
+    /* DONE 表示请求模式的准备已 READY；实际模式及使能仍须分别读有效反馈确认。 */
     return g_spindle_hal.mode_switch_state == SPINDLE_MODE_SWITCH_DONE;
 }
 
@@ -188,36 +170,36 @@ void spindle_hal_mode_switch_reset(void)
 
 int spindle_hal_request_mode(int mode)
 {
-    int result;
-
-    /*
-     * 每次都提交新请求，即使当前反馈已匹配目标模式；这样可覆盖 HAL
-     * 内部可能尚未完成的相反请求。成功提交后再依据反馈初始化事务状态。
-     */
-    result = rt_hal_request_spindle_mode(RT_HAL_AXIS_SP, (HalSpindleMode)mode);
-    g_spindle_hal.mode_switch_result = spindle_hal_log_hal_result(
-        "rt_hal_request_spindle_mode", result, 6U);
-    if (g_spindle_hal.mode_switch_result != HAL_OK)
-    {
-        g_spindle_hal.mode_switch_state = SPINDLE_MODE_SWITCH_ERROR;
-        return g_spindle_hal.mode_switch_result;
+    if(g_spindle_hal.mode_switch_state==SPINDLE_MODE_SWITCH_PENDING &&
+       g_spindle_hal.requested_mode==mode)return HAL_OK;
+    int rc=rt_hal_request_axis_mode(RT_HAL_AXIS_SP,(HalAxisMode)mode);
+    g_spindle_hal.mode_switch_result=rc;
+    g_spindle_hal.mode_switch_state=rc?SPINDLE_MODE_SWITCH_ERROR:SPINDLE_MODE_SWITCH_PENDING;
+    if(!rc) {
+        g_spindle_hal.requested_mode=mode;
+        alarm_axis_mode_requested(RT_HAL_AXIS_SP,mode);
     }
-
-    g_spindle_hal.requested_mode = mode;
-    g_spindle_hal.mode_switch_state = spindle_hal_mode() == (int)mode ?
-        SPINDLE_MODE_SWITCH_DONE : SPINDLE_MODE_SWITCH_PENDING;
-    return HAL_OK;
+    return rc;
 }
-
-/* 内部函数定义 */
-
-static void spindle_hal_poll_mode_switch(void)
+int spindle_hal_snapshot(HalAxisSnapshot* out)
 {
-    /* HAL 请求接口为异步语义；实际模式反馈匹配目标时才转入 DONE。 */
-    if (g_spindle_hal.mode_switch_state == SPINDLE_MODE_SWITCH_PENDING &&
-        spindle_hal_mode() == g_spindle_hal.requested_mode)
-    {
-        g_spindle_hal.mode_switch_state = SPINDLE_MODE_SWITCH_DONE;
+    return rt_hal_axis_snapshot(RT_HAL_AXIS_SP,out);
+}
+void spindle_hal_poll_mode_switch(void)
+{
+    if(g_spindle_hal.mode_switch_state!=SPINDLE_MODE_SWITCH_PENDING)return;
+    HalAxisSnapshot axis;
+    int rc=spindle_hal_snapshot(&axis);
+    if(!rc && axis.request_rejection.category==HAL_ISSUE_MODE)rc=axis.request_rejection.code;
+    if(!rc && axis.mode_setting_state==HAL_MODE_SETTING_FAILED)
+        rc=axis.execution_error.category==HAL_ISSUE_MODE?axis.execution_error.code:HAL_ERROR_STATE;
+    if(rc) {
+        g_spindle_hal.mode_switch_result=rc;
+        g_spindle_hal.mode_switch_state=SPINDLE_MODE_SWITCH_ERROR;
+    } else if(axis.target_mode==g_spindle_hal.requested_mode &&
+              axis.mode_setting_state==HAL_MODE_SETTING_READY) {
+        /* 台达在这里可能仍然报不出实际模式；使能是另一件事。 */
+        g_spindle_hal.mode_switch_state=SPINDLE_MODE_SWITCH_DONE;
     }
 }
 

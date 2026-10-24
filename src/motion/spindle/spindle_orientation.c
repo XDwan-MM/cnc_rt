@@ -1,70 +1,70 @@
-/**
- * @file spindle_orientation.c
- * @brief 主轴 M19 定向状态机与 HAL 定向命令封装。
- *
- * HAL 只提供 NONE、RUNNING、DONE 三态。本模块额外维护 RELEASING 阶段，
- * 用于确认厂商定向控制字已经交回普通 DS402 状态机。定向期间收到的最后
- * 一条手动启动命令会被保存，只有释放完成且所有安全条件满足后才执行。
- */
-
+#include "rt_drive_control.h"
+#include "alarm.h"
+/* M19 业务编排；硬件完成判定与预算归 HAL。 */
 #include "spindle_internal.h"
 #include "rt_hal_adapter.h"
 #include <alarmapi.h>
 #include <hmisysapi.h>
-
-#define SPINDLE_ALARM_ORIENT_TIMEOUT  (2100)
-#define SPINDLE_ORIENT_TIMEOUT_CYCLES (10000U)
-
-/* 内部函数声明 */
-
+#include <math.h>
+#define SPINDLE_ALARM_ORIENT_TIMEOUT 2100
+#define SPINDLE_ORIENT_TIMEOUT_CYCLES 10000U
 static void spindle_orientation_apply_deferred_start(void);
-
-/* 外部函数定义 */
-
-bool spindle_orientation_submit(void)
-{
-    const int result = rt_hal_spindle_request_orient(RT_HAL_AXIS_SP);
-
-    if (result == HAL_OK)
-    {
-        return true;
-    }
-    if (result == HAL_ERROR_UNSUPPORTED)
-    {
-        LOG(LOG_LEVEL_ERR, "主轴定向请求失败：驱动器未配置定向控制字");
-    }
-    return false;
+void spindle_orientation_failed(bool retain_hold) {
+    g_spindle.m19_active=false;
+    g_spindle.orient_request_pending=g_spindle.orient_submitted=false;
+    g_spindle.orient_exit_submitted=false;
+    g_spindle.deferred_start_pending=g_spindle.start_request_pending=false;
+    g_spindle.reset_requires_start=true;g_spindle.orient_hold_stop=true;
+    g_spindle.run_authorized=g_spindle.program_run_authorized=false;
+    g_spindle.orient_phase=retain_hold?SPINDLE_ORIENT_DONE:SPINDLE_ORIENT_IDLE;
+    spindle_internal_clear_velocity_arrival();
+    if(!retain_hold)(void)alarm_spindle_request_torque(false);
+    setAlarm(ALARM_AX,ALARM_ERROR,SPINDLE_ALARM_ORIENT_TIMEOUT);
 }
-
-bool spindle_orientation_hal_is_done(void)
-{
-    int32_t state = HAL_ORIENT_NONE;
-
-    if (rt_hal_spindle_orient_state(RT_HAL_AXIS_SP, &state) != HAL_OK)
-    {
-        return false;
-    }
-    return state == HAL_ORIENT_DONE;
+bool spindle_orientation_submit(void) {
+    if(g_spindle.orient_submitted)return true;
+    int rc=rt_hal_spindle_request_orient(RT_HAL_AXIS_SP);
+    if(rc)return false;
+    g_spindle.orient_submitted=true;
+    return true;
 }
-
-bool spindle_orientation_release(void)
-{
-    if (rt_hal_spindle_release_orient(RT_HAL_AXIS_SP) == HAL_OK)
-    {
-        return true;
-    }
-
-    LOG(LOG_LEVEL_ERR, "解除主轴定向失败");
-    return false;
+bool spindle_orientation_hal_is_done(void) {
+    HalAxisSnapshot axis;
+    return spindle_hal_snapshot(&axis)==HAL_OK &&
+        (axis.feedback_valid&(HAL_FEEDBACK_STATUS|HAL_FEEDBACK_MODE))==
+        (HAL_FEEDBACK_STATUS|HAL_FEEDBACK_MODE) &&
+        axis.drive_state==HAL_DRIVE_OPERATION_ENABLED &&
+        axis.actual_mode==axis.target_mode && axis.control_state==HAL_CONTROL_ORIENT_HOLD;
 }
-
-void spindle_orientation_abort(void)
-{
-    /* 急停或复位时，物理安全动作由 HAL 覆盖；这里释放定向请求，防止
-     * 下一条 M19 继承上次未清理的 DONE/RUNNING 状态。 */
-    (void)rt_hal_spindle_release_orient(RT_HAL_AXIS_SP);
+bool spindle_orientation_release(void) {
+    if(g_spindle.orient_exit_submitted)return true;
+    HalAxisSnapshot axis;
+    if(spindle_hal_snapshot(&axis)!=HAL_OK)return false;
+    if(axis.control_state!=HAL_CONTROL_ORIENT_HOLD && axis.control_state!=HAL_CONTROL_ORIENTING)
+        return axis.control_state!=HAL_CONTROL_EXITING_ORIENT &&
+               axis.control_state!=HAL_CONTROL_ORIENT_HANDOVER_UNKNOWN;
+    HalOrientExitTarget target={0};
+    if(!(axis.feedback_valid&HAL_FEEDBACK_MODE))return false;
+    if(axis.actual_mode==HAL_AXIS_MODE_CSV) {
+        target.kind=HAL_ORIENT_EXIT_SPINDLE_SPEED;target.value=0;
+    } else if(axis.actual_mode==HAL_AXIS_MODE_CSP &&
+              (axis.feedback_valid&HAL_FEEDBACK_POSITION) && isfinite(axis.actual_pos)) {
+        target.kind=HAL_ORIENT_EXIT_POSITION;target.value=axis.actual_pos;
+    } else return false;
+    if(rt_hal_spindle_exit_orient(RT_HAL_AXIS_SP,&target)!=HAL_OK)return false;
+    g_spindle.orient_exit_submitted=true;
+    return true;
 }
-
+void spindle_orientation_abort(void) {
+    /* 取消属于停车业务，绝不走那条不支持的正常交接路径。 */
+    g_spindle.orient_request_pending=g_spindle.orient_submitted=false;
+    g_spindle.orient_exit_submitted=false;
+    g_spindle.deferred_start_pending=false;
+    g_spindle.m19_active=false;
+    g_spindle.orient_phase=SPINDLE_ORIENT_IDLE;
+    g_spindle.orient_elapsed_cycles=0;
+    (void)alarm_spindle_request_torque(false);
+}
 void spindle_begin_m19(void)
 {
     spindle_internal_clear_velocity_arrival();
@@ -99,169 +99,74 @@ void spindle_request_orientation(bool active)
 
 bool spindle_orientation_is_done(void)
 {
-    if (g_spindle.m29_active)
+    if (!reset_spindle_business_allowed() ||
+        spindle_internal_stop_is_required(&g_spindle) || g_spindle.m29_active)
     {
         return false;
     }
     return spindle_orientation_hal_is_done();
 }
 
-void spindle_internal_update_orientation(void)
-{
-    static bool release_status_log_active;
-    static uint16_t last_release_status_word;
-    static int last_release_enabled;
-    static int last_release_orient_state;
 
-    /*
-     * 把 HAL 的定向进展映射到本文件的阶段状态，并在 M19 完成时产生代码握手。
-     * HAL 只有 NONE / RUNNING / DONE 三态；RELEASING 是本地加的"等控制字真的交回"阶段。
-     */
-
-    /* 是否被接受由 HAL 给出，不直接看原始 bit10 */
-    if (g_spindle.orient_request_pending &&
-        g_spindle.orient_phase != SPINDLE_ORIENT_RELEASING)
-    {
-        const int state = spindle_hal_orientation_state();
-        bool accepted;
-
-        accepted = (state == HAL_ORIENT_RUNNING ||
-                    state == HAL_ORIENT_DONE);
-        if (accepted)
-        {
-            g_spindle.orient_request_pending = false;
-            g_spindle.orient_phase = SPINDLE_ORIENT_RUNNING;
-            g_spindle.orient_elapsed_cycles = 0U;
-        }
-        else
-        {
-            if (spindle_hal_is_enabled())
-            {
-                (void)spindle_orientation_submit();
-            }
-            if (++g_spindle.orient_elapsed_cycles >=
-                 SPINDLE_ORIENT_TIMEOUT_CYCLES)
-            {
-                LOG(LOG_LEVEL_ERR,
-                    "主轴定向请求一直不被受理：status_word=0x%04X enabled=%d",
-                    spindle_hal_status_word(), spindle_hal_is_enabled());
-                setAlarm(ALARM_AX, ALARM_ERROR, SPINDLE_ALARM_ORIENT_TIMEOUT);
-                g_spindle.orient_request_pending = false;
-                g_spindle.orient_phase = SPINDLE_ORIENT_IDLE;
-                g_spindle.m19_active = false;
-                g_spindle.orient_hold_stop = true;
-                g_spindle.reset_requires_start = true;
-                spindle_internal_clear_velocity_arrival();   /* 新指令/安全事件：清旧到速完成 */
-                g_spindle.start_request_pending = false;
-                g_spindle.command_speed = 0.0;
-            }
-        }
+void spindle_internal_update_orientation(void) {
+    if(g_spindle.orient_phase==SPINDLE_ORIENT_IDLE && !g_spindle.orient_request_pending)return;
+    HalAxisSnapshot axis;
+    if(spindle_hal_snapshot(&axis)!=HAL_OK || !(axis.feedback_valid&HAL_FEEDBACK_STATUS)) {
+        spindle_orientation_failed(false);return;
     }
-
-    /* 2) 已请求，等 HAL 把完成位置起来。 */
-    if (g_spindle.orient_phase == SPINDLE_ORIENT_RUNNING)
-    {
-        if (spindle_orientation_hal_is_done())
-        {
-            g_spindle.orient_phase = SPINDLE_ORIENT_DONE;
-            g_spindle.orient_elapsed_cycles = 0U;
+    if(g_spindle.orient_exit_submitted) {
+        if((axis.request_rejection.category==HAL_ISSUE_EXIT_ORIENT && axis.request_rejection.code) ||
+           (axis.execution_error.category==HAL_ISSUE_EXIT_ORIENT && axis.execution_error.code)) {
+            /* H1 下的 UNSUPPORTED 是明确拒绝，既不是成功释放，也不是自动停车。 */
+            spindle_orientation_failed(axis.control_state==HAL_CONTROL_ORIENT_HOLD ||
+                               axis.control_state==HAL_CONTROL_ORIENTING);
+            return;
         }
-        else if (++g_spindle.orient_elapsed_cycles >=
-                 SPINDLE_ORIENT_TIMEOUT_CYCLES)
-        {
-            LOG(LOG_LEVEL_ERR, "主轴定向超时，自动请求释放");
-            setAlarm(ALARM_AX, ALARM_ERROR, SPINDLE_ALARM_ORIENT_TIMEOUT);
-            g_spindle.m19_active = false;
-            g_spindle.orient_phase = SPINDLE_ORIENT_RELEASING;
-            g_spindle.orient_release_pending = true;
-            g_spindle.orient_elapsed_cycles = 0U;
-        }
-    }
-
-    /* 3) 待处理的释放请求（定向完成前的释放、复位、超时都走这里）。 */
-    if (g_spindle.orient_release_pending && spindle_orientation_release())
-    {
-        g_spindle.orient_release_pending = false;
-        if (g_spindle.orient_phase != SPINDLE_ORIENT_IDLE)
-        {
-            g_spindle.orient_phase = SPINDLE_ORIENT_RELEASING;
-        }
-        g_spindle.orient_elapsed_cycles = 0U;
-    }
-
-    /* 4) 释放收尾。HAL 的释放是"控制字交回状态机并重新使能"，不是退回
-     *    Switch On Disabled，所以看的是定向状态已经退回 NONE。 */
-    if (g_spindle.orient_phase == SPINDLE_ORIENT_RELEASING &&
-        spindle_hal_orientation_is_inactive())
-    {
-        g_spindle.orient_elapsed_cycles = 0U;
-        release_status_log_active = false;
-        if (g_spindle.orient_request_pending)
-        {
-            /* 等释放信号已经发送到总线上之后，在下一个周期再重新发出请求。 */
-            g_spindle.orient_phase = SPINDLE_ORIENT_WAIT_ZERO;
-        }
-        else
-        {
-            g_spindle.orient_phase = SPINDLE_ORIENT_IDLE;
-            g_spindle.orient_hold_stop = false;
+        if(axis.control_state!=HAL_CONTROL_ORIENTING && axis.control_state!=HAL_CONTROL_ORIENT_HOLD &&
+           axis.control_state!=HAL_CONTROL_EXITING_ORIENT && axis.control_state!=HAL_CONTROL_ORIENT_HANDOVER_UNKNOWN) {
+            g_spindle.orient_exit_submitted=false;
+            g_spindle.orient_submitted=false;
+            g_spindle.orient_phase=SPINDLE_ORIENT_IDLE;
+            g_spindle.orient_hold_stop=false;
             spindle_internal_sync_planner_to_actual();
             spindle_orientation_apply_deferred_start();
         }
+        return;
     }
-
-    /* 5) 释放迟迟收不了尾就报警。这里不再退回去使能——HAL 那边已经重新使能了。 */
-    if (g_spindle.orient_phase == SPINDLE_ORIENT_RELEASING)
-    {
-        bool release_status_changed;
-
-        release_status_changed =
-            (!release_status_log_active ||
-             last_release_status_word != spindle_hal_status_word() ||
-             last_release_enabled != spindle_hal_is_enabled() ||
-             last_release_orient_state != spindle_hal_orientation_state());
-
-        if (release_status_changed)
-        {
-            LOG(LOG_LEVEL_INFO,
-                "主轴定向释放状态：status_word=0x%04X enabled=%d "
-                "orient_state=%d actual_vel=%.0f",
-                spindle_hal_status_word(), spindle_hal_is_enabled(),
-                spindle_hal_orientation_state(), spindle_hal_actual_velocity());
-            release_status_log_active = true;
-            last_release_status_word = spindle_hal_status_word();
-            last_release_enabled = spindle_hal_is_enabled();
-            last_release_orient_state = spindle_hal_orientation_state();
+    if(g_spindle.orient_request_pending) {
+        if(g_spindle.orient_submitted) {
+            if(axis.request_rejection.category==HAL_ISSUE_ORIENT && axis.request_rejection.code) {
+                spindle_orientation_failed(false);return;
+            }
+            if(axis.control_state==HAL_CONTROL_ORIENTING||axis.control_state==HAL_CONTROL_ORIENT_HOLD) {
+                g_spindle.orient_request_pending=false;
+                g_spindle.orient_phase=SPINDLE_ORIENT_RUNNING;
+            } else if(axis.execution_error.category==HAL_ISSUE_ORIENT && axis.execution_error.code) {
+                spindle_orientation_failed(false);return;
+            }
+        } else {
+            if(spindle_hal_mode_switch_result()!=HAL_OK ||
+               (axis.request_rejection.category==HAL_ISSUE_ENABLE&&axis.request_rejection.code)) {
+                spindle_orientation_failed(false);return;
+            }
+            if(spindle_hal_mode_switch_is_done()&&spindle_hal_is_enabled()) {
+                if(!spindle_orientation_submit())spindle_orientation_failed(false);
+            }
         }
-
-        if (++g_spindle.orient_elapsed_cycles >= SPINDLE_ORIENT_TIMEOUT_CYCLES)
-        {
-            LOG(LOG_LEVEL_ERR,
-                "主轴定向释放超时：status_word=0x%04X enabled=%d "
-                "orient_state=%d actual_vel=%.0f",
-                spindle_hal_status_word(), spindle_hal_is_enabled(),
-                spindle_hal_orientation_state(), spindle_hal_actual_velocity());
-            setAlarm(ALARM_AX, ALARM_ERROR, SPINDLE_ALARM_ORIENT_TIMEOUT);
-            g_spindle.orient_phase = SPINDLE_ORIENT_IDLE;
-            g_spindle.orient_hold_stop = true;
-            g_spindle.reset_requires_start = true;
-            spindle_internal_clear_velocity_arrival();   /* 新指令/安全事件：清旧到速完成 */
-            g_spindle.start_request_pending = false;
-            g_spindle.orient_elapsed_cycles = 0U;
+        if(++g_spindle.orient_elapsed_cycles>=SPINDLE_ORIENT_TIMEOUT_CYCLES) {
+            spindle_orientation_failed(false);return; /* overall business/preparation watchdog */
         }
     }
-
-    /* 6) M19 完成握手。 */
-    if (g_spindle.orient_phase == SPINDLE_ORIENT_DONE &&
-        g_spindle.m19_active)
-    {
-        g_spindle.m19_active = false;
-        spindle_internal_report_mcode_complete();
+    if(g_spindle.orient_phase==SPINDLE_ORIENT_RUNNING) {
+        if(spindle_orientation_hal_is_done())g_spindle.orient_phase=SPINDLE_ORIENT_DONE;
+        else if(axis.control_state!=HAL_CONTROL_ORIENTING) {
+            spindle_orientation_failed(false);return;
+        }
+    }
+    if(g_spindle.orient_phase==SPINDLE_ORIENT_DONE&&g_spindle.m19_active) {
+        g_spindle.m19_active=false;spindle_internal_report_mcode_complete();
     }
 }
-
-/* 内部函数定义 */
-
 static void spindle_orientation_apply_deferred_start(void)
 {
     if (spindle_internal_stop_is_required(&g_spindle) || g_spindle.reset_requires_start)

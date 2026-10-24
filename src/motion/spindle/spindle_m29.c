@@ -1,708 +1,278 @@
-/**
- * @file spindle_m29.c
- * @brief 主轴 M29 与 CSP 准备状态机。
- *
- * 本文件维护两条互斥流程：普通 M29 先执行驱动器定向，再释放定向并
- * 切换到 CSP；不定向 M29 则在 CSV 中受控停车，在当前机械位置建立
- * 软件零点后切换 CSP。外部只观察 active/error/ready，不得修改阶段。
- */
-
+#include "rt_drive_control.h"
+/** 只负责 M29 的准备：可选的定向/停车、切 CSP、坐标对齐、交接。
+ * 位置下发与长期保持归运动模块。 */
 #include "spindle_internal.h"
+#include "emcmot.h"
+#include "motion_csp_stop.h"
 #include "rt_hal_adapter.h"
 #include "alarm.h"
 #include <alarmapi.h>
 #include <hmisysapi.h>
 #include <math.h>
 
-#define SPINDLE_CONTROL_PERIOD_SECONDS       (0.001)
-#define SPINDLE_SPEED_EPSILON                (1e-6)
-#define SPINDLE_ACTUAL_ZERO_EPSILON          (1.0)
-#define SPINDLE_CSP_POSITION_EPSILON         (10.0)
-#define SPINDLE_M29_STABLE_CYCLES            (10U)
-#define SPINDLE_M29_MODE_TIMEOUT_CYCLES      (10000U)
-#define SPINDLE_ALARM_ORIENT_TIMEOUT         (2100)
-#define SPINDLE_ALARM_M29_FIN_TIMEOUT        (2101)
-#define SPINDLE_ALARM_M29_PREP_REJECT        (2102)
+#define M29_ZERO_RPM 1.0
+#define M29_POSITION_TOL 10.0
+#define M29_STABLE_CYCLES 10U
+#define M29_PREP_CYCLES 10000U
+#define M29_ALARM_TIMEOUT 2100
+#define M29_ALARM_FIN 2101
+#define M29_ALARM_REJECT 2102
 
-/* 内部函数声明 */
-
-static bool spindle_m29_read_feedback(HalCAxisStatus *axis,
-                                      HalCSpindleStatus *spindle);
-static void spindle_m29_no_orient_fail(void);
-static int spindle_velocity_direction(double velocity);
-
-/* 外部函数定义 */
-
-bool spindle_m29_is_active(void)
+static bool read_feedback(HalAxisSnapshot* a)
 {
-    return g_spindle.m29_active;
+    return spindle_hal_snapshot(a)==HAL_OK &&
+        (a->feedback_valid&(HAL_FEEDBACK_STATUS|HAL_FEEDBACK_MODE|HAL_FEEDBACK_POSITION|HAL_FEEDBACK_SPEED))==
+        (HAL_FEEDBACK_STATUS|HAL_FEEDBACK_MODE|HAL_FEEDBACK_POSITION|HAL_FEEDBACK_SPEED) &&
+        isfinite(a->actual_pos) && isfinite(a->actual_speed_rpm);
 }
-
-bool spindle_m29_has_error(void)
+static void prepare_failed(const char* reason)
 {
-    return g_spindle.m29_phase == SPINDLE_M29_ERROR;
-}
-
-void spindle_report_m29_prepare_rejected(void)
-{
-    setAlarm(ALARM_AX, ALARM_ERROR, SPINDLE_ALARM_M29_PREP_REJECT);
-}
-
-void spindle_report_m29_handshake_timeout(void)
-{
-    setAlarm(ALARM_AX, ALARM_ERROR, SPINDLE_ALARM_M29_FIN_TIMEOUT);
-}
-
-void spindle_request_m29(void)
-{
-    /* M29 是一条全新的主轴操作：清除上一条到速反馈和排队启动，
-     * 然后把控制权交给“定向 -> 释放 -> CSP”状态机。 */
+    g_spindle.m29_phase=SPINDLE_M29_ERROR;
+    g_spindle.m29_active=g_spindle.m29_feedback_stable=false;
+    g_spindle.reset_requires_start=true;
+    g_spindle.start_request_pending=g_spindle.deferred_start_pending=false;
+    g_spindle.command_state=g_spindle.run_state=SPINDLE_STOP;
+    g_spindle.command_speed=0;
+    g_spindle.velocity_planner.enable=false;
+    g_spindle.velocity_planner.target_vel=g_spindle_hal.target_velocity=0;
     spindle_internal_clear_velocity_arrival();
-    /* M29 本身是复位后的新主轴操作请求，允许重新取得驱动器使能。 */
-    g_spindle.reset_requires_start = false;
-    g_spindle.start_request_pending = true;
-    g_spindle.m29_active = true;
-    g_spindle.m29_feedback_stable = false;
-    g_spindle.m29_phase = SPINDLE_M29_ORIENTING;
-    g_spindle.m19_active = false;
-    g_spindle.orient_hold_stop = true;
-    /* M29 是新的主轴操作请求，取消排队中的 M3/M4。 */
-    g_spindle.deferred_start_pending = false;
-    g_spindle.pending_event = SPINDLE_EVENT_ORIENT;
-    g_spindle.command_speed = 0.0;
-    g_spindle.command_state = SPINDLE_STOP;
-    g_spindle.run_authorized = false;
-    g_spindle.program_run_authorized = false;
-    g_spindle.start_request_pending = false;
+    spindle_hal_mode_switch_reset();
+    motion_spindle_release_position();
+    (void)alarm_spindle_request_torque(false);
+    setAlarm(ALARM_AX,ALARM_ERROR,M29_ALARM_TIMEOUT);
+    LOG(LOG_LEVEL_ERR,"M29准备失败：%s",reason);
+}
+static void begin_preparation(spindle_m29_phase_t phase)
+{
+    motion_spindle_release_position();
+    spindle_internal_clear_velocity_arrival();
+    g_spindle.m29_active=true;g_spindle.m29_phase=phase;
+    g_spindle.m29_feedback_stable=false;
+    g_spindle.m29_stop_stable_cycles=0;g_spindle.orient_elapsed_cycles=0;
+    g_spindle.reset_requires_start=false;g_spindle.m19_active=false;
+    g_spindle.orient_hold_stop=true;g_spindle.csv_switch_pending=false;
+    g_spindle.start_request_pending=g_spindle.deferred_start_pending=false;
+    g_spindle.command_state=g_spindle.run_state=SPINDLE_STOP;
+    g_spindle.run_authorized=g_spindle.program_run_authorized=false;
+    g_spindle.command_speed=0;
+}
+static bool start_alignment(void)
+{
+    HalAxisSnapshot a;
+    if(!read_feedback(&a))return false;
+    g_spindle.m29_expected_offset=a.coordinate_offset-a.actual_pos;
+    g_spindle.m29_hold_submitted=false;
+    g_spindle.m29_stop_stable_cycles=0;g_spindle.orient_elapsed_cycles=0;
+    return isfinite(g_spindle.m29_expected_offset) && rt_hal_axis_set_pos(RT_HAL_AXIS_SP,0)==HAL_OK;
+}
+static void update_alignment(void)
+{
+    HalAxisSnapshot a;
+    const int awaited=g_spindle.m29_hold_submitted?HAL_ISSUE_POSITION:HAL_ISSUE_SET_POSITION;
+    if(!read_feedback(&a) || a.drive_state!=HAL_DRIVE_OPERATION_ENABLED ||
+       a.actual_mode!=HAL_AXIS_MODE_CSP ||
+       (a.request_rejection.category==awaited && a.request_rejection.code)) {
+        prepare_failed("坐标对齐反馈或请求异常");return;
+    }
+    if(fabs(a.coordinate_offset-g_spindle.m29_expected_offset)>1e-6)return;
+    if(!g_spindle.m29_hold_submitted) {
+        if(rt_hal_request_axis_pos(RT_HAL_AXIS_SP,0)!=HAL_OK)prepare_failed("保持目标被拒绝");
+        else g_spindle.m29_hold_submitted=true;
+        return;
+    }
+    if(!(a.command_valid&HAL_COMMAND_POSITION) || fabs(a.command_pos)>1e-6 ||
+       fabs(a.actual_speed_rpm)>M29_ZERO_RPM || fabs(a.command_pos-a.actual_pos)>M29_POSITION_TOL) {
+        g_spindle.m29_stop_stable_cycles=0;return;
+    }
+    if(++g_spindle.m29_stop_stable_cycles<M29_STABLE_CYCLES)return;
+    if(!motion_spindle_take_position(0)) { prepare_failed("运动模块接管失败");return; }
+    g_spindle_hal.target_position=0;
+    g_spindle.m29_phase=SPINDLE_M29_READY;g_spindle.m29_feedback_stable=true;
+}
+/* 两条准备路径共用的状态推进：模式就绪 → 显式使能 → 坐标对齐。 */
+static void update_csp_preparation(spindle_m29_phase_t alignment_phase)
+{
+    HalAxisSnapshot a;
+    if(spindle_hal_mode_switch_result()!=HAL_OK) { prepare_failed("CSP模式准备失败");return; }
+    if(spindle_hal_snapshot(&a)!=HAL_OK || !(a.feedback_valid&HAL_FEEDBACK_STATUS)) {
+        prepare_failed("CSP状态失效");return;
+    }
+    /* D32：模式准备 READY 与实际模式反馈是两件事。台达要等独立的使能完成
+     * 之后才可能报出实际模式。 */
+    if(!spindle_hal_mode_switch_is_done() || a.drive_state!=HAL_DRIVE_OPERATION_ENABLED)return;
+    if(!read_feedback(&a) || a.actual_mode!=HAL_AXIS_MODE_CSP || fabs(a.actual_speed_rpm)>M29_ZERO_RPM)return;
+    if(!start_alignment()) { prepare_failed("软件起点设置被拒绝");return; }
+    g_spindle.m29_phase=alignment_phase;
+}
+
+bool spindle_m29_is_active(void) { return g_spindle.m29_active; }
+bool spindle_m29_has_error(void) { return g_spindle.m29_phase==SPINDLE_M29_ERROR; }
+void spindle_report_m29_prepare_rejected(void) { setAlarm(ALARM_AX,ALARM_ERROR,M29_ALARM_REJECT); }
+void spindle_report_m29_handshake_timeout(void) { setAlarm(ALARM_AX,ALARM_ERROR,M29_ALARM_FIN); }
+
+bool spindle_request_m29(void)
+{
+    /* 复位期间拒绝新的业务请求，不能顺手把状态打成 ERROR——那会中断已经在跑的
+     * 受控停车。这里只给调用方返回 false。 */
+    if(!reset_spindle_business_allowed() || rt_data->sys_state[SYS_ESTOP_INPUT] ||
+       rt_data->sys_state[SYS_IS_ESTOP_ACTIVE])return false;
+    if(spindle_hal_mode()==HAL_AXIS_MODE_CSP) {
+        const int ready=motion_spindle_prepare_velocity();
+        if(ready<0) {
+            HalAxisSnapshot a={0};
+            const int rc=spindle_hal_snapshot(&a);
+            LOG(LOG_LEVEL_ERR,"M29请求被拒：位置控制交接条件不可用 rc=%d valid=0x%x command_valid=0x%x drive=%d mode=%d rpm=%.3f pos=%.6f target=%.6f",
+                rc,(unsigned)a.feedback_valid,(unsigned)a.command_valid,(int)a.drive_state,
+                (int)a.actual_mode,a.actual_speed_rpm,a.actual_pos,a.command_pos);
+            return false; /* caller retains the existing rejection alarm/cleanup */
+        }
+        if(ready==0) {
+            LOG(LOG_LEVEL_INFO,"M29请求被拒：位置运动尚未结束或尚未停稳，不排队重试");
+            return false;
+        }
+    }
+    begin_preparation(SPINDLE_M29_ORIENTING);
+    g_spindle.pending_event=SPINDLE_EVENT_ORIENT;
+    return true;
 }
 
 bool spindle_request_m29_no_orient(void)
 {
-    HalCAxisStatus axis;
-    HalCSpindleStatus spindle;
+    HalAxisSnapshot a;
     int32_t orient;
-    int orient_result;
-    bool stop_required;
-    bool mode_switching;
-    bool wait_for_csv;
-
-    stop_required = spindle_internal_stop_is_required(&g_spindle);
-    mode_switching = spindle_hal_mode_switch_is_pending();
-    if (stop_required || rt_data->sys_state[SYS_ESTOP_INPUT] ||
-        rt_data->axis_data[AXIS_SP].status.is_disable ||
-        rt_data->axis_data[AXIS_SP].status.is_error ||
-        g_spindle.m29_active ||
-        g_spindle.orient_phase != SPINDLE_ORIENT_IDLE ||
-        g_spindle.orient_request_pending)
-    {
-        LOG(LOG_LEVEL_ERR,
-            "M29无预定向入口拒绝：stop=%d estop=%d disable=%d error=%d "
-            "active=%d switching=%d csv_pending=%d orient_phase=%d orient_pending=%d",
-            stop_required, rt_data->sys_state[SYS_ESTOP_INPUT],
-            rt_data->axis_data[AXIS_SP].status.is_disable,
-            rt_data->axis_data[AXIS_SP].status.is_error, g_spindle.m29_active,
-            mode_switching, g_spindle.csv_switch_pending,
-            g_spindle.orient_phase, g_spindle.orient_request_pending);
-        return false;
+    const bool switching=spindle_hal_mode_switch_is_pending();
+    if(spindle_internal_stop_is_required(&g_spindle) ||
+       rt_data->sys_state[SYS_ESTOP_INPUT] || rt_data->axis_data[AXIS_SP].status.is_disable ||
+       rt_data->axis_data[AXIS_SP].status.is_error || g_spindle.m29_active ||
+       g_spindle.orient_phase!=SPINDLE_ORIENT_IDLE || g_spindle.orient_request_pending ||
+       rt_hal_spindle_orient_state(RT_HAL_AXIS_SP,&orient)!=HAL_OK || orient!=RT_HAL_ORIENT_NONE ||
+       spindle_hal_snapshot(&a)!=HAL_OK || !(a.feedback_valid&HAL_FEEDBACK_STATUS) ||
+       (a.raw_status&0x0008U) ||
+       ((a.feedback_valid&HAL_FEEDBACK_ERROR_CODE) && a.drive_error_code) ||
+       !isfinite(rt_data->axis_data[AXIS_SP].max_feed_acc) ||
+       rt_data->axis_data[AXIS_SP].max_feed_acc<=0)return false;
+    if((a.feedback_valid&(HAL_FEEDBACK_POSITION|HAL_FEEDBACK_SPEED))!=
+       (HAL_FEEDBACK_POSITION|HAL_FEEDBACK_SPEED) || !isfinite(a.actual_pos) || !isfinite(a.actual_speed_rpm))return false;
+    const bool mode_known=(a.feedback_valid&HAL_FEEDBACK_MODE)!=0;
+    if((!mode_known || (a.actual_mode!=HAL_AXIS_MODE_CSV && a.actual_mode!=HAL_AXIS_MODE_CSP)) &&
+       fabs(a.actual_speed_rpm)>M29_ZERO_RPM)return false;
+    if(mode_known && a.actual_mode==HAL_AXIS_MODE_CSP && a.drive_state==HAL_DRIVE_OPERATION_ENABLED) {
+        if(fabs(a.actual_speed_rpm)>M29_ZERO_RPM ||
+           (!g_spindle.reset_requires_start &&
+            (!(a.command_valid&HAL_COMMAND_POSITION) || fabs(a.command_pos-a.actual_pos)>M29_POSITION_TOL)))return false;
+        if(!switching && !g_spindle.csv_switch_pending &&
+           rt_hal_request_axis_pos(RT_HAL_AXIS_SP,a.actual_pos)!=HAL_OK)return false;
     }
-
-    orient_result = rt_hal_spindle_orient_state(RT_HAL_AXIS_SP, &orient);
-    if (orient_result != HAL_OK || orient != HAL_ORIENT_NONE)
-    {
-        LOG(LOG_LEVEL_ERR,
-            "M29无预定向入口拒绝：HAL定向状态 rc=%d state=%d",
-            orient_result, orient_result == HAL_OK ? orient : -1);
-        return false;
-    }
-    if (!spindle_m29_read_feedback(&axis, &spindle))
-    {
-        return false;
-    }
-    if ((axis.raw_status & 0x0008U) != 0U ||
-        (axis.error_code_valid && axis.error_code != 0U))
-    {
-        LOG(LOG_LEVEL_ERR,
-            "M29无预定向入口拒绝：主轴故障 status=0x%04X error=0x%04X",
-            (unsigned)axis.raw_status, (unsigned)axis.error_code);
-        return false;
-    }
-    if (!isfinite(rt_data->axis_data[AXIS_SP].max_feed_acc) ||
-        rt_data->axis_data[AXIS_SP].max_feed_acc <= 0.0)
-    {
-        LOG(LOG_LEVEL_ERR,
-            "M29无预定向入口拒绝：主轴进给加速度无效 %.3f",
-            rt_data->axis_data[AXIS_SP].max_feed_acc);
-        return false;
-    }
-    if (spindle.mode != HAL_SPINDLE_CSV &&
-        spindle.mode != HAL_SPINDLE_CSP &&
-        fabs(axis.actual_speed_rpm) > SPINDLE_ACTUAL_ZERO_EPSILON)
-    {
-        LOG(LOG_LEVEL_ERR,
-            "M29无预定向入口拒绝：未知模式%d下主轴仍在转 %.1f rpm",
-            spindle.mode, axis.actual_speed_rpm);
-        return false;
-    }
-
-    /* 复位可能保留中断前的 CSP 目标。只有静止且位置已经跟随时，
-     * 才能在不定向流程中接管该目标，避免突然回到旧位置。 */
-    if (spindle.mode == HAL_SPINDLE_CSP &&
-        (fabs(axis.actual_speed_rpm) > SPINDLE_ACTUAL_ZERO_EPSILON ||
-         (!g_spindle.reset_requires_start &&
-          fabs(axis.command_pos - axis.actual_pos) >
-              SPINDLE_CSP_POSITION_EPSILON)))
-    {
-        LOG(LOG_LEVEL_ERR,
-            "M29无预定向入口拒绝：CSP未停稳或位置未跟随 "
-            "rpm=%.3f 目标=%.3f 实际=%.3f",
-            axis.actual_speed_rpm, axis.command_pos, axis.actual_pos);
-        return false;
-    }
-    if (spindle.mode == HAL_SPINDLE_CSP && !mode_switching &&
-        !g_spindle.csv_switch_pending &&
-        rt_hal_request_axis_pos(RT_HAL_AXIS_SP, axis.actual_pos) != HAL_OK)
-    {
-        LOG(LOG_LEVEL_ERR, "M29无预定向入口拒绝：CSP位置保持请求失败");
-        return false;
-    }
-
-    wait_for_csv =
-        (mode_switching || g_spindle.csv_switch_pending ||
-         (spindle.mode != HAL_SPINDLE_CSV &&
-          spindle.mode != HAL_SPINDLE_CSP));
-    if (wait_for_csv &&
-        spindle_hal_request_mode(HAL_SPINDLE_CSV) != HAL_OK)
-    {
-        LOG(LOG_LEVEL_ERR,
-            "M29无预定向入口拒绝：CSV模式请求失败 rc=%d",
-            spindle_hal_mode_switch_result());
-        return false;
-    }
-
-    /* 从这里开始，普通 M3/M4/M5 和 M19 不再拥有控制权。规划器以当前
-     * 实际速度为起点减速，避免模式交接时出现目标速度阶跃。 */
-    g_spindle.m29_active = true;
-    g_spindle.m29_feedback_stable = false;
-    g_spindle.m29_phase = wait_for_csv ?
-        SPINDLE_M29_NO_ORIENT_WAIT_CSV : SPINDLE_M29_NO_ORIENT_STOPPING;
-    g_spindle.csv_switch_pending = false;
-    g_spindle.m29_stop_stable_cycles = 0U;
-    g_spindle.orient_elapsed_cycles = 0U;
-    g_spindle.reset_requires_start = false;
-    g_spindle.m19_active = false;
-    g_spindle.orient_hold_stop = true;
-    g_spindle.orient_release_pending = false;
-    g_spindle.start_request_pending = false;
-    g_spindle.deferred_start_pending = false;
-    g_spindle.pending_event = SPINDLE_EVENT_NONE;
-    g_spindle.command_state = SPINDLE_STOP;
-    g_spindle.run_state = SPINDLE_STOP;
-    g_spindle.run_authorized = false;
-    g_spindle.program_run_authorized = false;
-    g_spindle.command_speed = 0.0;
-    g_spindle.velocity_planner.current_vel = axis.actual_speed_rpm;
-    g_spindle.velocity_planner.target_vel = 0.0;
-    g_spindle.velocity_planner.enable = false;
-    g_spindle_hal.target_position = axis.actual_pos;
-    spindle_internal_clear_velocity_arrival();
-    if (!wait_for_csv)
-    {
-        spindle_hal_mode_switch_reset();
-    }
-
-    LOG(LOG_LEVEL_INFO,
-        "M29无预定向：初始模式=%d 切换中=%d 当前位置=%.3f "
-        "旧目标=%.3f，准备停稳后切CSP",
-        spindle.mode, mode_switching, axis.actual_pos, axis.command_pos);
+    const bool wait_csv=switching || g_spindle.csv_switch_pending || !mode_known ||
+        (a.actual_mode!=HAL_AXIS_MODE_CSV && a.actual_mode!=HAL_AXIS_MODE_CSP);
+    if(wait_csv && spindle_hal_request_mode(HAL_AXIS_MODE_CSV)!=HAL_OK)return false;
+    begin_preparation(wait_csv?SPINDLE_M29_NO_ORIENT_WAIT_CSV:SPINDLE_M29_NO_ORIENT_STOPPING);
+    g_spindle.pending_event=SPINDLE_EVENT_NONE;
+    g_spindle.velocity_planner.current_vel=a.actual_speed_rpm;
+    g_spindle.velocity_planner.target_vel=0;g_spindle.velocity_planner.enable=false;
+    g_spindle_hal.target_position=a.actual_pos;
+    if(!wait_csv)spindle_hal_mode_switch_reset();
     return true;
-}
-
-void spindle_internal_update_m29_no_orient(void)
-{
-    HalCAxisStatus axis;
-    HalCSpindleStatus spindle;
-    int32_t orient;
-    int velocity_direction;
-    int set_position_result;
-    bool abort_required;
-
-    abort_required =
-        (spindle_internal_stop_is_required(&g_spindle) ||
-         rt_data->sys_state[SYS_ESTOP_INPUT] ||
-         rt_data->axis_data[AXIS_SP].status.is_disable ||
-         rt_data->axis_data[AXIS_SP].status.is_error ||
-         !spindle_m29_read_feedback(&axis, &spindle) ||
-         !isfinite(rt_data->axis_data[AXIS_SP].max_feed_acc) ||
-         rt_data->axis_data[AXIS_SP].max_feed_acc <= 0.0 ||
-         (axis.raw_status & 0x0008U) != 0U ||
-         (axis.error_code_valid && axis.error_code != 0U) ||
-         rt_hal_spindle_orient_state(RT_HAL_AXIS_SP, &orient) != HAL_OK ||
-         orient != HAL_ORIENT_NONE ||
-         g_spindle.pending_event == SPINDLE_EVENT_ORIENT ||
-         g_spindle.pending_event == SPINDLE_EVENT_RELEASE_ORIENT ||
-         ++g_spindle.orient_elapsed_cycles >=
-             SPINDLE_M29_MODE_TIMEOUT_CYCLES);
-    if (abort_required)
-    {
-        spindle_m29_no_orient_fail();
-        return;
-    }
-
-    /* PLC 的方向边沿不能接管准备流程；不产生 M19 完成或 F45.7。 */
-    g_spindle.pending_event = SPINDLE_EVENT_NONE;
-    spindle_hal_request_torque();
-
-    if (g_spindle.m29_phase == SPINDLE_M29_NO_ORIENT_WAIT_CSV)
-    {
-        if (g_spindle_hal.mode_switch_state == SPINDLE_MODE_SWITCH_IDLE &&
-            spindle_hal_request_mode(HAL_SPINDLE_CSV) != HAL_OK)
-        {
-            spindle_m29_no_orient_fail();
-            return;
-        }
-        if (!spindle_hal_mode_switch_is_done() ||
-            spindle.mode != HAL_SPINDLE_CSV)
-        {
-            return;
-        }
-        g_spindle.m29_phase = SPINDLE_M29_NO_ORIENT_STOPPING;
-    }
-
-    if (g_spindle.m29_phase == SPINDLE_M29_NO_ORIENT_STOPPING)
-    {
-        if (spindle.mode == HAL_SPINDLE_CSV)
-        {
-            g_spindle.velocity_planner.max_acc =
-                rt_data->axis_data[AXIS_SP].max_feed_acc;
-            (void)spindle_velocity_planner_update(
-                &g_spindle.velocity_planner, SPINDLE_CONTROL_PERIOD_SECONDS);
-            g_spindle_hal.target_velocity =
-                g_spindle.velocity_planner.current_vel;
-            velocity_direction = spindle_velocity_direction(
-                g_spindle_hal.target_velocity);
-            if (rt_hal_request_spindle_speed(
-                    RT_HAL_AXIS_SP,
-                    fabs(g_spindle_hal.target_velocity),
-                    velocity_direction) != HAL_OK)
-            {
-                spindle_m29_no_orient_fail();
-                return;
-            }
-        }
-
-        if (fabs(axis.actual_speed_rpm) <= SPINDLE_ACTUAL_ZERO_EPSILON &&
-            (spindle.mode == HAL_SPINDLE_CSP ||
-             fabs(g_spindle.velocity_planner.current_vel) <=
-                 SPINDLE_SPEED_EPSILON))
-        {
-            ++g_spindle.m29_stop_stable_cycles;
-        }
-        else
-        {
-            g_spindle.m29_stop_stable_cycles = 0U;
-        }
-
-        if (g_spindle.m29_stop_stable_cycles >=
-            SPINDLE_M29_STABLE_CYCLES)
-        {
-            if (spindle_hal_request_mode(HAL_SPINDLE_CSP) != HAL_OK)
-            {
-                spindle_m29_no_orient_fail();
-                return;
-            }
-            g_spindle.m29_phase = SPINDLE_M29_NO_ORIENT_SWITCHING;
-            g_spindle.orient_elapsed_cycles = 0U;
-        }
-        return;
-    }
-
-    if (g_spindle.m29_phase == SPINDLE_M29_NO_ORIENT_SWITCHING)
-    {
-        if (!spindle_hal_mode_switch_is_done() ||
-            spindle.mode != HAL_SPINDLE_CSP || !axis.enabled ||
-            (axis.raw_status & 0x006FU) != 0x0027U ||
-            fabs(axis.actual_speed_rpm) > SPINDLE_ACTUAL_ZERO_EPSILON)
-        {
-            return;
-        }
-
-        /* HAL 切 CSP 时预置实际位置。这里只平移软件坐标，不命令主轴
-         * 回机械零度；确认设零成功后才写零位置保持目标。 */
-        if (rt_hal_axis_set_pos(RT_HAL_AXIS_SP, 0.0) != HAL_OK)
-        {
-            spindle_m29_no_orient_fail();
-            return;
-        }
-        g_spindle.m29_phase = SPINDLE_M29_NO_ORIENT_ALIGNING;
-        g_spindle.orient_elapsed_cycles = 0U;
-        g_spindle.m29_stop_stable_cycles = 0U;
-        return;
-    }
-
-    set_position_result = rt_hal_axis_set_pos_result(RT_HAL_AXIS_SP);
-    if (set_position_result == HAL_ERROR_BUSY)
-    {
-        return;
-    }
-    if (set_position_result != HAL_OK)
-    {
-        spindle_m29_no_orient_fail();
-        return;
-    }
-    if (spindle.mode != HAL_SPINDLE_CSP || !axis.enabled ||
-        (axis.raw_status & 0x006FU) != 0x0027U ||
-        fabs(axis.actual_speed_rpm) > SPINDLE_ACTUAL_ZERO_EPSILON ||
-        fabs(axis.actual_pos) > SPINDLE_CSP_POSITION_EPSILON ||
-        fabs(axis.command_pos) > SPINDLE_CSP_POSITION_EPSILON)
-    {
-        g_spindle.m29_stop_stable_cycles = 0U;
-        return;
-    }
-    if (++g_spindle.m29_stop_stable_cycles < SPINDLE_M29_STABLE_CYCLES)
-    {
-        return;
-    }
-    if (rt_hal_request_axis_pos(RT_HAL_AXIS_SP, 0.0) != HAL_OK)
-    {
-        spindle_m29_no_orient_fail();
-        return;
-    }
-
-    rt_data->axis_data[AXIS_SP].wcs_cmd_pos_cur = 0.0;
-    g_spindle_hal.target_position = 0.0;
-    g_spindle.m29_phase = SPINDLE_M29_READY;
-    g_spindle.m29_feedback_stable = true;
-    LOG(LOG_LEVEL_INFO,
-        "M29无预定向：CSP使能与起点对齐已确认，等待PLC握手");
-}
-
-
-bool spindle_m29_is_ready(void)
-{
-    /* 只看 READY 枚举不够（那只是本地状态机到位）：必须再核对实际模式切换结果、
-     * 实际 CSP、使能状态与 PDO 状态字。 */
-    if (spindle_internal_stop_is_required(&g_spindle))
-        return false;
-    if (!g_spindle.m29_active || g_spindle.reset_requires_start)
-        return false;
-    if (g_spindle.m29_phase != SPINDLE_M29_READY ||
-        !g_spindle.m29_feedback_stable)
-        return false;
-    if (!spindle_hal_mode_switch_is_done())
-        return false;
-    if (spindle_hal_mode() != HAL_SPINDLE_CSP)
-        return false;
-    if (!spindle_hal_is_enabled())
-        return false;
-    return (spindle_hal_status_word() & 0x006FU) == 0x0027U;
-}
-
-void spindle_complete_m29(void)
-{
-    if (g_spindle.m29_phase != SPINDLE_M29_READY)
-    {
-        return;
-    }
-
-    /*
-     * PLC 已返回 FIN。READY 只服务于握手期间的就绪判定；完成后转入
-     * COMPLETE，退出 M29 的周期控制分支。CSP 模式保留，位置轨迹与
-     * 驱动使能交由插补及其上层生命周期管理，不再由 M29 重复请求力矩。
-     */
-    g_spindle.m29_active = false;
-    g_spindle.m29_phase = SPINDLE_M29_COMPLETE;
-    g_spindle.orient_hold_stop = true;
-    g_spindle.command_state = SPINDLE_STOP;
-    g_spindle.command_speed = 0.0;
-    g_spindle.run_authorized = false;
-    g_spindle.program_run_authorized = false;
-    spindle_internal_clear_velocity_arrival();   /* 清旧到速反馈 + F45.3 */
-}
-
-void spindle_internal_publish_rigid_state(void)
-{
-    rt_data->sys_state[SYS_IS_RIGID] =
-        (g_spindle.reset_stop_pending && g_spindle.reset_stop_csp) ||
-        (g_spindle.m29_phase != SPINDLE_M29_IDLE &&
-         g_spindle.m29_phase != SPINDLE_M29_ERROR);
 }
 
 bool spindle_internal_m29_no_orient_preparing(void)
 {
-    return g_spindle.m29_phase >= SPINDLE_M29_NO_ORIENT_WAIT_CSV &&
-           g_spindle.m29_phase <= SPINDLE_M29_NO_ORIENT_ALIGNING;
+    return g_spindle.m29_phase>=SPINDLE_M29_NO_ORIENT_WAIT_CSV &&
+           g_spindle.m29_phase<=SPINDLE_M29_NO_ORIENT_ALIGNING;
 }
-
+void spindle_internal_update_m29_no_orient(void)
+{
+    HalAxisSnapshot a;
+    int32_t orient;
+    if(spindle_internal_stop_is_required(&g_spindle) ||
+       rt_data->axis_data[AXIS_SP].status.is_disable || rt_data->axis_data[AXIS_SP].status.is_error ||
+       spindle_hal_snapshot(&a)!=HAL_OK || !(a.feedback_valid&HAL_FEEDBACK_STATUS) ||
+       (a.raw_status&0x0008U) ||
+       ((a.feedback_valid&HAL_FEEDBACK_ERROR_CODE) && a.drive_error_code) ||
+       !isfinite(rt_data->axis_data[AXIS_SP].max_feed_acc) || rt_data->axis_data[AXIS_SP].max_feed_acc<=0 ||
+       rt_hal_spindle_orient_state(RT_HAL_AXIS_SP,&orient)!=HAL_OK || orient!=RT_HAL_ORIENT_NONE ||
+       g_spindle.pending_event==SPINDLE_EVENT_ORIENT || g_spindle.pending_event==SPINDLE_EVENT_RELEASE_ORIENT ||
+       ++g_spindle.orient_elapsed_cycles>=M29_PREP_CYCLES) {
+        prepare_failed("无预定向准备中止");return;
+    }
+    g_spindle.pending_event=SPINDLE_EVENT_NONE;
+    (void)alarm_spindle_request_torque(true);
+    switch(g_spindle.m29_phase) {
+    case SPINDLE_M29_NO_ORIENT_WAIT_CSV:
+        if(spindle_hal_mode_switch_result()!=HAL_OK) { prepare_failed("CSV模式准备失败");return; }
+        if(!spindle_hal_mode_switch_is_done() || !(a.feedback_valid&HAL_FEEDBACK_MODE) ||
+           a.actual_mode!=HAL_AXIS_MODE_CSV || a.drive_state!=HAL_DRIVE_OPERATION_ENABLED)return;
+        g_spindle.m29_phase=SPINDLE_M29_NO_ORIENT_STOPPING;
+        break;
+    case SPINDLE_M29_NO_ORIENT_STOPPING: break;
+    case SPINDLE_M29_NO_ORIENT_SWITCHING:
+        update_csp_preparation(SPINDLE_M29_NO_ORIENT_ALIGNING);return;
+    case SPINDLE_M29_NO_ORIENT_ALIGNING: update_alignment();return;
+    default:return;
+    }
+    if(!read_feedback(&a)) { prepare_failed("停车反馈失效");return; }
+    const int stopped=a.actual_mode==HAL_AXIS_MODE_CSV?spindle_prepare_csv_stop_step():
+        (fabs(a.actual_speed_rpm)<=M29_ZERO_RPM?1:0);
+    if(stopped<0) { prepare_failed("CSV停车执行失败");return; }
+    if(stopped)++g_spindle.m29_stop_stable_cycles;else g_spindle.m29_stop_stable_cycles=0;
+    if(g_spindle.m29_stop_stable_cycles<M29_STABLE_CYCLES)return;
+    if(spindle_hal_request_mode(HAL_AXIS_MODE_CSP)!=HAL_OK) { prepare_failed("CSP模式请求被拒绝");return; }
+    g_spindle.m29_phase=SPINDLE_M29_NO_ORIENT_SWITCHING;g_spindle.orient_elapsed_cycles=0;
+}
 void spindle_internal_update_m29(void)
 {
-    if (!g_spindle.m29_active)
-    {
+    if(!g_spindle.m29_active || spindle_internal_m29_no_orient_preparing() ||
+       g_spindle.m29_phase==SPINDLE_M29_READY)return;
+    switch(g_spindle.m29_phase) {
+    case SPINDLE_M29_ORIENTING:
+        if(g_spindle.orient_phase==SPINDLE_ORIENT_DONE) {
+            /* 真正的 CSV→CSP 模式切换会让驱动器取消定向。H1 不支持同模式下
+             * 假装正常释放的做法。 */
+            if(spindle_hal_mode()==HAL_AXIS_MODE_CSP || spindle_hal_request_mode(HAL_AXIS_MODE_CSP)!=HAL_OK) {
+                prepare_failed("定向到CSP交接被拒绝");return;
+            }
+            g_spindle.m29_phase=SPINDLE_M29_SWITCHING_CSP;
+            g_spindle.orient_phase=SPINDLE_ORIENT_IDLE;
+            g_spindle.orient_request_pending=g_spindle.orient_submitted=false;
+            g_spindle.orient_exit_submitted=false;
+            g_spindle.orient_elapsed_cycles=0;
+            (void)alarm_spindle_request_torque(true);
+        } else if(g_spindle.orient_phase==SPINDLE_ORIENT_IDLE) {
+            if(g_spindle.reset_requires_start) { prepare_failed("定向失败");return; }
+            g_spindle.orient_request_pending=true;g_spindle.orient_phase=SPINDLE_ORIENT_WAIT_ZERO;
+            g_spindle.orient_elapsed_cycles=0;
+            (void)alarm_spindle_request_torque(true);
+        }
         return;
-    }
-
-    if (g_spindle.m29_phase == SPINDLE_M29_ORIENTING)
-    {
-        switch (g_spindle.orient_phase)
-        {
-        case SPINDLE_ORIENT_DONE:
-            /* 定向已完成：交给 M29 释放后切 CSP。 */
-            if (spindle_orientation_release())
-            {
-                g_spindle.m29_phase = SPINDLE_M29_RELEASING;
-                g_spindle.orient_phase = SPINDLE_ORIENT_RELEASING;
-            }
-            else
-            {
-                g_spindle.m29_phase = SPINDLE_M29_ERROR;
-                g_spindle.m29_feedback_stable = false;
-                g_spindle.reset_requires_start = true;
-                spindle_internal_clear_velocity_arrival();   /* 新指令/安全事件：清旧到速完成 */
-                g_spindle.orient_hold_stop = true;
-            }
-            break;
-
-        case SPINDLE_ORIENT_RELEASING:
-            /* M19 刚结束时 PLC 会在 FIN 后拉低 G70.6（定向释放），
-             * 这是 M19→M29 连写的正常时序，不是 M29 定向失败：
-             * 等释放收尾，下一拍 orient_phase 回到 IDLE 后由 M29
-             * 自己重新发起一次定向（见下面的 IDLE 分支）。 */
-            break;
-
-        case SPINDLE_ORIENT_IDLE:
-            if (g_spindle.reset_requires_start)
-            {
-                /* 定向状态机已经判超时/失败并置了 2100：不能再无限重试。 */
-                LOG(LOG_LEVEL_ERR,
-                    "M29主轴定向失败：定向状态机已超时/失败 "
-                    "status_word=0x%04X actual_vel=%.0f",
-                    spindle_hal_status_word(), spindle_hal_actual_velocity());
-                g_spindle.m29_phase = SPINDLE_M29_ERROR;
-                g_spindle.m29_feedback_stable = false;
-                spindle_internal_clear_velocity_arrival();   /* 新指令/安全事件：清旧到速完成 */
-                g_spindle.start_request_pending = false;
-                g_spindle.orient_hold_stop = true;
-                g_spindle.command_speed = 0.0;
-                g_spindle.command_state = SPINDLE_STOP;
-                break;
-            }
-            /* 没有现成定向（上一条 M19 的释放已完成，或 M29 的 ORIENT
-             * 请求被 PLC 的释放事件覆盖）：由 M29 重新发起一次定向。
-             * 只置请求标志，提交/重试/超时统一由
-             * spindle_internal_update_orientation() 负责。 */
-            g_spindle.orient_request_pending = true;
-            g_spindle.orient_phase = SPINDLE_ORIENT_WAIT_ZERO;
-            g_spindle.orient_release_pending = false;
-            g_spindle.orient_elapsed_cycles = 0U;
-            spindle_hal_request_torque();
-            break;
-
-        default:
-            /* WAIT_ZERO / RUNNING：等定向完成，不在这里判失败。 */
-            break;
-        }
-    }
-
-    /* 释放后 HAL 会重新使能，故判据是"定向已交回 + 主轴真的停了"，不是 Switch On Disabled；
-     * 位置目标等 CSP 到位后再写（CSV 下的位置写会被 HAL 以 MODE_MISMATCH 拒收）。 */
-    if (g_spindle.m29_phase == SPINDLE_M29_RELEASING &&
-        spindle_hal_orientation_is_inactive() &&
-        fabs((double)spindle_hal_actual_velocity()) <= SPINDLE_ACTUAL_ZERO_EPSILON)
-    {
-        spindle_internal_sync_planner_to_actual();
-        g_spindle_hal.target_position = spindle_hal_actual_position();
-        LOG(LOG_LEVEL_INFO,
-            "M29定向停止确认，切换CSP保持：actual_pos=%.0f actual_vel=%.0f "
-            "status_word=0x%04X",
-            spindle_hal_actual_position(), spindle_hal_actual_velocity(),
-            spindle_hal_status_word());
-        if (spindle_hal_request_mode(HAL_SPINDLE_CSP) == HAL_OK)
-        {
-            g_spindle.orient_phase = SPINDLE_ORIENT_IDLE;
-            g_spindle.m29_phase = SPINDLE_M29_SWITCHING_CSP;
-            g_spindle.orient_elapsed_cycles = 0U;
-        }
-        else
-        {
-            g_spindle.m29_phase = SPINDLE_M29_ERROR;
-            g_spindle.m29_feedback_stable = false;
-            g_spindle.reset_requires_start = true;
-            spindle_internal_clear_velocity_arrival();   /* 新指令/安全事件：清旧到速完成 */
-            g_spindle.orient_hold_stop = true;
-        }
-    }
-
-    if (g_spindle.m29_phase == SPINDLE_M29_SWITCHING_CSP)
-    {
-        if (spindle_hal_mode() == HAL_SPINDLE_CSP && spindle_hal_is_enabled())
-        {
-            g_spindle.m29_phase = SPINDLE_M29_READY;
-            /* 攻丝起点：把当前角度定为 0 度（插补算的是从本段起点起的绝对累计角
-             * acc/螺距*360，必须与这里的零点对齐，否则第一个目标角会先跳回旧零点）。
-             * 先设零、再写 0 度保持（适配层同拍按此顺序消费），此后角度由插补每拍下发。 */
-            rt_data->axis_data[AXIS_SP].wcs_cmd_pos_cur = 0.0;
-            g_spindle_hal.target_position = 0.0;
-            (void)rt_hal_axis_set_pos(RT_HAL_AXIS_SP, 0.0);
-            (void)rt_hal_request_axis_pos(RT_HAL_AXIS_SP, 0.0);
-        }
-        else if (spindle_hal_mode_switch_result() != HAL_OK)
-        {
-            LOG(LOG_LEVEL_ERR,
-                "M29切换CSP失败：status_word=0x%04X enabled=%d",
-                spindle_hal_status_word(), spindle_hal_is_enabled());
-            g_spindle.m29_phase = SPINDLE_M29_ERROR;
-            g_spindle.m29_feedback_stable = false;
-            g_spindle.reset_requires_start = true;
-            spindle_internal_clear_velocity_arrival();   /* 新指令/安全事件：清旧到速完成 */
-            g_spindle.start_request_pending = false;
-            g_spindle.orient_hold_stop = true;
-            g_spindle.command_speed = 0.0;
-            g_spindle.command_state = SPINDLE_STOP;
-        }
-        else if (++g_spindle.orient_elapsed_cycles >=
-                 SPINDLE_M29_MODE_TIMEOUT_CYCLES)
-        {
-            LOG(LOG_LEVEL_ERR,
-                "M29切换CSP超时：status_word=0x%04X enabled=%d act_mode=%d",
-                spindle_hal_status_word(), spindle_hal_is_enabled(), spindle_hal_mode());
-            setAlarm(ALARM_AX, ALARM_ERROR, SPINDLE_ALARM_ORIENT_TIMEOUT);
-            g_spindle.m29_phase = SPINDLE_M29_ERROR;
-            g_spindle.m29_feedback_stable = false;
-            g_spindle.reset_requires_start = true;
-            spindle_internal_clear_velocity_arrival();   /* 新指令/安全事件：清旧到速完成 */
-            g_spindle.start_request_pending = false;
-            g_spindle.orient_hold_stop = true;
-            g_spindle.command_speed = 0.0;
-            g_spindle.command_state = SPINDLE_STOP;
-            g_spindle.orient_elapsed_cycles = 0U;
-        }
+    case SPINDLE_M29_SWITCHING_CSP:
+    case SPINDLE_M29_ALIGNING:
+        if(++g_spindle.orient_elapsed_cycles>=M29_PREP_CYCLES) { prepare_failed("CSP准备超时");return; }
+        if(g_spindle.m29_phase==SPINDLE_M29_SWITCHING_CSP)update_csp_preparation(SPINDLE_M29_ALIGNING);
+        else update_alignment();
+        return;
+    default:prepare_failed("无效准备阶段");return;
     }
 }
 
-void spindle_internal_update_m29_feedback(void)
+bool spindle_m29_is_ready(void)
 {
-    static bool feedback_active;
-    static uint32_t unsettled_cycles;
-    static uint32_t stable_cycles;
-    bool complete;
-    double position_error;
-
-    if (!g_spindle.m29_active ||
-        g_spindle.m29_phase != SPINDLE_M29_READY)
-    {
-        stable_cycles = 0U;
-        unsettled_cycles = 0U;
-        g_spindle.m29_feedback_stable = false;
-    }
-
-    position_error = fabs((double)g_spindle_hal.target_position -
-                          (double)spindle_hal_actual_position());
-    complete = g_spindle.m29_active &&
-               g_spindle.m29_phase == SPINDLE_M29_READY &&
-               spindle_hal_mode() == HAL_SPINDLE_CSP &&
-               spindle_hal_is_enabled() &&
-               fabs((double)spindle_hal_actual_velocity()) <=
-                   SPINDLE_ACTUAL_ZERO_EPSILON &&
-               position_error <= SPINDLE_CSP_POSITION_EPSILON;
-    if (complete)
-    {
-        unsettled_cycles = 0U;
-        stable_cycles++;
-        if (stable_cycles < SPINDLE_M29_STABLE_CYCLES)
-        {
-            return;
-        }
-        g_spindle.m29_feedback_stable = true;
-        if (!feedback_active)
-        {
-            LOG(LOG_LEVEL_INFO,
-                "M29定向及CSP切换完成：status_word=0x%04X "
-                "act_mode=%d enabled=%d target_pos=%.0f actual_pos=%.0f "
-                "actual_vel=%.0f position_error=%.0f",
-                spindle_hal_status_word(), spindle_hal_mode(), spindle_hal_is_enabled(),
-                g_spindle_hal.target_position, spindle_hal_actual_position(),
-                spindle_hal_actual_velocity(), position_error);
-            feedback_active = true;
-        }
-    }
-    else
-    {
-        g_spindle.m29_feedback_stable = false;
-        feedback_active = false;
-        stable_cycles = 0U;
-        if (g_spindle.m29_active &&
-            g_spindle.m29_phase == SPINDLE_M29_READY &&
-            (++unsettled_cycles % 1000U) == 0U)
-        {
-            LOG(LOG_LEVEL_WARN,
-                "M29 CSP尚未稳定：target_pos=%.0f "
-                "actual_pos=%.0f actual_vel=%.0f position_error=%.0f "
-                "act_mode=%d enabled=%d status_word=0x%04X",
-                g_spindle_hal.target_position, spindle_hal_actual_position(),
-                spindle_hal_actual_velocity(), position_error,
-                spindle_hal_mode(), spindle_hal_is_enabled(),
-                spindle_hal_status_word());
-        }
-    }
+    HalAxisSnapshot a;
+    return !spindle_internal_stop_is_required(&g_spindle) && g_spindle.m29_active &&
+        !g_spindle.reset_requires_start && g_spindle.m29_phase==SPINDLE_M29_READY &&
+        g_spindle.m29_feedback_stable && motion_spindle_position_active() && read_feedback(&a) &&
+        a.actual_mode==HAL_AXIS_MODE_CSP && a.drive_state==HAL_DRIVE_OPERATION_ENABLED;
 }
-
-/* 内部函数定义 */
-
-static bool spindle_m29_read_feedback(HalCAxisStatus *axis, HalCSpindleStatus *spindle)
+void spindle_complete_m29(void)
 {
-    const int axis_rc = rt_hal_axis_status(RT_HAL_AXIS_SP, axis);
-    const int spindle_rc = rt_hal_spindle_status(RT_HAL_AXIS_SP, spindle);
-    if (axis_rc != HAL_OK || spindle_rc != HAL_OK)
-    {
-        LOG(LOG_LEVEL_ERR, "M29无预定向反馈不可读：axis_rc=%d spindle_rc=%d",
-            axis_rc, spindle_rc);
-        return false;
-    }
-    if (!axis->speed_valid || !axis->position_valid ||
-        !isfinite(axis->actual_speed_rpm) || !isfinite(axis->actual_pos) ||
-        !isfinite(axis->command_pos) || !isfinite(spindle->position_deg))
-    {
-        LOG(LOG_LEVEL_ERR,
-            "M29无预定向反馈无效：speed_valid=%d position_valid=%d "
-            "rpm=%.3f actual_pos=%.3f command_pos=%.3f spindle_pos=%.3f",
-            axis->speed_valid, axis->position_valid, axis->actual_speed_rpm,
-            axis->actual_pos, axis->command_pos, spindle->position_deg);
-        return false;
-    }
-    return true;
-}
-
-static int spindle_velocity_direction(double velocity)
-{
-    if (velocity > 0.0)
-    {
-        return 1;
-    }
-    if (velocity < 0.0)
-    {
-        return -1;
-    }
-    return 0;
-}
-
-static void spindle_m29_no_orient_fail(void)
-{
-    g_spindle.m29_phase = SPINDLE_M29_ERROR;
-    g_spindle.m29_feedback_stable = false;
-    g_spindle.m29_active = false;
-    g_spindle.reset_requires_start = true;
-    g_spindle.start_request_pending = false;
-    g_spindle.deferred_start_pending = false;
-    g_spindle.command_state = SPINDLE_STOP;
-    g_spindle.run_state = SPINDLE_STOP;
-    g_spindle.command_speed = 0.0;
-    g_spindle.velocity_planner.enable = false;
-    g_spindle.velocity_planner.target_vel = 0.0;
-    g_spindle_hal.target_velocity = 0.0;
-    (void)rt_hal_request_spindle_speed(RT_HAL_AXIS_SP, 0.0, 0);
+    if(!spindle_m29_is_ready())return;
+    g_spindle.m29_active=false;g_spindle.m29_phase=SPINDLE_M29_IDLE;
+    g_spindle.m29_feedback_stable=false;g_spindle.orient_hold_stop=false;
+    g_spindle.command_state=SPINDLE_STOP;g_spindle.command_speed=0;
+    g_spindle.run_authorized=g_spindle.program_run_authorized=false;
     spindle_internal_clear_velocity_arrival();
-    spindle_hal_mode_switch_reset();
-    spindle_hal_release_torque();
-    setAlarm(ALARM_AX, ALARM_ERROR, SPINDLE_ALARM_ORIENT_TIMEOUT);
-    LOG(LOG_LEVEL_ERR, "M29无预定向准备中止：停止/联锁、反馈或请求异常、等待超时");
 }
-
+void spindle_internal_publish_rigid_state(void)
+{
+    rt_data->sys_state[SYS_IS_RIGID]=motion_spindle_position_active() || motion_csp_stop_pending() ||
+        (g_spindle.m29_phase!=SPINDLE_M29_IDLE && g_spindle.m29_phase!=SPINDLE_M29_ERROR);
+}

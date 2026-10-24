@@ -10,6 +10,7 @@
 #define SPINDLE_INTERNAL_H
 
 #include "global.h"
+#include "rt_hal_adapter.h"
 #include "spindle_control.h"
 #include "spindle_velocity_planner.h"
 #include <stdbool.h>
@@ -55,9 +56,8 @@ typedef enum
 {
     SPINDLE_M29_IDLE = 0,            /**< 没有正在执行的 M29 事务。 */
     SPINDLE_M29_ORIENTING,           /**< 普通流程：等待 M19 定向完成。 */
-    SPINDLE_M29_STOPPING_TO_CSP,     /**< 普通流程：定向后停车并准备切换 CSP。 */
-    SPINDLE_M29_RELEASING,           /**< 普通流程：释放定向请求。 */
     SPINDLE_M29_SWITCHING_CSP,       /**< 普通流程：等待驱动器切换到 CSP。 */
+    SPINDLE_M29_ALIGNING,            /* 普通流程：确认软件偏置及保持目标 */
     SPINDLE_M29_READY,               /**< CSP 对齐及稳定性检查完成，M29 可完成。 */
     SPINDLE_M29_COMPLETE,            /**< M29握手完成；退出M29周期控制，CSP交由插补/其他模块。 */
     SPINDLE_M29_ERROR,               /**< M29 流程失败或超时，等待外部恢复/复位。 */
@@ -67,12 +67,12 @@ typedef enum
     SPINDLE_M29_NO_ORIENT_ALIGNING   /**< 无定向流程：等待当前位置 CSP 反馈稳定。 */
 } spindle_m29_phase_t;
 
-/** 主轴模式切换请求的本地事务状态。 */
+/** 主轴业务等待模式准备的阶段；不是第二份硬件完成状态机。 */
 typedef enum
 {
     SPINDLE_MODE_SWITCH_IDLE = 0, /**< 没有待确认的模式切换事务。 */
     SPINDLE_MODE_SWITCH_PENDING,  /**< 已提交模式请求，等待 HAL 反馈目标模式。 */
-    SPINDLE_MODE_SWITCH_DONE,     /**< HAL 反馈已进入请求的模式。 */
+    SPINDLE_MODE_SWITCH_DONE,     /**< HAL 的模式准备已 READY，实际模式确认仍以有效快照为准。 */
     SPINDLE_MODE_SWITCH_ERROR     /**< 模式请求失败；错误码见 mode_switch_result。 */
 } spindle_mode_switch_state_t;
 
@@ -84,10 +84,11 @@ typedef enum
  */
 typedef struct
 {
+    bool velocity_submitted; /* This CSV business has submitted an ordinary target. */
     double target_velocity;                        /**< 最近写入/规划的主轴速度目标，单位 rpm；不是实际速度反馈。 */
     double target_position;                        /**< 最近写入的位置目标，单位为主轴 HAL 使用的位置单位。 */
     int requested_mode;                            /**< 最近一次请求切换到的 HAL 主轴模式，如 CSV 或 CSP。 */
-    spindle_mode_switch_state_t mode_switch_state; /**< 本地异步模式切换事务所处阶段。 */
+    spindle_mode_switch_state_t mode_switch_state; /**< 本条业务等待模式准备的阶段。 */
     int32_t mode_switch_result;                    /**< 最近一次模式切换 HAL 操作的结果码，成功时为 HAL_OK。 */
 } spindle_hal_state_t;
 
@@ -123,25 +124,25 @@ typedef struct
     bool m19_active;                 /**< 当前有尚未完成的 M19 定向命令。 */
     bool m29_active;                 /**< 当前有尚未完成的 M29 刚性攻丝准备事务。 */
     spindle_m29_phase_t m29_phase;   /**< M29 主状态机阶段，供 M29 流程各步骤协同推进。 */
+    bool m29_hold_submitted;
+    double m29_expected_offset;       /* 本次设零按有效反馈一次计算的预期偏置 */
     uint32_t m29_stop_stable_cycles; /**< M29 停稳判定连续成立的控制周期数，周期为 1 ms。 */
     bool m29_feedback_stable;        /**< CSP 零速和位置误差连续稳定后置位。 */
     bool csv_switch_pending;         /**< 有待处理的 CSV 模式切换；完成/失败后清除。 */
 
     /* M19 定向及定向期间的命令交接。 */
     bool orient_hold_stop;               /**< 定向事务要求普通旋转保持停止时置位，事务释放后清除。 */
+    bool orient_submitted;               /* 本条定向请求已交接，等待状态，不重发 */
+    bool orient_exit_submitted;          /* 本条正常退出请求已交接 */
     bool orient_request_pending;         /**< 定向硬件请求尚未提交或等待进入可提交阶段。 */
-    bool orient_release_pending;         /**< 定向请求需要撤销，等待 HAL 接受释放操作。 */
     spindle_orient_phase_t orient_phase; /**< M19 定向状态机当前阶段。 */
     uint32_t orient_elapsed_cycles;      /**< 当前定向/切换阶段已经过的 1 ms 控制周期数，用于超时判定。 */
 
     /* 复位/急停后的启动锁和受控停车状态。 */
     bool reset_requires_start;         /**< 复位/急停后启动锁；清除前须收到新的有效启动请求。 */
-    bool reset_stop_pending;           /**< 正在执行复位/急停触发的受控停车流程。 */
-    bool reset_stop_csp;               /**< 停车流程开始时主轴是否处于 CSP 模式，决定停车与判稳方式。 */
-    int reset_stop_feed_axis;          /**< CSP 同步停车时使用的进给轴 HAL 槽位；非 CSP 流程不使用。 */
-    uint32_t reset_stop_cycles;        /**< 本次受控停车启动后的总控制周期数，周期为 1 ms，用于超时/诊断。 */
-    uint32_t reset_stop_idle_cycles;   /**< 插补空闲后累计的周期数，用作停车第二阶段看门狗。 */
-    uint32_t reset_stop_stable_cycles; /**< 停车速度及相关稳定条件连续成立的周期数，周期为 1 ms。 */
+    bool csv_stop_pending;
+    uint32_t csv_stop_cycles;
+    uint32_t csv_stop_stable_cycles;
 
     /* 定向期间收到的启动请求，在释放完成后再执行。 */
     bool start_request_pending;           /**< 有已接收但尚未由旋转状态机处理的启动请求。 */
@@ -156,14 +157,14 @@ extern spindle_hal_state_t g_spindle_hal; /**< 主轴 HAL 输出意愿及异步�
 /* HAL 反馈访问与输出意愿。 */
 void spindle_hal_init(void);
 int spindle_hal_is_enabled(void);
+int spindle_hal_snapshot(HalAxisSnapshot* out);
+void spindle_hal_poll_mode_switch(void);
 int spindle_hal_mode(void);
 double spindle_hal_actual_velocity(void);
 double spindle_hal_actual_position(void);
 uint16_t spindle_hal_status_word(void);
 int spindle_hal_orientation_state(void);
 bool spindle_hal_orientation_is_inactive(void);
-void spindle_hal_request_torque(void);
-void spindle_hal_release_torque(void);
 
 /* 异步 CSV/CSP 模式切换事务。 */
 bool spindle_hal_mode_switch_is_pending(void);
@@ -177,6 +178,7 @@ bool spindle_orientation_submit(void);
 bool spindle_orientation_hal_is_done(void);
 bool spindle_orientation_release(void);
 void spindle_orientation_abort(void);
+void spindle_orientation_failed(bool retain_hold);
 void spindle_internal_update_orientation(void);
 
 /* 定向模块回调控制核心执行排队启动和完成反馈。 */
@@ -189,13 +191,12 @@ bool spindle_internal_reset_or_estop_active(void);
 extern "C" {
 #endif
 bool spindle_internal_reset_stop_abort_required(void);
-#ifdef __cplusplus
-}
-#endif
-void spindle_internal_update_reset_stop(void);
+void spindle_internal_update_csv_stop(void);
 
 /* CSV 速度规划与完成判定。 */
-void spindle_internal_update_velocity(void);
+bool spindle_internal_update_velocity(void);
+void spindle_internal_fail_velocity(int result);
+int spindle_prepare_csv_stop_step(void);
 bool spindle_internal_validate_start_request(const spindle_context_t *context);
 double spindle_internal_get_selected_speed(const spindle_context_t *context);
 void spindle_internal_sync_planner_to_actual(void);
@@ -209,7 +210,6 @@ void spindle_internal_report_mcode_complete(void);
 bool spindle_internal_m29_no_orient_preparing(void);
 void spindle_internal_update_m29_no_orient(void);
 void spindle_internal_update_m29(void);
-void spindle_internal_update_m29_feedback(void);
 void spindle_internal_publish_rigid_state(void);
 
 /* 只供主轴实现文件协作的内部函数。 */

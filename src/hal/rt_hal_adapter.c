@@ -1,151 +1,98 @@
-/* 适配层实现；线程契约见 rt_hal_adapter.h 头部。 */
-
-/* 严格 ISO 模式下不声明 clock_gettime/sem_timedwait，必须显式要，且必须在 include 前 */
+/* 适配层实现：cnc_rt 与 cnc_hal 之间的唯一通道。
+ *
+ * 三条不变式（改本文件前先确认没有破坏它们）：
+ *   1. 只有 PDO 线程调用 HAL 的周期接口（wait / begin / commit 与请求提交）；
+ *   2. 运动线程只写请求暂存区、只读快照，绝不直接调用 HAL；
+ *   3. 适配层不推导 DS402 状态，只做槽号映射、按拍暂存与错误翻译。
+ *
+ * 一拍的数据流：
+ *   begin → publish_snapshot() 填快照 → 放行 PLC/运动线程（sem_post）
+ *   → 等两个完成屏障 → take_requests() 把暂存区交给 HAL
+ *   → flush Y 映像 → commit（本拍唯一的发送点）。
+ */
 #define _POSIX_C_SOURCE 200809L
-
 #include "rt_hal_adapter.h"
-
+#include "rt_sem.h"
 #include <errno.h>
+#include <math.h>
 #include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
 #include <time.h>
 
-#include "hal_c_api.h"   /* create/start/stop/destroy、hal_error_text */
-#include "rt_sem.h"      /* 信号量、thread_exit_flag */
+static HalContext* s_ctx;
+static int s_running, s_snap_valid, s_in_cycle;
+static uint32_t s_cycle_timeout_ms, s_x_size, s_y_size;
+static int32_t s_cycle_error;
+static HalAxisSnapshot s_snap[RT_HAL_AXIS_COUNT];
+static uint8_t s_snap_fresh[RT_HAL_AXIS_COUNT];
+/* 拒绝记录的归属：由 PDO 线程持有并写进快照。
+ * 运动线程只在自己的屏障处把本地拒绝交接过来（s_local_rejection_dirty）。 */
+static HalAxisIssue s_rejection[RT_HAL_AXIS_COUNT], s_local_rejection[RT_HAL_AXIS_COUNT];
+static uint8_t s_local_rejection_dirty[RT_HAL_AXIS_COUNT];
+static double s_req_pos[RT_HAL_AXIS_COUNT], s_req_setpos[RT_HAL_AXIS_COUNT], s_req_speed[RT_HAL_AXIS_COUNT];
+static int s_req_speed_dir[RT_HAL_AXIS_COUNT];
+static uint8_t s_req_pos_dirty[RT_HAL_AXIS_COUNT], s_req_setpos_dirty[RT_HAL_AXIS_COUNT], s_req_speed_dirty[RT_HAL_AXIS_COUNT];
+static uint8_t s_req_estop[RT_HAL_AXIS_COUNT], s_req_reset[RT_HAL_AXIS_COUNT];
+static uint8_t s_req_enable_dirty[RT_HAL_AXIS_COUNT], s_req_mode_dirty[RT_HAL_AXIS_COUNT];
+static uint8_t s_req_orient_dirty[RT_HAL_AXIS_COUNT], s_req_exit_dirty[RT_HAL_AXIS_COUNT], s_req_clear[RT_HAL_AXIS_COUNT];
+static int s_req_enable[RT_HAL_AXIS_COUNT];
+static HalAxisMode s_req_mode[RT_HAL_AXIS_COUNT];
+static HalOrientExitTarget s_req_exit[RT_HAL_AXIS_COUNT];
+static uint8_t s_x_image[RT_HAL_IO_IMAGE_MAX], s_y_image[RT_HAL_IO_IMAGE_MAX];
+static int s_io_ready;
+static uint8_t s_stop_image[RT_HAL_IO_IMAGE_MAX];
+static int s_stop_image_valid;
 
-/* ---- context 与运行标志 ---- */
-static HalContext* s_ctx;                 /* 唯一句柄；只有 PDO 线程碰（create/start/stop 例外） */
-static int         s_running;             /* 1 = 已 start 且未 shutdown */
-static uint32_t    s_cycle_timeout_ms;    /* 周期超时：等两个手的等待上限 */
-
-/* ---- 快照：PDO 线程 begin 后填一次，本拍内不再改 ---- */
-static HalCAxisStatus   s_snap_status[RT_HAL_AXIS_COUNT];    /* 轴状态 */
-static HalCSpindleStatus s_snap_spindle[RT_HAL_AXIS_COUNT];  /* 转速侧；非主轴槽无意义 */
-static int              s_snap_valid;                        /* 0 = 本拍没采过，查询接口要拒 */
-
-/* ---- 请求：其他线程写，PDO 线程在 commit 前取走 ---- */
-static double s_req_pos[RT_HAL_AXIS_COUNT];        /* 目标位置（用户单位） */
-static double s_req_setpos[RT_HAL_AXIS_COUNT];     /* 当前位置重定义为该值（设零/对刀） */
-static int    s_req_setpos_dirty[RT_HAL_AXIS_COUNT];
-static double s_req_turn[RT_HAL_AXIS_COUNT];       /* 主轴单圈刻度（度）；同拍优先于 pos */
-static int    s_req_pos_dirty[RT_HAL_AXIS_COUNT];
-static int    s_req_turn_dirty[RT_HAL_AXIS_COUNT];
-static double s_req_speed[RT_HAL_AXIS_COUNT];      /* 目标转速 rpm */
-static int    s_req_speed_dir[RT_HAL_AXIS_COUNT];  /* 转向单独传：rpm 不许为负 */
-static int    s_req_speed_dirty[RT_HAL_AXIS_COUNT];
-static int    s_req_estop[RT_HAL_AXIS_COUNT];      /* 1 = 请求急停。一次性事件 */
-static int    s_req_reset[RT_HAL_AXIS_COUNT];      /* 1 = 请求故障复位。一次性事件 */
-static int     s_req_enable[RT_HAL_AXIS_COUNT];          /* 期望使能：1 = 要力矩，0 = 去使能；按拍声明 */
-static int     s_req_enable_dirty[RT_HAL_AXIS_COUNT];    /* 只有值变了才下发；失败保留，下拍重试 */
-/* 每轴每类请求上次的失败码；只在失败码变化时报一次，避免逐拍刷屏 */
-enum { RT_REQ_POS = 0, RT_REQ_SPEED, RT_REQ_MODE, RT_REQ_ENABLE, RT_REQ_ESTOP, RT_REQ_RESET,
-       RT_REQ_ORIENT, RT_REQ_SETPOS, RT_REQ_KINDS };
-static int32_t s_req_fail_rc[RT_HAL_AXIS_COUNT][RT_REQ_KINDS];
-/* 预期内失败已连着失败的拍数；到点才报一行，见 report_req() */
-static uint32_t s_req_fail_age[RT_HAL_AXIS_COUNT][RT_REQ_KINDS];
-static int32_t s_snap_reset[RT_HAL_AXIS_COUNT];   /* 复位进展快照 */
-static int32_t s_snap_orient[RT_HAL_AXIS_COUNT];  /* 定向状态快照 */
-static uint8_t s_snap_fresh[RT_HAL_AXIS_COUNT];   /* 该轴本拍反馈读取成功 */
-static uint8_t s_snap_spindle_fresh[RT_HAL_AXIS_COUNT];
-static int32_t s_cycle_error;                     /* 周期循环异常退出的原因；0 = 无 */
-static HalSpindleMode s_req_mode[RT_HAL_AXIS_COUNT];      /* 期望的 CSV / CSP */
-static int    s_req_mode_dirty[RT_HAL_AXIS_COUNT];        /* 只有变了才下发 */
-/* 定向请求/释放：运动线程写，PDO 线程消费，一次性，消费即清 */
-static int    s_req_orient[RT_HAL_AXIS_COUNT];       /* 1 = 请求定向 */
-static int    s_req_orient_dirty[RT_HAL_AXIS_COUNT];
-static int    s_req_orient_rel[RT_HAL_AXIS_COUNT];   /* 1 = 释放定向 */
-static int    s_req_orient_rel_dirty[RT_HAL_AXIS_COUNT];
-/* 模式切换握手上限：连续这么多拍驱动器实际模式（0x6061）还没变成要的，报一次 */
-#define RT_HAL_MODE_WAIT_CYCLES 1000u
-/* "轴尚未使能"等多久才值得报：DS402 要几拍才走到使能 */
-#define RT_HAL_NOT_ENABLED_WAIT_CYCLES 1000u
-static uint32_t s_mode_wait[RT_HAL_AXIS_COUNT];      /* 本次请求已等拍数；请求变了清零 */
-static int      s_mode_warned[RT_HAL_AXIS_COUNT];    /* 超上限报过一次就不再刷 */
-static uint8_t  s_mode_requested[RT_HAL_AXIS_COUNT]; /* 发过模式请求没；去使能时清掉 */
-
-/* IO 映像，长度与 REG_X_NUM/REG_Y_NUM 一致 */
-static uint8_t s_x_image[RT_HAL_IO_IMAGE_MAX];   /* 输入映像 */
-static uint8_t s_y_image[RT_HAL_IO_IMAGE_MAX];   /* 输出映像 */
-static int     s_io_ready;                 /* 1 = 本拍输入映像取到了；取不到连输出也不发 */
-static uint32_t s_x_size, s_y_size;        /* 映像段长（字节），start 时向 HAL 问一次并缓存 */
-static int     s_in_cycle;                 /* 已 begin 未 commit：停机帧只能在这个窗口发 */
-
-/* 停机要下发的 Y；默认未配置——不能假设全零安全，宁可不写 */
-static uint8_t s_stop_image[RT_HAL_IO_IMAGE_MAX];   /* 停机时要写出去的 Y 映像 */
-static int     s_stop_image_valid;            /* 0 = 没配过，就什么都不写 */
-static int slot_ok(int slot) {
-    return slot >= 0 && slot < (int)RT_HAL_AXIS_COUNT;
+static int slot_ok(int slot) { return slot>=0 && slot<RT_HAL_AXIS_COUNT; }
+static void log_hs(const char* what,int slot,int32_t rc) {
+    char text[96];hal_error_text(rc,text,sizeof(text));
+    fprintf(stderr,"[HAL] %s slot=%d rc=%d (%s)\n",what,slot,rc,text);
 }
-
-/* 台账挡住运动请求时提示一次（被挡的请求软件侧照跑、只有驱动器收不到）；
- * 台账清掉后重新允许提示 */
-static int s_ledger_warned;
-static void warn_ledger_blocked(const char* what, int slot) {
-    if (rt_hal_config_motion_allowed()) { s_ledger_warned = 0; return; }
-    if (s_ledger_warned) return;
-    s_ledger_warned = 1;
-    fprintf(stderr, "[HAL] 运动台账未清，轴槽%d 的 %s 被丢弃"
-                    "（软件侧看起来正常，但驱动器收不到）\n", slot, what);
-    fflush(stderr);
-}
-
-/* HAL 错误码是正数；带上轴槽，否则四轴同码看起来只报了一次。 */
-static void log_hs(const char* what, int slot, int32_t rc) {
-    char text[96];
-    hal_error_text(rc, text, sizeof(text));
-    if (slot >= 0)
-        fprintf(stderr, "[HAL] 轴槽%d %s 失败: rc=%d (%s)\n", slot, what, rc, text);
-    else
-        /* 生命周期/周期循环出错没有具体轴槽，传 -1 */
-        fprintf(stderr, "[HAL] %s 失败: rc=%d (%s)\n", what, rc, text);
-}
-
-/* 每轴每类只报一次，成功才清；HAL_ERROR_NOT_ENABLED 是预期内过渡态，连着失败到
- * 第 N 拍才报一行，其它错误码当场报一次 */
-static void report_req(const char* what, int slot, int kind, int32_t rc) {
-    if (rc == HAL_OK) {
-        s_req_fail_rc[slot][kind] = 0;
-        s_req_fail_age[slot][kind] = 0;
-        return;
+static int local_reply(RtHalAxisSlot slot,int category,int rc) {
+    if(rc && slot_ok(slot) && s_ctx && rt_hal_config_hal_axis(slot)>=0) {
+        s_local_rejection[slot]=(HalAxisIssue){category,rc};
+        s_local_rejection_dirty[slot]=1;
     }
-
-    if (s_req_fail_rc[slot][kind] != rc) {   /* 换了错误码就重新计数 */
-        s_req_fail_rc[slot][kind] = rc;
-        s_req_fail_age[slot][kind] = 0;
-    }
-
-    if (rc == HAL_ERROR_NOT_ENABLED) {
-        /* 不报也不计数的两种情形：没在请求使能；或复位在飞（使能本就被压着不发）。
-         * 请求了使能且无复位在飞、连着 N 拍被同一个码拒，才值得报。 */
-        if (!s_req_enable[slot] || s_snap_reset[slot] == HAL_RESET_PENDING) {
-            s_req_fail_age[slot][kind] = 0;
-            return;
-        }
-        if (s_req_fail_age[slot][kind] >= RT_HAL_NOT_ENABLED_WAIT_CYCLES) return;  /* 报过了 */
-        if (++s_req_fail_age[slot][kind] < RT_HAL_NOT_ENABLED_WAIT_CYCLES) return; /* 还没到点 */
-    } else if (s_req_fail_age[slot][kind] != 0) {
-        return;                              /* 这个码已经报过一次 */
-    }
-
-    log_hs(what, slot, rc);
-    if (rc != HAL_ERROR_NOT_ENABLED) s_req_fail_age[slot][kind] = 1;  /* 报过了 */
+    return rc;
 }
-
-/* ---- 生命周期 ---- */
-
+static int admission(RtHalAxisSlot slot,int category,int motion) {
+    int rc=!slot_ok(slot)||rt_hal_config_hal_axis(slot)<0?HAL_ERROR_ARGUMENT:
+        (!s_ctx||!s_running?HAL_ERROR_NOT_RUNNING:
+        (motion&&!rt_hal_config_motion_allowed()?HAL_ERROR_NOT_RUNNING:HAL_OK));
+    return local_reply(slot,category,rc);
+}
+static void submitted(int slot,int category,int rc) {
+    if(rc) s_rejection[slot]=(HalAxisIssue){category,rc};
+    else if(s_rejection[slot].category==category)s_rejection[slot]=(HalAxisIssue){0,0};
+}
+static void clear_axis_requests(int i) {
+    s_req_pos_dirty[i]=s_req_setpos_dirty[i]=s_req_speed_dirty[i]=0;
+    s_req_estop[i]=s_req_reset[i]=s_req_enable_dirty[i]=s_req_mode_dirty[i]=0;
+    s_req_orient_dirty[i]=s_req_exit_dirty[i]=s_req_clear[i]=0;
+}
+static void reset_transport(void) {
+    s_snap_valid=s_io_ready=s_in_cycle=0;s_cycle_error=0;
+    memset(s_snap_fresh,0,sizeof(s_snap_fresh));
+    memset(s_snap,0,sizeof(s_snap));
+    memset(s_rejection,0,sizeof(s_rejection));
+    memset(s_local_rejection_dirty,0,sizeof(s_local_rejection_dirty));
+    for(int i=0;i<RT_HAL_AXIS_COUNT;++i)clear_axis_requests(i);
+}
 int rt_hal_create(const RtHalAxisParams* params, char* err, uint32_t err_len) {
     if (!params) return RT_HAL_ERR_NULL_ARG;
-    if (s_ctx) return HAL_ERROR_BUSY;   /* 重复 create；当前只支持一个实例 */
+    if (s_ctx) return HAL_ERROR_BUSY;   /* 已经有实例了：当前只支持单实例，拒绝重复 create */
 
     if (err && err_len) err[0] = '\0';
 
-    /* 装配 profile（占位换算量） */
+    /* 先按台架 profile 装配一份占位配置。
+         * 缺参数的轴就停在这个占位值上，不会拿 0 或猜测值去驱动。 */
     HalCConfig cfg;
     int rc = rt_hal_config_build(&cfg, err, err_len);
     if (rc) return rc;
 
-    /* 逐轴换机床真值；缺参数的轴不调 set_scaling，保持占位值并挂台账 */
+    /* 逐轴用参数域的真实值替换占位换算量。
+         * 缺参数的轴不调用 set_scaling：保留占位值，同时由未确认台账把运动挡住。
+         * 这样"参数没确认"不会退化成"轴按错的当量悄悄跑"。 */
     for (int i = 0; i < RT_HAL_AXIS_COUNT; ++i) {
         if (!params[i].loaded) continue;
         rc = rt_hal_config_set_scaling(&cfg, (RtHalAxisSlot)i, &params[i].scaling);
@@ -156,7 +103,8 @@ int rt_hal_create(const RtHalAxisParams* params, char* err, uint32_t err_len) {
         }
     }
 
-    /* 主轴转速上限；缺参数保持占位值 */
+    /* 主轴转速上限。缺参数时保留占位上限，并在启动打印里明确提示——
+         * 超过占位上限的转速会被 HAL 直接拒收，不会静默钳位。 */
     if (params[RT_HAL_AXIS_SP].loaded && params[RT_HAL_AXIS_SP].max_speed > 0.0) {
         rc = rt_hal_config_set_spindle_max(&cfg, params[RT_HAL_AXIS_SP].max_speed);
         if (rc) {
@@ -170,13 +118,14 @@ int rt_hal_create(const RtHalAxisParams* params, char* err, uint32_t err_len) {
                "超过占位上限的转速会被 HAL 拒收\n");
     }
 
-    /* 校验 + 打印：没硬件也能先看配置对不对 */
+    /* 静态校验并打印装配结果。这一步不碰硬件，
+         * 所以没有台架时也能先确认配置对不对。 */
     rc = rt_hal_config_finish(&cfg, err, err_len);
     if (rc) return rc;
 
     s_cycle_timeout_ms = cfg.cycle_timeout_ms;
 
-    /* 创建 context */
+    /* 配置到这里才算定稿，创建 context（仍然不碰硬件） */
     HalContext* ctx = NULL;
     rc = hal_context_create(&cfg, &ctx, err, err_len);
     if (rc) { log_hs("hal_context_create", -1, rc); return rc; }
@@ -186,30 +135,13 @@ int rt_hal_create(const RtHalAxisParams* params, char* err, uint32_t err_len) {
     }
 
     s_ctx = ctx;
-    s_snap_valid = s_io_ready = 0;
-    s_in_cycle = 0;
-    memset(s_req_pos_dirty, 0, sizeof(s_req_pos_dirty));
-    memset(s_req_setpos_dirty, 0, sizeof(s_req_setpos_dirty));
-    memset(s_req_turn_dirty, 0, sizeof(s_req_turn_dirty));
-    memset(s_req_speed_dirty, 0, sizeof(s_req_speed_dirty));
-    memset(s_req_estop, 0, sizeof(s_req_estop));
-    memset(s_req_reset, 0, sizeof(s_req_reset));
-    memset(s_req_enable_dirty, 0, sizeof(s_req_enable_dirty));
-    memset(s_req_fail_rc, 0, sizeof(s_req_fail_rc));
-    memset(s_req_fail_age, 0, sizeof(s_req_fail_age));
-    memset(s_snap_reset, 0, sizeof(s_snap_reset));
-    memset(s_snap_orient, 0, sizeof(s_snap_orient));
-    memset(s_snap_fresh, 0, sizeof(s_snap_fresh));
-    memset(s_snap_spindle_fresh, 0, sizeof(s_snap_spindle_fresh));
-    s_cycle_error = 0;
-    memset(s_req_mode_dirty, 0, sizeof(s_req_mode_dirty));
+    reset_transport();
     __atomic_store_n(&plc_cycle_target, 0, __ATOMIC_RELEASE);
     __atomic_store_n(&plc_done_cycle, 0, __ATOMIC_RELEASE);
     __atomic_store_n(&motion_cycle_target, 0, __ATOMIC_RELEASE);
     __atomic_store_n(&motion_done_cycle, 0, __ATOMIC_RELEASE);
     return HAL_OK;
 }
-
 int rt_hal_start(char* err, uint32_t err_len) {
     if (!s_ctx) {
         if (err && err_len) snprintf(err, err_len, "尚未 rt_hal_create");
@@ -230,13 +162,16 @@ int rt_hal_start(char* err, uint32_t err_len) {
                    capability.slave_pos, capability.axis_index);
     }
 
-    /* 问一次映像段长并缓存；失败不致命（按 0 处理 = 不下发 IO） */
+    /* 问一次 IO 映像段长并缓存。查不到不算致命：
+         * 按 0 处理等价于本拍不下发 IO，比拿一个猜出来的长度去拷贝安全。 */
     s_x_size = s_y_size = 0;
     (void)hal_io_image_size(s_ctx, &s_x_size, &s_y_size);
     printf("映像段长（按设备 Entry 实算）：X=%u 字节, Y=%u 字节\n",
            (unsigned)s_x_size, (unsigned)s_y_size);
-    /* 段长超本适配层缓冲必须在这里拒绝启动：否则 IO 无声失效、线程层按 HAL 段长写
-     * 自己的 512 字节缓冲会越界写。RT_HAL_IO_IMAGE_MAX 三处一致（REG_X/REG_Y、线程层）。 */
+    /* 段长超过本层缓冲必须在这里拒绝启动。
+         * 后果不是"IO 少几个点"，而是越界写：线程层是按 HAL 段长去写自己那份
+         * 512 字节缓冲的。RT_HAL_IO_IMAGE_MAX 三处必须一致——
+         * 本层缓冲、线程层缓冲、共享内存 REG_X / REG_Y 长度。 */
     if (s_x_size > RT_HAL_IO_IMAGE_MAX || s_y_size > RT_HAL_IO_IMAGE_MAX) {
         if (err && err_len)
             snprintf(err, err_len,
@@ -248,17 +183,19 @@ int rt_hal_start(char* err, uint32_t err_len) {
     }
 
     s_running = 1;
-    /* emcmotTrajPlan() 拿 op_flag 当门控；"主站已进 OP"只有这里知道 */
+    /* emcmotTrajPlan() 用 op_flag 做总门控。
+         * "主站已经进 OP"这件事只有这里知道，所以置位不能提前到
+         * hal_context_start 返回之前。 */
     op_flag = 1;
     return HAL_OK;
 }
-
 void rt_hal_shutdown(void) {
     if (!s_ctx) return;
 
-    op_flag = 0;   /* 先关门控 */
+    op_flag = 0;   /* 先关总门控：避免还在跑的周期继续按旧状态下发指令 */
 
-    /* 调用方须先保证 PDO 线程已退出；本函数不 join */
+    /* 本函数不 join PDO 线程。调用方必须先让周期循环退出，
+         * 否则这里会拆掉别人还在使用的 context。 */
     if (s_running) {
         (void)hal_context_request_stop(s_ctx);
         (void)hal_context_stop(s_ctx);
@@ -269,13 +206,11 @@ void rt_hal_shutdown(void) {
 
     s_snap_valid = s_io_ready = 0;
     memset(s_snap_fresh, 0, sizeof(s_snap_fresh));
-    memset(s_snap_spindle_fresh, 0, sizeof(s_snap_spindle_fresh));
+
     s_in_cycle = 0;
     s_x_size = s_y_size = 0;
 }
-
 int rt_hal_running(void) { return s_running; }
-
 int rt_hal_axis_sdo_read(RtHalAxisSlot slot, uint16_t index, uint8_t subindex,
                          void* data, uint32_t size, uint32_t timeout_ms) {
     const int axis = rt_hal_config_hal_axis(slot);
@@ -283,7 +218,6 @@ int rt_hal_axis_sdo_read(RtHalAxisSlot slot, uint16_t index, uint8_t subindex,
     if (!s_ctx || !s_running) return HAL_ERROR_NOT_RUNNING;
     return hal_axis_sdo_read(s_ctx, (HalAxisId)axis, index, subindex, data, size, timeout_ms);
 }
-
 int rt_hal_axis_sdo_write(RtHalAxisSlot slot, uint16_t index, uint8_t subindex,
                           const void* data, uint32_t size, uint32_t timeout_ms) {
     const int axis = rt_hal_config_hal_axis(slot);
@@ -291,19 +225,16 @@ int rt_hal_axis_sdo_write(RtHalAxisSlot slot, uint16_t index, uint8_t subindex,
     if (!s_ctx || !s_running) return HAL_ERROR_NOT_RUNNING;
     return hal_axis_sdo_write(s_ctx, (HalAxisId)axis, index, subindex, data, size, timeout_ms);
 }
-
 int rt_hal_sdo_read(int slave_pos, uint16_t index, uint8_t subindex,
                     void* data, uint32_t size, uint32_t timeout_ms) {
     if (!s_ctx || !s_running) return HAL_ERROR_NOT_RUNNING;
     return hal_sdo_read(s_ctx, slave_pos, index, subindex, data, size, timeout_ms);
 }
-
 int rt_hal_sdo_write(int slave_pos, uint16_t index, uint8_t subindex,
                      const void* data, uint32_t size, uint32_t timeout_ms) {
     if (!s_ctx || !s_running) return HAL_ERROR_NOT_RUNNING;
     return hal_sdo_write(s_ctx, slave_pos, index, subindex, data, size, timeout_ms);
 }
-
 int rt_hal_io_image_size(uint32_t* x_size, uint32_t* y_size) {
     if (!x_size || !y_size) return HAL_ERROR_ARGUMENT;
     if (!s_running) return HAL_ERROR_NOT_RUNNING;
@@ -312,179 +243,81 @@ int rt_hal_io_image_size(uint32_t* x_size, uint32_t* y_size) {
     return HAL_OK;
 }
 
-/* ---- 周期（仅 PDO 线程） ---- */
-
-/* 取本拍快照；只读，不触发总线访问 */
 static void publish_snapshot(void) {
-    for (int i = 0; i < RT_HAL_AXIS_COUNT; ++i) {
-        s_snap_fresh[i] = 0;
-        s_snap_spindle_fresh[i] = 0;
-        const int hal_axis = rt_hal_config_hal_axis((RtHalAxisSlot)i);
-        if (hal_axis < 0) continue;
-        /* 读成功才覆盖快照；失败保留上一拍——过期的真值比新鲜的零安全 */
-        HalCAxisStatus st;
-        HalCSpindleStatus sp;
-        if (hal_rt_axis_read_status(s_ctx, (HalAxisId)hal_axis, &st) != HAL_OK) continue;
-        memcpy(&s_snap_status[i], &st, sizeof(st));
-        s_snap_fresh[i] = 1;
-        if (hal_rt_spindle_read_status(s_ctx, (HalAxisId)hal_axis, &sp) == HAL_OK) {
-            memcpy(&s_snap_spindle[i], &sp, sizeof(sp));
-            s_snap_spindle_fresh[i] = 1;
-        }
-        /* 复位进展进快照：别的线程用它判断收没收口，但不许碰 context */
-        int32_t rst = HAL_RESET_NONE;
-        if (hal_rt_axis_fault_reset_state(s_ctx, (HalAxisId)hal_axis, &rst) != HAL_OK)
-            rst = HAL_RESET_NONE;
-        s_snap_reset[i] = rst;
-        /* 定向状态进快照：公开查询接口给别的线程，但不能碰 context */
-        int32_t ori = HAL_ORIENT_NONE;
-        if (hal_rt_spindle_orient_state(s_ctx, (HalAxisId)hal_axis, &ori) != HAL_OK)
-            ori = HAL_ORIENT_NONE;
-        s_snap_orient[i] = ori;
+    for(int i=0;i<RT_HAL_AXIS_COUNT;++i) {
+        s_snap_fresh[i]=0;
+        const int id=rt_hal_config_hal_axis((RtHalAxisSlot)i);
+        HalAxisSnapshot snap;
+        if(id<0 || hal_rt_axis_read_snapshot(s_ctx,(HalAxisId)id,&snap)!=HAL_OK)continue;
+        snap.request_rejection=s_rejection[i];
+        s_snap[i]=snap;s_snap_fresh[i]=1;
     }
-    s_snap_valid = 1;
+    s_snap_valid=1;
 }
-
-/* 取走本拍命令下发给 HAL，须在 begin 之后 commit 之前调用；
- * 急停优先且排他：有急停意图时该轴普通请求一条都不下发 */
 static void take_requests(void) {
-    const int motion_ok = rt_hal_config_motion_allowed();
-
-    for (int i = 0; i < RT_HAL_AXIS_COUNT; ++i) {
-        const int hal_axis = rt_hal_config_hal_axis((RtHalAxisSlot)i);
-        if (hal_axis < 0) continue;
-
-        /* 设坐标零点：只平移软件基准、不写驱动器，故不受台账阻挡，放在急停分支之前；
-         * 必须在位置写之前消费（同拍后面的 write_pos 要按新零点算）。 */
-        if (s_req_setpos_dirty[i]) {
-            s_req_setpos_dirty[i] = 0;
-            report_req("hal_rt_axis_set_pos", i, RT_REQ_SETPOS,
-                       hal_rt_axis_set_pos(s_ctx, (HalAxisId)hal_axis, s_req_setpos[i]));
+    for(int i=0;i<RT_HAL_AXIS_COUNT;++i) {
+        int id=rt_hal_config_hal_axis((RtHalAxisSlot)i);
+        if(id<0)continue;
+        if(s_local_rejection_dirty[i]) {
+            s_rejection[i]=s_local_rejection[i];s_local_rejection_dirty[i]=0;
         }
-
-        if (s_req_estop[i]) {
-            s_req_estop[i] = 0;
-            /* 急停不受台账阻挡 */
-            report_req("hal_rt_axis_estop", i, RT_REQ_ESTOP,
-                       hal_rt_axis_estop(s_ctx, (HalAxisId)hal_axis));
-            s_req_reset[i] = 0;   /* 急停覆盖同拍的复位请求 */
-            /* 急停顺带撤掉使能意图；留着旧值 1 会让之后每拍的"轴尚未使能"被当成失败 */
-            s_req_enable[i] = 0;
-            s_req_enable_dirty[i] = 0;
-            /* 暂存的位置/转速/模式/刻度本拍作废即丢 dirty，否则下拍会被当新意图消费 */
-            s_req_pos_dirty[i] = s_req_speed_dirty[i] = 0;
-            s_req_mode_dirty[i] = s_req_turn_dirty[i] = 0;
-            continue;             /* 本拍该轴的其余请求全部作废 */
+        if(s_req_setpos_dirty[i]) {
+            s_req_setpos_dirty[i]=0;
+            submitted(i,HAL_ISSUE_SET_POSITION,hal_rt_axis_set_pos(s_ctx,id,s_req_setpos[i]));
         }
-
-        /* 故障复位同样不受台账阻挡 */
-        if (s_req_reset[i]) {
-            s_req_reset[i] = 0;
-            /* 同急停：复位期间暂存目标已过期，作废本拍 */
-            s_req_pos_dirty[i] = s_req_speed_dirty[i] = 0;
-            s_req_mode_dirty[i] = s_req_turn_dirty[i] = 0;
-            report_req("hal_rt_axis_fault_reset", i, RT_REQ_RESET,
-                       hal_rt_axis_fault_reset(s_ctx, (HalAxisId)hal_axis));
-            continue;   /* 复位与运动互斥，本拍不再下发运动指令 */
+        if(s_req_estop[i]) {
+            clear_axis_requests(i);
+            submitted(i,HAL_ISSUE_ESTOP,hal_rt_axis_request_estop(s_ctx,id));
+            continue;
         }
-
-        /* 使能/去使能不过台账，失败保留 dirty 下拍重试。复位在飞时必须忍住：HAL 契约是
-         * "急停/去使能取消待复位"，而 RT 停车路径每拍都下去使能，漏下去复位永不收口；
-         * 判据看快照里 HAL 的复位状态，收口后照常下发。 */
-        if (s_req_enable_dirty[i] && s_snap_reset[i] != HAL_RESET_PENDING) {
-            const int32_t erc = hal_rt_axis_enable(s_ctx, (HalAxisId)hal_axis, s_req_enable[i]);
-            report_req("hal_rt_axis_enable", i, RT_REQ_ENABLE, erc);
-            if (erc == HAL_OK) s_req_enable_dirty[i] = 0;   /* 失败保留，下一拍重试 */
+        if(s_req_reset[i]) {
+            const int disable=s_req_enable_dirty[i]&&!s_req_enable[i];
+            const int clear=s_req_clear[i];
+            clear_axis_requests(i);
+            if(clear)submitted(i,HAL_ISSUE_CLEAR_EXECUTION_ERROR,hal_rt_axis_clear_execution_error(s_ctx,id));
+            submitted(i,HAL_ISSUE_FAULT_RESET,hal_rt_axis_request_fault_reset(s_ctx,id));
+            if(disable)submitted(i,HAL_ISSUE_DISABLE,hal_rt_axis_request_disable(s_ctx,id));
+            continue;
         }
-
-        /* 定向的请求与释放放在台账闸门之前：定向不产生位移，不该被"运动范围未批准"拦住，
-         * 否则台账没清时 M19 毫无反应。一次性、失败也清；释放放在请求之前，同拍以释放为准。 */
-        if (s_req_orient_rel_dirty[i]) {
-            s_req_orient_rel_dirty[i] = 0;
-            s_req_orient_dirty[i] = 0;
-            report_req("hal_rt_spindle_release_orient", i, RT_REQ_ORIENT,
-                       hal_rt_spindle_release_orient(s_ctx, (HalAxisId)hal_axis));
-        } else if (s_req_orient_dirty[i]) {
-            s_req_orient_dirty[i] = 0;
-            report_req("hal_rt_spindle_request_orient", i, RT_REQ_ORIENT,
-                       hal_rt_spindle_request_orient(s_ctx, (HalAxisId)hal_axis));
+        if(s_req_enable_dirty[i]&&!s_req_enable[i]) {
+            s_req_enable_dirty[i]=0;
+            submitted(i,HAL_ISSUE_DISABLE,hal_rt_axis_request_disable(s_ctx,id));
         }
-
-        if (!motion_ok) continue;
-
-        /* 位置/转速/模式是一次性意图：报失败但不重试，留着 dirty 会在急停后、
-         * 轴重新使能时把过期目标下下去 */
-        if (s_req_pos_dirty[i]) {
-            s_req_pos_dirty[i] = 0;
-            report_req("hal_rt_axis_write_pos", i, RT_REQ_POS,
-                       hal_rt_axis_write_pos(s_ctx, (HalAxisId)hal_axis, s_req_pos[i]));
+        if(s_req_mode_dirty[i]) {
+            s_req_mode_dirty[i]=0;
+            submitted(i,HAL_ISSUE_MODE,hal_rt_axis_request_mode(s_ctx,id,s_req_mode[i]));
         }
-        /* 刻度命令放在位置写之后：同拍都置时以刻度为准（HAL 后写覆盖先写），
-         * 一次性意图，失败也清 */
-        if (s_req_turn_dirty[i]) {
-            s_req_turn_dirty[i] = 0;
-            report_req("hal_rt_spindle_write_pos", i, RT_REQ_POS,
-                       hal_rt_spindle_write_pos(s_ctx, (HalAxisId)hal_axis, s_req_turn[i]));
+        if(s_req_enable_dirty[i]) {
+            s_req_enable_dirty[i]=0;
+            submitted(i,HAL_ISSUE_ENABLE,hal_rt_axis_request_enable(s_ctx,id));
         }
-        if (s_req_speed_dirty[i]) {
-            s_req_speed_dirty[i] = 0;
-            report_req("hal_rt_spindle_write_speed", i, RT_REQ_SPEED,
-                       hal_rt_spindle_write_speed(s_ctx, (HalAxisId)hal_axis,
-                                                  s_req_speed[i], s_req_speed_dir[i]));
+        if(s_req_exit_dirty[i]) {
+            s_req_exit_dirty[i]=s_req_orient_dirty[i]=0;
+            submitted(i,HAL_ISSUE_EXIT_ORIENT,hal_rt_spindle_request_exit_orient(s_ctx,id,&s_req_exit[i]));
+        } else if(s_req_orient_dirty[i]) {
+            s_req_orient_dirty[i]=0;
+            submitted(i,HAL_ISSUE_ORIENT,hal_rt_spindle_request_orient(s_ctx,id));
         }
-
-        if (s_req_mode_dirty[i]) {
-            s_req_mode_dirty[i] = 0;
-            report_req("hal_rt_spindle_request_mode", i, RT_REQ_MODE,
-                       hal_rt_spindle_request_mode(s_ctx, (HalAxisId)hal_axis, s_req_mode[i]));
-            s_mode_requested[i] = 1;  /* 从这一刻起才值得跟驱动器对模式 */
-            s_mode_wait[i] = 0;      /* 新请求，重新计时 */
-            s_mode_warned[i] = 0;
+        if(s_req_pos_dirty[i]) {
+            s_req_pos_dirty[i]=0;
+            submitted(i,HAL_ISSUE_POSITION,hal_rt_axis_write_pos(s_ctx,id,s_req_pos[i]));
         }
-
-        /* 模式切换握手：比驱动器实际模式（0x6061）与最近一次请求的模式。两个前提不满足
-         * 就不握手，否则是假警报（启动时没发过模式，拿 s_req_mode 初值去比永远对不上）：
-         * ① 真的发过一次模式请求；② 该轴当前被请求使能（未使能时驱动器不切模式）。
-         * 被去使能就清掉"发过请求"的记号。 */
-        {
-            const int want_enable = s_req_enable[i] != 0;
-            if (!want_enable) s_mode_requested[i] = 0;
-            const int handshake =
-                s_mode_requested[i] && want_enable && (RtHalAxisSlot)i == RT_HAL_AXIS_SP;
-
-            HalCSpindleStatus sst;
-            int mode_ok = 1;
-            if (handshake &&
-                rt_hal_spindle_status((RtHalAxisSlot)i, &sst) == HAL_OK &&
-                sst.mode != s_req_mode[i]) {
-                mode_ok = 0;
-            }
-            if (!handshake || mode_ok) {
-                s_mode_wait[i] = 0;
-                s_mode_warned[i] = 0;
-            } else if (++s_mode_wait[i] >= RT_HAL_MODE_WAIT_CYCLES && !s_mode_warned[i]) {
-                s_mode_warned[i] = 1;
-                const char* want = s_req_mode[i] == HAL_SPINDLE_CSP ? "CSP" : "CSV";
-                fprintf(stderr,
-                        "[HAL] 轴槽%d 主轴模式切换超时：已等 %u 拍，实际模式仍不是 %s\n",
-                        i, s_mode_wait[i], want);
-            }
+        if(s_req_speed_dirty[i]) {
+            s_req_speed_dirty[i]=0;
+            submitted(i,HAL_ISSUE_SPINDLE_SPEED,hal_rt_spindle_write_speed(s_ctx,id,s_req_speed[i],s_req_speed_dir[i]));
+        }
+        if(s_req_clear[i]) {
+            s_req_clear[i]=0;
+            submitted(i,HAL_ISSUE_CLEAR_EXECUTION_ERROR,hal_rt_axis_clear_execution_error(s_ctx,id));
         }
     }
 }
-
-
-
-/* 本拍业务等待截止时刻；PLC 与运动共用，各自等一个完整周期会把一拍拖成两拍 */
 static void make_deadline(struct timespec* ts) {
     clock_gettime(CLOCK_REALTIME, ts);
     ts->tv_sec  += (time_t)(s_cycle_timeout_ms / 1000u);
     ts->tv_nsec += (long)(s_cycle_timeout_ms % 1000u) * 1000000L;
     if (ts->tv_nsec >= 1000000000L) { ts->tv_sec += 1; ts->tv_nsec -= 1000000000L; }
 }
-
-/* 等一个带周期号的完成信号：信号量只证明有人 post 过，不证明 post 的是本拍；
- * 对不上周期号就继续等。 */
 static int32_t wait_done(const char* what, volatile uint32_t* done, sem_t* sem,
                          uint32_t cycle, const struct timespec* deadline) {
     while (__atomic_load_n(done, __ATOMIC_ACQUIRE) != cycle) {
@@ -492,8 +325,11 @@ static int32_t wait_done(const char* what, volatile uint32_t* done, sem_t* sem,
         if (sem_timedwait(sem, deadline) != 0) {
             if (errno == EINTR) continue;
             if (errno == ETIMEDOUT) {
-                fprintf(stderr, "[HAL] 第 %u 拍等 %s 完成超时（上限 %u ms）\n",
-                        cycle, what, s_cycle_timeout_ms);
+                fprintf(stderr, "[HAL] 第 %u 拍共同等待超时（PLC/运动共享总预算 %u ms；"
+                        "当前等待 %s；PLC完成拍=%u，运动完成拍=%u）\n",
+                        cycle, s_cycle_timeout_ms, what,
+                        __atomic_load_n(&plc_done_cycle, __ATOMIC_ACQUIRE),
+                        __atomic_load_n(&motion_done_cycle, __ATOMIC_ACQUIRE));
                 return HAL_ERROR_TIMEOUT;
             }
             return HAL_ERROR_STATE;
@@ -501,75 +337,29 @@ static int32_t wait_done(const char* what, volatile uint32_t* done, sem_t* sem,
     }
     return HAL_OK;
 }
-
-/* 超时/中止时的停机帧：全轴急停 + 停机映像 + 提交一帧；只能 begin 与 commit 之间调 */
 static void stop_frame(void) {
     if (!s_in_cycle) return;
 
     for (int i = 0; i < RT_HAL_AXIS_COUNT; ++i) {
         const int hal_axis = rt_hal_config_hal_axis((RtHalAxisSlot)i);
         if (hal_axis < 0) continue;
-        (void)hal_rt_axis_estop(s_ctx, (HalAxisId)hal_axis);
+        const int rc=hal_rt_axis_request_estop(s_ctx, (HalAxisId)hal_axis);
+        if(rc)log_hs("停机帧急停请求失败（原周期错误保留）",i,rc);
     }
 
     if (s_stop_image_valid) {
-        (void)hal_rt_io_flush_outputs(s_ctx, s_stop_image, RT_HAL_IO_IMAGE_MAX);
+        const int rc=hal_rt_io_flush_outputs(s_ctx, s_stop_image, RT_HAL_IO_IMAGE_MAX);
+        if(rc)log_hs("停机帧Y映像提交失败（原周期错误保留）",-1,rc);
     } else {
-        /* 不写 Y，已下发的电平保持原状 */
+        /* 没有配置停机映像就不写 Y，保持上一次已下发的电平。
+             * 这比写全 0 安全：写 0 可能松开夹具或抬起刀。 */
         fprintf(stderr, "[HAL] 停机帧：未配置停机输出映像，本帧不写 Y（计划书 §8）\n");
     }
 
-    (void)hal_rt_commit_cycle(s_ctx);   /* 把上面的急停控制字发出去 */
+    const int rc=hal_rt_commit_cycle(s_ctx); /* 只提交这一拍，不重试，也不用新错误码覆盖原始错误 */
+    if(rc)log_hs("停机帧周期提交失败（原周期错误保留）",-1,rc);
     s_in_cycle = 0;
 }
-
-/* 只读快照转储：CNC_RT_DUMP=1 打第 100 拍、=N 打第 N 拍，支持逗号列表；不参与控制 */
-static void dump_snapshot_once(uint32_t cycle) {
-    const char* on = getenv("CNC_RT_DUMP");
-    if (!on || !*on) return;
-    /* =1 打第 100 拍（等采样稳定）；要看晚态传更大的 N */
-    int hit = 0;
-    for (const char* p = on; *p; ) {
-        char* end = NULL;
-        const long v = strtol(p, &end, 10);
-        if (end == p) break;                        /* 不是数字就停 */
-        if (v > 0 && cycle == (uint32_t)(v == 1 ? 100 : v)) { hit = 1; break; }
-        if (*end != ',') break;
-        p = end + 1;                                /* 跳过逗号 */
-    }
-    if (!hit) return;
-
-    printf("[HAL] ===== 只读快照 @第 %u 拍（未使能）=====\n", cycle);
-    for (int i = 0; i < RT_HAL_AXIS_COUNT; ++i) {
-        const int hal_axis = rt_hal_config_hal_axis((RtHalAxisSlot)i);
-        if (hal_axis < 0) continue;
-        HalCIdentity id;
-        HalCAxisStatus st;
-        const int ok_id = hal_device_identity(s_ctx, (HalAxisId)hal_axis, &id) == HAL_OK;
-        const int ok_st = hal_rt_axis_read_status(s_ctx, (HalAxisId)hal_axis, &st) == HAL_OK;
-        printf("  HAL轴%-2d 身份=%-12s vendor=0x%04x product=0x%04x | 使能=%d 位置=%.6f 速度=%.3f%s 状态字=0x%04x%s\n",
-               hal_axis,
-               ok_id ? id.name : "(读不到)",
-               ok_id ? id.vendor_id : 0u,
-               ok_id ? id.product_code : 0u,
-               ok_st ? st.enabled : -1,
-               ok_st ? st.actual_pos : 0.0,
-               ok_st ? st.actual_speed : 0.0,
-               (ok_st && st.speed_valid) ? "" : "(无速度PDO)",
-               ok_st ? st.raw_status : 0,
-               ok_st ? "" : "  [读取失败]");
-    }
-    if (s_io_ready) {
-        printf("  输入映像 X 前 12 字节:");
-        for (uint32_t i = 0; i < 12u && i < RT_HAL_IO_IMAGE_MAX; ++i) printf(" %02x", s_x_image[i]);
-        printf("\n");
-    } else {
-        printf("  输入映像：本拍没取到\n");
-    }
-    printf("[HAL] =====================================\n");
-    fflush(stdout);
-}
-
 int rt_hal_pdo_loop(void) {
     if (!s_ctx || !s_running) return RT_HAL_ERR_ORDER;
 
@@ -579,17 +369,19 @@ int rt_hal_pdo_loop(void) {
     while (!__atomic_load_n(&thread_exit_flag, __ATOMIC_ACQUIRE)) {
         ++cycle;
 
-        rc = hal_rt_wait_cycle(s_ctx);            /* 等节拍、收帧 */
+        rc = hal_rt_wait_cycle(s_ctx);            /* 第一拍：等节拍并收帧 */
         if (rc) break;
 
-        rc = hal_rt_begin_cycle(s_ctx);           /* 采样、推 DS402、准备输入映像 */
+        rc = hal_rt_begin_cycle(s_ctx);           /* 第二拍：采样、推进 DS402 状态机、准备输入映像 */
         if (rc) break;
         s_in_cycle = 1;
 
         publish_snapshot();
         s_io_ready = (hal_rt_io_snapshot_inputs(s_ctx, s_x_image, RT_HAL_IO_IMAGE_MAX) == HAL_OK);
 
-        /* 周期号先写再放行，业务线程才知道自己算第几拍 */
+        /* 先把周期号写出去，再 sem_post 放行业务线程。
+             * 顺序反了，业务线程会读到上一拍的号；它收工时把旧号写回，
+             * 屏障判定就永远对不上。 */
         __atomic_store_n(&plc_cycle_target, cycle, __ATOMIC_RELEASE);
         __atomic_store_n(&motion_cycle_target, cycle, __ATOMIC_RELEASE);
         sem_post(&plc_sem);
@@ -607,27 +399,180 @@ int rt_hal_pdo_loop(void) {
         take_requests();
 
         if (s_io_ready && hal_rt_io_flush_outputs(s_ctx, s_y_image, RT_HAL_IO_IMAGE_MAX) != HAL_OK) {
-            /* IO 下发失败不让整圈失败：commit 会再报同一个总线错误 */
+            /* IO 下发失败不单独中止本拍：同一笔总线错误会在 commit 那里再报一次，
+                 * 由那里统一闭锁，避免同一故障被记两遍。 */
             s_io_ready = 0;
         }
 
-        rc = hal_rt_commit_cycle(s_ctx);          /* 本拍唯一发送出口 */
+        rc = hal_rt_commit_cycle(s_ctx);          /* 本拍唯一的发送出口 */
         s_in_cycle = 0;
         if (rc) break;
 
-        dump_snapshot_once(cycle);
+
     }
 
     if (rc && !__atomic_load_n(&thread_exit_flag, __ATOMIC_ACQUIRE)) {
-        /* 记下来给 RT 侧报警用，不能只打 stderr */
+        /* 除了打日志，还要把错误码留下来：周期循环一退出，运动线程就卡在
+             * sem_wait 上不再跑，只能靠 rt_hal_cycle_error() 把原因带回 RT 侧报警。 */
         s_cycle_error = rc;
         log_hs("周期循环", -1, rc);
     }
+    s_snap_valid=s_io_ready=0;
+    memset(s_snap_fresh,0,sizeof(s_snap_fresh));
+    for(int i=0;i<RT_HAL_AXIS_COUNT;++i)clear_axis_requests(i);
     return rc;
 }
 
 int32_t rt_hal_cycle_error(void) { return s_cycle_error; }
+int rt_hal_axis_snapshot(RtHalAxisSlot slot,HalAxisSnapshot* out) {
+    if(!slot_ok(slot)||!out)return HAL_ERROR_ARGUMENT;
+    if(!s_snap_valid||!s_snap_fresh[slot])return HAL_ERROR_NOT_RUNNING;
+    *out=s_snap[slot];return HAL_OK;
+}
+int rt_hal_axis_status(RtHalAxisSlot slot,RtHalAxisStatus* out) {
+    if(!out)return HAL_ERROR_ARGUMENT;
+    HalAxisSnapshot s;int rc=rt_hal_axis_snapshot(slot,&s);if(rc)return rc;
+    if(!(s.feedback_valid&HAL_FEEDBACK_STATUS))return HAL_ERROR_NOT_RUNNING;
+    RtHalAxisStatus v={0};
+    v.enabled=s.drive_state==HAL_DRIVE_OPERATION_ENABLED;
+    v.position_valid=!!(s.feedback_valid&HAL_FEEDBACK_POSITION);
+    v.actual_pos=s.actual_pos;v.command_pos=(s.command_valid&HAL_COMMAND_POSITION)?s.command_pos:NAN;
+    v.speed_valid=!!(s.feedback_valid&HAL_FEEDBACK_SPEED);
+    v.actual_speed=s.actual_speed_device_units;v.actual_speed_rpm=s.actual_speed_rpm;
+    v.raw_status=s.raw_status;v.error_code=s.drive_error_code;
+    v.error_code_valid=!!(s.feedback_valid&HAL_FEEDBACK_ERROR_CODE);
+    v.actual_speed_mm_min=s.actual_speed_mm_min;
+    v.linear_speed_valid=!!(s.feedback_valid&HAL_FEEDBACK_LINEAR_SPEED);
+    *out=v;return HAL_OK;
+}
+static int scalar(RtHalAxisSlot slot,double* out,uint32_t bit,int which) {
+    if(!out)return HAL_ERROR_ARGUMENT;
+    HalAxisSnapshot s;int rc=rt_hal_axis_snapshot(slot,&s);if(rc)return rc;
+    if(!(s.feedback_valid&bit))return HAL_ERROR_UNSUPPORTED;
+    *out=which==0?s.actual_pos:which==1?s.actual_speed_device_units:
+        which==2?s.actual_speed_rpm:s.actual_speed_mm_min;
+    return HAL_OK;
+}
+int rt_hal_axis_pos(RtHalAxisSlot s,double* out){return scalar(s,out,HAL_FEEDBACK_POSITION,0);}
+int rt_hal_axis_speed(RtHalAxisSlot s,double* out){return scalar(s,out,HAL_FEEDBACK_SPEED,1);}
+int rt_hal_axis_speed_rpm(RtHalAxisSlot s,double* out){return scalar(s,out,HAL_FEEDBACK_SPEED,2);}
+int rt_hal_axis_speed_mm_min(RtHalAxisSlot s,double* out){return scalar(s,out,HAL_FEEDBACK_LINEAR_SPEED,3);}
+int rt_hal_spindle_status(RtHalAxisSlot slot,RtHalSpindleStatus* out) {
+    if(!out||!rt_hal_config_is_spindle(slot))return HAL_ERROR_ARGUMENT;
+    HalAxisSnapshot s;int rc=rt_hal_axis_snapshot(slot,&s);if(rc)return rc;
+    if(!(s.feedback_valid&HAL_FEEDBACK_STATUS))return HAL_ERROR_NOT_RUNNING;
+    RtHalSpindleStatus v={0};
+    v.enabled=s.drive_state==HAL_DRIVE_OPERATION_ENABLED;
+    v.mode=(s.feedback_valid&HAL_FEEDBACK_MODE)?s.actual_mode:HAL_AXIS_MODE_UNSET;
+    v.command_speed=(s.command_valid&HAL_COMMAND_SPINDLE_SPEED_RPM)?s.command_speed_rpm:NAN;
+    v.actual_speed=(s.feedback_valid&HAL_FEEDBACK_SPEED)?s.actual_speed_rpm:NAN;
+    v.position_deg=(s.feedback_valid&HAL_FEEDBACK_POSITION)?s.actual_pos:NAN;
+    v.raw_status=s.raw_status;*out=v;return HAL_OK;
+}
+int rt_hal_spindle_speed(RtHalAxisSlot slot,double* out) {
+    if(!rt_hal_config_is_spindle(slot))return HAL_ERROR_ARGUMENT;
+    return rt_hal_axis_speed_rpm(slot,out);
+}
+double rt_hal_spindle_rpm(void) {
+    double rpm;return rt_hal_spindle_speed(RT_HAL_AXIS_SP,&rpm)?NAN:rpm;
+}
+int rt_hal_fault_reset_state(RtHalAxisSlot slot,int32_t* out) {
+    if(!out)return HAL_ERROR_ARGUMENT;
+    HalAxisSnapshot s;int rc=rt_hal_axis_snapshot(slot,&s);if(rc)return rc;
+    if(s.control_state==HAL_CONTROL_RESETTING_FAULT)*out=RT_HAL_RESET_PENDING;
+    else if((s.execution_error.category==HAL_ISSUE_FAULT_RESET&&s.execution_error.code) ||
+            (s.request_rejection.category==HAL_ISSUE_FAULT_RESET&&s.request_rejection.code))*out=RT_HAL_RESET_FAILED;
+    else if((s.feedback_valid&HAL_FEEDBACK_STATUS)&&s.drive_state==HAL_DRIVE_READY)*out=RT_HAL_RESET_DONE;
+    else *out=RT_HAL_RESET_NONE;
+    return HAL_OK;
+}
+int rt_hal_fault_reset_settled(int* any_timeout) {
+    int failed=0;
+    for(int i=0;i<RT_HAL_AXIS_COUNT;++i) {
+        if(rt_hal_config_hal_axis((RtHalAxisSlot)i)<0)continue;
+        int32_t state;
+        if(s_req_reset[i]||rt_hal_fault_reset_state((RtHalAxisSlot)i,&state))return 0;
+        if(state==RT_HAL_RESET_FAILED)failed=1;
+        else if(state!=RT_HAL_RESET_DONE)return 0;
+    }
+    if(any_timeout)*any_timeout=failed;
+    return 1;
+}
+int rt_hal_spindle_orient_state(RtHalAxisSlot slot,int32_t* out) {
+    if(!out||!rt_hal_config_is_spindle(slot))return HAL_ERROR_ARGUMENT;
+    HalAxisSnapshot s;int rc=rt_hal_axis_snapshot(slot,&s);if(rc)return rc;
+    if(!(s.feedback_valid&HAL_FEEDBACK_STATUS))return HAL_ERROR_NOT_RUNNING;
+    *out=s.control_state==HAL_CONTROL_ORIENTING?RT_HAL_ORIENT_RUNNING:
+        s.control_state==HAL_CONTROL_ORIENT_HOLD?RT_HAL_ORIENT_DONE:
+        (s.control_state==HAL_CONTROL_EXITING_ORIENT||s.control_state==HAL_CONTROL_ORIENT_HANDOVER_UNKNOWN)?
+        RT_HAL_ORIENT_UNKNOWN:RT_HAL_ORIENT_NONE;
+    return HAL_OK;
+}
 
+int rt_hal_request_axis_pos(RtHalAxisSlot slot,double pos) {
+    int rc=admission(slot,HAL_ISSUE_POSITION,1);if(rc)return rc;
+    if(!isfinite(pos))return local_reply(slot,HAL_ISSUE_POSITION,HAL_ERROR_ARGUMENT);
+    s_req_pos[slot]=pos;s_req_pos_dirty[slot]=1;return HAL_OK;
+}
+int rt_hal_axis_set_pos(RtHalAxisSlot slot,double pos) {
+    int rc=admission(slot,HAL_ISSUE_SET_POSITION,0);if(rc)return rc;
+    if(!isfinite(pos))return local_reply(slot,HAL_ISSUE_SET_POSITION,HAL_ERROR_ARGUMENT);
+    s_req_setpos[slot]=pos;s_req_setpos_dirty[slot]=1;return HAL_OK;
+}
+int rt_hal_request_spindle_speed(RtHalAxisSlot slot,double rpm,int dir) {
+    int rc=admission(slot,HAL_ISSUE_SPINDLE_SPEED,1);if(rc)return rc;
+    if(!rt_hal_config_is_spindle(slot)||!isfinite(rpm)||rpm<0||dir < -1||dir>1)
+        return local_reply(slot,HAL_ISSUE_SPINDLE_SPEED,HAL_ERROR_ARGUMENT);
+    s_req_speed[slot]=rpm;s_req_speed_dir[slot]=dir;s_req_speed_dirty[slot]=1;return HAL_OK;
+}
+int rt_hal_request_axis_mode(RtHalAxisSlot slot,HalAxisMode mode) {
+    int rc=admission(slot,HAL_ISSUE_MODE,1);if(rc)return rc;
+    if(mode!=HAL_AXIS_MODE_CSP&&mode!=HAL_AXIS_MODE_CSV)return local_reply(slot,HAL_ISSUE_MODE,HAL_ERROR_ARGUMENT);
+    s_req_mode[slot]=mode;s_req_mode_dirty[slot]=1;return HAL_OK;
+}
+int rt_hal_request_spindle_mode(RtHalAxisSlot slot,HalAxisMode mode) {
+    if(!rt_hal_config_is_spindle(slot))return local_reply(slot,HAL_ISSUE_MODE,HAL_ERROR_ARGUMENT);
+    return rt_hal_request_axis_mode(slot,mode);
+}
+int rt_hal_request_axis_enable(RtHalAxisSlot slot,int on) {
+    const int category=on?HAL_ISSUE_ENABLE:HAL_ISSUE_DISABLE;
+    int rc=admission(slot,category,0);if(rc)return rc;
+    if(on!=0&&on!=1)return local_reply(slot,category,HAL_ERROR_ARGUMENT);
+    /* 同拍内的下使能不许被随后的上使能覆盖：
+         * 下使能代表"停"，不能被后面的请求翻案。 */
+    if(on&&s_req_enable_dirty[slot]&&!s_req_enable[slot])return local_reply(slot,category,HAL_ERROR_BUSY);
+    s_req_enable[slot]=on;s_req_enable_dirty[slot]=1;return HAL_OK;
+}
+int rt_hal_request_estop(RtHalAxisSlot slot) {
+    int rc=admission(slot,HAL_ISSUE_ESTOP,0);if(rc)return rc;
+    s_req_estop[slot]=1;return HAL_OK;
+}
+int rt_hal_request_fault_reset(RtHalAxisSlot slot) {
+    int rc=admission(slot,HAL_ISSUE_FAULT_RESET,0);if(rc)return rc;
+    s_req_reset[slot]=1;return HAL_OK;
+}
+int rt_hal_clear_execution_error(RtHalAxisSlot slot) {
+    int rc=admission(slot,HAL_ISSUE_CLEAR_EXECUTION_ERROR,0);if(rc)return rc;
+    s_req_clear[slot]=1;return HAL_OK;
+}
+int rt_hal_spindle_request_orient(RtHalAxisSlot slot) {
+    int rc=admission(slot,HAL_ISSUE_ORIENT,0);if(rc)return rc;
+    if(!rt_hal_config_is_spindle(slot))return local_reply(slot,HAL_ISSUE_ORIENT,HAL_ERROR_ARGUMENT);
+    s_req_orient_dirty[slot]=1;return HAL_OK;
+}
+int rt_hal_spindle_exit_orient(RtHalAxisSlot slot,const HalOrientExitTarget* target) {
+    int rc=admission(slot,HAL_ISSUE_EXIT_ORIENT,0);if(rc)return rc;
+    if(!target||!rt_hal_config_is_spindle(slot)||target->reserved||!isfinite(target->value))
+        return local_reply(slot,HAL_ISSUE_EXIT_ORIENT,HAL_ERROR_ARGUMENT);
+    s_req_exit[slot]=*target;s_req_exit_dirty[slot]=1;return HAL_OK;
+}
+int rt_hal_spindle_set_orient_pulses(RtHalAxisSlot slot,uint32_t pulses,uint32_t timeout_ms) {
+    if(!slot_ok(slot))return HAL_ERROR_ARGUMENT;
+    int id=rt_hal_config_hal_axis(slot);
+    if(!s_ctx||!s_running)return HAL_ERROR_NOT_RUNNING;
+    if(id<0)return HAL_ERROR_ARGUMENT;
+    return hal_spindle_set_orient_pulses(s_ctx,(HalAxisId)id,pulses,timeout_ms);
+}
 int rt_hal_io_set_stop_image(const uint8_t* y, uint32_t len) {
     if (!y) return HAL_ERROR_ARGUMENT;
     if (len < RT_HAL_IO_IMAGE_MAX) return HAL_ERROR_ARGUMENT;
@@ -635,236 +580,6 @@ int rt_hal_io_set_stop_image(const uint8_t* y, uint32_t len) {
     s_stop_image_valid = 1;
     return HAL_OK;
 }
-
-/* ---- 反馈快照（任意线程，只读快照） ---- */
-
-int rt_hal_axis_pos(RtHalAxisSlot slot, double* out) {
-    if (!slot_ok(slot) || !out) return HAL_ERROR_ARGUMENT;
-    if (!s_snap_valid || !s_snap_fresh[slot]) return HAL_ERROR_NOT_RUNNING;
-    if (!s_snap_status[slot].position_valid) return HAL_ERROR_UNSUPPORTED;
-    *out = s_snap_status[slot].actual_pos;
-    return HAL_OK;
-}
-
-int rt_hal_axis_status(RtHalAxisSlot slot, HalCAxisStatus* out) {
-    if (!slot_ok(slot) || !out) return HAL_ERROR_ARGUMENT;
-    if (!s_snap_valid || !s_snap_fresh[slot]) return HAL_ERROR_NOT_RUNNING;
-    *out = s_snap_status[slot];
-    return HAL_OK;
-}
-
-int rt_hal_spindle_set_orient_pulses(HalAxisId slot, uint32_t pulses, uint32_t timeout_ms) {
-    if (!slot_ok(slot)) return HAL_ERROR_ARGUMENT;
-    //if (!s_snap_valid || !s_snap_fresh[slot]) return HAL_ERROR_NOT_RUNNING;
-    //if (!s_snap_status[slot].position_valid) return HAL_ERROR_UNSUPPORTED;
-    int rc = hal_spindle_set_orient_pulses(s_ctx, slot, pulses, timeout_ms);
-    return rc;
-}
-
-/* speed_valid=0 → UNSUPPORTED，让上层区分"没速度 PDO"和"停着" */
-int rt_hal_axis_speed(RtHalAxisSlot slot, double* out) {
-    if (!slot_ok(slot) || !out) return HAL_ERROR_ARGUMENT;
-    if (!s_snap_valid || !s_snap_fresh[slot]) return HAL_ERROR_NOT_RUNNING;
-    if (!s_snap_status[slot].speed_valid) return HAL_ERROR_UNSUPPORTED;
-    *out = s_snap_status[slot].actual_speed;
-    return HAL_OK;
-}
-
-/* 与 rt_hal_axis_speed() 同一读数，换成 rpm 口径（HAL 已按 speed_unit 换算） */
-int rt_hal_axis_speed_rpm(RtHalAxisSlot slot, double* out) {
-    if (!slot_ok(slot) || !out) return HAL_ERROR_ARGUMENT;
-    if (!s_snap_valid || !s_snap_fresh[slot]) return HAL_ERROR_NOT_RUNNING;
-    if (!s_snap_status[slot].speed_valid) return HAL_ERROR_UNSUPPORTED;
-    *out = s_snap_status[slot].actual_speed_rpm;
-    return HAL_OK;
-}
-
-int rt_hal_axis_speed_mm_min(RtHalAxisSlot slot, double* out) {
-    if (!slot_ok(slot) || !out) return HAL_ERROR_ARGUMENT;
-    if (!s_snap_valid || !s_snap_fresh[slot]) return HAL_ERROR_NOT_RUNNING;
-    if (!s_snap_status[slot].linear_speed_valid) return HAL_ERROR_UNSUPPORTED;
-    *out = s_snap_status[slot].actual_speed_mm_min;
-    return HAL_OK;
-}
-
-int rt_hal_spindle_status(RtHalAxisSlot slot, HalCSpindleStatus* out) {
-    if (!slot_ok(slot) || !out) return HAL_ERROR_ARGUMENT;
-    /* 非主轴槽 */
-    if (!rt_hal_config_is_spindle(slot)) return HAL_ERROR_ARGUMENT;
-    if (!s_snap_valid || !s_snap_spindle_fresh[slot]) return HAL_ERROR_NOT_RUNNING;
-    *out = s_snap_spindle[slot];
-    return HAL_OK;
-}
-
-int rt_hal_spindle_speed(RtHalAxisSlot slot, double* out) {
-    if (!slot_ok(slot) || !out) return HAL_ERROR_ARGUMENT;
-    /* 非主轴槽 */
-    if (!rt_hal_config_is_spindle(slot)) return HAL_ERROR_ARGUMENT;
-    if (!s_snap_valid || !s_snap_spindle_fresh[slot]) return HAL_ERROR_NOT_RUNNING;
-    *out = s_snap_spindle[slot].actual_speed;
-    return HAL_OK;
-}
-
-int rt_hal_request_fault_reset(RtHalAxisSlot slot) {
-    if (!slot_ok(slot)) return HAL_ERROR_ARGUMENT;
-    if (!s_ctx) return HAL_ERROR_NOT_RUNNING;
-    /* 有意不做台账检查：驱动器已故障时不该被"参数未确认"拦住 */
-    s_req_reset[slot] = 1;
-    return HAL_OK;
-}
-
-int rt_hal_fault_reset_state(RtHalAxisSlot slot, int32_t* out) {
-    if (!slot_ok(slot) || !out) return HAL_ERROR_ARGUMENT;
-    if (!s_snap_valid) return HAL_ERROR_NOT_RUNNING;
-    *out = s_snap_reset[slot];
-    return HAL_OK;
-}
-
-int rt_hal_fault_reset_settled(int* any_timeout) {
-    if (!s_snap_valid) return 0;
-    if (any_timeout) *any_timeout = 0;
-    for (int i = 0; i < RT_HAL_AXIS_COUNT; ++i) {
-        /* 没绑定 HAL 轴的槽位永远等不到复位终态，直接跳过，否则收口永远不成立。 */
-        if (rt_hal_config_hal_axis((RtHalAxisSlot)i) < 0) continue;
-        /* 请求还没被 PDO 线程取走 → 没收口 */
-        if (s_req_reset[i]) return 0;
-        if (s_snap_reset[i] == HAL_RESET_DONE) continue;
-        if (s_snap_reset[i] == HAL_RESET_TIMEOUT) {
-            if (any_timeout) *any_timeout = 1;
-            continue;
-        }
-        return 0;   /* NONE 或 PENDING 都算没收口 */
-    }
-    return 1;
-}
-
-double rt_hal_spindle_rpm(void) {
-    double rpm = 0.0;
-    if (rt_hal_spindle_speed(RT_HAL_AXIS_SP, &rpm) != HAL_OK) return 0.0;
-    return rpm;
-}
-
-/* ---- 命令请求（任意线程） ---- */
-
-/* 请求主轴定向；不受台账阻挡（不产生位移，只是让驱动器对准） */
-int rt_hal_spindle_request_orient(RtHalAxisSlot slot) {
-    if (!slot_ok(slot)) return HAL_ERROR_ARGUMENT;
-    if (!s_ctx) return HAL_ERROR_NOT_RUNNING;
-    s_req_orient[slot] = 1;
-    s_req_orient_dirty[slot] = 1;
-    return HAL_OK;
-}
-
-/* 只读快照，任意线程可调，不碰 HalContext */
-int rt_hal_spindle_orient_state(RtHalAxisSlot slot, int32_t* out) {
-    if (!slot_ok(slot) || !out) return HAL_ERROR_ARGUMENT;
-    if (!rt_hal_config_is_spindle(slot)) return HAL_ERROR_ARGUMENT;
-    if (!s_snap_valid) return HAL_ERROR_NOT_RUNNING;
-    *out = s_snap_orient[slot];
-    return HAL_OK;
-}
-
-int rt_hal_spindle_release_orient(RtHalAxisSlot slot) {
-    if (!slot_ok(slot)) return HAL_ERROR_ARGUMENT;
-    if (!s_ctx) return HAL_ERROR_NOT_RUNNING;
-    s_req_orient_rel[slot] = 1;
-    s_req_orient_rel_dirty[slot] = 1;
-    return HAL_OK;
-}
-
-/* 主轴单圈刻度：与 axis_pos 同一条台账闸门（同样会让轴动） */
-int rt_hal_request_spindle_turn(RtHalAxisSlot slot, double deg) {
-    if (!slot_ok(slot)) return HAL_ERROR_ARGUMENT;
-    if (!s_ctx) return HAL_ERROR_NOT_RUNNING;
-    if (!rt_hal_config_motion_allowed()) {
-        warn_ledger_blocked("主轴单圈刻度", (int)slot);
-        return HAL_ERROR_NOT_RUNNING;
-    }
-    s_req_turn[slot] = deg;
-    s_req_turn_dirty[slot] = 1;
-    return HAL_OK;
-}
-
-/* 把该轴当前位置重新定义为 pos（用户单位）；攻丝起点、回零/对刀用。
- * 不写驱动器、不动电机，故不过台账闸门 */
-int rt_hal_axis_set_pos(RtHalAxisSlot slot, double pos) {
-    if (!slot_ok(slot)) return HAL_ERROR_ARGUMENT;
-    if (!s_ctx) return HAL_ERROR_NOT_RUNNING;
-    s_req_setpos[slot] = pos;
-    s_req_setpos_dirty[slot] = 1;
-    return HAL_OK;
-}
-
-int rt_hal_axis_set_pos_result(RtHalAxisSlot slot) {
-    if (!slot_ok(slot)) return HAL_ERROR_ARGUMENT;
-    if (!s_ctx || !s_snap_valid) return HAL_ERROR_NOT_RUNNING;
-    if (s_req_setpos_dirty[slot]) return HAL_ERROR_BUSY;
-    return s_req_fail_rc[slot][RT_REQ_SETPOS];
-}
-
-int rt_hal_request_axis_pos(RtHalAxisSlot slot, double pos) {
-    if (!slot_ok(slot)) return HAL_ERROR_ARGUMENT;
-    if (!s_ctx) return HAL_ERROR_NOT_RUNNING;
-    if (!rt_hal_config_motion_allowed()) {
-        warn_ledger_blocked("位置指令", (int)slot);
-        return HAL_ERROR_NOT_RUNNING;
-    }
-    s_req_pos[slot] = pos;   /* 同拍后者覆盖前者，命令按拍消费不排队 */
-    s_req_pos_dirty[slot] = 1;
-    return HAL_OK;
-}
-
-int rt_hal_request_spindle_speed(RtHalAxisSlot slot, double rpm, int dir) {
-    if (!slot_ok(slot)) return HAL_ERROR_ARGUMENT;
-    if (dir < -1 || dir > 1) return HAL_ERROR_ARGUMENT;
-    if (!s_ctx) return HAL_ERROR_NOT_RUNNING;
-    if (!rt_hal_config_motion_allowed()) {
-        warn_ledger_blocked("主轴转速", (int)slot);
-        return HAL_ERROR_NOT_RUNNING;
-    }
-    s_req_speed[slot] = rpm;
-    s_req_speed_dir[slot] = dir;
-    s_req_speed_dirty[slot] = 1;
-    return HAL_OK;
-}
-
-int rt_hal_request_spindle_mode(RtHalAxisSlot slot, HalSpindleMode mode) {
-    if (!slot_ok(slot)) return HAL_ERROR_ARGUMENT;
-    if (mode != HAL_SPINDLE_CSV && mode != HAL_SPINDLE_CSP) return HAL_ERROR_ARGUMENT;
-    if (!s_ctx) return HAL_ERROR_NOT_RUNNING;
-    if (!rt_hal_config_motion_allowed()) {
-        warn_ledger_blocked("主轴模式", (int)slot);
-        return HAL_ERROR_NOT_RUNNING;
-    }
-    /* 期望模式没变就不重复提交 */
-    if (s_req_mode_dirty[slot] && s_req_mode[slot] == mode) return HAL_OK;
-    s_req_mode[slot] = mode;
-    s_req_mode_dirty[slot] = 1;
-    return HAL_OK;
-}
-
-/* 期望使能状态，主轴也用这一个；值没变就不重复下发。
- * 有意不做台账检查（台账只关位置/转速/模式）。 */
-int rt_hal_request_axis_enable(RtHalAxisSlot slot, int on) {
-    if (!slot_ok(slot)) return HAL_ERROR_ARGUMENT;
-    if (on != 0 && on != 1) return HAL_ERROR_ARGUMENT;
-    if (!s_ctx) return HAL_ERROR_NOT_RUNNING;
-    if (s_req_enable_dirty[slot] && s_req_enable[slot] == on) return HAL_OK;
-    s_req_enable[slot] = on;
-    s_req_enable_dirty[slot] = 1;
-    return HAL_OK;
-}
-
-int rt_hal_request_estop(RtHalAxisSlot slot) {
-    if (!slot_ok(slot)) return HAL_ERROR_ARGUMENT;
-    if (!s_ctx) return HAL_ERROR_NOT_RUNNING;
-    /* 有意不做台账检查：急停是安全路径 */
-    s_req_estop[slot] = 1;
-    return HAL_OK;
-}
-
-/* ---- IO 映像 ---- */
-
 int rt_hal_io_fetch_inputs(uint8_t* out, uint32_t len) {
     if (!out) return HAL_ERROR_ARGUMENT;
     if (len < RT_HAL_IO_IMAGE_MAX) return HAL_ERROR_ARGUMENT;
@@ -872,7 +587,6 @@ int rt_hal_io_fetch_inputs(uint8_t* out, uint32_t len) {
     memcpy(out, s_x_image, RT_HAL_IO_IMAGE_MAX);
     return HAL_OK;
 }
-
 int rt_hal_io_publish_outputs(const uint8_t* y, uint32_t len) {
     if (!y) return HAL_ERROR_ARGUMENT;
     if (len < RT_HAL_IO_IMAGE_MAX) return HAL_ERROR_ARGUMENT;

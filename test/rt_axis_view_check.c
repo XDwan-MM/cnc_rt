@@ -14,7 +14,7 @@ static RT_DATA g;
 RT_DATA* rt_data = &g;
 
 static double g_stub_deg;
-int rt_hal_spindle_status(RtHalAxisSlot slot, HalCSpindleStatus* out) {
+int rt_hal_spindle_status(RtHalAxisSlot slot, RtHalSpindleStatus* out) {
     if (!out) return HAL_ERROR_ARGUMENT;
     if ((int)slot != AXIS_SP) return HAL_ERROR_ARGUMENT;
     memset(out, 0, sizeof(*out));

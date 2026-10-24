@@ -1,3 +1,5 @@
+#include "rt_drive_control.h"
+#include "alarm.h"
 /**
  * @file spindle_speed.c
  * @brief 主轴 CSV 速度规划、到速反馈与停止完成判定。
@@ -56,13 +58,43 @@ double spindle_get_program_command_speed(void)
     return g_spindle.remembered_program_speed;
 }
 
-void spindle_internal_update_velocity(void)
+void spindle_internal_fail_velocity(int result)
+{
+    g_spindle_hal.velocity_submitted=false;
+    g_spindle.run_authorized=g_spindle.program_run_authorized=false;
+    g_spindle.start_request_pending=g_spindle.deferred_start_pending=false;
+    g_spindle.csv_switch_pending=false;
+    g_spindle.reset_requires_start=true;
+    g_spindle.run_state=SPINDLE_STOP;
+    g_spindle.velocity_planner.enable=false;
+    g_spindle.velocity_planner.target_vel=0;
+    spindle_internal_clear_velocity_arrival();
+    (void)alarm_spindle_request_torque(false);
+    alarm_report_hal_error(result);
+}
+
+bool spindle_internal_update_velocity(void)
 {
     /*
      * 仅在驱动器处于 CSV 且允许速度控制时调用。规划器先计算 current_vel，
      * 再写入 HAL 缓存；EtherCAT 主循环负责把缓存发送到 60FF。
      */
     spindle_velocity_planner_t *planner = &g_spindle.velocity_planner;
+
+    HalAxisSnapshot axis;
+    int error=spindle_hal_snapshot(&axis);
+    if(error==HAL_OK && g_spindle_hal.velocity_submitted) {
+        if(axis.request_rejection.category==HAL_ISSUE_SPINDLE_SPEED)
+            error=axis.request_rejection.code;
+        if(error==HAL_OK && axis.execution_error.category==HAL_ISSUE_SPINDLE_SPEED)
+            error=axis.execution_error.code;
+    }
+    if(error==HAL_OK && spindle_is_rotating() &&
+       !isfinite(spindle_internal_get_selected_speed(&g_spindle)))error=HAL_ERROR_ARGUMENT;
+    if(error!=HAL_OK) {
+        spindle_internal_fail_velocity(error);
+        return false;
+    }
 
     planner->max_acc = rt_data->axis_data[AXIS_SP].max_feed_acc;
     /* enable=false 时，规划器按最大减速度将 current_vel 拉回零。 */
@@ -81,11 +113,17 @@ void spindle_internal_update_velocity(void)
      * EtherCAT 60FF 由主站发送周期统一完成。
      */
     g_spindle_hal.target_velocity = planner->current_vel;
-    (void)rt_hal_request_spindle_speed(RT_HAL_AXIS_SP,
+    const int rc=rt_hal_request_spindle_speed(RT_HAL_AXIS_SP,
                                        fabs((double)g_spindle_hal.target_velocity),
                                        g_spindle_hal.target_velocity > 0 ? 1 :
                                        (g_spindle_hal.target_velocity < 0 ? -1 : 0));
+    if(rc!=HAL_OK) {
+        spindle_internal_fail_velocity(rc);
+        return false;
+    }
+    g_spindle_hal.velocity_submitted=true;
     spindle_internal_finish_stop_if_ready();
+    return true;
 }
 
 bool spindle_internal_validate_start_request(const spindle_context_t *context)
@@ -141,7 +179,7 @@ void spindle_internal_finish_stop_if_ready(void)
     if (spindle_hal_mode() >= 0)
     {
         (void)rt_hal_request_spindle_speed(RT_HAL_AXIS_SP, 0.0, 0);   /* 停转 */
-        spindle_hal_release_torque();
+        (void)alarm_spindle_request_torque(false);
     }
 
     /* 置 ARRIVED 并锁存完成反馈：F45.3 由 PLC 发布层只读查询，保持到
@@ -282,7 +320,7 @@ static void spindle_update_planner_state(spindle_context_t *context)
 
 static bool spindle_is_velocity_arrived(void)
 {
-    HalCAxisStatus axis;
+    RtHalAxisStatus axis;
     const int status_result = rt_hal_axis_status(RT_HAL_AXIS_SP, &axis);
 
     /* 到速必须满足 CSV、Operation Enabled、有效反馈和目标误差带条件。 */
@@ -305,7 +343,7 @@ static bool spindle_is_velocity_arrived(void)
     {
         return false;
     }
-    if (spindle_hal_mode() != HAL_SPINDLE_CSV || !spindle_hal_is_enabled() ||
+    if (spindle_hal_mode() != HAL_AXIS_MODE_CSV || !spindle_hal_is_enabled() ||
         (spindle_hal_status_word() & 0x006FU) != 0x0027U)
     {
         return false;
@@ -338,7 +376,7 @@ static bool spindle_velocity_feedback_blocked(void)
     {
         return true;
     }
-    if (g_spindle.orient_request_pending || g_spindle.orient_release_pending)
+    if (g_spindle.orient_request_pending)
     {
         return true;
     }
@@ -347,7 +385,7 @@ static bool spindle_velocity_feedback_blocked(void)
     {
         return true;
     }
-    if (spindle_hal_orientation_state() != HAL_ORIENT_NONE)
+    if (spindle_hal_orientation_state() != RT_HAL_ORIENT_NONE)
     {
         return true;
     }
@@ -397,4 +435,25 @@ static bool spindle_is_rotating(void)
     default:
         return false;
     }
+}
+
+/* 准备流程的调用方只申请走一步 CSV 减速，不自己改规划器速度、也不直接下发。
+ * 返回 1 = 规划与实际都已到零，0 = 仍在运动。 */
+int spindle_prepare_csv_stop_step(void)
+{
+    HalAxisSnapshot a;
+    if(spindle_hal_snapshot(&a)!=HAL_OK ||
+       (a.feedback_valid&(HAL_FEEDBACK_SPEED|HAL_FEEDBACK_MODE))!=
+       (HAL_FEEDBACK_SPEED|HAL_FEEDBACK_MODE) || a.actual_mode!=HAL_AXIS_MODE_CSV ||
+       !isfinite(a.actual_speed_rpm))return -1;
+    g_spindle.velocity_planner.max_acc=rt_data->axis_data[AXIS_SP].max_feed_acc;
+    g_spindle.velocity_planner.enable=false;
+    g_spindle.velocity_planner.target_vel=0;
+    (void)spindle_velocity_planner_update(&g_spindle.velocity_planner,SPINDLE_CONTROL_PERIOD_SECONDS);
+    g_spindle_hal.target_velocity=g_spindle.velocity_planner.current_vel;
+    const double speed=g_spindle_hal.target_velocity;
+    /* 已经停住时不要再补一个多余的转速目标——同一拍里调用方可能正在申请模式准备。 */
+    if(fabs(speed)<=SPINDLE_SPEED_EPSILON && fabs(a.actual_speed_rpm)<=SPINDLE_ACTUAL_ZERO_EPSILON)return 1;
+    if(rt_hal_request_spindle_speed(RT_HAL_AXIS_SP,fabs(speed),(speed>0)-(speed<0))!=HAL_OK)return -1;
+    return 0;
 }

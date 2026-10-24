@@ -75,7 +75,7 @@ double spindle_get_command_speed(void);
 double spindle_get_program_command_speed(void);
 
 /** 普通 M29：定向后切换 CSP。 */
-void spindle_request_m29(void);
+bool spindle_request_m29(void);
 
 /** 不定向 M29：受控停车后在当前位置切换 CSP。 */
 bool spindle_request_m29_no_orient(void);
@@ -98,11 +98,10 @@ void spindle_report_m29_prepare_rejected(void);
 /** 报告 M29 的外部 PLC FIN 握手超时。 */
 void spindle_report_m29_handshake_timeout(void);
 
-/** HMI 复位是否仍在等待主轴受控停稳。 */
-bool spindle_reset_stop_pending(void);
-
-/** CSP 攻丝复位停车是否需要主轴位置反馈保持有效。 */
-bool spindle_reset_stop_uses_csp(void);
+/** CSV 停车执行器；公共复位流程负责调度和最终裁决。 */
+bool spindle_csv_stop_pending(void);
+void spindle_csv_stop_begin(void);
+void spindle_csv_stop_cancel(void);
 
 /** F45.3 的唯一查询入口。 */
 bool spindle_velocity_is_ready(void);

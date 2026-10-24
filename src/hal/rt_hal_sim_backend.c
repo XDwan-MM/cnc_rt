@@ -1,5 +1,15 @@
-/* 调试模式用的驱动层桩：位置/速度即时跟随指令，状态字按控制字推导。本文件是全工程
- * 唯一包含 HAL 内部头的（桩要知道 DeviceSlot / DevDictRole），别处不要照抄。 */
+/* 调试模式下的驱动层桩（仿真后端）。
+ *
+ * 它扮演 GreeMaster 驱动层：对外提供与真实后端逐字相同的接口，但状态全在内存里推演——
+ * 位置/速度即时跟随指令，状态字按控制字推导，故障与定向可以按需注入。这样 HAL core、
+ * 适配层和上层业务时序都能在没有台架的情况下跑起来（离线回归靠的就是它）。
+ *
+ * 两条硬约束：
+ *   1. 从站拓扑必须与 rt_hal_config.c 的 kBindings 一致，否则 HAL 在 start 阶段就报错；
+ *   2. 它是全工程唯一包含 HAL 内部头的文件（桩需要 DeviceSlot / DevDictRole），
+ *      别处不要照抄这个 include 列表。
+ *
+ * 可注入的故障与行为由环境变量控制，清单见下方各变量定义处的注释。 */
 
 #define _POSIX_C_SOURCE 200809L
 
@@ -9,13 +19,13 @@
 #include <time.h>
 #include <stdatomic.h>
 
-#include "backend/greemaster/device.h"
-#include "backend/greemaster/device_table.h"
-#include "backend/greemaster/servo_step.h"
-#include "backend/greemaster/entry_access.h"
-#include "backend/greemaster/master.h"
-#include "backend/greemaster/devdict.h"
-#include "backend/greemaster/ds402.h"
+#include "backend/greemaster/devices/device.h"
+#include "backend/greemaster/devices/device_table.h"
+#include "backend/greemaster/motion/servo_step.h"
+#include "backend/greemaster/pdo/entry_access.h"
+#include "backend/greemaster/bus/master.h"
+#include "backend/greemaster/mapping/devdict.h"
+#include "backend/greemaster/motion/ds402.h"
 /* 定向控制字与完成位用本地 profile 的同一份定义，免得两处各写一份对不上 */
 #include "rt_hal_config.h"
 
@@ -63,16 +73,17 @@ static uint32_t   s_cycle_us = 1000u;
 static int        s_opened;
 static int        s_slave_count = SIM_SLOT_COUNT;
 static int        s_fail_bus;    /* 非零 = 所有驱动读都失败，用来验证总线故障路径 */
-static int        s_csv_reached; /* CNC_RT_SIM_CSV_REACHED: start in CSV with speed-reached bit10 */
+static int        s_csv_reached; /* CNC_RT_SIM_CSV_REACHED=1：上电即处于 CSV 模式并置"到速"位 bit10，
+ * 用来验证换向与到速判定 */
 /* 驱动层停止标志：Master_RequestStop() 置，周期里查 */
 static atomic_int s_stop_requested;
 
 /* 控制字 → 状态字，位模式同 CiA402 */
 static uint16_t sim_status_from_ctrl(uint16_t cw) {
-    if ((cw & 0x000Fu) == 0x000Fu) return 0x0237u;  /* Operation enabled */
-    if ((cw & 0x0007u) == 0x0007u) return 0x0023u;  /* Switched on */
-    if ((cw & 0x0006u) == 0x0006u) return 0x0021u;  /* Ready to switch on */
-    return 0x0040u;                                 /* Switch on disabled */
+    if ((cw & 0x000Fu) == 0x000Fu) return 0x0237u;  /* 运行使能（Operation enabled）：真正出力 */
+    if ((cw & 0x0007u) == 0x0007u) return 0x0023u;  /* 已合闸（Switched on）：功率级带电、不带载力矩 */
+    if ((cw & 0x0006u) == 0x0006u) return 0x0021u;  /* 就绪（Ready to switch on）：等待合闸 */
+    return 0x0040u;                                 /* 禁止合闸（Switch on disabled）：断电态 */
 }
 
 /* 位长必须与 HAL bind_axis/bind_io 期望一致，对不上返回 UNSUPPORTED */

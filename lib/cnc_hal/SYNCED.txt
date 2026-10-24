@@ -1,8 +1,14 @@
-同步自   : /mnt/e/数控系统项目/1.项目代码/cnc_hal
-提交     : e31db71
-提交说明 : 更新6060及6061配置
-同步时间 : 2026-10-23T20:56:45+08:00
-ABI      : 9u.3u
+同步自   : /home/mxh/usb-import/code/cnc_hal
+提交     : 4d2c66c
+提交说明 : fix(hal): 修正控制字哨兵与错误回调闭锁顺序
+同步时间 : 2026-10-24T20:26:53+08:00
+ABI      : 10u.0u
 公共头   : 5 个
 内部头   : 9 个
 设备字典 : devices.json sha256=d36a2d611b29c187
+
+2026-10-24只读核验（未重新同步或替换库）：
+现有静态库与 /home/mxh/usb-import/code/cnc_hal/build/h1-core-split/link/libcnc_hal.a 字节一致。
+静态库 sha256=fada4ce6861c035696fc519356e3d99e89c8fd6de16e99452a13925ea0d3ba38
+公共头与当前HAL公共头逐字节一致；build/all/libcnc_hal.a为另一构建产物，不能据其哈希不同判定本副本过期。
+本核验只证明与上述构建产物一致，不等于已建立源码/编译选项的可复现构建证明。

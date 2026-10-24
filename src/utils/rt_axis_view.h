@@ -60,7 +60,7 @@ int rt_axis_view_speed_rpm(int axis, double* out);
 /**
  * @brief 主轴累计转角（度）：位置模式下"走过的角度"反馈
  *
- * 来源 HAL 的 HalCSpindleStatus.position_deg，跨圈已展开、**不取模**。
+ * 来源 HAL 的 RtHalSpindleStatus.position_deg，跨圈已展开、**不取模**。
  * 只有主轴有角度；进给轴返回 UNSUPPORTED。
  *
  * @param axis 必须是主轴（AXIS_SP）

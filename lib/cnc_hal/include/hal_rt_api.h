@@ -1,296 +1,246 @@
+/**
+ * @file  hal_rt_api.h
+ * @brief 周期面接口：由唯一一个实时线程按 wait -> begin -> 请求/读数 -> commit 的三拍节奏调用。
+ *
+ * 约定：
+ *  - 返回 0 只表示「请求已被受理」，不表示硬件已完成动作；实际状态一律从统一轴快照读取。
+ *  - 在途相同控制请求幂等；冲突按各入口规则拒绝且不排队，停止/复位可取消已有动作。
+ *  - 请求窗口指 begin 与 commit 之间；disable/estop 例外，可在窗口外登记停止意图。
+ *  - 除 hal_context_request_stop() 外，本文件所有接口都不允许跨线程并发调用。
+ *  - 快照读取只取缓存，读取失败时出参保持不变。
+ *  - 模式准备不会顺带使能；使能完成后不保留「使能意图」，再次使能必须重新显式请求。
+ *  - H1 版本不支持正常退出定向；通过前检的请求返回 HAL_ERROR_UNSUPPORTED，不改目标与控制字。
+ */
+
 #pragma once
 #include "hal_types.h"
-
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-/* 周期面：单个 RT 线程串行调用，一个周期固定三拍
- *
- *     hal_rt_wait_cycle()  ->  hal_rt_begin_cycle()  ->  hal_rt_commit_cycle()
- *
- * wait 是唯一阻塞点。begin 与 commit 之间可调 write_* / read_*：read_* 读本拍 begin
- * 的快照（begin 之前没有快照），write_* 只暂存、commit 才下发总线，故同拍先写后读
- * 读不到自己刚写的值。上一拍 commit 之后才能进下一次 wait。
- *
- * 公共返回码（下面不再逐个重复）：
- *   HAL_ERROR_ARGUMENT    参数为空、轴号不存在、越界或非有限值
- *   HAL_ERROR_NOT_RUNNING 未 start，或所需运行状态未达成
- *   HAL_ERROR_STOPPED     已 request_stop，或等待被停止打断
- *   HAL_ERROR_BUS         总线失败；首个错误码闭锁到 stop/start。request_stop 只通知，
- *                         资源仍须 stop/destroy。
- *
- * 参数约定：c = 已 start 的 context；id = 逻辑轴号。 */
-
 /**
- * @brief 周期第一拍：等主站的下一个周期
- * @return 0 = 成功；HAL_ERROR_STATE = 上一拍未走完；其余见文件头
+ * @brief 等待主站下一个周期帧到达，开启本拍。
+ *
+ * 只能在上一拍已 commit 之后调用（内部 phase 必须为 0）；等待期间若收到停止请求，
+ * 返回 HAL_ERROR_STOPPED 让调用方退出循环。
+ *
+ * @param[in] c HAL 上下文，须已 start。
+ * @return 0 成功；HAL_ERROR_STATE 上一拍未 commit；
+ *         HAL_ERROR_STOPPED 已被 request_stop 打断；其余为总线错误码。
  */
 int32_t hal_rt_wait_cycle(HalContext* c);
 
 /**
- * @brief 周期第二拍：采轴实际值、各推一拍 DS402 状态机、读 IO 输入，并补发待清零的速度目标
- * @return 0 = 成功；成功后 read_* 才有本拍快照。HAL_ERROR_STATE = 未先 wait；
- *         HAL_ERROR_ARGUMENT = 非同一坐标系的预置值超出 int32（本拍未写控制 PDO）
+ * @brief 采样本拍：锁存时间戳、读回所有轴的反馈与 IO 输入、推进各轴控制状态机。
+ *
+ * 本拍不写任何 PDO，只做「读」和状态推进，因此采样结果反映的是上一拍下发的效果。
+ * 全部轴采样完成后才推进动作，避免同一拍内先后顺序影响结果。
+ *
+ * @param[in] c HAL 上下文，须已 start。
+ * @return 0 成功；HAL_ERROR_STATE 未在 wait 之后调用；
+ *         其余为总线/时钟读取失败，失败后 context 进入闭锁错误。
  */
 int32_t hal_rt_begin_cycle(HalContext* c);
 
 /**
- * @brief 周期第三拍：下发本拍暂存的轴指令与 IO 输出，提交主站，回空闲相
- * @return 0 = 成功；HAL_ERROR_STATE = 未先 begin；其余见文件头
+ * @brief 提交本拍：复检元操作超时，把缓存的命令与控制字写进 PDO，再提交主站发帧。
+ *
+ * 请求窗口拖得过长时，超时预算已耗尽的动作不再提交；这里只做超时复检，
+ * 不二次消费完成反馈，也不伪造定向边沿。
+ *
+ * @param[in] c HAL 上下文，须已 start。
+ * @return 0 成功；HAL_ERROR_STATE 未在 begin 之后调用；
+ *         HAL_ERROR_STOPPED 提交前收到停止请求；其余为总线错误码。
  */
 int32_t hal_rt_commit_cycle(HalContext* c);
 
 /**
- * @brief 使能 / 去使能一根进给轴
- * 去使能降到 Ready to switch on（0x0F→0x07→0x06 关断，电机可手转）；断电用 hal_rt_axis_estop。
- * 已有撤销电压覆盖时 on=0 保持断电；显式 on=1 或受理故障复位可解除覆盖，同拍停止优先。
- * 请求变化会丢弃该轴未提交的运动指令并取消定向；恢复运动须重新下发目标。
- * @param on 1 = 使能，0 = 去使能；其它值拒绝
- * @return 0 = 成功；其余见文件头
- */
-int32_t hal_rt_axis_enable(HalContext* c, HalAxisId id, int32_t on);
-
-/**
- * @brief 在 CSP 模式下下发目标位置（用户单位）
- * 受理条件：本拍已 begin 未 commit、轴已使能、状态机到位、实际模式为 CSP。
- * 坐标相对 hal_rt_axis_set_pos 建立的基准。
- * @param pos 目标位置（用户单位），须有限
- * @return 0 = 成功；HAL_ERROR_NOT_RUNNING = 上述条件不满足；
- *         HAL_ERROR_ARGUMENT = pos 非有限或换算后超出 int32；其余见文件头
- */
-int32_t hal_rt_axis_write_pos(HalContext* c, HalAxisId id, double pos);
-
-/**
- * @brief 读最近一次采样的实际位置（用户单位）；只读快照，不访问总线
- * @param pos 带出实际位置
- * @return 0 = 成功；其余见文件头
- */
-int32_t hal_rt_axis_read_pos(HalContext* c, HalAxisId id, double* pos);
-
-/**
- * @brief 请求清除驱动器故障（DS402 bit7 上升沿）
- * 非阻塞：只置意图，边沿由之后的 begin 产生（先 0x0000，再 0x0080/0x0000 交替），
- * Fault 消失或超时后释放 bit7。超时自首次高电平拍起算，fault_reset_timeout_ms 按
- * cycle_us 向上取整。
- * 终态一律未使能（成功、超时、被急停打断都不恢复使能），再运动须显式 enable。
- * 重复调用会重开低电平准备阶段并重置超时预算；不要每拍重发（永不超时），查进展用
- * hal_rt_axis_fault_reset_state()。急停/去使能优先：同拍有停止请求返回 HAL_ERROR_STATE；
- * 复位期间停止会取消复位（回 HAL_RESET_NONE），并清除 stop_override；持续急停须每拍
- * 请求停止。PENDING 时 enable 返回 HAL_ERROR_NOT_RUNNING。
- * @return 0 = 成功；HAL_ERROR_STATE = 不在 begin 与 commit 之间；其余见文件头
- */
-int32_t hal_rt_axis_fault_reset(HalContext* c, HalAxisId id);
-
-/**
- * @brief 查故障复位进展
- * @param out 带出 HAL_RESET_* 之一（见 hal_config_api.h）
- * @return 0 = 成功；其余见文件头
- */
-int32_t hal_rt_axis_fault_reset_state(const HalContext* c, HalAxisId id, int32_t* out);
-
-/**
- * @brief 读最近一次采样的轴状态
- * @param out 状态快照；使能位取自状态字的 DS402 判定
- * @return 0 = 成功；HAL_ERROR_NOT_RUNNING = 还没跑过 begin；其余见文件头
- */
-int32_t hal_rt_axis_read_status(HalContext* c, HalAxisId id, HalCAxisStatus* out);
-
-/**
- * @brief 把该轴当前位置重新定义为 pos（用户单位）
- * 只平移命令侧与反馈侧坐标基准，不写驱动器、不改已暂存目标，故本身不会让轴动；使能中可调。
- * @param pos 新当前位置（用户单位），须有限
- * @return 0 = 成功；HAL_ERROR_NOT_RUNNING = 还没跑过 begin；其余见文件头
- */
-int32_t hal_rt_axis_set_pos(HalContext* c, HalAxisId id, double pos);
-
-/**
- * @brief 急停一根进给轴
- * 取消未提交的运动、使能与模式请求，按 estop_action 覆盖本拍控制字（0x07 或 0x00）；
- * begin 之后到达时 commit 覆盖 begin 写下的控制字与速度目标。重复调用幂等；
- * 恢复须显式 enable 并再经一次 begin。
- * @note 总线故障闭锁时仍受理并记录意图，但闭锁下不发 PDO，故「受理成功」不等于硬件已执行。
- * @return 0 = 成功；其余见文件头
- */
-int32_t hal_rt_axis_estop(HalContext* c, HalAxisId id);
-
-/**
- * @brief 使能 / 去使能一根主轴
- * @param id 逻辑轴号，且必须是主轴
- * @param on 1 = 使能，0 = 去使能；其它值拒绝
- * @return 0 = 成功；HAL_ERROR_ARGUMENT = 不是主轴；其余见文件头
- */
-int32_t hal_rt_spindle_enable(HalContext* c, HalAxisId id, int32_t on);
-
-/**
- * @brief 在 CSV 模式下下发转速指令
- * 受理条件：本拍已 begin 未 commit、轴已使能、状态机到位、实际模式为 CSV。
- * 转向由 dir 决定，rpm 不接受负值。
- * @param id  逻辑轴号，且必须是主轴
- * @param rpm 转速大小（rpm），须有限且 0 <= rpm <= 配置 max_speed
- * @param dir 1 = 正转（M03），-1 = 反转（M04），0 = 停
- * @return 0 = 成功；HAL_ERROR_NOT_RUNNING = 运行状态不满足；其余见文件头
- */
-int32_t hal_rt_spindle_write_speed(HalContext* c, HalAxisId id, double rpm, int32_t dir);
-
-/**
- * @brief 读最近一次采样的实际转速
- * @param id  逻辑轴号，且必须是主轴
- * @param rpm 带出实际转速（rpm，正 = 正转）
- * @return 0 = 成功；其余见文件头
- */
-int32_t hal_rt_spindle_read_speed(HalContext* c, HalAxisId id, double* rpm);
-
-/**
- * @brief 读主轴零速信号（最近一次采样的状态字 bit8）
- * 仅适用于已确认 bit8 为零速信号的驱动器，如四合一、蓝海华腾。
- * 不按转速推算，不表示无故障或已下使能。
- * @param id 逻辑主轴号，不接受进给轴
- * @param is_zero 成功时 1 = 零速，0 = 非零速；失败时保持原值
- * @return 0 = 成功；HAL_ERROR_NOT_RUNNING = 尚未采样；其余见文件头
- */
-int32_t hal_rt_spindle_read_zero_speed(HalContext* c, HalAxisId id, int32_t* is_zero);
-
-/**
- * @brief 读最近一次采样的主轴状态
- * @param id  逻辑轴号，且必须是主轴
- * @param out 转速侧快照
- * @return 0 = 成功；HAL_ERROR_NOT_RUNNING = 还没跑过 begin；其余见文件头
- */
-int32_t hal_rt_spindle_read_status(HalContext* c, HalAxisId id, HalCSpindleStatus* out);
-
-/* 主轴定向：厂商专有控制字，整字覆盖 0x6040
+ * @brief 请求使能轴（DS402 上使能），只登记请求，写 PDO 发生在 commit。
  *
- * 定向字与完成位由配置给（HalCAxisCfg 的 vendor_orient_control_word /
- * vendor_orient_done_mask）；定向期间整字覆盖普通 DS402 控制字。
- * 优先级：急停 > 定向字 > 普通 DS402 推进。
+ * 要求模式已就绪、目标模式与实际模式一致、驱动器不在故障态；重复请求幂等。
+ * 使能完成后不保留使能意图，再次使能必须重新显式请求。
  *
- * 约束：
- * 1. 定向期间控制字与状态字语义由驱动器决定，HAL 不保证 DS402 合规，也不解读它。
- * 2. 释放时 HAL 撤销厂商字并按当前使能意图补写普通控制字，不假定驱动器已去使能。
- * 3. 调用方必须保证「请求 -> 等 DONE -> 释放」，异常路径也要释放：不释放则驱动器
- *    停在厂商状态，普通控制字无法接管。
- * 4. 两个配置都为 0 表示该轴不支持定向，request_orient 返回 HAL_ERROR_UNSUPPORTED。 */
+ * @param[in] c  HAL 上下文。
+ * @param[in] id 逻辑轴号。
+ * @return 0 已受理；HAL_ERROR_BUSY 该轴有动作或停止未收口；
+ *         HAL_ERROR_MODE_MISMATCH 模式未就绪；HAL_ERROR_NOT_ENABLED 驱动器处于故障态；
+ *         HAL_ERROR_STOPPED 本拍刚接受了急停。
+ */
+int32_t hal_rt_axis_request_enable(HalContext* c, HalAxisId id);
 
 /**
- * @brief 请求主轴定向（厂商专有控制字）
- * 受理后每拍下发 vendor_orient_control_word，普通 DS402 推进暂停，直到 release_orient。
- * 完成判据：先采到 done mask 全低，再采到高并保持 vendor_orient_delay_ms；请求前的低电平、
- * 一直为高的 CSV 到速位不算本轮。
- * @param id 逻辑轴号，且必须是主轴
- * @return 0 = 已受理；HAL_ERROR_UNSUPPORTED = 未配定向控制字；
- *         HAL_ERROR_NOT_RUNNING = 不在 begin 与 commit 之间；
- *         HAL_ERROR_NOT_ENABLED = 未到 OperationEnabled；其余见文件头
+ * @brief 请求下使能轴，只登记停止意图，实际收口在后续周期完成。
+ *
+ * 可在请求窗口外调用；取消使能/定向，保留在途模式准备/故障复位及模式凭据。
+ * 按 HAL_ESTOP_DISABLE_OPERATION 收口；已有撤压约束时继续撤压，不升电凑 Ready。
+ *
+ * @param[in] c  HAL 上下文。
+ * @param[in] id 逻辑轴号。
+ * @return 0 已受理；HAL_ERROR_NOT_RUNNING 未 start；HAL_ERROR_ARGUMENT 轴号非法。
+ */
+int32_t hal_rt_axis_request_disable(HalContext* c, HalAxisId id);
+
+/**
+ * @brief 请求切换运行模式（CSP 或 CSV），模式准备完成前不会自动使能。
+ *
+ * 模式已生效时只更新目标模式；否则进入 SETTING 状态，按 mode_timeout_ms 预算等待。
+ * 重复提交相同模式幂等，提交与当前动作冲突的模式返回 HAL_ERROR_BUSY。
+ *
+ * @param[in] c    HAL 上下文。
+ * @param[in] id   逻辑轴号。
+ * @param[in] mode HAL_AXIS_MODE_CSP 或 HAL_AXIS_MODE_CSV。
+ * @return 0 已受理；HAL_ERROR_ARGUMENT 模式非法；
+ *         HAL_ERROR_UNSUPPORTED 该轴/设备不具备该模式所需 PDO；
+ *         HAL_ERROR_BUSY 该轴正忙或模式冲突；HAL_ERROR_STOPPED 本拍刚接受了急停。
+ */
+int32_t hal_rt_axis_request_mode(HalContext* c, HalAxisId id, HalAxisMode mode);
+
+/**
+ * @brief 请求急停：作废当前动作、作废模式凭据，按配置的急停动作收口。
+ *
+ * 可在请求窗口外调用；estop_action 决定是去使能还是撤销电压。
+ * 同拍使能、模式、复位和新定向请求返回 HAL_ERROR_STOPPED。后续停止约束持续保留，
+ * 新的明确模式准备/复位请求按各自规则处理，不能把未再次调用急停当作恢复授权。
+ *
+ * @param[in] c  HAL 上下文。
+ * @param[in] id 逻辑轴号。
+ * @return 0 已受理；HAL_ERROR_NOT_RUNNING 未 start；HAL_ERROR_ARGUMENT 轴号非法。
+ */
+int32_t hal_rt_axis_request_estop(HalContext* c, HalAxisId id);
+
+/**
+ * @brief 请求故障复位：把驱动器从 Fault 拉回 Ready，随后的使能须另行请求。
+ *
+ * 已在 Ready 时无需设备动作；在途重复请求幂等，不重开预算。复位取消已有控制动作、
+ * 作废模式凭据与未提交目标；普通下使能不取消复位，急停取消。复位在
+ * fault_reset_timeout_ms 预算内等待驱动器状态变化。
+ *
+ * @param[in] c  HAL 上下文。
+ * @param[in] id 逻辑轴号。
+ * @return 0 已受理或已处于 Ready；
+ *         HAL_ERROR_STOPPED 本拍刚接受了急停。
+ */
+int32_t hal_rt_axis_request_fault_reset(HalContext* c, HalAxisId id);
+
+/**
+ * @brief 请求主轴定向：按设备字典配置的厂商控制字启动定向。
+ *
+ * 只在轴尚未处于定向态时发起；须已使能且运行模式到位。该轴未配置定向控制字
+ * 或完成位时返回 HAL_ERROR_UNSUPPORTED。
+ *
+ * @param[in] c  HAL 上下文。
+ * @param[in] id 主轴逻辑轴号。
+ * @return 0 已受理或已处于定向态；HAL_ERROR_ARGUMENT 该轴不是主轴；
+ *         HAL_ERROR_UNSUPPORTED 未配置定向；HAL_ERROR_BUSY 轴正忙；
+ *         HAL_ERROR_NOT_ENABLED / HAL_ERROR_MODE_MISMATCH 运动前置条件不满足。
  */
 int32_t hal_rt_spindle_request_orient(HalContext* c, HalAxisId id);
 
 /**
- * @brief 定向是否已完成（状态字的 done 位）；只读
- * @param id 逻辑轴号，且必须是主轴
- * @param out 带出 HAL_ORIENT_*
- * @return 0 = 成功；其余见文件头
+ * @brief 请求退出定向（H1 未支持，通过前检后返回 HAL_ERROR_UNSUPPORTED）。
+ *
+ * 参数仍做完整校验，便于上层在后续版本直接沿用：kind 为位置时要求实际模式为 CSP，
+ * 为转速时要求实际模式为 CSV 且目标值必须为 0。
+ *
+ * @param[in] c      HAL 上下文。
+ * @param[in] id     主轴逻辑轴号。
+ * @param[in] target 退出目标；reserved 必须为 0，value 必须为有限值。
+ * @return HAL_ERROR_UNSUPPORTED；参数或模式不合法时返回 HAL_ERROR_ARGUMENT /
+ *         HAL_ERROR_MODE_MISMATCH / HAL_ERROR_BUSY。
  */
-int32_t hal_rt_spindle_orient_state(HalContext* c, HalAxisId id, int32_t* out);
+int32_t hal_rt_spindle_request_exit_orient(HalContext* c, HalAxisId id,
+                                          const HalOrientExitTarget* target);
 
 /**
- * @brief 释放定向，交回普通 DS402 状态机
- * 清定向状态，并在 commit 时按最终使能意图补写普通控制字（避免厂商字残留在 PDO）；
- * 急停与故障复位优先。
- * 不改变使能意图：释放后是否带力矩由 hal_rt_axis_enable() 决定。
- * @param id 逻辑轴号，且必须是主轴
- * @return 0 = 成功；其余见文件头
+ * @brief 清除该轴的执行错误槽（快照里的 execution_error）。
+ *
+ * @param[in] c  HAL 上下文。
+ * @param[in] id 逻辑轴号。
+ * @return 0 成功；其余为准入错误（未 start、轴号非法、不在请求窗口内等）。
  */
-int32_t hal_rt_spindle_release_orient(HalContext* c, HalAxisId id);
+int32_t hal_rt_axis_clear_execution_error(HalContext* c, HalAxisId id);
 
 /**
- * @brief 读一根轴还差什么才能受理运动指令；只读
- * 位含义（=1 表示该项不满足）：bit0 PHASE 不在 begin 与 commit 之间；
- * bit1 NOT_ENABLED 未到 OperationEnabled；bit2 NOT_READY 状态机或采样未到位；
- * bit4 MODE_ACTUAL 实际模式（0x6061）未跟上 HAL 要求的模式。全 0 = 就绪。
- * 模式切换追赶期间会短暂非零，持续非零才需处置。
- * @note 本查询只比「实际 vs 要求」，要求由 hal_rt_spindle_request_mode() 设定。
- *       write_pos 要 CSP、write_speed 要 CSV，故顺序为：设期望模式 -> 等全 0 -> 下发。
- * @param out 带出位掩码
- * @return 0 = 成功；HAL_ERROR_ARGUMENT = 轴号不存在或 out 为空；其余见文件头
+ * @brief 写 CSP 目标位置（0x607A），commit 时下发。
+ *
+ * 要求该轴已使能、模式已就绪且目标与实际模式都是 CSP；参数按命令当量换算成原始计数，
+ * 非有限值或超出 32 位范围会被拒绝。
+ *
+ * @param[in] c   HAL 上下文。
+ * @param[in] id  逻辑轴号。
+ * @param[in] pos 目标位置，用户单位（与反馈同为工程单位）。
+ * @return 0 已受理；HAL_ERROR_ARGUMENT 非有限值或超范围；
+ *         HAL_ERROR_UNSUPPORTED 该轴无位置 PDO；其余为运动前置条件错误码。
  */
-int32_t hal_rt_axis_readiness(HalContext* c, HalAxisId id, uint32_t* out);
+int32_t hal_rt_axis_write_pos(HalContext* c, HalAxisId id, double pos);
 
 /**
- * @brief 急停一根主轴；语义同 hal_rt_axis_estop，断电/去使能由 estop_action 决定
- * @param id 逻辑轴号，且必须是主轴
- * @return 0 = 成功；其余见文件头
+ * @brief 写主轴 CSV 目标转速（0x60FF），commit 时下发。
+ *
+ * 要求该轴是主轴、已使能、目标与实际模式都是 CSV；rpm 取绝对值并受 max_speed 限制，
+ * dir 取 -1/0/1 作为方向乘子，最终按 speed_unit 换算成设备单位。
+ *
+ * @param[in] c   HAL 上下文。
+ * @param[in] id  主轴逻辑轴号。
+ * @param[in] rpm 目标转速绝对值，单位 rpm，须在 [0, max_speed] 内。
+ * @param[in] dir 方向：-1 反转、0 停止、1 正转。
+ * @return 0 已受理；HAL_ERROR_ARGUMENT 非主轴、rpm 越界或 dir 非法；
+ *         HAL_ERROR_UNSUPPORTED 该轴无速度 PDO；其余为运动前置条件错误码。
  */
-int32_t hal_rt_spindle_estop(HalContext* c, HalAxisId id);
+int32_t hal_rt_spindle_write_speed(HalContext* c, HalAxisId id, double rpm, int32_t dir);
 
 /**
- * @brief 请求切换主轴运行模式（CSP / CSV）
- * 只改期望模式，不动使能状态；实际切换在之后的 begin 完成（默认先退回 SwitchedOn 再写 0x6060；
- * 台达单轴按驱动器身份自动改为退到 Ready 再写）。
- * 期望模式变化时才丢弃未提交的运动指令并取消定向；重复调用无副作用。
- * @param id   逻辑轴号，且必须是主轴
- * @param mode HAL_SPINDLE_CSP 或 HAL_SPINDLE_CSV
- * @return 0 = 成功；其余见文件头
+ * @brief 设定软件坐标：把当前实际位置标定为 pos，只改偏置，不动硬件。
+ *
+ * 同时平移反馈偏置与命令偏置，使后续的目标位置、反馈位置都落在新坐标系里；
+ * 已有命令位置回显时一并平移。
+ *
+ * @param[in] c   HAL 上下文。
+ * @param[in] id  逻辑轴号。
+ * @param[in] pos 新的当前位置，用户单位。
+ * @return 0 成功；HAL_ERROR_ARGUMENT 参数非有限值或偏置溢出；
+ *         HAL_ERROR_UNSUPPORTED 该轴尚无位置反馈。
  */
-int32_t hal_rt_spindle_request_mode(HalContext* c, HalAxisId id, HalSpindleMode mode);
-
-typedef enum {
-    HAL_CSP_PREPARE_NONE = 0,
-    HAL_CSP_PREPARE_STOPPING,
-    HAL_CSP_PREPARE_SWITCHING,
-    HAL_CSP_PREPARE_DONE,
-    HAL_CSP_PREPARE_ERROR,
-    HAL_CSP_PREPARE_CANCELLED
-} HalCSpindlePrepareState;
-
-/* 不定向准备 CSP：给零速度，由驱动减速，停稳后切 CSP 并使能；不设零、不处理 PLC 握手。
- * 在 begin/commit 间调用一次，timeout_ms > 0 为总超时；HAL_OK 仅表示受理。
- * 准备中运动、模式、定向、设零及重复准备请求返回 BUSY；持续运行周期并查询进展。
- * 去使能/急停/复位取消准备，故障或超时撤销使能；调用方负责机床联锁与停车参数。
- */
-int32_t hal_rt_spindle_prepare_csp(HalContext* c, HalAxisId id, uint32_t timeout_ms);
-
-/* 只读查询：先检查返回码，再看 state/result；仅 DONE 且 result=HAL_OK 表示准备完成。
- * 进行中为 BUSY，取消为 STOPPED，失败为 TIMEOUT/NOT_RUNNING。
- * DONE 不代表永久就绪，后续运动前仍须核对实际模式与使能。
- */
-int32_t hal_rt_spindle_prepare_csp_state(HalContext* c, HalAxisId id,
-                                       int32_t* state, int32_t* result);
+int32_t hal_rt_axis_set_pos(HalContext* c, HalAxisId id, double pos);
 
 /**
- * @brief 在 CSP 模式下下发相对既定零点的主轴单圈刻度（度）
- * 零点由 hal_rt_axis_set_pos(c, id, 0) 建立；命令侧基准在首次采样与使能那一拍被拉平到实际
- * 位置（hal_context.c 的 sample/enable），所以还没写过位置时基准就是当前位置。
- * 范围 [-360, 360]：正/负表示方向，0 取最近零刻度；方向由上一条已受理目标计算。
- * 重复同一普通目标不再转一圈（设零、通用累计位置写入、取消运动都会重置该判定）；
- * +360/-360 是整圈命令，重复调用会重复转圈。不生成轨迹，速度/加速度由上层负责；
- * 受理条件同 write_pos。
- * @param id  逻辑轴号，且必须是主轴
- * @param deg 相对既定零点的刻度（度），范围 [-360, 360]
- * @return 0 = 成功；其余见文件头
+ * @brief 读取该轴的统一快照；只读缓存，不访问总线。
+ *
+ * 读取失败时 *out 保持不变。是否可用要看 snapshot.available / feedback_valid /
+ * command_valid 位，不要只看返回值。
+ *
+ * @param[in]  c   HAL 上下文。
+ * @param[in]  id  逻辑轴号。
+ * @param[out] out 带出快照。
+ * @return 0 成功；HAL_ERROR_NOT_RUNNING 本拍尚未采样；
+ *         HAL_ERROR_ARGUMENT 轴号非法或 out 为空。
  */
-int32_t hal_rt_spindle_write_pos(HalContext* c, HalAxisId id, double deg);
+int32_t hal_rt_axis_read_snapshot(HalContext* c, HalAxisId id, HalAxisSnapshot* out);
 
 /**
- * @brief 把本拍采到的输入映像拷到调用方 PLC X 区
- * 普通 IO 与面板共用一块映像，各段按配置的 X 起始地址落位：段内覆盖、段外补 0，
- * 调用方不必先清缓冲。
- * @param x_image 目标缓冲
- * @param x_len   缓冲长度，须 >= 映像长度（start 时按配置算出的 x_size）
- * @return 0 = 成功；HAL_ERROR_ARGUMENT = 缓冲不够长；HAL_ERROR_NOT_RUNNING = 还没跑过 begin；其余见文件头
+ * @brief 把本拍输入映像拷进调用方的 X 区；段内覆盖，段外补 0。
+ *
+ * 缓冲长度必须不小于 x_size（见 hal_io_image_size），否则报参数错误。
+ *
+ * @param[in]  c     HAL 上下文。
+ * @param[out] image 调用方的 X 区缓冲，长度 >= x_size。
+ * @param[in]  len   缓冲字节数。
+ * @return 0 成功；HAL_ERROR_ARGUMENT 长度不足；HAL_ERROR_NOT_RUNNING 尚未采样。
  */
-int32_t hal_rt_io_snapshot_inputs(HalContext* c, uint8_t* x_image, uint32_t x_len);
+int32_t hal_rt_io_snapshot_inputs(HalContext* c, uint8_t* image, uint32_t len);
 
 /**
- * @brief 把调用方 PLC Y 区拆成输出 Entry，暂存待 commit 下发
- * 只在 begin 与 commit 之间调用；本拍不调用则本拍不写输出（旧值保留）。
- * 总线按整 Entry 下发，只改其中几位需调用方自己读改写。
- * @param y_image 源缓冲
- * @param y_len   缓冲长度，须 >= 映像长度（start 时按配置算出的 y_size）
- * @return 0 = 成功；HAL_ERROR_STATE = 不在 begin 与 commit 之间；
- *         HAL_ERROR_ARGUMENT = 缓冲不够长；其余见文件头
+ * @brief 把调用方的 Y 区按位拆进各输出 Entry 并置脏，真正下发在 commit。
+ *
+ * HAL 不做读改写：只改其中几位也由调用方自己保持整段一致。
+ *
+ * @param[in] c     HAL 上下文。
+ * @param[in] image 调用方的 Y 区缓冲，长度 >= y_size。
+ * @param[in] len   缓冲字节数。
+ * @return 0 成功；HAL_ERROR_ARGUMENT 长度不足；
+ *         HAL_ERROR_STATE 不在 begin 与 commit 之间。
  */
-int32_t hal_rt_io_flush_outputs(HalContext* c, const uint8_t* y_image, uint32_t y_len);
-
+int32_t hal_rt_io_flush_outputs(HalContext* c, const uint8_t* image, uint32_t len);
 #ifdef __cplusplus
 }
 #endif

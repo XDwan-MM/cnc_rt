@@ -46,7 +46,11 @@ cp "$HAL_INC"/*.h "$SCRIPT_DIR/include/"
 #    实时构建的 INCLUDEPATH 里**没有**这个目录，依赖边界不被破坏。
 #    保留后端目录层级，与 HAL 内部 include 路径一致。
 rm -rf "$SCRIPT_DIR/internal"; mkdir -p "$SCRIPT_DIR/internal/backend/greemaster"
-cp "$HAL_SRC"/backend/greemaster/*.h "$SCRIPT_DIR/internal/backend/greemaster/"
+while IFS= read -r -d '' header; do
+    relative="${header#"$HAL_SRC/"}"
+    mkdir -p "$SCRIPT_DIR/internal/$(dirname "$relative")"
+    cp "$header" "$SCRIPT_DIR/internal/$relative"
+done < <(find "$HAL_SRC/backend/greemaster" -name '*.h' -print0)
 
 # 3) 静态库 + 设备字典
 rm -rf "$SCRIPT_DIR/lib"; mkdir -p "$SCRIPT_DIR/lib"
@@ -68,9 +72,11 @@ cp "$HAL_ROOT/config/devices.json" "$SCRIPT_DIR/lib/devices.json"
     fi
     echo "提交说明 : $(git -C "$HAL_ROOT" log -1 --format=%s 2>/dev/null || echo '-')"
     echo "同步时间 : $(date -Iseconds)"
+    echo "静态库源 : $(realpath -- "$HAL_LIB")"
+    echo "静态库   : libcnc_hal.a sha256=$(sha256sum "$SCRIPT_DIR/lib/libcnc_hal.a" | cut -d' ' -f1)"
     echo "ABI      : $(grep -oP 'HAL_C_ABI_MAJOR\s+\K[0-9]+' "$HAL_INC/hal_types.h")u.$(grep -oP 'HAL_C_ABI_MINOR\s+\K[0-9]+' "$HAL_INC/hal_types.h")u"
     echo "公共头   : $(ls "$SCRIPT_DIR/include" | wc -l) 个"
-    echo "内部头   : $(ls "$SCRIPT_DIR/internal/backend/greemaster" | grep -c '\.h$') 个"
+    echo "内部头   : $(find "$SCRIPT_DIR/internal" -name '*.h' | wc -l) 个"
     echo "设备字典 : devices.json sha256=$(sha256sum "$SCRIPT_DIR/lib/devices.json" | cut -c1-16)"
 } > "$SCRIPT_DIR/SYNCED.txt"
 
