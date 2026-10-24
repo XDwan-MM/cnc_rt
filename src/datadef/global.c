@@ -113,6 +113,8 @@ void shm_var_update(){
             getVarChanValue(0, VAR_CHAN_MODAL, 14, &crds_type_var, 0);
             getCrdsValue(CRDS_TYPE_G5X + crds_type_var.value.i - 1, i, &crds_oft);
             act_pos_wcs_ex = rt_data->axis_data[i].wcs_cmd_pos_cur - crds_oft;
+            // todo:优化为对进给值和旋转轴的显示处理
+            if(i == AXIS_SP) act_pos_wcs_ex = fmod(act_pos_wcs_ex, 360);
             setVarAxisDouble(i, VAR_AXIS_CMD_POS_WCS_EX, act_pos_wcs_ex, 0);
         }
         if(rt_data->current_mode == MODE_MEM || rt_data->current_mode == MODE_MDI || rt_data->current_mode == MODE_DNC){
@@ -138,9 +140,11 @@ void shm_var_update(){
         double real_zero = 0.0;
         getVarAxisDouble(i, VAR_AXIS_REAL_ZERO_EX, &real_zero, 0);
         double real = rt_data->axis_data[i].mac_cmd_pos - real_zero;
+        if(i == AXIS_SP) real = fmod(real, 360);
         setVarAxisDouble(i, VAR_AXIS_CMD_POS_RCS_EX, real, 0);
         // 机械坐标 = 机床指令位置
         setVarAxisDouble(i, VAR_AXIS_CMD_POS_EX, rt_data->axis_data[i].mac_cmd_pos, 0);
+        if(i == AXIS_SP) setVarAxisDouble(i, VAR_AXIS_CMD_POS_EX, fmod(rt_data->axis_data[i].mac_cmd_pos, 360), 0);
         // 机床实际位置。仿真反馈包含误差补偿，显示机械坐标时去除补偿。
         #ifdef DEBUG_MODE_ENABLED
         setVarAxisDouble(i, VAR_AXIS_ACT_POS_EX, rt_data->axis_data[i].fb_pos_no_comp, 0);
