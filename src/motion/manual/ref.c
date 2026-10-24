@@ -714,6 +714,10 @@ static void abs_ref_update_state_by_event(AXIS_TYPE axis_type){
     }
 }
 
+bool is_ref_ready_to_switch(){
+    return ref_tp[0].ref_state == REF_ABS_EXEC_IDLE && ref_tp[1].ref_state == REF_ABS_EXEC_IDLE && ref_tp[2].ref_state == REF_ABS_EXEC_IDLE;
+}
+
 /// @brief 设置回参考点完成信号
 /// @param ref_type 回第几参考点
 void set_ref_state(REF_TYPE ref_type, AXIS_TYPE axis_type){
