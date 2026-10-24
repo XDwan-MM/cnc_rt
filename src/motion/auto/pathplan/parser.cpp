@@ -338,13 +338,41 @@ static GNC_RES parser_set_content(NC_MODE nc_mode){
     // 设置程序段来源
     switch (nc_mode)
     {
-    case MODE_MEM:
+    case MODE_MEM: {
         if(sysprog_content_ready())
         {
             LOG(LOG_LEVEL_INFO, "记忆模式启动：放弃就绪系统程序");
             sysprog_cleanup();
         }
-        // 选择NC文件
+
+        // 从指定程序行启动：auto 侧已在循环启动事件里完成校验与首按确认，
+        // 这里用 pending 快照提交，不再读共享内存（避免 HMI 检测到运行后撤销的竞态）
+        HmiProgramStartSnapshot startSnap;
+        if(hmi_request_program_start_pending(&startSnap)) {
+            // 决策到译码之间文件可能变化，提交前再核对一次；失败不回落第 0 行
+            if(!hmi_request_program_start_validate_file(startSnap.path, startSnap.startLine)) {
+                hmi_request_ack(startSnap.seq, HMI_REQUEST_STATE_REJECTED,
+                                HMI_REQUEST_ERROR_PROGRAM);
+                hmi_request_program_start_commit();
+                LOG(LOG_LEVEL_WARN, "起始行启动失败：文件不可读或行号越界 path=%s line=%d",
+                    startSnap.path, (int)startSnap.startLine);
+                return GNC_OPERATOR_ERROR;
+            }
+            strncpy(parser_data->parser_file_path, startSnap.path,
+                    sizeof(parser_data->parser_file_path) - 1);
+            parser_data->parser_file_path[sizeof(parser_data->parser_file_path) - 1] = '\0';
+            ItpSetFile(parser_data->parser_file_path, startSnap.startLine);
+            hmi_request_ack(startSnap.seq, HMI_REQUEST_STATE_CONSUMED,
+                            HMI_REQUEST_ERROR_NONE);
+            hmi_request_program_start_commit();
+            delAlarm(ALARM_CH, ALARM_WARNING, 1);
+            delAlarm(ALARM_CH, ALARM_WARNING, 2);
+            LOG(LOG_LEVEL_INFO, "mem程序 %s 起始行 %d",
+                parser_data->parser_file_path, (int)startSnap.startLine);
+            break;
+        }
+
+        // 原有路径：从第 0 行开始
         getNcFilePath(parser_data->parser_file_path);
         // todo：界面增加校验，增加警告
         if((strlen(parser_data->parser_file_path) == 0)){
@@ -358,6 +386,7 @@ static GNC_RES parser_set_content(NC_MODE nc_mode){
         ItpSetFile(parser_data->parser_file_path);
         LOG(LOG_LEVEL_INFO, "mem程序 %s", parser_data->parser_file_path);
         break;
+    }
     case MODE_MDI: {
         tapreturn_refresh_return_param();
         static char hmiProgBuf[(HMI_MST_PROGRAM_BUF_LEN > HMI_TAPRET_PROGRAM_BUF_LEN)
