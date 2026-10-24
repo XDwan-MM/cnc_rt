@@ -77,6 +77,7 @@ void nc_set_resetted(){
                 nc_reset->is_resetted = 1;
                 rt_data_reset();
                 // 主轴下使能
+                spindle_release_torque_request();
                 int ret = rt_hal_request_axis_enable(RT_HAL_AXIS_SP, 0);
                 LOG(LOG_LEVEL_INFO, "主轴下使能状态%d", ret);
                 if (nc_reset->reset_trigger == HMI_RESET) {
@@ -93,6 +94,7 @@ void nc_set_resetted(){
                 rt_data_reset();
 
                 // 主轴下使能
+                spindle_release_torque_request();
                 int ret = rt_hal_request_axis_enable(RT_HAL_AXIS_SP, 0);
                 LOG(LOG_LEVEL_INFO, "主轴下使能状态%d", ret);
                 if (nc_reset->reset_trigger == HMI_RESET) {
@@ -113,6 +115,7 @@ void nc_set_resetted(){
                 rt_data_reset();
 
                 // 主轴下使能
+                spindle_release_torque_request();
                 int ret = rt_hal_request_axis_enable(RT_HAL_AXIS_SP, 0);
                 LOG(LOG_LEVEL_INFO, "主轴下使能状态%d", ret);
                 if (nc_reset->reset_trigger == HMI_RESET) {

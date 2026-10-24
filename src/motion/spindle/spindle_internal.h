@@ -59,6 +59,7 @@ typedef enum
     SPINDLE_M29_RELEASING,           /**< 普通流程：释放定向请求。 */
     SPINDLE_M29_SWITCHING_CSP,       /**< 普通流程：等待驱动器切换到 CSP。 */
     SPINDLE_M29_READY,               /**< CSP 对齐及稳定性检查完成，M29 可完成。 */
+    SPINDLE_M29_COMPLETE,            /**< M29握手完成；退出M29周期控制，CSP交由插补/其他模块。 */
     SPINDLE_M29_ERROR,               /**< M29 流程失败或超时，等待外部恢复/复位。 */
     SPINDLE_M29_NO_ORIENT_WAIT_CSV,  /**< 无定向流程：等待切换到 CSV。 */
     SPINDLE_M29_NO_ORIENT_STOPPING,  /**< 无定向流程：在 CSV 下受控停稳。 */
@@ -184,7 +185,13 @@ void spindle_internal_handle_rotation(spindle_context_t *context, spindle_state_
 /* 安全仲裁和 HMI 复位受控停车。 */
 bool spindle_internal_stop_is_required(const spindle_context_t *context);
 bool spindle_internal_reset_or_estop_active(void);
+#ifdef __cplusplus
+extern "C" {
+#endif
 bool spindle_internal_reset_stop_abort_required(void);
+#ifdef __cplusplus
+}
+#endif
 void spindle_internal_update_reset_stop(void);
 
 /* CSV 速度规划与完成判定。 */

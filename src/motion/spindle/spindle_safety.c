@@ -74,10 +74,6 @@ bool spindle_internal_stop_is_required(const spindle_context_t *context)
         /* 复位事件只保持一个 NC 周期，复位流程期间必须持续停主轴。 */
         stop_required = true;
     }
-    // if (rt_data->sys_state[SYS_IS_ALARMING])
-    // {
-    //     stop_required = true;
-    // }
     if (context->pending_event == SPINDLE_EVENT_STOP)
     {
         stop_required = true;
@@ -101,7 +97,6 @@ bool spindle_internal_reset_stop_abort_required(void)
 {
     return rt_data->sys_state[SYS_ESTOP_INPUT] ||
            rt_data->sys_state[SYS_IS_ESTOP_ACTIVE] ||
-           rt_data->sys_state[SYS_IS_ALARMING] ||
            alarm_fault_reset_pending() ||
            rt_data->axis_data[AXIS_SP].status.is_disable ||
            rt_data->axis_data[AXIS_SP].status.is_error ||
