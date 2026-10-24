@@ -182,7 +182,7 @@ static void set_operating_mode()
         }
         break;
     case MODE_HOMING:
-        if (ref_tp[0].ref_state == REF_ABS_EXEC_IDLE && ref_tp[1].ref_state == REF_ABS_EXEC_IDLE && ref_tp[2].ref_state == REF_ABS_EXEC_IDLE)
+        if (is_ref_ready_to_switch())
         {
             rt_data->current_mode = rt_data->target_mode;
             rt_data->sys_state[SYS_IS_SWITCHING_MODE] = false;
@@ -193,7 +193,7 @@ static void set_operating_mode()
     case MODE_MDI:
     case MODE_MEM:
     case MODE_DNC:
-        if (cycle_tp->exec_state == EXEC_IDLE)
+        if (is_auto_ready_to_switch())
         {
             rt_data->current_mode = rt_data->target_mode;
             rt_data->sys_state[SYS_IS_SWITCHING_MODE] = false;

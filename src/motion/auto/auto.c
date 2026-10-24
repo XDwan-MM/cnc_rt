@@ -1258,6 +1258,10 @@ static void auto_check_feed_override_event(){
     }
 }
 
+bool is_auto_ready_to_switch(){
+    return cycle_tp->exec_state == EXEC_IDLE;
+}
+
 // 编辑模式下复位，光标回到首行
 void handle_edit_cmd(){
     switch(rt_data->nc_event){

@@ -67,6 +67,7 @@ void ref_tp_delete();
 void ref_tp_reset();
 void handle_ref_cmd();
 void ref_handle_estop();
+bool is_ref_ready_to_switch();
 
 // 回参考点状态
 void set_ref_state(REF_TYPE ref_type, AXIS_TYPE axis_type);
