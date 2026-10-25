@@ -14,6 +14,7 @@
 #include "sysprog.h"
 #include "pathplan.h"
 #include "bufstop.h"
+#include "hmi_request.h"
 #include "tapreturn.h"
 #include "sysprog.h"
 #include "pathplan.h"
@@ -100,6 +101,36 @@ static void auto_update_state(){
         {
         case SYS_EVENT_RERUN:
             LOG(LOG_LEVEL_INFO, "自动模式处理循环启动");
+            if (rt_data->current_mode == MODE_MEM) {
+                // HMI 可能重启过（能力位被清），每次 MEM 启动前重新发布
+                hmi_request_publish_capabilities();
+                int32_t hmiReason = HMI_REQUEST_ERROR_NONE;
+                const int startRc = hmi_request_program_start_decide(&hmiReason);
+                if (startRc == 1) {
+                    HmiProgramStartSnapshot startSnap;
+                    // 从指定行启动：同步路径簿记并确保本次不走断点再启动
+                    rerun_sync_program_path();
+                    rerun_reset_is_rerun();
+                    auto_start_run();
+                    if (hmi_request_program_start_pending(&startSnap)) {
+                        // auto_start_run 内写的是 rerun_row(0)；改成实际起始行，
+                        // 让 HMI 在首块译码前就显示正确行号
+                        setVarChanInt(0, VAR_CHAN_RUN_ROW, startSnap.startLine, 0);
+                    }
+                    cycle_tp->exec_state = EXEC_RUNNING;
+                    cycle_tp->running_stage = PROGRAM_START;
+                    break;
+                }
+                if (startRc == -1) {
+                    // 首按确认已报警 / HMI 正在写入：本轮不启动，也不回落 rerun
+                    break;
+                }
+                if (startRc == -2) {
+                    LOG(LOG_LEVEL_WARN, "HMI起始行请求未执行 reason=%d", (int)hmiReason);
+                    break;
+                }
+                // startRc == 0：无起始行请求，继续原有 rerun/首行路径
+            }
             // 判断是否从首行开始
             if(check_is_program_rerun()) break;
             auto_start_run();
@@ -1027,6 +1058,8 @@ static void auto_reset_run(){
     trace_publisher_reset(0);
     rt_set_zero_vel_params();
     rerun_record_if_interrupted(cycle_tp->plan_block);
+    // 复位/结束时丢弃未提交的起始行快照与首按确认状态
+    hmi_request_program_start_cancel();
 }
 
 static void auto_update_var(){

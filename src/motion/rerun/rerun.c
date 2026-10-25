@@ -286,15 +286,24 @@ void rerun_update_when_switching(){
     rerun_persist();    // 锁存结果变了 → 落一次盘
 }
 
+/// @brief 同步当前程序路径到 rerun 记录：切换程序时重置断点
+/// @note  从指定行启动时 auto 侧也会调用本函数，保证后续断点记录的路径是最新的
+void rerun_sync_program_path(){
+    if (rerun_data == NULL) return;
+    char parser_file_path[NCFILEPATH_CHAR_LEN] = {0};
+    getNcFilePath(parser_file_path);
+    parser_file_path[NCFILEPATH_CHAR_LEN - 1] = '\0';
+    if(parser_file_path[0] != '\0' && strcmp(parser_file_path, rerun_data->parser_file_path)){
+        rerun_data_reset();
+        strncpy(rerun_data->parser_file_path, parser_file_path,
+                sizeof(rerun_data->parser_file_path) - 1);
+        rerun_data->parser_file_path[sizeof(rerun_data->parser_file_path) - 1] = '\0';
+    }
+}
+
 /// @brief 判断是否程序再启动
 bool check_is_program_rerun(){
-    char parser_file_path[NCFILEPATH_CHAR_LEN];
-    getNcFilePath(parser_file_path);
-    // 切换程序时重置断点
-    if(parser_file_path[0] != '\0'&& strcmp(parser_file_path, rerun_data->parser_file_path)){
-        rerun_data_reset();
-        strcpy(rerun_data->parser_file_path, parser_file_path);
-    }
+    rerun_sync_program_path();
     // 程序再启动时提示用户风险
     if (rerun_data->is_rerun){
         if (rerun_data->is_first_time_click_rerun) {

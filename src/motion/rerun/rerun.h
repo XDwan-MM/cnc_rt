@@ -88,6 +88,8 @@ void rerun_mark_interrupted(void);
 void rerun_record_if_interrupted(const PLAN_BLOCK* block);
 
 bool check_is_program_rerun();
+/*! 同步当前程序路径到 rerun 记录：路径变化时重置断点（不做首按确认） */
+void rerun_sync_program_path();
 void rerun_reset_is_rerun();
 
 bool check_rerun_row_is_valid(const PLAN_BLOCK* target);

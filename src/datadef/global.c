@@ -13,6 +13,7 @@
 #include <hmisysapi.h>
 #include <pthread.h>
 #include "tapreturn.h"
+#include "hmi_request.h"
 #include "debug_mode.h"
 #include "tapreturn.h"
 #include "debug_mode.h"
@@ -301,6 +302,8 @@ GNC_RES rt_global_init(){
         return GNC_OPERATOR_ERROR;
     }
     shm_mutex_initialized = true;
+    // 向 HMI 发布本版 RT 支持的请求能力位（HMI 启动的 ResetAll 会清掉，MEM 启动前会重写）
+    hmi_request_publish_capabilities();
     return GNC_OPERATOR_SUCCESS;
 }
 
