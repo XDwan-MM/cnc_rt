@@ -491,16 +491,16 @@ static void plc_lock_g_signal_scan_cycle(const G_INPUT_MAP *curr_g, const G_INPU
     }
 
     /* 起动锁停 G7.1 1有效*/
-    if (SIGNAL_RISING(curr_g->g_regs[7], last_g->g_regs[7], 1))
-    {
-        LOG(LOG_LEVEL_INFO, "扫描到G7.1 发生上升沿");
-        plc_dispatch_event(PLC_EV_MSG_ENANLE, STLK, 1, 0, 0);
-    }
-    if (SIGNAL_FALLING(curr_g->g_regs[7], last_g->g_regs[7], 1))
-    {
-        LOG(LOG_LEVEL_INFO, "扫描到G7.1 发生下降沿");
-        plc_dispatch_event(PLC_EV_MSG_ENANLE, STLK, 0, 0, 0);
-    }
+    // if (SIGNAL_RISING(curr_g->g_regs[7], last_g->g_regs[7], 1))
+    // {
+    //     LOG(LOG_LEVEL_INFO, "扫描到G7.1 发生上升沿");
+    //     plc_dispatch_event(PLC_EV_MSG_ENANLE, STLK, 1, 0, 0);
+    // }
+    // if (SIGNAL_FALLING(curr_g->g_regs[7], last_g->g_regs[7], 1))
+    // {
+    //     LOG(LOG_LEVEL_INFO, "扫描到G7.1 发生下降沿");
+    //     plc_dispatch_event(PLC_EV_MSG_ENANLE, STLK, 0, 0, 0);
+    // }
 
     /* 所有互锁 G8.0 0有效*/
     if (SIGNAL_RISING(curr_g->g_regs[8], last_g->g_regs[8], 0))
@@ -515,28 +515,28 @@ static void plc_lock_g_signal_scan_cycle(const G_INPUT_MAP *curr_g, const G_INPU
     }
 
     /* 切削程序段开始互锁 G8.1 0有效*/
-    if (SIGNAL_RISING(curr_g->g_regs[8], last_g->g_regs[8], 1))
-    {
-        LOG(LOG_LEVEL_INFO, "扫描到G8.1 发生上升沿");
-        plc_dispatch_event(PLC_EV_MSG_ENANLE, CSL, 0, 0, 0);
-    }
-    if (SIGNAL_FALLING(curr_g->g_regs[8], last_g->g_regs[8], 1))
-    {
-        LOG(LOG_LEVEL_INFO, "扫描到G8.1 发生下降沿");
-        plc_dispatch_event(PLC_EV_MSG_ENANLE, CSL, 1, 0, 0);
-    }
+    // if (SIGNAL_RISING(curr_g->g_regs[8], last_g->g_regs[8], 1))
+    // {
+    //     LOG(LOG_LEVEL_INFO, "扫描到G8.1 发生上升沿");
+    //     plc_dispatch_event(PLC_EV_MSG_ENANLE, CSL, 0, 0, 0);
+    // }
+    // if (SIGNAL_FALLING(curr_g->g_regs[8], last_g->g_regs[8], 1))
+    // {
+    //     LOG(LOG_LEVEL_INFO, "扫描到G8.1 发生下降沿");
+    //     plc_dispatch_event(PLC_EV_MSG_ENANLE, CSL, 1, 0, 0);
+    // }
 
     /* 程序段开始互锁 G8.3 0有效*/
-    if (SIGNAL_RISING(curr_g->g_regs[8], last_g->g_regs[8], 3))
-    {
-        LOG(LOG_LEVEL_INFO, "扫描到G8.3 发生上升沿");
-        plc_dispatch_event(PLC_EV_MSG_ENANLE, BSL, 0, 0, 0);
-    }
-    if (SIGNAL_FALLING(curr_g->g_regs[8], last_g->g_regs[8], 3))
-    {
-        LOG(LOG_LEVEL_INFO, "扫描到G8.3 发生下降沿");
-        plc_dispatch_event(PLC_EV_MSG_ENANLE, BSL, 1, 0, 0);
-    }
+    // if (SIGNAL_RISING(curr_g->g_regs[8], last_g->g_regs[8], 3))
+    // {
+    //     LOG(LOG_LEVEL_INFO, "扫描到G8.3 发生上升沿");
+    //     plc_dispatch_event(PLC_EV_MSG_ENANLE, BSL, 0, 0, 0);
+    // }
+    // if (SIGNAL_FALLING(curr_g->g_regs[8], last_g->g_regs[8], 3))
+    // {
+    //     LOG(LOG_LEVEL_INFO, "扫描到G8.3 发生下降沿");
+    //     plc_dispatch_event(PLC_EV_MSG_ENANLE, BSL, 1, 0, 0);
+    // }
 
     /* 各轴互锁 G130.0-130.4 0有效*/
     for (int i = 0; i < 5; i++)
