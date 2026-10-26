@@ -466,7 +466,8 @@ void parser_run_mode(){
             CHECK_RES(parser_check_res(res));
             break;
         case PARSER_WAITING_FOR_BUFSTOP:
-            parser_waiting_for_bufstop();
+            res=parser_waiting_for_bufstop();
+            CHECK_RES(parser_check_res(res));
             break;
         default:
             break;
@@ -851,6 +852,8 @@ static GNC_RES parser_waiting_for_bufstop()
     buf_stop_hold_done(&parser_data->bufstop);
     buf_stop_release(&parser_data->bufstop);
     parser_data->parser_state = PARSER_READING;
+    if(ItpIsOver())
+        return GNC_PARSER_OVER;
     ItpNextLine();                      // 停止块执行完毕，开始译下一段
     return GNC_CAL_SUCCESS;
 }
