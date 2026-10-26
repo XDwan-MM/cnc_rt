@@ -190,6 +190,7 @@ void handle_jog_cmd(void)
     /* 4. 汇总轴输出，并在停止完成后消费本周期事件。 */
     jog_update_outputs();
 }
+
 /*检查全局锁住事件是否开启，更新实时数据的系统状态*/
 static void jog_update_it_lock(void){
     SYS_EVENT event;

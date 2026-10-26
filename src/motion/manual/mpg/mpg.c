@@ -47,7 +47,7 @@ static void handwheel_update_mac_lock(void);
 static void handwheel_apply_mac_lock_if_stopped(void);
 //全轴锁住
 static void handwheel_update_it_lock(void);
-
+static void handwheel_process_it_lock(mpg_planner_t *planner,int selected_axis);
 /* 外部函数定义 */
 
 /*
@@ -189,7 +189,10 @@ void handle_mpg_cmd(void)
         else
             mpg_context.last_count_direction[selected_axis] = 0;
     }
-
+    //处理全轴锁住
+    if(rt_data->sys_state[SYS_IS_IT_LOCK] && valid_selection){
+        handwheel_process_it_lock(planner,selected_axis);
+    }
     /*
      * 先用基础 mpg_spd 计算目标允许超前量和停止距离，保持原有手轮目标跟随行为；
      * 再计算当前方向的最终速度上限并推进规划器。外部减速只影响速度规划，信号
@@ -574,5 +577,25 @@ static void handwheel_update_it_lock(void)
     default:
         break;
     }
+}
+
+static void handwheel_process_it_lock(mpg_planner_t *planner,int selected_axis)
+{
+    if(rt_data->sys_state[SYS_IS_IT_LOCK]){
+        //将手轮目标位置设为当前位置
+        planner->active = false;
+        planner->target_position = planner->current_position;
+        //减速到0
+        planner->max_velocity = mpg_get_velocity_limit(selected_axis, planner);
+        mpg_planner_step(planner, rt_data->ncu_data.cycle);
+        planner->reference_position = planner->current_position;
+        mpg_update_axis_output(selected_axis);
+        //停止机械坐标的更新
+        rt_data->axis_data[selected_axis].mac_cmd_pos = planner->current_position;
+        
+        mpg_update_channel_output();
+    }
+    else
+        return;
 }
 
