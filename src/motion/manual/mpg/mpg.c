@@ -126,6 +126,7 @@ void handle_mpg_cmd(void)
     is_mpg_interlock = rt_data->sys_state[SYS_IS_IT_LOCK];
     if(is_mpg_interlock && valid_selection){
         mpg_stop_axis_chasing(selected_axis);
+        handwheel_process_it_lock(planner,selected_axis);
     }
     /* 失效后重新启用也视为切换，使被忽略期间的计数不进入目标位置。 */
     selection_changed = (!mpg_context.initialized || !mpg_context.enabled ||
@@ -188,10 +189,6 @@ void handle_mpg_cmd(void)
             mpg_context.last_count_direction[selected_axis] = -1;
         else
             mpg_context.last_count_direction[selected_axis] = 0;
-    }
-    //处理全轴锁住
-    if(rt_data->sys_state[SYS_IS_IT_LOCK] && valid_selection){
-        handwheel_process_it_lock(planner,selected_axis);
     }
     /*
      * 先用基础 mpg_spd 计算目标允许超前量和停止距离，保持原有手轮目标跟随行为；
@@ -568,11 +565,11 @@ static void handwheel_update_it_lock(void)
     {
     case SYS_EVENT_IT_ON:
         LOG(LOG_LEVEL_INFO, "手动模式全轴锁住开启");
-        rt_data->sys_state[SYS_IS_MAC_LOCK] = true;
+        rt_data->sys_state[SYS_IS_IT_LOCK] = true;
         break;
     case SYS_EVENT_IT_OFF:
         LOG(LOG_LEVEL_INFO, "手动模式全轴锁住关闭");
-        rt_data->sys_state[SYS_IS_MAC_LOCK] = false;
+        rt_data->sys_state[SYS_IS_IT_LOCK] = false;
         break;
     default:
         break;
