@@ -58,7 +58,7 @@ int spindle_hal_is_enabled(void)
     RtHalAxisStatus status;
     int result;
 
-    /* 使能状态来自轴状态快照；读取失败时返回未使能，按不可用处理。 */
+    /* 读取失败也返回 0，只能用于准入；确认实际下使能必须另查有效快照和驱动状态。 */
     result = rt_hal_axis_status(RT_HAL_AXIS_SP, &status);
     if (spindle_hal_log_hal_result("rt_hal_axis_status", result, 0U) != HAL_OK)
     {
@@ -170,6 +170,7 @@ void spindle_hal_mode_switch_reset(void)
 
 int spindle_hal_request_mode(int mode)
 {
+    /* 返回成功仅表示请求入缓冲；公共管理随后负责模式准备及明确使能。 */
     if(g_spindle_hal.mode_switch_state==SPINDLE_MODE_SWITCH_PENDING &&
        g_spindle_hal.requested_mode==mode)return HAL_OK;
     int rc=rt_hal_request_axis_mode(RT_HAL_AXIS_SP,(HalAxisMode)mode);

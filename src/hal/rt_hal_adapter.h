@@ -219,6 +219,10 @@ int rt_hal_request_axis_pos(RtHalAxisSlot slot, double pos);
  * pos 的单位：主轴为角度，进给轴为 mm。 */
 int rt_hal_axis_set_pos(RtHalAxisSlot slot, double pos);
 
+/* 单槽设零回执：BUSY 表示未执行，OK 时 result 为 HAL 实际结果（也可能失败）。
+ * 只供运动线程在周期屏障内查询；下一次受理的设零请求会覆盖旧回执。 */
+int rt_hal_axis_set_pos_result(RtHalAxisSlot slot, int32_t* result);
+
 /* 请求主轴以某转速转动。rpm 不许为负，方向由 dir（+1/-1/0）给出，
  * 两者分开表达是为了让"停止"和"极低速"不混为一谈。 */
 int rt_hal_request_spindle_speed(RtHalAxisSlot slot, double rpm, int dir);

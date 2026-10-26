@@ -20,7 +20,7 @@ bool spindle_velocity_planner_update(spindle_velocity_planner_t *planner, double
     double delta;
     bool active;
 
-    /* 无效参数不能进行规划，调用方保留上一周期的输出。 */
+    /* 此处只拒绝空指针及非正周期，未完整校验 NaN/无穷值与速度参数。 */
     if (planner == NULL || period <= 0.0)
     {
         return false;
@@ -33,7 +33,7 @@ bool spindle_velocity_planner_update(spindle_velocity_planner_t *planner, double
     /* 带方向的速度误差决定加速还是减速。 */
     delta = target_vel - planner->current_vel;
 
-    /* 到达目标或没有有效加速度参数时，直接设置目标速度。 */
+    /* 加速度为零时直接跳到目标，不具备受控减速效果；不能用零值表达暂停。 */
     if (max_delta <= 0.0 || fabs(delta) <= max_delta)
     {
         planner->current_vel = target_vel;

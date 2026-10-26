@@ -3,8 +3,8 @@
  * @brief 主轴控制模块的公开接口。
  *
  * 外部模块只能通过本文件提交主轴命令或读取业务状态，不得直接访问主轴
- * 状态机、规划器或 HAL 模式切换过程。所有命令最终都在 1 ms 运动周期中
- * 统一仲裁，避免任务线程、PLC 扫描线程和运动线程同时修改控制状态。
+ * 状态机、规划器或 HAL 模式切换过程。命令入口由运动线程调用，本接口不提供
+ * 跨线程排队。PLC 速度/速度源两个入口目前由 PLC 线程直接调用，尚需同步交接。
  */
 
 #ifndef SPINDLE_CONTROL_H
@@ -53,13 +53,13 @@ void spindle_release_torque_request(void);
 /** 标记一条 M19 正在等待完成反馈。实际定向由 PLC G70.6 上升沿触发。 */
 void spindle_begin_m19(void);
 
-/** 提交或释放 PLC 主轴定向请求。active=true 请求，false 释放。 */
+/** 提交定向或退出请求；适配设备支持 CSV 零速/CSP 当前位置保持，拒绝时保留定向。 */
 void spindle_request_orientation(bool active);
 
-/** 更新 PLC 模拟量换算后的主轴转速，单位 rpm。 */
+/** 更新 PLC 转速，单位 rpm；当前调用来自 PLC 线程，非线程安全队列。 */
 void spindle_set_plc_speed(double speed);
 
-/** 选择 CNC 或 PLC 速度输入。 */
+/** 选择 CNC 或 PLC 速度输入；须与 PLC 转速建立一致的跨线程交接。 */
 void spindle_set_speed_source(spindle_speed_source_t source);
 
 /** 获取按 G33.7 选择后的当前主轴速度值，单位 rpm。 */
@@ -89,7 +89,7 @@ bool spindle_m29_has_error(void);
 /** M29 的 CSP、使能、零速及位置保持条件是否全部满足。 */
 bool spindle_m29_is_ready(void);
 
-/** PLC FIN 与 NC 就绪均完成后结束本次 M29 握手。 */
+/** PLC FIN 与 NC 就绪均完成后交给运动模块，不下使能、不清 CSP 保持目标。 */
 void spindle_complete_m29(void);
 
 /** 报告不定向 M29 在入口联锁检查阶段被拒绝。 */

@@ -5,6 +5,7 @@
 #include "emcmot.h"
 #include "motion_csp_stop.h"
 #include "rt_hal_adapter.h"
+#include "rt_hal_config.h"
 #include "alarm.h"
 #include <alarmapi.h>
 #include <hmisysapi.h>
@@ -13,6 +14,8 @@
 #define M29_ZERO_RPM 1.0
 #define M29_POSITION_TOL 10.0
 #define M29_STABLE_CYCLES 10U
+#define M29_ORIENT_STABLE_CYCLES 50U /* 连续 50 ms 保持稳定 */
+#define M29_ORIENT_POSITION_TOL 0.5  /* 稳定窗口及模式交接允差，度；4096ppr 下 0.5°≈5.7 count，覆盖实测 2 count 抖动 */
 #define M29_PREP_CYCLES 10000U
 #define M29_ALARM_TIMEOUT 2100
 #define M29_ALARM_FIN 2101
@@ -48,6 +51,7 @@ static void begin_preparation(spindle_m29_phase_t phase)
     spindle_internal_clear_velocity_arrival();
     g_spindle.m29_active=true;g_spindle.m29_phase=phase;
     g_spindle.m29_feedback_stable=false;
+    g_spindle.m29_orient_reference_valid=false;
     g_spindle.m29_stop_stable_cycles=0;g_spindle.orient_elapsed_cycles=0;
     g_spindle.reset_requires_start=false;g_spindle.m19_active=false;
     g_spindle.orient_hold_stop=true;g_spindle.csv_switch_pending=false;
@@ -60,10 +64,28 @@ static bool start_alignment(void)
 {
     HalAxisSnapshot a;
     if(!read_feedback(&a))return false;
-    g_spindle.m29_expected_offset=a.coordinate_offset-a.actual_pos;
+    /* 软件设零不转动主轴；完成以 PDO 线程的执行回执为准。 */
     g_spindle.m29_hold_submitted=false;
     g_spindle.m29_stop_stable_cycles=0;g_spindle.orient_elapsed_cycles=0;
-    return isfinite(g_spindle.m29_expected_offset) && rt_hal_axis_set_pos(RT_HAL_AXIS_SP,0)==HAL_OK;
+    return isfinite(a.coordinate_offset) && rt_hal_axis_set_pos(RT_HAL_AXIS_SP,0)==HAL_OK;
+}
+static bool orient_position_preserved(const HalAxisSnapshot* a)
+{
+    /* 去掉软件偏置后再比较，避免设零掩盖切模式期间的实际反馈变化。
+     * 该式对 set_pos 不变（actual 与 offset 同步平移），因此判失败即真实位置
+     * 在 CSV→CSP 交接期间发生了变化；失败时把实际量打出来供现场判读。 */
+    const double physical=isfinite(a->coordinate_offset)?
+        a->actual_pos-a->coordinate_offset:NAN;
+    if(!g_spindle.m29_orient_reference_valid)return true;
+    if(isfinite(physical) &&
+       fabs(physical-g_spindle.m29_orient_reference)<=M29_ORIENT_POSITION_TOL)return true;
+    LOG(LOG_LEVEL_ERR,
+        "M29定向位置偏移：actual=%.4f offset=%.4f physical=%.4f ref=%.4f delta=%.4f tol=%.3f rpm=%.3f phase=%d",
+        a->actual_pos,isfinite(a->coordinate_offset)?a->coordinate_offset:NAN,physical,
+        g_spindle.m29_orient_reference,
+        physical-g_spindle.m29_orient_reference,(double)M29_ORIENT_POSITION_TOL,
+        a->actual_speed_rpm,(int)g_spindle.m29_phase);
+    return false;
 }
 static void update_alignment(void)
 {
@@ -74,8 +96,18 @@ static void update_alignment(void)
        (a.request_rejection.category==awaited && a.request_rejection.code)) {
         prepare_failed("坐标对齐反馈或请求异常");return;
     }
-    if(fabs(a.coordinate_offset-g_spindle.m29_expected_offset)>1e-6)return;
+    if(!orient_position_preserved(&a)) {
+        prepare_failed("定向位置在CSP交接期间发生偏移");return;
+    }
     if(!g_spindle.m29_hold_submitted) {
+        int32_t result;
+        const int rc=rt_hal_axis_set_pos_result(RT_HAL_AXIS_SP,&result);
+        if(rc==HAL_ERROR_BUSY)return;
+        if(rc!=HAL_OK || result!=HAL_OK) {
+            prepare_failed("软件设零未执行成功");return;
+        }
+        g_spindle.m29_expected_offset=a.coordinate_offset;
+        /* 不要求反馈在请求后完全不动，仍保留物理位置连续性保护。 */
         if(rt_hal_request_axis_pos(RT_HAL_AXIS_SP,0)!=HAL_OK)prepare_failed("保持目标被拒绝");
         else g_spindle.m29_hold_submitted=true;
         return;
@@ -85,6 +117,7 @@ static void update_alignment(void)
         g_spindle.m29_stop_stable_cycles=0;return;
     }
     if(++g_spindle.m29_stop_stable_cycles<M29_STABLE_CYCLES)return;
+    /* 只授予位置输出许可；READY 仍需等待 PLC FIN，期间维持同一零目标。 */
     if(!motion_spindle_take_position(0)) { prepare_failed("运动模块接管失败");return; }
     g_spindle_hal.target_position=0;
     g_spindle.m29_phase=SPINDLE_M29_READY;g_spindle.m29_feedback_stable=true;
@@ -100,7 +133,11 @@ static void update_csp_preparation(spindle_m29_phase_t alignment_phase)
     /* D32：模式准备 READY 与实际模式反馈是两件事。台达要等独立的使能完成
      * 之后才可能报出实际模式。 */
     if(!spindle_hal_mode_switch_is_done() || a.drive_state!=HAL_DRIVE_OPERATION_ENABLED)return;
-    if(!read_feedback(&a) || a.actual_mode!=HAL_AXIS_MODE_CSP || fabs(a.actual_speed_rpm)>M29_ZERO_RPM)return;
+    const bool feedback_valid=read_feedback(&a);
+    if(feedback_valid && !orient_position_preserved(&a)) {
+        prepare_failed("定向位置在切CSP后发生偏移");return;
+    }
+    if(!feedback_valid || a.actual_mode!=HAL_AXIS_MODE_CSP || fabs(a.actual_speed_rpm)>M29_ZERO_RPM)return;
     if(!start_alignment()) { prepare_failed("软件起点设置被拒绝");return; }
     g_spindle.m29_phase=alignment_phase;
 }
@@ -216,6 +253,8 @@ void spindle_internal_update_m29_no_orient(void)
     if(stopped<0) { prepare_failed("CSV停车执行失败");return; }
     if(stopped)++g_spindle.m29_stop_stable_cycles;else g_spindle.m29_stop_stable_cycles=0;
     if(g_spindle.m29_stop_stable_cycles<M29_STABLE_CYCLES)return;
+    /* 等 HAL 侧动作彻底收口再请求切 CSP；否则模式请求会被"控制占用"拒掉。 */
+    if(a.control_state != HAL_CONTROL_IDLE) return;
     if(spindle_hal_request_mode(HAL_AXIS_MODE_CSP)!=HAL_OK) { prepare_failed("CSP模式请求被拒绝");return; }
     g_spindle.m29_phase=SPINDLE_M29_NO_ORIENT_SWITCHING;g_spindle.orient_elapsed_cycles=0;
 }
@@ -226,6 +265,45 @@ void spindle_internal_update_m29(void)
     switch(g_spindle.m29_phase) {
     case SPINDLE_M29_ORIENTING:
         if(g_spindle.orient_phase==SPINDLE_ORIENT_DONE) {
+            g_spindle.m29_phase=SPINDLE_M29_ORIENT_SETTLING;
+            g_spindle.m29_stop_stable_cycles=0;
+            g_spindle.orient_elapsed_cycles=0;
+        } else if(g_spindle.orient_phase==SPINDLE_ORIENT_IDLE) {
+            if(g_spindle.reset_requires_start) { prepare_failed("定向失败");return; }
+            g_spindle.orient_request_pending=true;g_spindle.orient_phase=SPINDLE_ORIENT_WAIT_ZERO;
+            g_spindle.orient_elapsed_cycles=0;
+            (void)alarm_spindle_request_torque(true);
+        }
+        return;
+    case SPINDLE_M29_ORIENT_SETTLING: {
+        /* 保持厂商定向控制字，不以收到 DONE 的瞬间作为模式交接时刻。 */
+        HalAxisSnapshot a;
+        if(++g_spindle.orient_elapsed_cycles>=M29_PREP_CYCLES) {
+            prepare_failed("定向后等待稳定超时");return;
+        }
+        if(!read_feedback(&a) || a.drive_state!=HAL_DRIVE_OPERATION_ENABLED ||
+           a.actual_mode!=HAL_AXIS_MODE_CSV || a.control_state!=HAL_CONTROL_ORIENT_HOLD ||
+           !isfinite(a.coordinate_offset)) {
+            prepare_failed("定向保持状态或反馈失效");return;
+        }
+        if(!(a.raw_status&RT_PLACEHOLDER_ORIENT_DONE) || fabs(a.actual_speed_rpm)>M29_ZERO_RPM) {
+            g_spindle.m29_stop_stable_cycles=0;return;
+        }
+        const double position=a.actual_pos-a.coordinate_offset;
+        if(!g_spindle.m29_stop_stable_cycles) {
+            g_spindle.m29_settle_min=g_spindle.m29_settle_max=position;
+        }
+        /* 比较窗口极差而非相邻拍差，避免缓慢单向漂移被连续小增量放过。 */
+        g_spindle.m29_settle_min=fmin(g_spindle.m29_settle_min,position);
+        g_spindle.m29_settle_max=fmax(g_spindle.m29_settle_max,position);
+        if(g_spindle.m29_settle_max-g_spindle.m29_settle_min>M29_ORIENT_POSITION_TOL) {
+            g_spindle.m29_stop_stable_cycles=0;return;
+        }
+        if(++g_spindle.m29_stop_stable_cycles>=M29_ORIENT_STABLE_CYCLES) {
+            g_spindle.m29_orient_reference=position;
+            g_spindle.m29_orient_reference_valid=true;
+            LOG(LOG_LEVEL_INFO,"M29定向稳定参考：physical=%.4f actual=%.4f offset=%.4f rpm=%.3f",
+                position,a.actual_pos,a.coordinate_offset,a.actual_speed_rpm);
             /* 真正的 CSV→CSP 模式切换会让驱动器取消定向。H1 不支持同模式下
              * 假装正常释放的做法。 */
             if(spindle_hal_mode()==HAL_AXIS_MODE_CSP || spindle_hal_request_mode(HAL_AXIS_MODE_CSP)!=HAL_OK) {
@@ -237,13 +315,9 @@ void spindle_internal_update_m29(void)
             g_spindle.orient_exit_submitted=false;
             g_spindle.orient_elapsed_cycles=0;
             (void)alarm_spindle_request_torque(true);
-        } else if(g_spindle.orient_phase==SPINDLE_ORIENT_IDLE) {
-            if(g_spindle.reset_requires_start) { prepare_failed("定向失败");return; }
-            g_spindle.orient_request_pending=true;g_spindle.orient_phase=SPINDLE_ORIENT_WAIT_ZERO;
-            g_spindle.orient_elapsed_cycles=0;
-            (void)alarm_spindle_request_torque(true);
         }
         return;
+    }
     case SPINDLE_M29_SWITCHING_CSP:
     case SPINDLE_M29_ALIGNING:
         if(++g_spindle.orient_elapsed_cycles>=M29_PREP_CYCLES) { prepare_failed("CSP准备超时");return; }
@@ -256,6 +330,7 @@ void spindle_internal_update_m29(void)
 
 bool spindle_m29_is_ready(void)
 {
+    /* 稳定性在对齐阶段锁存；此处不重新累计稳定窗口，也不校验绝对定向角度。 */
     HalAxisSnapshot a;
     return !spindle_internal_stop_is_required(&g_spindle) && g_spindle.m29_active &&
         !g_spindle.reset_requires_start && g_spindle.m29_phase==SPINDLE_M29_READY &&
@@ -265,6 +340,7 @@ bool spindle_m29_is_ready(void)
 void spindle_complete_m29(void)
 {
     if(!spindle_m29_is_ready())return;
+    /* 正常握手完成只归还业务状态，不能释放运动模块持有的位置许可和力矩。 */
     g_spindle.m29_active=false;g_spindle.m29_phase=SPINDLE_M29_IDLE;
     g_spindle.m29_feedback_stable=false;g_spindle.orient_hold_stop=false;
     g_spindle.command_state=SPINDLE_STOP;g_spindle.command_speed=0;

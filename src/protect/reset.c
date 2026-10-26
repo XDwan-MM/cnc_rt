@@ -256,4 +256,9 @@ void nc_set_resetted(void)
     rerun_data_reset_keep_breakpoint();
     s_phase = RESET_COMPLETE;
     nc_reset->is_resetted = 1;
+    /* 复位完成即一次新的显式恢复：解除故障期间因残留 Fault 反馈粘连的
+     * ENABLE_FAILED，让下一拍按当前需求重新准备模式/使能。否则故障复位后
+     * X/Y/Z 会一直停在 ENABLE_FAILED，表现为"复位后轴不动、参数正常"。
+     * 主轴力矩需求在这里一并清零，仍保持下使能，等新指令再使能。 */
+    alarm_reset_latch_clear();
 }

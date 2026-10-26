@@ -32,6 +32,11 @@ void h1_test_spindle_follow_error(double error) {
     axis->command_pos=axis->actual_pos+error;
 }
 
+void h1_test_spindle_feedback_delta(double delta, double rpm) {
+    s_snap[RT_HAL_AXIS_SP].actual_pos+=delta;
+    s_snap[RT_HAL_AXIS_SP].actual_speed_rpm=rpm;
+}
+
 void h1_test_spindle_mode_feedback_valid(int valid) {
     if(valid)s_snap[RT_HAL_AXIS_SP].feedback_valid|=HAL_FEEDBACK_MODE;
     else s_snap[RT_HAL_AXIS_SP].feedback_valid&=~HAL_FEEDBACK_MODE;
@@ -47,4 +52,10 @@ void h1_test_request_admission_running(int running) { s_running=running; }
 void h1_test_spindle_speed_failure(void) {
     s_snap[RT_HAL_AXIS_SP].request_rejection.category=HAL_ISSUE_SPINDLE_SPEED;
     s_snap[RT_HAL_AXIS_SP].request_rejection.code=HAL_ERROR_BUSY;
+}
+
+/* 模拟 HAL 在下一拍快照里带出的"每轴最新一条"拒绝记录（退出定向等异步请求）。 */
+void h1_test_spindle_rejection(int category, int code) {
+    s_snap[RT_HAL_AXIS_SP].request_rejection.category=category;
+    s_snap[RT_HAL_AXIS_SP].request_rejection.code=code;
 }

@@ -19,9 +19,12 @@ extern "C" void h1_test_request_admission_running(int);
 extern "C" void h1_test_invalidate_snapshot(void);
 extern "C" void h1_test_axis_position_valid(int,int);
 extern "C" void h1_test_spindle_follow_error(double);
+extern "C" void h1_test_spindle_feedback_delta(double,double);
 extern "C" void h1_test_spindle_mode_feedback_valid(int);
 extern "C" void h1_test_spindle_mode_failure(void);
 extern "C" void h1_test_spindle_speed_failure(void);
+extern "C" void h1_test_spindle_rejection(int,int);
+extern "C" void rt_test_force_spindle_enable_wait(void);
 extern "C" void h1_test_override_spindle_drive_state(int);
 extern "C" int h1_test_commit(void);
 extern "C" int h1_test_force_disable(void);
@@ -30,6 +33,7 @@ namespace {
 class HalH1SpindleTest : public ::testing::Test {
 protected:
     PLAN_BLOCK* saved_block=nullptr;
+    bool gree4_fixture=false;
     void SetUp() override {
         ASSERT_TRUE(testEnvReady());
         saved_block=cycle_tp->plan_block;
@@ -61,7 +65,25 @@ protected:
         ASSERT_EQ(rt_hal_start(nullptr,0),HAL_OK);
         ASSERT_EQ(h1_test_begin(),HAL_OK);
     }
-    void TearDown() override { cycle_tp->plan_block=saved_block;rt_hal_shutdown(); }
+    void TearDown() override {
+        cycle_tp->plan_block=saved_block;rt_hal_shutdown();
+        if(gree4_fixture)unsetenv("CNC_RT_SIM_GREE4");
+    }
+    void useGree4() {
+        rt_hal_shutdown();setenv("CNC_RT_SIM_GREE4","1",1);gree4_fixture=true;
+        rt_data->axis_data[AXIS_SP].spdl_max_speed=10000;
+        setVarChanDouble(0,VAR_CHAN_SPDL_OVERRIDE,100,0);
+        RtHalAxisParams params[RT_HAL_AXIS_COUNT]={};
+        for(int i=0;i<RT_HAL_AXIS_COUNT;++i) {
+            params[i].loaded=1;params[i].max_speed=10000;
+            params[i].scaling.units_per_count=.01;
+            params[i].scaling.feedback_pulses_per_rev=10000;
+            params[i].scaling.command_pulses_per_rev=10000;
+        }
+        ASSERT_EQ(rt_hal_create(params,nullptr,0),HAL_OK);
+        ASSERT_EQ(rt_hal_start(nullptr,0),HAL_OK);
+        ASSERT_EQ(h1_test_begin(),HAL_OK);
+    }
     void fullFrame() {
         emcmotTrajPlan();alarm_poll_hal();nc_set_resetted();hal_axis_intent_poll();
         if(nc_reset->is_resetted) {
@@ -140,6 +162,213 @@ TEST_F(HalH1SpindleTest, UnsupportedExitCannotStartDeferredRotation) {
     EXPECT_FALSE(g_spindle.deferred_start_pending);
     EXPECT_FALSE(g_spindle.run_authorized);
 }
+/* 现场故障回归：复位后主轴尚未使能，M19 的定向请求还没提交给 HAL，
+ * 下一条 M3 的 SF 已经让梯子撤销 G70.6 并释放定向。此时没有硬件动作可退，
+ * 必须本地收口并执行排队的 M3，不能停在永远推进不了的 RELEASING。 */
+TEST_F(HalH1SpindleTest, ReleaseBeforeSubmitFinalizesAndStartsM3) {
+    useGree4();
+    spindle_begin_m19();spindle_request_orientation(true);
+    spindle_control_update();
+    ASSERT_FALSE(g_spindle.orient_submitted);
+    ASSERT_EQ(g_spindle.orient_phase,SPINDLE_ORIENT_WAIT_ZERO);
+    ASSERT_NE(axis().control_state,HAL_CONTROL_ORIENT_HOLD);
+    ASSERT_NE(axis().control_state,HAL_CONTROL_ORIENTING);
+    ASSERT_TRUE(spindle_request_program_run(SPINDLE_CW,200));
+    spindle_request_orientation(false);
+    frames(80);
+    EXPECT_EQ(g_spindle.orient_phase,SPINDLE_ORIENT_IDLE);
+    EXPECT_FALSE(g_spindle.orient_exit_submitted);
+    EXPECT_FALSE(g_spindle.orient_request_pending);
+    EXPECT_TRUE(g_spindle.run_authorized);
+    EXPECT_EQ(axis().actual_mode,HAL_AXIS_MODE_CSV);
+    EXPECT_GT(axis().command_speed_rpm,0);
+}
+/* 现场故障回归（17:55 日志）：第三条 M19 紧跟 100 rpm 的 M3，定向还在
+ * HAL_CONTROL_ORIENTING 时下一条 M4 的 SF 就要求退出。HAL 此时返回 BUSY
+ * （未停稳），只能重试，不能当成失败报警 2100。 */
+TEST_F(HalH1SpindleTest, ReleaseWhileOrientingRetriesInsteadOfFailing) {
+    useGree4();
+    spindle_begin_m19();spindle_request_orientation(true);
+    for(int i=0;i<80 && axis().control_state!=HAL_CONTROL_ORIENTING;++i)frames(1);
+    ASSERT_EQ(axis().control_state,HAL_CONTROL_ORIENTING);
+    ASSERT_TRUE(spindle_request_program_run(SPINDLE_CW,200));
+    spindle_request_orientation(false);
+    frames(2);
+    /* 定向尚未到位：必须停在 RELEASING 重试，而不是报警并锁复位启动。 */
+    EXPECT_FALSE(g_spindle.reset_requires_start);
+    EXPECT_FALSE(g_spindle.orient_exit_submitted);
+    EXPECT_EQ(g_spindle.orient_phase,SPINDLE_ORIENT_RELEASING);
+    frames(120);
+    EXPECT_EQ(g_spindle.orient_phase,SPINDLE_ORIENT_IDLE);
+    EXPECT_FALSE(g_spindle.orient_exit_submitted);
+    EXPECT_FALSE(g_spindle.reset_requires_start);
+    EXPECT_TRUE(g_spindle.run_authorized);
+    EXPECT_GT(axis().command_speed_rpm,0);
+}
+/* 现场 18:08 日志回归：退出请求已经暂存，HAL 在下一拍快照里带回
+ * EXIT_ORIENT/BUSY（定向保持但未停稳）。必须退回重试，不能报 2100。 */
+TEST_F(HalH1SpindleTest, AsyncBusyExitRejectionRetriesInsteadOfFailing) {
+    useGree4();orient();
+    g_spindle.orient_exit_requested=true;
+    g_spindle.orient_exit_submitted=true;
+    g_spindle.orient_phase=SPINDLE_ORIENT_RELEASING;
+    h1_test_spindle_rejection(HAL_ISSUE_EXIT_ORIENT,HAL_ERROR_BUSY);
+    spindle_control_update();
+    EXPECT_FALSE(g_spindle.reset_requires_start);
+    EXPECT_FALSE(g_spindle.orient_exit_submitted);
+    EXPECT_EQ(g_spindle.orient_phase,SPINDLE_ORIENT_RELEASING);
+    frames(60);
+    EXPECT_EQ(g_spindle.orient_phase,SPINDLE_ORIENT_IDLE);
+    EXPECT_EQ(axis().control_state,HAL_CONTROL_IDLE);
+    EXPECT_EQ(axis().drive_state,HAL_DRIVE_OPERATION_ENABLED);
+}
+/* 现场 19:31 回归：使能请求被拒后，拒绝记录被同一拍后续的定向请求类别覆盖，
+ * ENABLE_WAIT 看不到任何 ENABLE 拒绝，旧实现会永远等下去。这里强制构造该等待态，
+ * 要求控制周期在若干拍后重新提交使能。 */
+TEST_F(HalH1SpindleTest, EnableWaitWithoutVisibleRejectionRetries) {
+    useGree4();
+    ASSERT_TRUE(spindle_request_program_run(SPINDLE_CW,200));
+    frames(60);
+    spindle_request_stop();
+    frames(90);
+    ASSERT_NE(axis().drive_state,HAL_DRIVE_OPERATION_ENABLED);
+    /* 直接构造"业务要力矩、定向等待中、使能请求却没有任何可见结果"的状态：
+     * 定向阶段会让驱动控制保留力矩需求，不会被 stop 收尾清掉。 */
+    g_spindle.orient_phase=SPINDLE_ORIENT_WAIT_ZERO;
+    g_spindle.orient_request_pending=true;
+    rt_test_force_spindle_enable_wait();
+    frames(60);
+    EXPECT_EQ(axis().drive_state,HAL_DRIVE_OPERATION_ENABLED);
+}
+/* 没有定向在途时收到释放：应直接收口，不能进入 RELEASING。 */
+TEST_F(HalH1SpindleTest, ReleaseWithoutOrientationDoesNotStick) {
+    runZero();
+    ASSERT_EQ(g_spindle.orient_phase,SPINDLE_ORIENT_IDLE);
+    spindle_request_orientation(false);
+    frames(3);
+    EXPECT_EQ(g_spindle.orient_phase,SPINDLE_ORIENT_IDLE);
+    EXPECT_FALSE(g_spindle.orient_exit_submitted);
+    EXPECT_EQ(axis().control_state,HAL_CONTROL_IDLE);
+    EXPECT_EQ(axis().drive_state,HAL_DRIVE_OPERATION_ENABLED);
+}
+/* 未消费的 ORIENT 不得被手动方向事件覆盖，应转为定向释放后的排队启动。 */
+TEST_F(HalH1SpindleTest, ManualDirectionDoesNotOverwriteQueuedOrientation) {
+    spindle_begin_m19();spindle_request_orientation(true);
+    ASSERT_EQ(g_spindle.pending_event,SPINDLE_EVENT_ORIENT);
+    ASSERT_TRUE(spindle_request_manual_run(SPINDLE_CW));
+    EXPECT_EQ(g_spindle.pending_event,SPINDLE_EVENT_ORIENT);
+    EXPECT_TRUE(g_spindle.deferred_start_pending);
+    EXPECT_EQ(g_spindle.deferred_start_state,SPINDLE_CW);
+}
+/* 状态不一致时的看门狗：非 IDLE 且没有任何在途动作，必须在有限拍内自愈。 */
+TEST_F(HalH1SpindleTest, OrientationStallWatchdogRecovers) {
+    runZero();
+    g_spindle.orient_phase=SPINDLE_ORIENT_RELEASING;
+    g_spindle.orient_request_pending=false;
+    g_spindle.orient_submitted=false;
+    g_spindle.orient_exit_submitted=false;
+    g_spindle.orient_stall_cycles=0;
+    frames(static_cast<int>(SPINDLE_ORIENT_STALL_CYCLES)+5);
+    EXPECT_EQ(g_spindle.orient_phase,SPINDLE_ORIENT_IDLE);
+    EXPECT_EQ(g_spindle.orient_stall_cycles,0U);
+    EXPECT_TRUE(g_spindle.orient_hold_stop);
+}
+TEST_F(HalH1SpindleTest, CsvExitKeepsEnableAndWaitsForFeedback) {
+    useGree4();orient();
+    spindle_request_orientation(false);frames(5);
+    EXPECT_EQ(axis().control_state,HAL_CONTROL_EXITING_ORIENT);
+    EXPECT_EQ(axis().drive_state,HAL_DRIVE_OPERATION_ENABLED);
+    EXPECT_FALSE(g_spindle.run_authorized);
+    frames(25);
+    EXPECT_EQ(axis().control_state,HAL_CONTROL_IDLE);
+    EXPECT_EQ(g_spindle.orient_phase,SPINDLE_ORIENT_IDLE);
+    EXPECT_EQ(axis().drive_state,HAL_DRIVE_OPERATION_ENABLED);
+    EXPECT_NEAR(axis().command_speed_rpm,0,1e-6);
+}
+TEST_F(HalH1SpindleTest, CsvExitThenM3UsesNewAuthorization) {
+    useGree4();orient();
+    ASSERT_TRUE(spindle_request_program_run(SPINDLE_CW,200));
+    spindle_request_orientation(false);frames(40);
+    EXPECT_EQ(g_spindle.orient_phase,SPINDLE_ORIENT_IDLE);
+    EXPECT_TRUE(g_spindle.run_authorized);
+    EXPECT_EQ(axis().actual_mode,HAL_AXIS_MODE_CSV);
+    EXPECT_GT(axis().command_speed_rpm,0);
+}
+/* 现场 18:27 回归：停车收口会同一拍暂存"写 0 速"和"撤力矩"。速度必须先于
+ * 下使能提交，否则 0 速会被 stop_goal 拒成 NOT_ENABLED，再被当成速度业务故障
+ * 报 139。这里跑完整的 M3 400→M5→停稳下使能，确认不产生启动锁和报警。 */
+TEST_F(HalH1SpindleTest, M5StopDoesNotReportVelocityFailure) {
+    useGree4();
+    ASSERT_TRUE(spindle_request_program_run(SPINDLE_CW,400));
+    frames(80);
+    ASSERT_GT(axis().command_speed_rpm,0);
+    spindle_request_stop();
+    frames(120);
+    EXPECT_FALSE(g_spindle.reset_requires_start);
+    EXPECT_NE(axis().drive_state,HAL_DRIVE_OPERATION_ENABLED);
+}
+/* 停车收口同一拍会同时暂存 0 速和下使能。速度先提交时 0 速被接受，
+ * 再撤力矩；顺序相反会留下 SPINDLE_SPEED/NOT_ENABLED 拒绝记录。 */
+TEST_F(HalH1SpindleTest, StopStagesZeroSpeedBeforeDisable) {
+    useGree4();
+    ASSERT_TRUE(spindle_request_program_run(SPINDLE_CW,400));
+    frames(80);
+    spindle_request_stop();
+    for(int i=0;i<160 && axis().drive_state==HAL_DRIVE_OPERATION_ENABLED;++i)frames(1);
+    EXPECT_NE(axis().drive_state,HAL_DRIVE_OPERATION_ENABLED);
+    EXPECT_FALSE(axis().request_rejection.category==HAL_ISSUE_SPINDLE_SPEED &&
+                 axis().request_rejection.code==HAL_ERROR_NOT_ENABLED);
+}
+/* 停车还没完全收口时立刻来 M19：使能管理的 BUSY、定向请求的 NOT_ENABLED
+ * 都必须按瞬态重试，不能粘连成失败。 */
+TEST_F(HalH1SpindleTest, ImmediateM19AfterStopRecovers) {
+    useGree4();
+    ASSERT_TRUE(spindle_request_program_run(SPINDLE_CW,400));
+    frames(80);
+    spindle_request_stop();
+    frames(45);
+    spindle_begin_m19();spindle_request_orientation(true);
+    frames(160);
+    EXPECT_FALSE(g_spindle.reset_requires_start);
+    EXPECT_EQ(axis().control_state,HAL_CONTROL_ORIENT_HOLD);
+}
+TEST_F(HalH1SpindleTest, RepeatedM19ExitsOldHoldBeforeNewOrientation) {
+    useGree4();orient();
+    spindle_begin_m19();spindle_request_orientation(true);frames(100);
+    EXPECT_EQ(axis().control_state,HAL_CONTROL_ORIENT_HOLD);
+    EXPECT_EQ(g_spindle.orient_phase,SPINDLE_ORIENT_DONE);
+    EXPECT_FALSE(g_spindle.reset_requires_start);
+}
+TEST_F(HalH1SpindleTest, M5AfterCsvExitStillDisables) {
+    useGree4();orient();spindle_request_orientation(false);frames(30);
+    ASSERT_EQ(axis().drive_state,HAL_DRIVE_OPERATION_ENABLED);
+    spindle_request_stop();frames(15);
+    EXPECT_NE(axis().drive_state,HAL_DRIVE_OPERATION_ENABLED);
+}
+TEST_F(HalH1SpindleTest, ManualStartAfterCsvExitConsumesNewRequest) {
+    useGree4();orient();spindle_request_orientation(false);frames(30);
+    g_spindle.remembered_program_speed=200;
+    ASSERT_TRUE(spindle_request_manual_run(SPINDLE_CCW));frames(30);
+    EXPECT_TRUE(g_spindle.run_authorized);
+    EXPECT_LT(axis().command_speed_rpm,0);
+}
+TEST_F(HalH1SpindleTest, M29AfterM19CanExitOldHoldAndReorient) {
+    useGree4();orient();
+    ASSERT_TRUE(spindle_request_m29());frames(220);
+    EXPECT_TRUE(spindle_m29_is_ready());
+    EXPECT_TRUE(motion_spindle_position_active());
+}
+TEST_F(HalH1SpindleTest, ResetDuringCsvExitCannotReplayPendingM3) {
+    useGree4();orient();fullResetSetup();
+    ASSERT_TRUE(spindle_request_program_run(SPINDLE_CW,200));
+    spindle_request_orientation(false);frames(3);
+    ASSERT_EQ(axis().control_state,HAL_CONTROL_EXITING_ORIENT);
+    rt_data->nc_event=SYS_EVENT_HMI_RESET;
+    for(int i=0;i<40;++i)fullFrame();
+    EXPECT_FALSE(g_spindle.run_authorized);
+    EXPECT_FALSE(g_spindle.start_request_pending);
+    EXPECT_NE(axis().drive_state,HAL_DRIVE_OPERATION_ENABLED);
+}
 TEST_F(HalH1SpindleTest, M29TrueModeChangeThenOffsetAlignment) {
     spindle_request_m29();frames(110);
     EXPECT_EQ(axis().actual_mode,HAL_AXIS_MODE_CSP);
@@ -156,6 +385,65 @@ TEST_F(HalH1SpindleTest, M29WithoutOrientationAlignsBeforeReady) {
     EXPECT_EQ(g_spindle.m29_phase,SPINDLE_M29_READY);
     EXPECT_TRUE(g_spindle.m29_feedback_stable);
     EXPECT_NEAR(axis().coordinate_offset,g_spindle.m29_expected_offset,1e-6);
+}
+TEST_F(HalH1SpindleTest, M29KeepsOrientationDuringSettling) {
+    ASSERT_TRUE(spindle_request_m29());
+    for(int i=0;i<100 && g_spindle.m29_phase!=SPINDLE_M29_ORIENT_SETTLING;++i)frames(1);
+    ASSERT_EQ(g_spindle.m29_phase,SPINDLE_M29_ORIENT_SETTLING);
+    frames(20);
+    EXPECT_EQ(g_spindle.m29_phase,SPINDLE_M29_ORIENT_SETTLING);
+    EXPECT_EQ(axis().control_state,HAL_CONTROL_ORIENT_HOLD);
+    EXPECT_EQ(axis().actual_mode,HAL_AXIS_MODE_CSV);
+    frames(90);EXPECT_TRUE(spindle_m29_is_ready());
+}
+TEST_F(HalH1SpindleTest, M29MovingFeedbackCannotPassSettlingWindow) {
+    ASSERT_TRUE(spindle_request_m29());
+    for(int i=0;i<100 && g_spindle.m29_phase!=SPINDLE_M29_ORIENT_SETTLING;++i)frames(1);
+    ASSERT_EQ(g_spindle.m29_phase,SPINDLE_M29_ORIENT_SETTLING);
+    for(int i=0;i<70;++i) {
+        h1_test_spindle_feedback_delta(i%2?.7:0,0);frames(1);
+    }
+    EXPECT_EQ(g_spindle.m29_phase,SPINDLE_M29_ORIENT_SETTLING);
+    for(int i=0;i<60;++i) { h1_test_spindle_feedback_delta(0,2);frames(1); }
+    EXPECT_EQ(g_spindle.m29_phase,SPINDLE_M29_ORIENT_SETTLING);
+    frames(100);EXPECT_TRUE(spindle_m29_is_ready());
+}
+TEST_F(HalH1SpindleTest, M29RejectsPositionShiftAfterRezero) {
+    ASSERT_TRUE(spindle_request_m29());
+    for(int i=0;i<150 && g_spindle.m29_phase!=SPINDLE_M29_ALIGNING;++i)frames(1);
+    ASSERT_EQ(g_spindle.m29_phase,SPINDLE_M29_ALIGNING);
+    h1_test_spindle_feedback_delta(2,0);frames(1);
+    EXPECT_TRUE(spindle_m29_has_error());
+    EXPECT_FALSE(motion_spindle_position_active());
+}
+TEST_F(HalH1SpindleTest, M29RejectsPositionShiftBeforeRezero) {
+    ASSERT_TRUE(spindle_request_m29());
+    for(int i=0;i<150 && g_spindle.m29_phase!=SPINDLE_M29_SWITCHING_CSP;++i)frames(1);
+    ASSERT_EQ(g_spindle.m29_phase,SPINDLE_M29_SWITCHING_CSP);
+    const double offset=axis().coordinate_offset;
+    for(int i=0;i<40 && !spindle_m29_has_error();++i) {
+        h1_test_spindle_feedback_delta(2,0);frames(1);
+    }
+    EXPECT_TRUE(spindle_m29_has_error());
+    EXPECT_DOUBLE_EQ(axis().coordinate_offset,offset);
+    EXPECT_FALSE(motion_spindle_position_active());
+}
+TEST_F(HalH1SpindleTest, M29SettlingHasFiniteTimeout) {
+    ASSERT_TRUE(spindle_request_m29());
+    for(int i=0;i<100 && g_spindle.m29_phase!=SPINDLE_M29_ORIENT_SETTLING;++i)frames(1);
+    ASSERT_EQ(g_spindle.m29_phase,SPINDLE_M29_ORIENT_SETTLING);
+    g_spindle.orient_elapsed_cycles=9999;frames(1);
+    EXPECT_TRUE(spindle_m29_has_error());
+    EXPECT_FALSE(motion_spindle_position_active());
+}
+TEST_F(HalH1SpindleTest, RepeatedM29RequiresFreshSettling) {
+    for(int repeat=0;repeat<3;++repeat) {
+        ASSERT_TRUE(spindle_request_m29());frames(170);
+        ASSERT_TRUE(spindle_m29_is_ready());
+        EXPECT_TRUE(g_spindle.m29_orient_reference_valid);
+        EXPECT_NEAR(axis().actual_pos,0,.011);
+        spindle_complete_m29();
+    }
 }
 TEST_F(HalH1SpindleTest, UnexpectedEnableLossDoesNotReplayOldEnable) {
     runZero();ASSERT_EQ(h1_test_force_disable(),0);frames(15);
@@ -209,6 +497,16 @@ TEST_F(HalH1SpindleTest, M3AfterM29ExplicitlyPreparesCsvAndEnables) {
     EXPECT_EQ(axis().actual_mode,HAL_AXIS_MODE_CSV);
     EXPECT_EQ(axis().drive_state,HAL_DRIVE_OPERATION_ENABLED);
     EXPECT_TRUE(g_spindle.run_authorized);
+}
+TEST_F(HalH1SpindleTest, M19AfterM29ExitsCspAndOrients) {
+    useGree4();
+    spindle_request_m29();frames(110);ASSERT_EQ(g_spindle.m29_phase,SPINDLE_M29_READY);
+    spindle_complete_m29();
+    spindle_begin_m19();
+    spindle_request_orientation(true);
+    frames(120);
+    EXPECT_EQ(axis().actual_mode,HAL_AXIS_MODE_CSV);
+    EXPECT_EQ(axis().control_state,HAL_CONTROL_ORIENT_HOLD);
 }
 TEST_F(HalH1SpindleTest, M5AfterM29OwnershipEndsDoesNotReenable) {
     spindle_request_m29();frames(110);ASSERT_EQ(g_spindle.m29_phase,SPINDLE_M29_READY);
@@ -682,6 +980,8 @@ TEST_F(HalH1SpindleTest, InvalidLivePlcSpeedRevokesCsvAuthorization) {
 #define PREPARATION_CANCEL_TEST(Name,NoOrient,Phase,Estop) \
 TEST_F(HalH1SpindleTest, Name) { cancelPreparation(NoOrient,Phase,Estop); }
 PREPARATION_CANCEL_TEST(ResetDuringM29Orientation,false,SPINDLE_M29_ORIENTING,false)
+PREPARATION_CANCEL_TEST(ResetDuringM29Settling,false,SPINDLE_M29_ORIENT_SETTLING,false)
+PREPARATION_CANCEL_TEST(EstopDuringM29Settling,false,SPINDLE_M29_ORIENT_SETTLING,true)
 PREPARATION_CANCEL_TEST(ResetDuringM29ModePreparation,false,SPINDLE_M29_SWITCHING_CSP,false)
 PREPARATION_CANCEL_TEST(ResetDuringM29Alignment,false,SPINDLE_M29_ALIGNING,false)
 PREPARATION_CANCEL_TEST(EstopDuringM29Orientation,false,SPINDLE_M29_ORIENTING,true)

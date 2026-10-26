@@ -39,6 +39,7 @@ static bool spindle_is_rotating(void);
 
 void spindle_set_plc_speed(double speed)
 {
+    /* PLC 线程直接写入；当前没有与 speed_source 成组发布的同步机制。 */
     g_spindle.plc_speed = speed;
 }
 
@@ -60,6 +61,26 @@ double spindle_get_program_command_speed(void)
 
 void spindle_internal_fail_velocity(int result)
 {
+    /* 现场只看到"HAL 错误 rc=262"时无法判断是哪条速度路径失败。
+     * 这里在置错前打一条完整上下文，便于区分：驱动器掉使能、停止约束、
+     * 模式不符、定向/复位占用，还是请求本身被拒。 */
+    HalAxisSnapshot axis;
+    const int snap_rc=spindle_hal_snapshot(&axis);
+    LOG(LOG_LEVEL_ERR,
+        "主轴速度业务失败：rc=%d snap=%d mode=%d/%d drive=%d block=0x%x rpm=%.1f planner=%.1f/%.1f run=%d orient=%d pending=%d m29=%d reset_lock=%d rej=%d/%d exec=%d/%d",
+        result,snap_rc,
+        snap_rc==HAL_OK?(int)axis.actual_mode:-1,snap_rc==HAL_OK?(int)axis.target_mode:-1,
+        snap_rc==HAL_OK?(int)axis.drive_state:-1,
+        snap_rc==HAL_OK?(unsigned)axis.motion_block_reasons:0u,
+        snap_rc==HAL_OK?axis.actual_speed_rpm:NAN,
+        (double)g_spindle.velocity_planner.current_vel,
+        (double)g_spindle.velocity_planner.target_vel,
+        (int)g_spindle.run_state,(int)g_spindle.orient_phase,(int)g_spindle.pending_event,
+        (int)g_spindle.m29_active,(int)g_spindle.reset_requires_start,
+        snap_rc==HAL_OK?(int)axis.request_rejection.category:-1,
+        snap_rc==HAL_OK?(int)axis.request_rejection.code:-1,
+        snap_rc==HAL_OK?(int)axis.execution_error.category:-1,
+        snap_rc==HAL_OK?(int)axis.execution_error.code:-1);
     g_spindle_hal.velocity_submitted=false;
     g_spindle.run_authorized=g_spindle.program_run_authorized=false;
     g_spindle.start_request_pending=g_spindle.deferred_start_pending=false;
@@ -83,6 +104,7 @@ bool spindle_internal_update_velocity(void)
 
     HalAxisSnapshot axis;
     int error=spindle_hal_snapshot(&axis);
+    /* 本条业务提交过速度后才消费速度拒绝槽，避免旧业务的错误污染新请求。 */
     if(error==HAL_OK && g_spindle_hal.velocity_submitted) {
         if(axis.request_rejection.category==HAL_ISSUE_SPINDLE_SPEED)
             error=axis.request_rejection.code;
@@ -92,6 +114,14 @@ bool spindle_internal_update_velocity(void)
     if(error==HAL_OK && spindle_is_rotating() &&
        !isfinite(spindle_internal_get_selected_speed(&g_spindle)))error=HAL_ERROR_ARGUMENT;
     if(error!=HAL_OK) {
+        /* 停止约束/下使能已经在 HAL 侧生效时，速度目标本来就不再受理；
+         * 这是停车收口的正常结果，不是速度业务故障。清提交标记后交给
+         * 停止或复位路径，不要报警，也不要锁成"等待新启动"。 */
+        if(error==HAL_ERROR_NOT_ENABLED &&
+           (axis.motion_block_reasons & (HAL_BLOCK_STOP_REQUIRED|HAL_BLOCK_NOT_ENABLED))) {
+            g_spindle_hal.velocity_submitted=false;
+            return false;
+        }
         spindle_internal_fail_velocity(error);
         return false;
     }
@@ -272,6 +302,7 @@ static double spindle_calculate_target_velocity(const spindle_context_t *context
     const double override = var_chan[0][VAR_CHAN_SPDL_OVERRIDE].value.f / 100.0;
     double target_speed = fabs(spindle_internal_get_selected_speed(context));
 
+    /* 规划与到速均使用限幅后的目标，避免超上限 S 指令永久等不到 FIN。 */
     target_speed *= fmax(0.0, override);
 
     target_speed = fmin(max_speed, target_speed);
@@ -438,7 +469,7 @@ static bool spindle_is_rotating(void)
 }
 
 /* 准备流程的调用方只申请走一步 CSV 减速，不自己改规划器速度、也不直接下发。
- * 返回 1 = 规划与实际都已到零，0 = 仍在运动。 */
+ * 返回 1 = 规划与实际都已到零，0 = 仍在运动，-1 = 反馈或请求失败。 */
 int spindle_prepare_csv_stop_step(void)
 {
     HalAxisSnapshot a;

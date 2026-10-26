@@ -92,6 +92,10 @@ static struct timespec s_reset_started;
 /* 唯一的正常业务力矩需求。业务侧只改这里；
  * rt_data 里的 spindle_wants_torque 是只读投影，不参与任何决策。 */
 static bool s_spindle_torque_demand;
+/* 业务侧出现过"撤力矩→再要力矩"的边沿。只靠每拍比较 intent 会漏掉同一拍内的
+ * 翻转（停车收口撤力矩、紧接着 M19 又要力矩），导致使能管理停在 COMPLETE 而
+ * 硬件其实已经下使能。该标志强制下一次 poll 重新走一次完整序列。 */
+static bool s_spindle_torque_rearm;
 
 bool alarm_spindle_request_torque(bool needed)
 {
@@ -107,6 +111,8 @@ bool alarm_spindle_request_torque(bool needed)
         rt_data->sys_state[SYS_ESTOP_INPUT] || rt_data->sys_state[SYS_IS_ESTOP_ACTIVE] ||
         rt_data->axis_data[AXIS_SP].status.is_disable ||
         rt_data->axis_data[AXIS_SP].status.is_error) return false;
+    /* 真正授予时记下"撤力矩→再要力矩"边沿，防止使能管理漏看同一拍内的翻转。 */
+    if (!s_spindle_torque_demand) s_spindle_torque_rearm = true;
     s_spindle_torque_demand = true;
     return true;
 }
@@ -165,6 +171,32 @@ enum { ENABLE_IDLE, ENABLE_MODE_NEXT, ENABLE_MODE_WAIT, ENABLE_WAIT, ENABLE_COMP
 static int s_enable_stage[RT_HAL_AXIS_COUNT];
 static int s_enable_intent[RT_HAL_AXIS_COUNT]={-1,-1,-1,-1};
 static HalAxisMode s_enable_mode[RT_HAL_AXIS_COUNT];
+/* ENABLE_WAIT 连续无进展拍数。HAL 每轴只保留"最新一条"拒绝，同一拍里后续的
+ * 定向/位置请求会把 ENABLE 的拒绝记录覆盖掉，使能管理就永远等不到结果。
+ * 连续这么多拍既没有使能动作、也没有 ENABLE 拒绝时，重新提交一次。 */
+#define ENABLE_WAIT_RETRY_CYCLES 10U
+static unsigned s_enable_wait_cycles[RT_HAL_AXIS_COUNT];
+/* 进入粘滞失败时留一条日志；否则现场只能看到"轴一直不使能"，不知道卡在哪一步。 */
+static void enable_mark_failed(int i, const char* why, int code) {
+    if(s_enable_stage[i]!=ENABLE_FAILED)
+        LOG(LOG_LEVEL_ERR,"使能失败：轴槽 %d 阶段=%d 原因=%s code=%d",
+            i,s_enable_stage[i],why!=NULL?why:"未说明",code);
+    s_enable_stage[i]=ENABLE_FAILED;
+    s_enable_wait_cycles[i]=0;
+}
+#ifdef UNIT_TEST
+/* 测试入口：把主轴使能管理强制放到"已提交、但拒绝记录被覆盖"的等待态，
+ * 用于验证 ENABLE_WAIT 无进展自愈。 */
+void rt_test_force_spindle_enable_wait(void) {
+    /* 需求已授予、但使能请求没有生效：模拟"拒绝记录被其它类别覆盖"后的等待态。
+     * 同时把需求边沿标志清掉，避免再次触发"重走序列"。 */
+    s_spindle_torque_demand=true;
+    s_spindle_torque_rearm=false;
+    s_enable_intent[RT_HAL_AXIS_SP]=1;
+    s_enable_stage[RT_HAL_AXIS_SP]=ENABLE_WAIT;
+    s_enable_wait_cycles[RT_HAL_AXIS_SP]=0;
+}
+#endif
 void alarm_axis_mode_requested(int slot,int mode) {
     if(slot<0||slot>=RT_HAL_AXIS_COUNT)return;
     s_enable_mode[slot]=mode;
@@ -172,7 +204,7 @@ void alarm_axis_mode_requested(int slot,int mode) {
 }
 static void reset_enable_business(void) {
     for(int i=0;i<RT_HAL_AXIS_COUNT;++i) {
-        s_enable_intent[i]=-1;s_enable_stage[i]=ENABLE_IDLE;
+        s_enable_intent[i]=-1;s_enable_stage[i]=ENABLE_IDLE;s_enable_wait_cycles[i]=0;
     }
 }
 void hal_axis_intent_poll(void) {
@@ -203,7 +235,12 @@ void hal_axis_intent_poll(void) {
             !spindle_wanted);
 
         const int intent=estop?2:off?0:1;
-        const int changed=intent!=s_enable_intent[i];
+        int changed=intent!=s_enable_intent[i];
+        if(slot==RT_HAL_AXIS_SP&&s_spindle_torque_rearm) {
+            /* 业务明确重新要力矩：即使 intent 没变，也重走一次使能序列。 */
+            changed=1;
+            s_spindle_torque_rearm=false;
+        }
         s_enable_intent[i]=intent;
 
         /*===6. 急停：走 HAL 安全路径，不进入使能状态机===*/
@@ -218,7 +255,7 @@ void hal_axis_intent_poll(void) {
             /* 反馈出现 Fault：先把该轴打到 ENABLE_FAILED 并下使能。
              * 反过来不成立——Fault 消失不代表拿到了新的恢复授权。 */
             if(s_enable_stage[i]!=ENABLE_FAILED)(void)rt_hal_request_axis_enable(slot,0);
-            s_enable_stage[i]=ENABLE_FAILED;
+            enable_mark_failed(i,"轴反馈故障",0);
             continue;
         }
 
@@ -234,12 +271,31 @@ void hal_axis_intent_poll(void) {
             continue;
         }
 
+        /*===8.5 完成态复核：COMPLETE 只是业务镜像。若 HAL 已经登记了停止约束，
+         * 说明使能结论已过期（停车收口在 COMPLETE 之后才生效），必须重新走序列；
+         * 否则 stop_goal 会一直留着，轴永远停在 READY。===*/
+        if(slot==RT_HAL_AXIS_SP&&s_enable_stage[i]==ENABLE_COMPLETE&&
+           reset_spindle_business_allowed()) {
+            HalAxisSnapshot chk;
+            if(rt_hal_axis_snapshot(slot,&chk)==HAL_OK &&
+               (chk.motion_block_reasons&HAL_BLOCK_STOP_REQUIRED)) {
+                static unsigned s_expired_count[RT_HAL_AXIS_COUNT];
+                if(++s_expired_count[i]==1||(s_expired_count[i]%1000)==0)
+                    LOG(LOG_LEVEL_WARN,
+                        "轴槽 %d 使能完成结论已过期：drive=%d block=0x%x，重新走使能序列",
+                        i,(int)chk.drive_state,(unsigned)chk.motion_block_reasons);
+                s_enable_stage[i]=ENABLE_MODE_WAIT;
+            }
+        }
+
         /*===9. 使能第一步：先把模式准备好（进给轴固定 CSP，主轴等业务指定）===*/
         if(changed && s_enable_stage[i]!=ENABLE_MODE_NEXT && s_enable_stage[i]!=ENABLE_MODE_WAIT) {
             if(slot!=RT_HAL_AXIS_SP) {
                 s_enable_mode[i]=HAL_AXIS_MODE_CSP;
-                s_enable_stage[i]=rt_hal_request_axis_mode(slot,HAL_AXIS_MODE_CSP)==HAL_OK?
-                    ENABLE_MODE_NEXT:ENABLE_FAILED;
+                if(rt_hal_request_axis_mode(slot,HAL_AXIS_MODE_CSP)==HAL_OK)
+                    s_enable_stage[i]=ENABLE_MODE_NEXT;
+                else
+                    enable_mark_failed(i,"CSP模式请求被拒",HAL_ERROR_BUSY);
             } else {
                 /* 主轴要准备哪个模式由业务决定（CSV 运转或 CSP 定向），这里只等它给出。 */
                 s_enable_mode[i]=HAL_AXIS_MODE_UNSET;
@@ -254,7 +310,7 @@ void hal_axis_intent_poll(void) {
         /*===10. 读一次快照：后面两个等待阶段都靠它判别进展===*/
         HalAxisSnapshot axis;
         if(rt_hal_axis_snapshot(slot,&axis)!=HAL_OK) {
-            s_enable_stage[i]=ENABLE_FAILED;continue;
+            enable_mark_failed(i,"轴快照不可读",0);continue;
         }
 
         /*===11. 等待阶段：模式就绪后才发上使能，再确认实际使能到位才算完成===*/
@@ -262,22 +318,46 @@ void hal_axis_intent_poll(void) {
             if(s_enable_mode[i]==HAL_AXIS_MODE_UNSET)s_enable_mode[i]=axis.target_mode;
             if(axis.mode_setting_state==HAL_MODE_SETTING_FAILED ||
                (axis.request_rejection.category==HAL_ISSUE_MODE&&axis.request_rejection.code)) {
-                s_enable_stage[i]=ENABLE_FAILED;continue;
+                enable_mark_failed(i,"模式准备失败",(int)axis.request_rejection.code);continue;
             }
             if(axis.target_mode==HAL_AXIS_MODE_UNSET||axis.target_mode!=s_enable_mode[i]||
                axis.mode_setting_state!=HAL_MODE_SETTING_READY)continue;
-            s_enable_stage[i]=rt_hal_request_axis_enable(slot,1)==HAL_OK?ENABLE_WAIT:ENABLE_FAILED;
+            /* 同模式定向退出期间已经有有效使能，不再提交会被动作占用拒绝的重复使能。 */
+            if((axis.feedback_valid&(HAL_FEEDBACK_STATUS|HAL_FEEDBACK_MODE))==
+                   (HAL_FEEDBACK_STATUS|HAL_FEEDBACK_MODE) &&
+               axis.drive_state==HAL_DRIVE_OPERATION_ENABLED && axis.actual_mode==s_enable_mode[i] &&
+               !(axis.motion_block_reasons&HAL_BLOCK_NOT_ENABLED)) {
+                s_enable_stage[i]=ENABLE_COMPLETE;continue;
+            }
+            if(rt_hal_request_axis_enable(slot,1)==HAL_OK) {
+                s_enable_stage[i]=ENABLE_WAIT;s_enable_wait_cycles[i]=0;
+            } else enable_mark_failed(i,"使能请求提交失败",0);
         } else if(s_enable_stage[i]==ENABLE_WAIT) {
             if(axis.request_rejection.category==HAL_ISSUE_ENABLE&&axis.request_rejection.code) {
-                s_enable_stage[i]=ENABLE_FAILED;continue;
+                /* BUSY = 轴上一笔停止/动作还没收口，属瞬态；等它收口后重新提交使能。
+                 * 停车后紧接 M19/M3 时必然遇到，不能粘连成 ENABLE_FAILED。 */
+                if(axis.request_rejection.code==HAL_ERROR_BUSY) {
+                    s_enable_stage[i]=ENABLE_MODE_WAIT;s_enable_wait_cycles[i]=0;continue;
+                }
+                enable_mark_failed(i,"使能请求被拒绝",(int)axis.request_rejection.code);continue;
             }
             if((axis.feedback_valid&(HAL_FEEDBACK_STATUS|HAL_FEEDBACK_MODE))==
                 (HAL_FEEDBACK_STATUS|HAL_FEEDBACK_MODE) &&
-                axis.drive_state==HAL_DRIVE_OPERATION_ENABLED&&axis.actual_mode==s_enable_mode[i])
-                s_enable_stage[i]=ENABLE_COMPLETE;
-            else if(axis.control_state!=HAL_CONTROL_ENABLING &&
-                axis.execution_error.category==HAL_ISSUE_ENABLE&&axis.execution_error.code)
-                s_enable_stage[i]=ENABLE_FAILED;
+                axis.drive_state==HAL_DRIVE_OPERATION_ENABLED&&axis.actual_mode==s_enable_mode[i]) {
+                s_enable_stage[i]=ENABLE_COMPLETE;s_enable_wait_cycles[i]=0;
+            } else if(axis.control_state!=HAL_CONTROL_ENABLING &&
+                axis.execution_error.category==HAL_ISSUE_ENABLE&&axis.execution_error.code) {
+                enable_mark_failed(i,"使能执行错误",(int)axis.execution_error.code);
+            } else if(axis.control_state==HAL_CONTROL_ENABLING) {
+                /* 使能动作在途，正常等待。 */
+                s_enable_wait_cycles[i]=0;
+            } else if(++s_enable_wait_cycles[i]>=ENABLE_WAIT_RETRY_CYCLES) {
+                /* 没有使能动作、没有 ENABLE 拒绝、也没有执行错误：请求多半被执行过但被
+                 * 拒，而拒绝记录被同一拍后续的定向/位置请求类别覆盖。重新提交一次。 */
+                LOG(LOG_LEVEL_WARN,
+                    "轴槽 %d 使能等待无进展（拒绝记录可能被其它请求覆盖），重新提交使能",i);
+                s_enable_stage[i]=ENABLE_MODE_WAIT;s_enable_wait_cycles[i]=0;
+            }
         }
         /* COMPLETE / FAILED 都不会凭一个一直存在的旧意图自动重新使能。
          * 恢复只有三条路：一次显式复位、一次新的主轴模式业务、或一次下使能/上使能
@@ -362,10 +442,18 @@ static void alarm_poll_axis_not_enabled(void) {
         s_logged[i] = 1;
         int32_t reset_state = -1;
         (void)rt_hal_fault_reset_state((RtHalAxisSlot)i, &reset_state);
+        HalAxisSnapshot snap;
+        const int snap_ok = rt_hal_axis_snapshot((RtHalAxisSlot)i, &snap) == HAL_OK;
         LOG(LOG_LEVEL_WARN,
-            "HAL 轴槽 %d 持续未使能：status_word=0x%04X 0x603F=0x%08X valid=%d reset=%d",
+            "HAL 轴槽 %d 持续未使能：status_word=0x%04X 0x603F=0x%08X valid=%d reset=%d stage=%d intent=%d ctl=%d mode_set=%d act/tgt=%d/%d block=0x%x",
             i, (unsigned)st.raw_status, (unsigned)st.error_code,
-            (int)st.error_code_valid, (int)reset_state);
+            (int)st.error_code_valid, (int)reset_state,
+            s_enable_stage[i], s_enable_intent[i],
+            snap_ok ? (int)snap.control_state : -1,
+            snap_ok ? (int)snap.mode_setting_state : -1,
+            snap_ok ? (int)snap.actual_mode : -1,
+            snap_ok ? (int)snap.target_mode : -1,
+            snap_ok ? (unsigned)snap.motion_block_reasons : 0u);
     }
 }
 

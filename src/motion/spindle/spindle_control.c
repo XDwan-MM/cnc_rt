@@ -5,7 +5,7 @@
  * @file spindle_control.c
  * @brief 主轴控制周期入口、命令仲裁和驱动控制权切换。
  *
- * 外部线程只提交高层请求，本文件在 1 ms 运动周期中把程序命令、PLC
+ * 本文件在 1 ms 运动周期中把程序命令、PLC
  * 命令、安全停车、M19 和 M29 按固定优先级串行化。速度规划、定向、
  * M29、HAL 访问和安全停车分别由同目录下的专用实现文件负责。
  */
@@ -61,6 +61,38 @@ static void spindle_cancel_business(void)
 }
 
 /* 外部函数定义 */
+
+/*
+ * 单槽事件的唯一写入口。槽位仍只有一格，但覆盖顺序必须显式：
+ *   ORIENT          —— 定向接管控制权，覆盖排队中的启动/释放/停止；
+ *   RELEASE_ORIENT  —— 停止优先；其余允许覆盖。覆盖尚未消费的 ORIENT 表示
+ *                      该定向从未下发给硬件，由释放流程本地收口；
+ *   CW/CCW          —— 不得覆盖尚未消费的 ORIENT（调用方应转为 deferred_start）；
+ *   STOP            —— 安全停止优先，可覆盖任何排队事件；普通 M5 的早退由
+ *                      spindle_request_stop() 自己保证。
+ */
+void spindle_post_event(spindle_event_t event)
+{
+    const spindle_event_t queued = g_spindle.pending_event;
+
+    switch (event)
+    {
+    case SPINDLE_EVENT_ORIENT:
+    case SPINDLE_EVENT_STOP:
+        break;
+    case SPINDLE_EVENT_RELEASE_ORIENT:
+        if (queued == SPINDLE_EVENT_STOP) return;
+        break;
+    case SPINDLE_EVENT_CW:
+    case SPINDLE_EVENT_CCW:
+        if (queued == SPINDLE_EVENT_ORIENT) return;
+        break;
+    case SPINDLE_EVENT_NONE:
+    default:
+        return;
+    }
+    g_spindle.pending_event = event;
+}
 
 /**
  * @brief 执行一个主轴控制周期。
@@ -121,7 +153,8 @@ void spindle_control_update(void)
     if (!csp_mode && spindle_internal_stop_is_required(&g_spindle) &&
         !release_orient_event)
     {
-        g_spindle.pending_event = SPINDLE_EVENT_STOP;
+        /* 安全停止优先于排队中的定向启动，可以覆盖 ORIENT。 */
+        spindle_post_event(SPINDLE_EVENT_STOP);
     }
     else if (!release_orient_event)
     {
@@ -140,10 +173,9 @@ void spindle_control_update(void)
 
     /* 事件处理只负责改变逻辑/驱动器目标；定向完成和速度规划在后续阶段更新。 */
     spindle_process_event(&g_spindle);
-    /* 直接读取 driver.c 的定向状态，并映射到 CNC/PLC 的 orient_phase。 */
+    /* HAL 负责驱动器完成判据；这里只推进 M19 业务阶段。 */
     spindle_internal_update_orientation();
-    /* M29 consumes the DONE phase on the following cycle, allowing the
-     * NC/PLC handshake to observe orient_phase == DONE first. */
+    /* 同一周期消费定向 DONE；M29 先保持稳定，再请求切 CSP。 */
     spindle_internal_update_m29();
     /* 根据安全状态、定向状态和速度状态决定使能、模式及 60FF 目标值。 */
     spindle_update_driver_control();
@@ -215,9 +247,11 @@ bool spindle_request_manual_run(spindle_state_t direction)
     }
 
     if (g_spindle.orient_phase != SPINDLE_ORIENT_IDLE ||
+        g_spindle.pending_event == SPINDLE_EVENT_ORIENT ||
         g_spindle.orient_request_pending)
     {
-        /* 定向期间不能立即执行速度命令。只保留最后一条手动方向请求，
+        /* 定向期间不能立即执行速度命令。槽里尚未消费的 ORIENT 同样算定向进行中，
+         * 否则这里写入 CW 会把定向请求直接覆盖掉。只保留最后一条手动方向请求，
          * 待 HAL 确认定向释放后，由主轴模块在同一周期完成控制权交接。 */
         g_spindle.deferred_start_pending = true;
         g_spindle.deferred_start_state = direction;
@@ -225,8 +259,9 @@ bool spindle_request_manual_run(spindle_state_t direction)
         return true;
     }
 
-    g_spindle.pending_event = direction == SPINDLE_CCW ?
-        SPINDLE_EVENT_CCW : SPINDLE_EVENT_CW;
+    spindle_post_event(direction == SPINDLE_CCW ?
+        SPINDLE_EVENT_CCW : SPINDLE_EVENT_CW);
+    g_spindle.orient_hold_stop = false;
     g_spindle.command_speed = g_spindle.remembered_program_speed;
     g_spindle.command_state = direction;
     g_spindle.start_request_pending = true;
@@ -260,7 +295,7 @@ void spindle_request_stop(void)
         return;
     }
 
-    g_spindle.pending_event = SPINDLE_EVENT_STOP;
+    spindle_post_event(SPINDLE_EVENT_STOP);
 }
 
 void spindle_release_torque_request(void)
@@ -350,8 +385,6 @@ void spindle_internal_handle_rotation(spindle_context_t *context,
 
 }
 
-/* 不能用读取失败时回零的便捷访问器判断停稳。 */
-/* M29 卡住诊断用的只读快照：只查询，不改变任何状态（供 auto_mst 打印一行）。 */
 /* 内部函数定义 */
 /* CNC M3/M4/M5 只更新目标数据；目标发生变化时在控制层生成事件。 */
 static void spindle_update_command_event(void)
@@ -360,8 +393,11 @@ static void spindle_update_command_event(void)
      * 此函数不直接启动驱动器，只比较“期望目标”和规划器目标，生成
      * CW/CCW/STOP 事件。定向期间禁止执行，防止旧的 S 值抢回控制权。
      */
-    /* 定向流程拥有主轴控制权，不能被旧的 M3/M4 目标重新启动。 */
+    /* 定向流程拥有主轴控制权，不能被旧的 M3/M4 目标重新启动。
+     * 槽里已排队的 ORIENT 也算"定向进行中"：本函数在事件处理之前运行，
+     * 若此时写入 CW 会把尚未消费的定向请求直接吞掉。 */
     if (g_spindle.orient_request_pending ||
+        g_spindle.pending_event == SPINDLE_EVENT_ORIENT ||
         g_spindle.orient_phase != SPINDLE_ORIENT_IDLE ||
         g_spindle.orient_hold_stop)
     {
@@ -380,8 +416,8 @@ static void spindle_update_command_event(void)
      * 只清请求、不恢复旧完成位；之后由 spindle_update_planner_state() 按实际反馈重新确认。 */
     if (g_spindle.start_request_pending)
     {
-        g_spindle.pending_event = g_spindle.command_state == SPINDLE_CCW ?
-            SPINDLE_EVENT_CCW : SPINDLE_EVENT_CW;
+        spindle_post_event(g_spindle.command_state == SPINDLE_CCW ?
+            SPINDLE_EVENT_CCW : SPINDLE_EVENT_CW);
         return;
     }
     /* 已经授权后，速度每周期由规划器直接跟随所选速度源，不重复生成启动事件。 */
@@ -448,11 +484,7 @@ static void spindle_process_event(spindle_context_t *context)
             spindle_report_m29_prepare_rejected();
             break; /* explicit refusal, no mode write and no deferred takeover */
         }
-        /*
-         * 定向不是普通的 M5 停止：驱动器收到 0x040F 后会自行减速并
-         * 完成定位。因此这里立即提交定向请求，不等待软件速度规划器
-         * 归零；否则高速主轴可能永远等不到本地“零速”条件。
-         */
+        /* 不走普通 M5 归零握手；先准备 CSV 并使能，再由定向模块提交厂商动作。 */
         /* 定向接管主轴：清遗留启动/排队请求，命令字段归位到 STOP；"等待新启动"锁由
          * reset_requires_start=false 显式解除，不能靠 start_request_pending 兜底
          * （会挡住定向自己的完成判定）。 */
@@ -469,12 +501,10 @@ static void spindle_process_event(spindle_context_t *context)
         context->orient_submitted = false;
         context->orient_exit_submitted = false;
         if (spindle_hal_request_mode(HAL_AXIS_MODE_CSV) != HAL_OK) {
-            spindle_orientation_failed(false);
+            spindle_orientation_failed(false,"定向前请求CSV模式被拒绝");
             break;
         }
-        /* M19 在复位之后必须先重新进入“Operation Enabled”状态。
-        -如果在这里调用 spindle_handle_stop()，就可能请求从 CSP 切换到 CSV，
-        -并把定向请求覆盖成 target_state=READY_TO_SWITCH_ON。 */
+        /* 停止与定向是不同业务，不能在此调用普通停止收尾撤销使能需求。 */
         context->run_state = SPINDLE_STOP;
         context->velocity_planner.enable = false;
         context->velocity_planner.target_vel = 0.0;
@@ -482,27 +512,36 @@ static void spindle_process_event(spindle_context_t *context)
         (void)alarm_spindle_request_torque(true);
         if (spindle_orientation_hal_is_done())
         {
-            /* 在开始一个新的请求之前，先等待 HAL 确认已经释放。
-            -在定向模式之外，bit10 可能代表 CSV 速度已到达。 */
-            const bool released = spindle_orientation_release();
-            if(!released) {
-                spindle_orientation_failed(true);
+            /* 先退出上一条定向保持，确认后再发新动作，不复用旧完成信号。 */
+            const spindle_orient_release_t released = spindle_orientation_release();
+            if(released==SPINDLE_ORIENT_RELEASE_FAILED) {
+                spindle_orientation_failed(true,"重复定向前的退出被拒绝");
                 break;
             }
-            context->orient_phase = SPINDLE_ORIENT_RELEASING;
-            context->orient_request_pending = true;
-            context->orient_elapsed_cycles = 0U;
-            break;
+            if(released==SPINDLE_ORIENT_RELEASE_SUBMITTED ||
+               released==SPINDLE_ORIENT_RELEASE_RETRY) {
+                /* RETRY：旧保持还在定向中/未停稳，由控制周期继续尝试退出。 */
+                context->orient_exit_requested = true;
+                context->orient_phase = SPINDLE_ORIENT_RELEASING;
+                context->orient_request_pending = true;
+                context->orient_elapsed_cycles = 0U;
+                break;
+            }
+            /* IDLE：保持动作在两次查询之间已消失，直接按新定向继续，不再等待退出。 */
         }
         /* 等模式准备与明确使能完成后只提交一次定向，再观察统一状态。 */
         context->orient_request_pending = true;
         context->orient_phase = SPINDLE_ORIENT_WAIT_ZERO;
         context->orient_elapsed_cycles = 0U;
+        context->orient_stall_cycles = 0U;
         break;
     case SPINDLE_EVENT_RELEASE_ORIENT:
         /*
          * 请求正常定向交接；只有 HAL 确认退出后才能恢复普通速度业务。
          * 明确拒绝保留定向保持，不能当成公共停机取消。
+         * 若定向请求尚未提交给硬件（例如复位后使能还没到位，下一条 M3 的 SF
+         * 已经让梯子撤销 G70.6），没有在途动作可退，必须本地收口并执行排队启动，
+         * 否则会停在无人推进的 RELEASING。
          */
         context->orient_request_pending = false;
         /* 正常退出中止当前 M19 握手，公共复位另行取消业务。 */
@@ -510,14 +549,25 @@ static void spindle_process_event(spindle_context_t *context)
         context->run_state = SPINDLE_STOP;
         context->velocity_planner.enable = false;
         context->velocity_planner.target_vel = 0.0;
-        if (spindle_orientation_release())
         {
-            context->orient_phase = SPINDLE_ORIENT_RELEASING;
-            context->orient_elapsed_cycles = 0U;
-        }
-        else
-        {
-            spindle_orientation_failed(true);
+            const spindle_orient_release_t released = spindle_orientation_release();
+            if (released == SPINDLE_ORIENT_RELEASE_SUBMITTED ||
+                released == SPINDLE_ORIENT_RELEASE_RETRY)
+            {
+                /* RETRY：硬件还在定向/未停稳，控制周期按预算继续重试退出。 */
+                context->orient_exit_requested = true;
+                context->orient_phase = SPINDLE_ORIENT_RELEASING;
+                context->orient_elapsed_cycles = 0U;
+            }
+            else if (released == SPINDLE_ORIENT_RELEASE_IDLE)
+            {
+                /* 没有在途定向动作：不下发 HAL 退出、不报警，直接交接给速度业务。 */
+                spindle_orientation_complete_release();
+            }
+            else
+            {
+                spindle_orientation_failed(true,"释放定向请求被拒绝");
+            }
         }
         break;
     case SPINDLE_EVENT_NONE:
@@ -559,7 +609,7 @@ static void spindle_update_driver_control(void)
         g_spindle.velocity_planner.enable=false;
         g_spindle.velocity_planner.target_vel=0;
         g_spindle_hal.target_velocity=0;
-        return; /* Mode preparation owns the device; ordinary targets are not queued. */
+        return; /* 模式准备占用设备，普通速度目标不能抢先下发。 */
     }
 
     if (g_spindle.m29_phase == SPINDLE_M29_ERROR)
@@ -589,6 +639,9 @@ static void spindle_update_driver_control(void)
         g_spindle_hal.target_velocity = 0;
         return;
     }
+    /* 定向已正常退出但尚无新指令：保留零速使能，不套用 M5 的下使能收尾。 */
+    if(g_spindle.orient_hold_stop && !g_spindle.m29_active &&
+       !g_spindle.orient_request_pending)return;
 
     if (spindle_hal_mode_switch_result()!=HAL_OK) {
         if(g_spindle.run_authorized || g_spindle.csv_switch_pending)
@@ -618,13 +671,13 @@ static void spindle_update_driver_control(void)
             g_spindle.csv_switch_pending = false;
             if (g_spindle.command_state == SPINDLE_STOP)
             {
-                g_spindle.pending_event = SPINDLE_EVENT_STOP;
+                spindle_post_event(SPINDLE_EVENT_STOP);
             }
             else
             {
-                g_spindle.pending_event =
+                spindle_post_event(
                     (g_spindle.command_state == SPINDLE_CCW) ?
-                    SPINDLE_EVENT_CCW : SPINDLE_EVENT_CW;
+                    SPINDLE_EVENT_CCW : SPINDLE_EVENT_CW);
             }
         }
         return;
@@ -651,7 +704,7 @@ static void spindle_update_driver_control(void)
         {
             spindle_internal_update_velocity();
         }
-        else if (spindle_hal_mode() < 0)    /* < 0 = 驱动器没报出工作模式。HAL 里 CSV == 0！ */
+        else if (spindle_hal_mode() < 0)    /* 实际模式反馈无效，不能据此确认设备已停止。 */
         {
             g_spindle_hal.target_velocity = 0;
             spindle_internal_finish_stop_if_ready();
@@ -724,6 +777,7 @@ static bool spindle_is_in_csp_mode(void)
 
 static void spindle_handle_stop(spindle_context_t *context)
 {
+    context->orient_hold_stop=false;
     spindle_internal_clear_velocity_arrival();   /* 新指令：清旧到速完成 */
     /* M05 入口必须清掉遗留启动请求，否则定向释放交接时会把停止前排队的旧 M3/M4
      * 重新启动；命令字段也要归位到 STOP（停止完成判定依赖 command_state == run_state）。 */
@@ -734,8 +788,8 @@ static void spindle_handle_stop(spindle_context_t *context)
     context->run_authorized = false;
     context->program_run_authorized = false;
     /*
-     * 停止事件只撤销速度目标。普通 M5 和 HMI 复位的 CSV 停车保持驱动器使能，
-     * 急停/Fault 则直接下使能；CSP 攻丝复位由插补继续下发同步位置。
+     * M5 的 CSV 减速阶段保持使能，停稳后撤销需求；HMI 复位由公共流程收口。
+     * 急停/Fault 走安全裁决；CSP 攻丝复位的同步位置仍由运动模块执行。
      */
     context->run_state = SPINDLE_STOP;
     context->velocity_planner.enable = false;

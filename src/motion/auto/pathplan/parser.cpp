@@ -695,6 +695,14 @@ static GNC_RES parser_handle_gcode(pmc_data* motion_data, NcItpState *itp_state,
     }
     // 进给速度
     plan_block.feed_vel = motion_data->feed.value / TIME_MINUS_2_S;
+    /* 攻丝/回退的进给必须由 S×螺距 决定。回退程序（G90 M29 S... G30 P99）没有显式 F，
+     * 解析器会把模态 F 再按 G95 换算一次，得到 (S×F)×S 的异常值（现场 4166.667 mm/s），
+     * 最终被参数上限 clamp 成快速。这里按本段的 S 与螺距直接覆盖。 */
+    if (plan_block.type == RIGID_TAP || plan_block.type == TAP_RETURN) {
+        const double pitch = motion_data->screw_offset < 0.0 ? -motion_data->screw_offset : motion_data->screw_offset;
+        if (pitch > 0.0 && motion_data->spindle.speed > 0)
+            plan_block.feed_vel = (double)motion_data->spindle.speed * pitch / 60.0;
+    }
     // 位置
     plan_block.end_pos.x = motion_data->position.x;
     plan_block.end_pos.y = motion_data->position.y;

@@ -40,6 +40,7 @@ bool spindle_internal_stop_is_required(const spindle_context_t *context)
         /* 复位事件只保持一个 NC 周期，复位流程期间必须持续停主轴。 */
         stop_required = true;
     }
+    /* 通用报警不在此一律撤力矩；故障/急停及复位停车由公共流程裁决。 */
     if (context->pending_event == SPINDLE_EVENT_STOP)
     {
         stop_required = true;
@@ -74,6 +75,7 @@ bool spindle_internal_reset_stop_abort_required(void)
 
 void spindle_internal_update_csv_stop(void)
 {
+    /* 普通业务已被取消，本执行器仅保留减速所需的 CSV 目标及停车反馈。 */
     RtHalAxisStatus axis={0};
     ++g_spindle.csv_stop_cycles;
     if(g_spindle.csv_stop_cycles>=SPINDLE_RESET_STOP_TIMEOUT_CYCLES ||
@@ -103,6 +105,7 @@ void spindle_internal_update_csv_stop(void)
 }
 void spindle_csv_stop_begin(void)
 {
+    /* 只接管已经使能且正在运动的 CSV；不能为执行停车重新使能。 */
     if(!g_spindle.csv_stop_pending && !g_spindle.reset_requires_start &&
        !spindle_internal_reset_stop_abort_required() && spindle_hal_is_enabled() &&
        spindle_hal_mode()==HAL_AXIS_MODE_CSV &&

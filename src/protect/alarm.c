@@ -68,6 +68,10 @@ void handle_alarm_cmd()
         // 状态复位、数据重置
         tp_reset();
         rt_data_reset();
+        // 重置事件
+        event_queue_reset(event_queue);
+        // 按当前电平重新同步互锁锁住信号 
+        //plc_lock_state_resync();
         // 更新cmd_pos位置
         update_pos_flag = 0;
         // 四轴一起发非阻塞复位请求，由 PDO 线程下发直至离开 Fault 或超时；

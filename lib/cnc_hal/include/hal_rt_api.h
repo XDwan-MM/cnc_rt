@@ -9,7 +9,7 @@
  *  - 除 hal_context_request_stop() 外，本文件所有接口都不允许跨线程并发调用。
  *  - 快照读取只取缓存，读取失败时出参保持不变。
  *  - 模式准备不会顺带使能；使能完成后不保留「使能意图」，再次使能必须重新显式请求。
- *  - H1 版本不支持正常退出定向；通过前检的请求返回 HAL_ERROR_UNSUPPORTED，不改目标与控制字。
+ *  - 四合一/蓝海华腾支持 CSV 零速、CSP 当前位置保持退出；不支持退出时指定新位置。
  */
 
 #pragma once
@@ -137,16 +137,20 @@ int32_t hal_rt_axis_request_fault_reset(HalContext* c, HalAxisId id);
 int32_t hal_rt_spindle_request_orient(HalContext* c, HalAxisId id);
 
 /**
- * @brief 请求退出定向（H1 未支持，通过前检后返回 HAL_ERROR_UNSUPPORTED）。
+ * @brief 退出定向并保持使能（仅四合一/蓝海华腾的 0x040F 定向配置）。
  *
- * 参数仍做完整校验，便于上层在后续版本直接沿用：kind 为位置时要求实际模式为 CSP，
- * 为转速时要求实际模式为 CSV 且目标值必须为 0。
+ * 只接受已完成的定向保持且有效反馈转速不超过 1 rpm；未停稳返回 BUSY。
+ * 同一退出请求在途幂等，不重开预算。
+ * CSV 要求 SPINDLE_SPEED/value=0；CSP 要求 POSITION/value 等于本拍 actual_pos。
+ * CSP 只捕获一次保持目标，不随反馈漂移更新；先写目标再撤定向字，至少观察 10 ms。
+ * 完成要求有效模式、使能及零速；CSP 还要求位置偏差不超过命令/反馈当量较大者（一个计数）。
+ * 这不是厂商专用退出应答；bit10 不作为退出完成证据。停止/复位可抢占本动作。
+ * 被拒绝的请求不改目标与控制字；退出期间普通运动请求被拒绝，不排队。
  *
  * @param[in] c      HAL 上下文。
  * @param[in] id     主轴逻辑轴号。
  * @param[in] target 退出目标；reserved 必须为 0，value 必须为有限值。
- * @return HAL_ERROR_UNSUPPORTED；参数或模式不合法时返回 HAL_ERROR_ARGUMENT /
- *         HAL_ERROR_MODE_MISMATCH / HAL_ERROR_BUSY。
+ * @return 0 已受理；UNSUPPORTED 未支持的设备/退出方式；其余为准入或参数错误。
  */
 int32_t hal_rt_spindle_request_exit_orient(HalContext* c, HalAxisId id,
                                           const HalOrientExitTarget* target);

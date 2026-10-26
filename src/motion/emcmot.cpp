@@ -362,13 +362,98 @@ static void read_from_hal()
     }
 }
 
+/* XYZ 位置请求是"暂存成功即返回"，HAL 的真正拒绝要下一拍快照才可见。
+ * 没有这条诊断时，表现为"G 代码在等位置、轴一动不动、也没有报警"。
+ * 每个轴只在错误码变化时打一条，避免刷屏。 */
+static void report_axis_position_rejection(int axis, RtHalAxisSlot slot, int stage_rc)
+{
+    static int s_last[3] = {0, 0, 0};
+    HalAxisSnapshot a;
+    int code = stage_rc;
+    int category = stage_rc ? HAL_ISSUE_POSITION : 0;
+
+    if (axis < 0 || axis > 2) return;
+    if (rt_hal_axis_snapshot(slot, &a) == HAL_OK) {
+        if (!code && a.request_rejection.category == HAL_ISSUE_POSITION &&
+            a.request_rejection.code) {
+            code = (int)a.request_rejection.code;
+            category = HAL_ISSUE_POSITION;
+        }
+        if (!code && a.execution_error.category == HAL_ISSUE_POSITION &&
+            a.execution_error.code) {
+            code = (int)a.execution_error.code;
+            category = HAL_ISSUE_POSITION;
+        }
+    } else if (!code) {
+        return;
+    }
+    if (code == s_last[axis]) return;
+    s_last[axis] = code;
+    if (code) {
+        LOG(LOG_LEVEL_ERR,
+            "轴槽 %d 位置请求未生效：code=%d category=%d drive=%d mode=%d/%d "
+            "block=0x%x cmd=%.4f act=%.4f",
+            (int)slot, code, category, (int)a.drive_state,
+            (int)a.actual_mode, (int)a.target_mode,
+            (unsigned)a.motion_block_reasons, a.command_pos, a.actual_pos);
+    }
+}
+
+/* 攻丝/回退期间的 SP/Z 轨迹诊断：用来区分"指令在跳"和"指令单调但反馈在摆"。
+ * 只在攻丝块或攻丝回退流程中按 50 Hz 采样，避免平时刷屏。 */
+static void trace_tap_motion(void)
+{
+    static unsigned s_count;
+    const int block_type = (cycle_tp && cycle_tp->plan_block) ? (int)cycle_tp->plan_block->type : -1;
+    if (block_type != RIGID_TAP && block_type != TAP_RETURN &&
+        !rt_data->sys_state[SYS_IS_RIGID_RETURN]) return;
+    if ((++s_count % 20U) != 0U) return;
+
+    HalAxisSnapshot sp;
+    if (rt_hal_axis_snapshot(RT_HAL_AXIS_SP, &sp) != HAL_OK) return;
+
+    LOG(LOG_LEVEL_DEBUG,
+        "攻丝轨迹：blk=%d ret=%d accum=%.4f len=%.4f wcs=%.4f cmd=%.4f act=%.4f rpm=%.3f "
+        "mode=%d/%d ctl=%d hblk=0x%x rej=%d/%d active=%d stop=%d "
+        "feed=%.3f max=%.3f tgt=%.3f pv=%.3f ovr=%.1f/%.1f "
+        "rig=%.1f/%.4f zcmd=%.4f zact=%.4f",
+        block_type, (int)rt_data->sys_state[SYS_IS_RIGID_RETURN],
+        cycle_tp ? cycle_tp->pos_cmd_data.accum_distance : 0.0,
+        (cycle_tp && cycle_tp->plan_block) ? cycle_tp->plan_block->length : 0.0,
+        rt_data->axis_data[AXIS_SP].wcs_cmd_pos_cur,
+        sp.command_pos, sp.actual_pos, sp.actual_speed_rpm,
+        (int)sp.actual_mode, (int)sp.target_mode, (int)sp.control_state,
+        (unsigned)sp.motion_block_reasons,
+        (int)sp.request_rejection.category, (int)sp.request_rejection.code,
+        (int)motion_spindle_position_active(), (int)motion_csp_stop_pending(),
+        (cycle_tp && cycle_tp->plan_block) ? cycle_tp->plan_block->feed_vel : 0.0,
+        (cycle_tp && cycle_tp->plan_block) ? cycle_tp->plan_block->max_vel : 0.0,
+        cycle_tp ? cycle_tp->pos_cmd_data.target_vel : 0.0,
+        (cycle_tp && cycle_tp->plan_block) ? cycle_tp->plan_block->param_vel : 0.0,
+        var_chan[0][VAR_CHAN_FEED_OVERRIDE].value.f,
+        var_chan[0][VAR_CHAN_RAPID_OVERRIDE].value.f,
+        (cycle_tp && cycle_tp->plan_block) ? (double)cycle_tp->plan_block->rigid_data.speed : 0.0,
+        (cycle_tp && cycle_tp->plan_block) ? cycle_tp->plan_block->rigid_data.screw_offset : 0.0,
+        rt_data->axis_data[AXIS_Z].motor_cmd_pos,
+        rt_data->axis_data[AXIS_Z].motor_act_pos);
+}
+
 static void output_to_hal()
 {
     /* 以用户单位（mm）发布命令，只放进适配层的按拍缓冲；真正的写入由 PDO 线程
-     * 在 commit 前完成。台账未清时适配层会拒收，此处有意忽略返回值。 */
-    (void)rt_hal_request_axis_pos(RT_HAL_AXIS_X, rt_data->axis_data[AXIS_X].motor_cmd_pos);
-    (void)rt_hal_request_axis_pos(RT_HAL_AXIS_Y, rt_data->axis_data[AXIS_Y].motor_cmd_pos);
-    (void)rt_hal_request_axis_pos(RT_HAL_AXIS_Z, rt_data->axis_data[AXIS_Z].motor_cmd_pos);
+     * 在 commit 前完成。暂存被拒或 HAL 异步拒绝都会在这里留下记录。 */
+    {
+        const int rc=rt_hal_request_axis_pos(RT_HAL_AXIS_X, rt_data->axis_data[AXIS_X].motor_cmd_pos);
+        report_axis_position_rejection(AXIS_X, RT_HAL_AXIS_X, rc);
+    }
+    {
+        const int rc=rt_hal_request_axis_pos(RT_HAL_AXIS_Y, rt_data->axis_data[AXIS_Y].motor_cmd_pos);
+        report_axis_position_rejection(AXIS_Y, RT_HAL_AXIS_Y, rc);
+    }
+    {
+        const int rc=rt_hal_request_axis_pos(RT_HAL_AXIS_Z, rt_data->axis_data[AXIS_Z].motor_cmd_pos);
+        report_axis_position_rejection(AXIS_Z, RT_HAL_AXIS_Z, rc);
+    }
     /* 主轴目标沿用已对齐的角度坐标基准；XYZ 仍走原有的电机位置/补偿通路。
      * 停车输出优先。 */
     if(motion_csp_stop_handle_position_output() || !motion_spindle_position_active())return;
@@ -379,6 +464,7 @@ static void output_to_hal()
         (void)alarm_spindle_request_torque(false);
         alarm_report_hal_error(rc);
     }
+    trace_tap_motion();
 }
 
 static void compute_error_comp()
@@ -619,17 +705,40 @@ int motion_spindle_prepare_velocity(void)
     if(rt_hal_axis_snapshot(RT_HAL_AXIS_SP,&a)!=HAL_OK ||
        (a.feedback_valid&(HAL_FEEDBACK_STATUS|HAL_FEEDBACK_MODE|HAL_FEEDBACK_SPEED))!=
        (HAL_FEEDBACK_STATUS|HAL_FEEDBACK_MODE|HAL_FEEDBACK_SPEED) ||
-       a.actual_mode!=HAL_AXIS_MODE_CSP || !isfinite(a.actual_speed_rpm))return -1;
-    if(motion_csp_stop_pending())return 0;
+       a.actual_mode!=HAL_AXIS_MODE_CSP || !isfinite(a.actual_speed_rpm)) {
+        LOG(LOG_LEVEL_ERR,"M19前准备CSV被拒：快照/反馈无效 rc=%d",(int)a.actual_mode);
+        return -1;
+    }
+    if(motion_csp_stop_pending()) {
+        LOG(LOG_LEVEL_ERR,"M19前准备CSV被拒：CSP停车在途");
+        return 0;
+    }
     if(cycle_tp && cycle_tp->exec_state!=EXEC_IDLE &&
        (cycle_tp->exec_cmd==DO_TAP_CMD || cycle_tp->exec_cmd==DO_MOVE_CMD ||
-        cycle_tp->exec_cmd==DO_CHOP_CMD || cycle_tp->exec_cmd==DO_SKIP_CMD))return 0;
-    if(fabs(a.actual_speed_rpm)>1.0)return 0;
+        cycle_tp->exec_cmd==DO_CHOP_CMD || cycle_tp->exec_cmd==DO_SKIP_CMD)) {
+        LOG(LOG_LEVEL_ERR,"M19前准备CSV被拒：运动未空闲 cmd=%d state=%d",
+            (int)cycle_tp->exec_cmd,(int)cycle_tp->exec_state);
+        return 0;
+    }
+    if(fabs(a.actual_speed_rpm)>1.0) {
+        LOG(LOG_LEVEL_ERR,"M19前准备CSV被拒：主轴未停稳 rpm=%.3f",a.actual_speed_rpm);
+        return 0;
+    }
     if(a.drive_state==HAL_DRIVE_OPERATION_ENABLED) {
         if(!(a.feedback_valid&HAL_FEEDBACK_POSITION) || !(a.command_valid&HAL_COMMAND_POSITION) ||
-           !isfinite(a.command_pos) || !isfinite(a.actual_pos))return -1;
-        if(fabs(a.command_pos-a.actual_pos)>10.0)return 0;
-    } else if(a.drive_state!=HAL_DRIVE_READY && a.drive_state!=HAL_DRIVE_SWITCH_ON_DISABLED)return -1;
+           !isfinite(a.command_pos) || !isfinite(a.actual_pos)) {
+            LOG(LOG_LEVEL_ERR,"M19前准备CSV被拒：位置反馈/指令无效");
+            return -1;
+        }
+        if(fabs(a.command_pos-a.actual_pos)>10.0) {
+            LOG(LOG_LEVEL_ERR,"M19前准备CSV被拒：位置误差过大 cmd=%.4f act=%.4f err=%.4f",
+                a.command_pos,a.actual_pos,fabs(a.command_pos-a.actual_pos));
+            return 0;
+        }
+    } else if(a.drive_state!=HAL_DRIVE_READY && a.drive_state!=HAL_DRIVE_SWITCH_ON_DISABLED) {
+        LOG(LOG_LEVEL_ERR,"M19前准备CSV被拒：驱动状态=%d",(int)a.drive_state);
+        return -1;
+    }
     s_position_active=false;
     return 1;
 }

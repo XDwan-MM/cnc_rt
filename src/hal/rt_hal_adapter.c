@@ -32,6 +32,8 @@ static uint8_t s_local_rejection_dirty[RT_HAL_AXIS_COUNT];
 static double s_req_pos[RT_HAL_AXIS_COUNT], s_req_setpos[RT_HAL_AXIS_COUNT], s_req_speed[RT_HAL_AXIS_COUNT];
 static int s_req_speed_dir[RT_HAL_AXIS_COUNT];
 static uint8_t s_req_pos_dirty[RT_HAL_AXIS_COUNT], s_req_setpos_dirty[RT_HAL_AXIS_COUNT], s_req_speed_dirty[RT_HAL_AXIS_COUNT];
+static int32_t s_setpos_result[RT_HAL_AXIS_COUNT];
+static uint8_t s_setpos_result_valid[RT_HAL_AXIS_COUNT];
 static uint8_t s_req_estop[RT_HAL_AXIS_COUNT], s_req_reset[RT_HAL_AXIS_COUNT];
 static uint8_t s_req_enable_dirty[RT_HAL_AXIS_COUNT], s_req_mode_dirty[RT_HAL_AXIS_COUNT];
 static uint8_t s_req_orient_dirty[RT_HAL_AXIS_COUNT], s_req_exit_dirty[RT_HAL_AXIS_COUNT], s_req_clear[RT_HAL_AXIS_COUNT];
@@ -65,7 +67,14 @@ static void submitted(int slot,int category,int rc) {
     if(rc) s_rejection[slot]=(HalAxisIssue){category,rc};
     else if(s_rejection[slot].category==category)s_rejection[slot]=(HalAxisIssue){0,0};
 }
+static void cancel_setpos(int i) {
+    if(s_req_setpos_dirty[i]) {
+        s_setpos_result[i]=HAL_ERROR_STOPPED;s_setpos_result_valid[i]=1;
+        s_req_setpos_dirty[i]=0;
+    }
+}
 static void clear_axis_requests(int i) {
+    cancel_setpos(i);
     s_req_pos_dirty[i]=s_req_setpos_dirty[i]=s_req_speed_dirty[i]=0;
     s_req_estop[i]=s_req_reset[i]=s_req_enable_dirty[i]=s_req_mode_dirty[i]=0;
     s_req_orient_dirty[i]=s_req_exit_dirty[i]=s_req_clear[i]=0;
@@ -77,6 +86,7 @@ static void reset_transport(void) {
     memset(s_rejection,0,sizeof(s_rejection));
     memset(s_local_rejection_dirty,0,sizeof(s_local_rejection_dirty));
     for(int i=0;i<RT_HAL_AXIS_COUNT;++i)clear_axis_requests(i);
+    memset(s_setpos_result_valid,0,sizeof(s_setpos_result_valid));
 }
 int rt_hal_create(const RtHalAxisParams* params, char* err, uint32_t err_len) {
     if (!params) return RT_HAL_ERR_NULL_ARG;
@@ -261,10 +271,6 @@ static void take_requests(void) {
         if(s_local_rejection_dirty[i]) {
             s_rejection[i]=s_local_rejection[i];s_local_rejection_dirty[i]=0;
         }
-        if(s_req_setpos_dirty[i]) {
-            s_req_setpos_dirty[i]=0;
-            submitted(i,HAL_ISSUE_SET_POSITION,hal_rt_axis_set_pos(s_ctx,id,s_req_setpos[i]));
-        }
         if(s_req_estop[i]) {
             clear_axis_requests(i);
             submitted(i,HAL_ISSUE_ESTOP,hal_rt_axis_request_estop(s_ctx,id));
@@ -279,9 +285,25 @@ static void take_requests(void) {
             if(disable)submitted(i,HAL_ISSUE_DISABLE,hal_rt_axis_request_disable(s_ctx,id));
             continue;
         }
+        /* 速度目标必须先于下使能提交：停车收口水时同一拍会同时暂存
+         * "写 0 速"和"撤力矩"，若先执行下使能，HAL 已经有了 stop_goal，
+         * 随后的 0 速请求会被 NOT_ENABLED 拒掉，业务层再把这条自造拒绝
+         * 当成故障（现场 18:27 的 262/报警 139）。顺序反过来后，0 速在轴
+         * 仍使能时先被接受，再撤力矩。 */
+        if(s_req_speed_dirty[i]) {
+            s_req_speed_dirty[i]=0;
+            submitted(i,HAL_ISSUE_SPINDLE_SPEED,hal_rt_spindle_write_speed(s_ctx,id,s_req_speed[i],s_req_speed_dir[i]));
+        }
         if(s_req_enable_dirty[i]&&!s_req_enable[i]) {
+            cancel_setpos(i);
             s_req_enable_dirty[i]=0;
             submitted(i,HAL_ISSUE_DISABLE,hal_rt_axis_request_disable(s_ctx,id));
+        }
+        if(s_req_setpos_dirty[i]) {
+            s_req_setpos_dirty[i]=0;
+            s_setpos_result[i]=hal_rt_axis_set_pos(s_ctx,id,s_req_setpos[i]);
+            s_setpos_result_valid[i]=1;
+            submitted(i,HAL_ISSUE_SET_POSITION,s_setpos_result[i]);
         }
         if(s_req_mode_dirty[i]) {
             s_req_mode_dirty[i]=0;
@@ -301,10 +323,6 @@ static void take_requests(void) {
         if(s_req_pos_dirty[i]) {
             s_req_pos_dirty[i]=0;
             submitted(i,HAL_ISSUE_POSITION,hal_rt_axis_write_pos(s_ctx,id,s_req_pos[i]));
-        }
-        if(s_req_speed_dirty[i]) {
-            s_req_speed_dirty[i]=0;
-            submitted(i,HAL_ISSUE_SPINDLE_SPEED,hal_rt_spindle_write_speed(s_ctx,id,s_req_speed[i],s_req_speed_dir[i]));
         }
         if(s_req_clear[i]) {
             s_req_clear[i]=0;
@@ -517,7 +535,16 @@ int rt_hal_request_axis_pos(RtHalAxisSlot slot,double pos) {
 int rt_hal_axis_set_pos(RtHalAxisSlot slot,double pos) {
     int rc=admission(slot,HAL_ISSUE_SET_POSITION,0);if(rc)return rc;
     if(!isfinite(pos))return local_reply(slot,HAL_ISSUE_SET_POSITION,HAL_ERROR_ARGUMENT);
+    if(s_req_setpos_dirty[slot])return local_reply(slot,HAL_ISSUE_SET_POSITION,HAL_ERROR_BUSY);
+    s_setpos_result_valid[slot]=0;
     s_req_setpos[slot]=pos;s_req_setpos_dirty[slot]=1;return HAL_OK;
+}
+int rt_hal_axis_set_pos_result(RtHalAxisSlot slot,int32_t* result) {
+    if(!slot_ok(slot)||!result)return HAL_ERROR_ARGUMENT;
+    if(!s_ctx||!s_running||!s_snap_valid)return HAL_ERROR_NOT_RUNNING;
+    if(s_req_setpos_dirty[slot])return HAL_ERROR_BUSY;
+    if(!s_setpos_result_valid[slot])return HAL_ERROR_STATE;
+    *result=s_setpos_result[slot];return HAL_OK;
 }
 int rt_hal_request_spindle_speed(RtHalAxisSlot slot,double rpm,int dir) {
     int rc=admission(slot,HAL_ISSUE_SPINDLE_SPEED,1);if(rc)return rc;
