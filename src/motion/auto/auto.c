@@ -375,21 +375,21 @@ static void auto_check_event(){
             break;
         }
         break;    
-    case SYS_EVENT_STLK_ON:
+    // case SYS_EVENT_STLK_ON:
     case SYS_EVENT_IT_ON:
-    case SYS_EVENT_IT1_ON:
-    case SYS_EVENT_IT2_ON:
-    case SYS_EVENT_IT3_ON:
-    case SYS_EVENT_IT4_ON:
-    case SYS_EVENT_IT5_ON:
-    case SYS_EVENT_PMIT2_ON:
-    case SYS_EVENT_PMIT3_ON:
-    case SYS_EVENT_PMIT4_ON:
-    case SYS_EVENT_PMIT5_ON:
-    case SYS_EVENT_NMIT2_ON:
-    case SYS_EVENT_NMIT3_ON:
-    case SYS_EVENT_NMIT4_ON:
-    case SYS_EVENT_NMIT5_ON:
+    // case SYS_EVENT_IT1_ON:
+    // case SYS_EVENT_IT2_ON:
+    // case SYS_EVENT_IT3_ON:
+    // case SYS_EVENT_IT4_ON:
+    // case SYS_EVENT_IT5_ON:
+    // case SYS_EVENT_PMIT2_ON:
+    // case SYS_EVENT_PMIT3_ON:
+    // case SYS_EVENT_PMIT4_ON:
+    // case SYS_EVENT_PMIT5_ON:
+    // case SYS_EVENT_NMIT2_ON:
+    // case SYS_EVENT_NMIT3_ON:
+    // case SYS_EVENT_NMIT4_ON:
+    // case SYS_EVENT_NMIT5_ON:
         LOG(LOG_LEVEL_INFO, "自动模式处理开启所有轴互锁");
         switch (cycle_tp->exec_state)
         {
@@ -400,21 +400,21 @@ static void auto_check_event(){
             break;
         }
         break;
-    case SYS_EVENT_STLK_OFF:
+    // case SYS_EVENT_STLK_OFF:
     case SYS_EVENT_IT_OFF:
-    case SYS_EVENT_IT1_OFF:
-    case SYS_EVENT_IT2_OFF:
-    case SYS_EVENT_IT3_OFF:
-    case SYS_EVENT_IT4_OFF:
-    case SYS_EVENT_IT5_OFF:
-    case SYS_EVENT_PMIT2_OFF:
-    case SYS_EVENT_PMIT3_OFF:
-    case SYS_EVENT_PMIT4_OFF:
-    case SYS_EVENT_PMIT5_OFF:
-    case SYS_EVENT_NMIT2_OFF:
-    case SYS_EVENT_NMIT3_OFF:
-    case SYS_EVENT_NMIT4_OFF:
-    case SYS_EVENT_NMIT5_OFF:
+    // case SYS_EVENT_IT1_OFF:
+    // case SYS_EVENT_IT2_OFF:
+    // case SYS_EVENT_IT3_OFF:
+    // case SYS_EVENT_IT4_OFF:
+    // case SYS_EVENT_IT5_OFF:
+    // case SYS_EVENT_PMIT2_OFF:
+    // case SYS_EVENT_PMIT3_OFF:
+    // case SYS_EVENT_PMIT4_OFF:
+    // case SYS_EVENT_PMIT5_OFF:
+    // case SYS_EVENT_NMIT2_OFF:
+    // case SYS_EVENT_NMIT3_OFF:
+    // case SYS_EVENT_NMIT4_OFF:
+    // case SYS_EVENT_NMIT5_OFF:
         LOG(LOG_LEVEL_INFO, "自动模式处理关闭所有轴互锁");
         switch (cycle_tp->exec_state)
         {
