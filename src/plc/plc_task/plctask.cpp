@@ -1552,8 +1552,11 @@ void PlcTask::handleSPGET(const LadInstr& instr) {
     if (scaleReg.type != REG_TYPE_NONE || !isRegRangeValid(outReg, 0, 1) || (outReg.type != REG_D && outReg.type != REG_B) || scale < 0 || scale > 4) {
         replaceLogicTop(false); return;
     }
+    /* 主轴实际转速：AXIS_SP(3) 的 ACT_VEL_EX 由实时周期写入，单位 rpm。
+     * VAR_CHAN_ACT_SPDL_SPEED 目前没有生产者，不能作为 SPGET 的数据源。 */
+    constexpr int kSpindleAxis = 3;
     VarUnion speedVar = {};
-    if (getVarChanValue(0, VAR_CHAN_ACT_SPDL_SPEED, 0, &speedVar, 0) != 0 || speedVar.type != DOUBLE_TYPE) {
+    if (getVarAxisValue(kSpindleAxis, VAR_AXIS_ACT_VEL_EX, &speedVar, 0) != 0 || speedVar.type != DOUBLE_TYPE) {
         replaceLogicTop(false); return;
     }
     const double speed = speedVar.value.f;
