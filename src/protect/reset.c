@@ -69,7 +69,17 @@ void nc_set_resetting(RESET_TRIGGER reset_trigger){
     if (!nc_reset) return;
     /* 同一复位尚在进行时保留停车进度；新的急停/复位来源仍可抢占。 */
     if (nc_reset->is_resetting && nc_reset->reset_trigger == reset_trigger &&
-        s_phase != RESET_FAILED && s_phase != RESET_COMPLETE && s_phase != RESET_IDLE) return;
+        s_phase != RESET_FAILED && s_phase != RESET_COMPLETE && s_phase != RESET_IDLE) {
+        /* 重复按 HMI 复位必须重新给出 F6.1 握手脉冲：PLC 是靠 F6.1 把
+         * G8.4 置 1 的。第一次脉冲可能落在急停仍按着、PLC 不接受的时候，
+         * 拔起后再按复位如果被这里的早退吞掉，F6.1 就再也不会出现，
+         * G8.4 永远为 0。 */
+        if (reset_trigger == HMI_RESET) {
+            nc_reset->is_mdi_reset = 1;
+            nc_reset->mdi_reset_tic = 0;
+        }
+        return;
+    }
     /* 新的一次复位：撤销旧业务，后续在运动计算前选择停车执行方。 */
     motion_spindle_release_position();
     motion_csp_stop_cancel();

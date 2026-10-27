@@ -68,8 +68,9 @@ void handle_alarm_cmd()
         // 状态复位、数据重置
         tp_reset();
         rt_data_reset();
-        // 重置事件
-        event_queue_reset(event_queue);
+        /* 05ed630 修复"急停后互锁复位无效"时删掉了这里的 event_queue_reset：
+         * 复位处理中清事件队列会把随后的急停释放/复位事件一起清掉，导致
+         * 拔起急停后再按复位无效。7b7404b 又把它加回来了，这里恢复 05ed630 的行为。 */
         // 按当前电平重新同步互锁锁住信号 
         //plc_lock_state_resync();
         // 更新cmd_pos位置
