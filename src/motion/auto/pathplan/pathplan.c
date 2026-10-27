@@ -35,6 +35,15 @@ static int block_cal_segment(PLAN_BLOCK* pretreat_block, double seg_theta_thre,P
 static void block_fix_pos(PLAN_BLOCK* pretreat_block, double l_theta_thre ,double theta_thre, PLAN_QUEUE* temp);
 static bool is_length_valid(PLAN_BLOCK* parser_block);
 static void block_deal_nurbs_enable(PLAN_BLOCK* pretreat_block,PLAN_QUEUE* temp);
+// 外部减速：RAPID与切削进给使用不同的参数和判定方式
+static bool block_cal_external_decel_function_enabled(int function);
+static double block_cal_cut_external_decel_parameter(int function);
+static double block_cal_rapid_external_decel_parameter(int axis, int function);
+static double block_cal_axis_component(PLAN_BLOCK* current_block, int axis, bool end_vec);
+static int block_cal_axis_direction_mask(PLAN_BLOCK* current_block, int axis);
+static double block_cal_rapid_external_decel_vel(PLAN_BLOCK* current_block);
+static double block_cal_cut_external_decel_vel(PLAN_BLOCK* current_block);
+static double block_cal_external_decel_vel(PLAN_BLOCK* current_block);
 
 static bool noMoreBlocks(void);
 
@@ -1032,6 +1041,266 @@ void block_cal_move_axis(PLAN_BLOCK* current_block){
     }
 }
 
+#define BLOCK_EXTERNAL_DECEL_FUNCTION_COUNT 3
+#define BLOCK_AXIS_DIR_POS 0x01
+#define BLOCK_AXIS_DIR_NEG 0x02
+
+static const SysStateIndex block_cal_external_decel_state[3][3][2] = {
+    {
+        {SYS_IS_EXTERNAL_DECLINE1_AXIS1_POS, SYS_IS_EXTERNAL_DECLINE1_AXIS1_NEG},
+        {SYS_IS_EXTERNAL_DECLINE2_AXIS1_POS, SYS_IS_EXTERNAL_DECLINE2_AXIS1_NEG},
+        {SYS_IS_EXTERNAL_DECLINE3_AXIS1_POS, SYS_IS_EXTERNAL_DECLINE3_AXIS1_NEG},
+    },
+    {
+        {SYS_IS_EXTERNAL_DECLINE1_AXIS2_POS, SYS_IS_EXTERNAL_DECLINE1_AXIS2_NEG},
+        {SYS_IS_EXTERNAL_DECLINE2_AXIS2_POS, SYS_IS_EXTERNAL_DECLINE2_AXIS2_NEG},
+        {SYS_IS_EXTERNAL_DECLINE3_AXIS2_POS, SYS_IS_EXTERNAL_DECLINE3_AXIS2_NEG},
+    },
+    {
+        {SYS_IS_EXTERNAL_DECLINE1_AXIS3_POS, SYS_IS_EXTERNAL_DECLINE1_AXIS3_NEG},
+        {SYS_IS_EXTERNAL_DECLINE2_AXIS3_POS, SYS_IS_EXTERNAL_DECLINE2_AXIS3_NEG},
+        {SYS_IS_EXTERNAL_DECLINE3_AXIS3_POS, SYS_IS_EXTERNAL_DECLINE3_AXIS3_NEG},
+    },
+};
+
+// 外部减速功能使能：功能1（下标0）没有独立开关；功能2/3由 ex_dec2/3_enable 控制
+static bool block_cal_external_decel_function_enabled(int function)
+{
+    switch (function)
+    {
+    case 0:
+        return true;
+    case 1:
+        return rt_data->chan_data[0].ex_dec2_enable;
+    case 2:
+        return rt_data->chan_data[0].ex_dec3_enable;
+    default:
+        return false;
+    }
+}
+
+// 切削进给的外部减速速度：通道参数
+static double block_cal_cut_external_decel_parameter(int function)
+{
+    switch (function)
+    {
+    case 0: return rt_data->chan_data[0].cut_ex_dec1_vel;
+    case 1: return rt_data->chan_data[0].cut_ex_dec2_vel;
+    case 2: return rt_data->chan_data[0].cut_ex_dec3_vel;
+    default: return HUGE_VAL;
+    }
+}
+
+// 快速进给的外部减速速度：轴参数
+static double block_cal_rapid_external_decel_parameter(int axis, int function)
+{
+    switch (function)
+    {
+    case 0: return rt_data->axis_data[axis].rpd_ex_dec1_vel;
+    case 1: return rt_data->axis_data[axis].rpd_ex_dec2_vel;
+    case 2: return rt_data->axis_data[axis].rpd_ex_dec3_vel;
+    default: return HUGE_VAL;
+    }
+}
+
+// 取段起点/终点切矢在指定轴上的分量
+static double block_cal_axis_component(PLAN_BLOCK* current_block, int axis, bool end_vec)
+{
+    VECTOR vec = end_vec ? current_block->end_vec : current_block->start_vec;
+    switch (axis)
+    {
+    case AXIS_X:
+        return vec.x;
+    case AXIS_Y:
+        return vec.y;
+    case AXIS_Z:
+        return vec.z;
+    default:
+        return 0.0;
+    }
+}
+
+// 计算某轴在本段内可能出现的运动方向（同时包含正、负向）
+static int block_cal_axis_direction_mask(PLAN_BLOCK* current_block, int axis)
+{
+    int direction_mask = 0;
+    double start_component = block_cal_axis_component(current_block, axis, false);
+    double end_component = block_cal_axis_component(current_block, axis, true);
+
+    if (start_component > 0.0) direction_mask |= BLOCK_AXIS_DIR_POS;
+    else if (start_component < 0.0) direction_mask |= BLOCK_AXIS_DIR_NEG;
+    if (end_component > 0.0) direction_mask |= BLOCK_AXIS_DIR_POS;
+    else if (end_component < 0.0) direction_mask |= BLOCK_AXIS_DIR_NEG;
+
+    // 曲线段在一个程序段内的运动方向可能变化，保守按双向处理
+    switch (current_block->type)
+    {
+    case CIRCLE_CW:
+    case CIRCLE_CCW:
+        switch (current_block->plane)
+        {
+        case PLANE_XY:
+            if (axis == AXIS_X || axis == AXIS_Y) direction_mask |= BLOCK_AXIS_DIR_POS | BLOCK_AXIS_DIR_NEG;
+            break;
+        case PLANE_XZ:
+            if (axis == AXIS_X || axis == AXIS_Z) direction_mask |= BLOCK_AXIS_DIR_POS | BLOCK_AXIS_DIR_NEG;
+            break;
+        case PLANE_YZ:
+            if (axis == AXIS_Y || axis == AXIS_Z) direction_mask |= BLOCK_AXIS_DIR_POS | BLOCK_AXIS_DIR_NEG;
+            break;
+        default:
+            break;
+        }
+        break;
+    case HELIX_CW:
+    case HELIX_CCW:
+        switch (current_block->plane)
+        {
+        case PLANE_XY:
+            if (axis == AXIS_X || axis == AXIS_Y)
+            {
+                direction_mask |= BLOCK_AXIS_DIR_POS | BLOCK_AXIS_DIR_NEG;
+            }
+            else if (axis == AXIS_Z)
+            {
+                // 螺旋的直线轴方向由本段Z向位移决定
+                double delta = current_block->end_pos.z - current_block->start_pos.z;
+                if (delta > 0.0) direction_mask |= BLOCK_AXIS_DIR_POS;
+                else if (delta < 0.0) direction_mask |= BLOCK_AXIS_DIR_NEG;
+            }
+            break;
+        case PLANE_XZ:
+            if (axis == AXIS_X || axis == AXIS_Z)
+            {
+                direction_mask |= BLOCK_AXIS_DIR_POS | BLOCK_AXIS_DIR_NEG;
+            }
+            else if (axis == AXIS_Y)
+            {
+                double delta = current_block->end_pos.y - current_block->start_pos.y;
+                if (delta > 0.0) direction_mask |= BLOCK_AXIS_DIR_POS;
+                else if (delta < 0.0) direction_mask |= BLOCK_AXIS_DIR_NEG;
+            }
+            break;
+        case PLANE_YZ:
+            if (axis == AXIS_Y || axis == AXIS_Z)
+            {
+                direction_mask |= BLOCK_AXIS_DIR_POS | BLOCK_AXIS_DIR_NEG;
+            }
+            else if (axis == AXIS_X)
+            {
+                double delta = current_block->end_pos.x - current_block->start_pos.x;
+                if (delta > 0.0) direction_mask |= BLOCK_AXIS_DIR_POS;
+                else if (delta < 0.0) direction_mask |= BLOCK_AXIS_DIR_NEG;
+            }
+            break;
+        default:
+            break;
+        }
+        break;
+    case NURBS:
+        // 样条曲率方向在段内可能变化，按双向处理
+        direction_mask |= BLOCK_AXIS_DIR_POS | BLOCK_AXIS_DIR_NEG;
+        break;
+    default:
+        break;
+    }
+    return direction_mask;
+}
+
+// 快速进给：按运动轴分别取 rpd_ex_decN_vel，再换算成路径速度上限
+// 快速进给：暂时不按照运动轴取速度
+static double block_cal_rapid_external_decel_vel(PLAN_BLOCK* current_block)
+{
+    double limit = HUGE_VAL;
+
+    for (int axis = AXIS_X; axis <= AXIS_Z; axis++)
+    {
+        int direction_mask = block_cal_axis_direction_mask(current_block, axis);
+        if (direction_mask == 0) continue;
+
+        // 轴速度 = 路径速度 × 方向分量，因此路径速度上限 = 轴速度上限 / |方向分量|
+        double component = fabs(block_cal_axis_component(current_block, axis, false));
+        if (component <= 0.0) continue;
+
+        for (int function = 0; function < BLOCK_EXTERNAL_DECEL_FUNCTION_COUNT; function++)
+        {
+            if (!block_cal_external_decel_function_enabled(function)) continue;
+
+            bool positive_active = (direction_mask & BLOCK_AXIS_DIR_POS)
+                                   && rt_data->sys_state[block_cal_external_decel_state[axis][function][0]];
+            bool negative_active = (direction_mask & BLOCK_AXIS_DIR_NEG)
+                                   && rt_data->sys_state[block_cal_external_decel_state[axis][function][1]];
+            if (!positive_active && !negative_active) continue;
+
+            double axis_vel = block_cal_rapid_external_decel_parameter(axis, function);
+            if (axis_vel < 0.0) axis_vel = 0.0;
+            // double path_vel = axis_vel / component;
+            if (axis_vel < limit) limit = axis_vel;
+        }
+    }
+    return limit;
+}
+
+// 切削进给：按通道取 cut_ex_decN_vel，并用各轴的方向使能参数过滤
+static double block_cal_cut_external_decel_vel(PLAN_BLOCK* current_block)
+{
+    double limit = HUGE_VAL;
+
+    for (int axis = AXIS_X; axis <= AXIS_Z; axis++)
+    {
+        int direction_mask = block_cal_axis_direction_mask(current_block, axis);
+        if (direction_mask == 0) continue;
+
+        bool positive_enable = rt_data->axis_data[axis].ex_dec_enable_pos_cut;
+        bool negative_enable = rt_data->axis_data[axis].ex_dec_enable_neg_cut;
+        if (!positive_enable && !negative_enable) continue;
+
+        for (int function = 0; function < BLOCK_EXTERNAL_DECEL_FUNCTION_COUNT; function++)
+        {
+            if (!block_cal_external_decel_function_enabled(function)) continue;
+
+            bool positive_active = (direction_mask & BLOCK_AXIS_DIR_POS)
+                                   && positive_enable
+                                   && rt_data->sys_state[block_cal_external_decel_state[axis][function][0]];
+            bool negative_active = (direction_mask & BLOCK_AXIS_DIR_NEG)
+                                   && negative_enable
+                                   && rt_data->sys_state[block_cal_external_decel_state[axis][function][1]];
+            if (!positive_active && !negative_active) continue;
+
+            double cut_vel = block_cal_cut_external_decel_parameter(function);
+            if (cut_vel < 0.0) cut_vel = 0.0;
+            if (cut_vel < limit) limit = cut_vel;
+        }
+    }
+    return limit;
+}
+
+// 按段类型选择外部减速参数：RAPID 用轴参数，切削用通道参数；攻丝/探针不减速
+static double block_cal_external_decel_vel(PLAN_BLOCK* current_block)
+{
+    if (current_block == NULL || rt_data == NULL) return HUGE_VAL;
+    if (!rt_data->chan_data[0].ex_dec_enable) return HUGE_VAL;
+
+    switch (current_block->type)
+    {
+    case RAPID:
+        return block_cal_rapid_external_decel_vel(current_block);
+    case LINE:
+    case CIRCLE_CCW:
+    case CIRCLE_CW:
+    case HELIX_CW:
+    case HELIX_CCW:
+    case NURBS:
+        return block_cal_cut_external_decel_vel(current_block);
+    case RIGID_TAP:
+    case TAP_RETURN:
+    case PROBE:
+    case UNKNOWN:
+    default:
+        return HUGE_VAL;
+    }
+}
+
 // 计算段最大允许速度
 void block_cal_max_vel(PLAN_BLOCK* current_block){
     switch(current_block->type){
@@ -1040,12 +1309,6 @@ void block_cal_max_vel(PLAN_BLOCK* current_block){
             {
             case MOVING_AXIS_X:
                 current_block->param_vel = rt_data->axis_data[0].max_rapid_vel;
-                if (rt_get_sys_state(SYS_IS_EXTERNAL_DECLINE1_AXIS1_POS) || rt_get_sys_state(SYS_IS_EXTERNAL_DECLINE1_AXIS1_NEG)) {
-                    current_block->param_vel = MIN(current_block->param_vel, rt_data->chan_data[0].cut_ex_dec1_vel);
-                }
-                if (rt_get_sys_state(SYS_IS_EXTERNAL_DECLINE2_AXIS1_POS) || rt_get_sys_state(SYS_IS_EXTERNAL_DECLINE2_AXIS1_NEG)) {
-                    current_block->param_vel = MIN(current_block->param_vel, rt_data->chan_data[0].cut_ex_dec2_vel);
-                }
                 current_block->feed_vel = rt_data->axis_data[0].jog_lowspd;
                 current_block->max_vel = MIN(current_block->feed_vel, current_block->param_vel);
                 current_block->max_acc = rt_data->axis_data[0].max_rapid_acc;
@@ -1192,6 +1455,17 @@ void block_cal_max_vel(PLAN_BLOCK* current_block){
             break;
         default:
             break;
+    }
+    // 外部减速：RAPID 取轴参数 rpd_ex_decN_vel，切削进给取通道参数 cut_ex_decN_vel，
+    // 两者都必须同时钳制到本段的 param_vel 和 max_vel 上，否则前瞻仍会按原速度规划。
+    double external_decel_vel = block_cal_external_decel_vel(current_block);
+    if (external_decel_vel < current_block->param_vel)
+    {
+        current_block->param_vel = external_decel_vel;
+    }
+    if (external_decel_vel < current_block->max_vel)
+    {
+        current_block->max_vel = external_decel_vel;
     }
 }
 

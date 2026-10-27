@@ -240,11 +240,13 @@ static bool is_newval_unvalid(){
 }
 
 static void auto_cal_target_vel(){
-    if(rt_data->sys_state[SYS_IS_EXTERNAL_DECLINE1_AXIS1_POS] || rt_data->sys_state[SYS_IS_EXTERNAL_DECLINE1_AXIS1_NEG]) cycle_tp->plan_block->param_vel = MIN(cycle_tp->plan_block->param_vel, rt_data->chan_data[0].cut_ex_dec1_vel);
-    if(rt_data->sys_state[SYS_IS_EXTERNAL_DECLINE2_AXIS1_POS] || rt_data->sys_state[SYS_IS_EXTERNAL_DECLINE2_AXIS1_NEG]) cycle_tp->plan_block->param_vel = MIN(cycle_tp->plan_block->param_vel, rt_data->chan_data[0].cut_ex_dec2_vel);
     switch (cycle_tp->exec_state)
     {
     case EXEC_RUNNING:
+        // 外部减速状态会改变本段允许的最大速度：先按当前状态刷新本段上限。
+        // RAPID 使用轴参数 rpd_ex_decN_vel，切削进给使用通道参数 cut_ex_decN_vel，
+        // 具体选择在 pathplan.c 的 block_cal_max_vel() 中完成。
+        block_cal_max_vel(cycle_tp->plan_block);
         switch (cycle_tp->plan_block->type)
         {
         case RAPID:
@@ -523,10 +525,10 @@ static void block_cal_exact_stop_vel(PLAN_BLOCK* current_block){
             // 当参数RDR（No.1401#6）的值为1时为空运行速度×JV，其值为0时则为快速移动速度
             if (rt_get_sys_state(SYS_IS_DRY_RUN))
             {
-                current_block->max_vel = MIN(rt_data->chan_data[0].dryrun_spd * var_chan[0][VAR_CHAN_RAPID_OVERRIDE].value.f / OVERRIDE_PERCENT, cycle_tp->plan_block->param_vel);        
+                current_block->max_vel = MIN(rt_data->chan_data[0].dryrun_spd * var_chan[0][VAR_CHAN_RAPID_OVERRIDE].value.f / OVERRIDE_PERCENT, current_block->param_vel);        
             }
             else{
-                current_block->max_vel = MIN(current_block->feed_vel * var_chan[0][VAR_CHAN_RAPID_OVERRIDE].value.f / OVERRIDE_PERCENT, cycle_tp->plan_block->param_vel);
+                current_block->max_vel = MIN(current_block->feed_vel * var_chan[0][VAR_CHAN_RAPID_OVERRIDE].value.f / OVERRIDE_PERCENT, current_block->param_vel);
             }
             current_block->start_vel = current_block->end_vel = 0;
             break;
@@ -539,10 +541,10 @@ static void block_cal_exact_stop_vel(PLAN_BLOCK* current_block){
             // 被钳制在最大切削进给速度上
             if (rt_get_sys_state(SYS_IS_DRY_RUN))
             {
-                current_block->max_vel = MIN(rt_data->chan_data[0].dryrun_spd * var_chan[0][VAR_CHAN_FEED_OVERRIDE].value.f / OVERRIDE_PERCENT, cycle_tp->plan_block->param_vel);
+                current_block->max_vel = MIN(rt_data->chan_data[0].dryrun_spd * var_chan[0][VAR_CHAN_FEED_OVERRIDE].value.f / OVERRIDE_PERCENT, current_block->param_vel);
             }
             else{
-                current_block->max_vel = MIN(current_block->feed_vel * var_chan[0][VAR_CHAN_FEED_OVERRIDE].value.f / OVERRIDE_PERCENT, cycle_tp->plan_block->param_vel);
+                current_block->max_vel = MIN(current_block->feed_vel * var_chan[0][VAR_CHAN_FEED_OVERRIDE].value.f / OVERRIDE_PERCENT, current_block->param_vel);
             }
             current_block->start_vel = current_block->end_vel = 0;
             break;
@@ -558,10 +560,10 @@ static void block_cal_tap_vel(PLAN_BLOCK* current_block){
         case RAPID:
             if (rt_get_sys_state(SYS_IS_DRY_RUN))
             {
-                current_block->max_vel = MIN(rt_data->chan_data[0].dryrun_spd, cycle_tp->plan_block->param_vel);
+                current_block->max_vel = MIN(rt_data->chan_data[0].dryrun_spd, current_block->param_vel);
             }
             else{
-                current_block->max_vel = MIN(current_block->feed_vel, cycle_tp->plan_block->param_vel);
+                current_block->max_vel = MIN(current_block->feed_vel, current_block->param_vel);
             }
             current_block->start_vel = current_block->end_vel = 0;
             break;
@@ -572,10 +574,10 @@ static void block_cal_tap_vel(PLAN_BLOCK* current_block){
         case NURBS:
             if (rt_get_sys_state(SYS_IS_DRY_RUN))
             {
-                current_block->max_vel = MIN(rt_data->chan_data[0].dryrun_spd, cycle_tp->plan_block->param_vel);
+                current_block->max_vel = MIN(rt_data->chan_data[0].dryrun_spd, current_block->param_vel);
             }
             else{
-                current_block->max_vel = MIN(current_block->feed_vel, cycle_tp->plan_block->param_vel);
+                current_block->max_vel = MIN(current_block->feed_vel, current_block->param_vel);
             }
             if(rt_get_sys_state(SYS_IS_SINGLE_BLOCK)) current_block->start_vel = current_block->end_vel = 0;
             else current_block->start_vel = current_block->end_vel = current_block->max_vel;    
@@ -585,10 +587,10 @@ static void block_cal_tap_vel(PLAN_BLOCK* current_block){
         case HELIX_CCW:
             if (rt_get_sys_state(SYS_IS_DRY_RUN))
             {
-                current_block->max_vel = MIN(rt_data->chan_data[0].dryrun_spd, cycle_tp->plan_block->param_vel);
+                current_block->max_vel = MIN(rt_data->chan_data[0].dryrun_spd, current_block->param_vel);
             }
             else{
-                current_block->max_vel = MIN(current_block->feed_vel, cycle_tp->plan_block->param_vel);
+                current_block->max_vel = MIN(current_block->feed_vel, current_block->param_vel);
             }
             current_block->start_vel = current_block->end_vel = 0;
             break;
@@ -603,10 +605,10 @@ static void block_cal_chop_vel(PLAN_BLOCK* current_block){
         case RAPID:
             if (rt_get_sys_state(SYS_IS_DRY_RUN))
             {
-                current_block->max_vel = MIN(rt_data->chan_data[0].dryrun_spd * var_chan[0][VAR_CHAN_RAPID_OVERRIDE].value.f / OVERRIDE_PERCENT, cycle_tp->plan_block->param_vel);
+                current_block->max_vel = MIN(rt_data->chan_data[0].dryrun_spd * var_chan[0][VAR_CHAN_RAPID_OVERRIDE].value.f / OVERRIDE_PERCENT, current_block->param_vel);
             }
             else{
-                current_block->max_vel = MIN(current_block->feed_vel * var_chan[0][VAR_CHAN_RAPID_OVERRIDE].value.f / OVERRIDE_PERCENT, cycle_tp->plan_block->param_vel);
+                current_block->max_vel = MIN(current_block->feed_vel * var_chan[0][VAR_CHAN_RAPID_OVERRIDE].value.f / OVERRIDE_PERCENT, current_block->param_vel);
             }
             current_block->start_vel = current_block->end_vel = 0;
             break;
@@ -616,10 +618,10 @@ static void block_cal_chop_vel(PLAN_BLOCK* current_block){
         case NURBS:
             if (rt_get_sys_state(SYS_IS_DRY_RUN))
             {
-                current_block->max_vel = MIN(rt_data->chan_data[0].dryrun_spd * var_chan[0][VAR_CHAN_FEED_OVERRIDE].value.f / OVERRIDE_PERCENT, cycle_tp->plan_block->param_vel);
+                current_block->max_vel = MIN(rt_data->chan_data[0].dryrun_spd * var_chan[0][VAR_CHAN_FEED_OVERRIDE].value.f / OVERRIDE_PERCENT, current_block->param_vel);
             }
             else{
-                current_block->max_vel = MIN(current_block->feed_vel * var_chan[0][VAR_CHAN_FEED_OVERRIDE].value.f / OVERRIDE_PERCENT, cycle_tp->plan_block->param_vel);
+                current_block->max_vel = MIN(current_block->feed_vel * var_chan[0][VAR_CHAN_FEED_OVERRIDE].value.f / OVERRIDE_PERCENT, current_block->param_vel);
             }
             if(rt_get_sys_state(SYS_IS_SINGLE_BLOCK)) current_block->start_vel = current_block->end_vel = 0;
             else current_block->start_vel = current_block->end_vel = current_block->max_vel;  
@@ -629,10 +631,10 @@ static void block_cal_chop_vel(PLAN_BLOCK* current_block){
         case HELIX_CCW:
             if (rt_get_sys_state(SYS_IS_DRY_RUN))
             {
-                current_block->max_vel = MIN(rt_data->chan_data[0].dryrun_spd * var_chan[0][VAR_CHAN_FEED_OVERRIDE].value.f / OVERRIDE_PERCENT, cycle_tp->plan_block->param_vel);
+                current_block->max_vel = MIN(rt_data->chan_data[0].dryrun_spd * var_chan[0][VAR_CHAN_FEED_OVERRIDE].value.f / OVERRIDE_PERCENT, current_block->param_vel);
             }
             else{
-                current_block->max_vel = MIN(current_block->feed_vel * var_chan[0][VAR_CHAN_FEED_OVERRIDE].value.f / OVERRIDE_PERCENT, cycle_tp->plan_block->param_vel);
+                current_block->max_vel = MIN(current_block->feed_vel * var_chan[0][VAR_CHAN_FEED_OVERRIDE].value.f / OVERRIDE_PERCENT, current_block->param_vel);
             }
             current_block->start_vel = current_block->end_vel = 0;
             break;
@@ -644,7 +646,7 @@ static void block_cal_chop_vel(PLAN_BLOCK* current_block){
 // 跳转：终点减速，不受倍率和空运行影响
 // todo：可通过参数配置是否受倍率和空运行影响
 static void block_cal_stop_skip_vel(PLAN_BLOCK* current_block){
-    current_block->max_vel = MIN(current_block->feed_vel, cycle_tp->plan_block->param_vel);
+    current_block->max_vel = MIN(current_block->feed_vel, current_block->param_vel);
     current_block->start_vel = current_block->end_vel = 0;
 }
 
