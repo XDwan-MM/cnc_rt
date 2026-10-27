@@ -152,13 +152,41 @@ typedef struct {
 /* 一台从站占几个槽（多轴驱动器占多个：axis6→6，axis4→4）。
  * 装配与建表必须走同一规则；各写一遍会整体错位且不报错。 */
 int device_slot_count(DEVICE_TYPE type);
+
+/**
+ * @brief 清空设备数据、EEPROM 身份、装配错误文本与槽游标，供重新扫描前复位。
+ */
 void device_reset(void);
 
 /* 某台从站的 EEPROM 身份（按【从站号】索引）；越界返回全零静态对象。 */
 const DEVICE_BASIC_INFO* device_identity_get(int slave_pos);
 
+/**
+ * @brief 逐台读 EEPROM 取身份、定类型，并搭建该从站的映射链。
+ *
+ * @param[in]  slave_num 从站数。
+ * @param[out] types     带出各从站的设备类型。
+ * @param[in]  cycle_us  通讯周期。
+ * @param[in]  dc_enable 总线级 DC 开关。
+ * @return 0 成功；-1 失败，原因见 device_bind_error()。
+ */
 int get_device_info_from_eeprom(int slave_num, DEVICE_TYPE* types,
                               uint32_t cycle_us, int dc_enable);
+
+/**
+ * @brief 按从站类型逐台装配设备句柄，槽号按 device_slot_count() 推进。
+ *
+ * @param[in] list      从站链。
+ * @param[in] type      各从站的设备类型。
+ * @param[in] slave_num 从站数。
+ * @return 0 成功；-1 失败，原因见 device_bind_error()。
+ */
 int device_match(Slave_info* list, DEVICE_TYPE* type, int slave_num);
+
+/**
+ * @brief 取最近一次设备装配失败的原因文本。
+ *
+ * @return 静态缓冲中的中文原因。
+ */
 const char* device_bind_error(void);
 #endif

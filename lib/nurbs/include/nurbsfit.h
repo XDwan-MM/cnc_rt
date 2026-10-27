@@ -41,7 +41,7 @@ int getFittingError(double* fittingError, POS *data_point, POS *controlpoint ,in
 
 int onebasisFun(double* onebasisfuntemp, int nurbs_p, double* nurbs_U, int span_i, double uki, int nurbs_U_length);
 
-int getControlPoint(POS* point, POS* data_point, double* uk, int data_row, double* nurbs_U, int interpnum, int nurbs_U_length, int nurbs_p);
+int getControlPoint(POS* point, POS* data_point, double* uk, int data_row, double* nurbs_U, int interpnum, int nurbs_U_length ,int nurbs_p, POS T0, POS T1);
 
 int approximate(double fittingErrorThr, double sagittaErrorThr, POS* data, int m, POS T0, POS T1,POS* out_P, double** out_knots, int* out_ctrl_cnt,int k);
 

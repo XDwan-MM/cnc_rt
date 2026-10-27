@@ -1,8 +1,8 @@
 #pragma once
 
 #include <stdint.h>
-#include "export.h"
-#include "backend/greemaster/devdict.h"   /* DevDictRole */
+#include "backend/greemaster/export.h"
+#include "backend/greemaster/mapping/devdict.h"   /* DevDictRole */
 
 #ifdef __cplusplus
 extern "C" {

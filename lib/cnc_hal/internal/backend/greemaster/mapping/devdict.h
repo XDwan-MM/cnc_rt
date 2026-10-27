@@ -18,7 +18,6 @@
  *
  * 内置最小 JSON 解析器（支持 // 注释），无堆常驻，启动时 Load 一次，单线程。
  */
-
 #include <stdint.h>
 
 #ifdef __cplusplus

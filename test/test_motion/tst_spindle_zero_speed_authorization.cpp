@@ -9,7 +9,7 @@ class SpindleZeroSpeedAuthorizationTest : public ::testing::Test
 protected:
     void SetUp() override
     {
-        ASSERT_TRUE(testEnvReady()) << testEnvMessage();
+        ASSERT_TRUE(testEnvReady());
         spindle_init();
     }
 };

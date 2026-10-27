@@ -26,6 +26,7 @@ static void auto_check_event();
 static void auto_update_stage();
 static void auto_update_cmd();
 static void auto_execute_cmd();
+static void auto_mapping_event();
 static void auto_start_run();
 static void auto_reset_run();
 static void auto_pause_run();
@@ -40,8 +41,19 @@ static void auto_pop_current_block();
 static void auto_update_buf_stop();
 static void auto_set_stop_skip_macro();
 static void auro_reset_stop_skip();
+static void auto_update_idle_state();
+static void auto_update_running_state();
+static void auto_update_pausing_state();
 static void auto_check_feed_override_event();
 static void auto_check_rapid_override_event();
+static void auto_check_block_skip_event();
+static void auto_check_rigid_return_on_event();
+static void auto_check_rigid_return_off_event();
+static void auto_check_dry_run_event(bool is_enable);
+static void auto_check_single_block_event(bool is_enable);
+static void auto_check_mac_lock_event(bool is_enable);
+static void auto_check_it_event(bool is_enable);
+static bool auto_buf_stop_pipeline_empty(void);
 
 // 阻止缓冲：已弹出的停止块 ID
 static unsigned int s_buf_stop_popped_id = 0;
@@ -50,20 +62,8 @@ static int s_buf_stop_lost_ticks = 0;
 // 活性兜底宽限：目标块一直没弹出、流水线又全空，说明它不可能再执行。 
 #define AUTO_BUFSTOP_LOST_TICKS 2000
 
-static bool auto_buf_stop_pipeline_empty(void)
-{
-    if (parser_queue == NULL || pretreat_queue == NULL || treat_queue == NULL
-        || fix_queue == NULL || nurbs_temp_queue == NULL || unif_queue == NULL
-        || plan_queue == NULL)
-        return false;
-
-    return queue_is_empty(parser_queue) && queue_is_empty(pretreat_queue)
-        && queue_is_empty(treat_queue) && queue_is_empty(fix_queue)
-        && queue_is_empty(nurbs_temp_queue) && queue_is_empty(unif_queue)
-        && queue_is_empty(plan_queue);
-}
-
 void handle_auto_cmd(){
+    auto_handle_alarm();
     // 更新状态
     auto_update_state();
     // 处理中断事件
@@ -90,188 +90,19 @@ static void auto_update_state(){
             || rt_data->nc_event == SYS_EVENT_OUTSIDE_RESET)) {
         setVarChanInt(0, VAR_CHAN_RUN_ROW, 0, 0);
     }
-    // 报警或切换模式下，减速停止
-    static bool reset_trigger = false;
-    if(rt_data->sys_state[SYS_IS_ALARMING] || rt_data->sys_state[SYS_IS_SWITCHING_MODE]){
-        if(!reset_trigger){
-            reset_trigger = true;
-            auto_handle_alarm();
-        }
-        return;
-    }else reset_trigger = false;
+    if(rt_data->sys_state[SYS_IS_ALARMING] || rt_data->sys_state[SYS_IS_SWITCHING_MODE]) return;
     // 正常模式下
     switch (cycle_tp->exec_state)
     {
     case EXEC_IDLE:
-        switch (rt_data->nc_event)
-        {
-        case SYS_EVENT_RERUN:
-            LOG(LOG_LEVEL_INFO, "自动模式处理循环启动");
-            if (rt_data->current_mode == MODE_MEM) {
-                // HMI 可能重启过（能力位被清），每次 MEM 启动前重新发布
-                hmi_request_publish_capabilities();
-                int32_t hmiReason = HMI_REQUEST_ERROR_NONE;
-                const int startRc = hmi_request_program_start_decide(&hmiReason);
-                if (startRc == 1) {
-                    HmiProgramStartSnapshot startSnap;
-                    // 从指定行启动：同步路径簿记并确保本次不走断点再启动
-                    rerun_sync_program_path();
-                    rerun_reset_is_rerun();
-                    auto_start_run();
-                    if (hmi_request_program_start_pending(&startSnap)) {
-                        // auto_start_run 内写的是 rerun_row(0)；改成实际起始行，
-                        // 让 HMI 在首块译码前就显示正确行号
-                        setVarChanInt(0, VAR_CHAN_RUN_ROW, startSnap.startLine, 0);
-                    }
-                    cycle_tp->exec_state = EXEC_RUNNING;
-                    cycle_tp->running_stage = PROGRAM_START;
-                    break;
-                }
-                if (startRc == -1) {
-                    // 首按确认已报警 / HMI 正在写入：本轮不启动，也不回落 rerun
-                    break;
-                }
-                if (startRc == -2) {
-                    LOG(LOG_LEVEL_WARN, "HMI起始行请求未执行 reason=%d", (int)hmiReason);
-                    break;
-                }
-                // startRc == 0：无起始行请求，继续原有 rerun/首行路径
-            }
-            // 判断是否从首行开始
-            if(check_is_program_rerun()) break;
-            auto_start_run();
-            cycle_tp->exec_state = EXEC_RUNNING;
-            cycle_tp->running_stage = PROGRAM_START;
-            break;
-        default:
-            break;
-        }
+        auto_update_idle_state();
         break;
-
     case EXEC_RUNNING:
-        switch (rt_data->nc_event)
-        {
-        case SYS_EVENT_PAUSE:
-            LOG(LOG_LEVEL_INFO, "自动模式处理进给保持");
-            switch(cycle_tp->exec_cmd){
-            case DO_MOVE_CMD:
-            case DO_CHOP_CMD:
-            case DO_DWELL_CMD:
-            case DO_HOME_CMD:
-            case DO_SKIP_CMD:
-            case DO_MSTB_CMD:
-            case DO_NULL_CMD:
-                cycle_tp->exec_state = EXEC_PAUSING;
-                switch (cycle_tp->running_stage)
-                {
-                case PROGRAM_RUNNING:
-                case BLOCK_PAUSED:
-                case BLOCK_BREAKPOINT:
-                case BLOCK_ARRIVE_2_END:
-                    cycle_tp->running_stage = BLOCK_BREAKPOINT;
-                    break;
-                default:
-                    break; 
-                }
-                break; 
-            case DO_TAP_CMD: // 攻丝时不能暂停
-            default:
-                break;
-            }
-            break;
-        case SYS_EVENT_HMI_RESET:
-            LOG(LOG_LEVEL_INFO, "自动模式处理MDI复位");
-            cycle_tp->exec_state = EXEC_RESET;
-            switch (cycle_tp->running_stage)
-            {
-            case PROGRAM_RUNNING:
-            case BLOCK_PAUSED:
-            case BLOCK_BREAKPOINT:
-            case BLOCK_ARRIVE_2_END:
-                cycle_tp->running_stage = BLOCK_BREAKPOINT;
-                break;
-            default:
-                break; 
-            }
-            break;
-        case SYS_EVENT_OUTSIDE_RESET:
-            LOG(LOG_LEVEL_INFO, "自动模式处理外部复位");
-            cycle_tp->exec_state = EXEC_RESET;
-            break;
-        default:
-            break;
-        }
+        auto_update_running_state();
         break;
-
     case EXEC_PAUSING:
-        switch (rt_data->nc_event)
-        {
-        case SYS_EVENT_HMI_RESET:
-            LOG(LOG_LEVEL_INFO, "自动模式处理复位");
-            switch(cycle_tp->exec_cmd){
-            case DO_MOVE_CMD:
-            case DO_CHOP_CMD:
-            case DO_HOME_CMD:
-            case DO_TAP_CMD:
-            case DO_SKIP_CMD:
-                cycle_tp->exec_state = EXEC_RESET;
-                break;
-            case DO_DWELL_CMD:
-            case DO_MSTB_CMD:
-            case DO_NULL_CMD:
-                cycle_tp->exec_state = EXEC_RESET;
-                switch (cycle_tp->running_stage)
-                {
-                case PROGRAM_RUNNING:
-                case BLOCK_PAUSED:
-                case BLOCK_BREAKPOINT:
-                case BLOCK_ARRIVE_2_END:
-                    cycle_tp->running_stage = BLOCK_BREAKPOINT;
-                    break;
-                default:
-                    break; 
-                }
-                break;
-            default:
-                break;
-            } 
-            break;
-        case SYS_EVENT_RERUN:
-            LOG(LOG_LEVEL_INFO, "自动模式处理循环启动");
-            switch(cycle_tp->exec_cmd){
-            case DO_CHOP_CMD:
-                switch (cycle_tp->plan_block->type)
-                {
-                case NURBS: // nurbs暂停后不可恢复
-                    setAlarm(ALARM_CH, ALARM_ERROR, 5);
-                    LOG(LOG_LEVEL_ERR, "NURBS暂停后不可恢复,请重新运行");
-                    return;
-                default:
-                    break;
-                }
-                break;
-            default:
-                break;
-            }
-            cycle_tp->exec_state = EXEC_RUNNING;
-            auto_restart_run();
-            switch (cycle_tp->running_stage)
-            {
-            case PROGRAM_RUNNING:
-            case BLOCK_PAUSED:
-            case BLOCK_BREAKPOINT:
-            case BLOCK_ARRIVE_2_END:
-                cycle_tp->running_stage = BLOCK_BREAKPOINT;
-                break;
-            default:
-                break; 
-            }
-            break;
-        default:
-            break;
-        }
+        auto_update_pausing_state();
         break;
-
     case EXEC_RESET:
     default:
         break;
@@ -279,202 +110,41 @@ static void auto_update_state(){
 }
 
 static void auto_check_event(){
+    auto_mapping_event();
     switch (rt_data->nc_event)
     {
     case SYS_EVENT_SINGLE_BLOCK_ON:
         LOG(LOG_LEVEL_INFO, "自动模式处理开启单程序");
-        switch (cycle_tp->exec_state)
-        {
-        case EXEC_RUNNING:
-            cycle_tp->running_stage = BLOCK_BREAKPOINT;
-        case EXEC_PAUSING:
-        case EXEC_RESET:
-        case EXEC_IDLE:
-            cycle_tp->trigger_event = SINGLE_BLOCK_ENABLE;
-            break;
-        }
+        auto_check_single_block_event(true);
         break;
     case SYS_EVENT_SINGLE_BLOCK_OFF:
         LOG(LOG_LEVEL_INFO, "自动模式处理关闭单程序");
-        switch (cycle_tp->exec_state)
-        {
-        case EXEC_RUNNING:
-            cycle_tp->running_stage = BLOCK_BREAKPOINT;
-        case EXEC_PAUSING:
-        case EXEC_RESET:
-        case EXEC_IDLE:
-            cycle_tp->trigger_event = NONE_EVENT;
-            break;
-        }
+        auto_check_single_block_event(false);
         break;
     case SYS_EVENT_DRY_RUN_ON:
         LOG(LOG_LEVEL_INFO, "自动模式处理开启空运行");
-        switch (cycle_tp->exec_state)
-        {
-        case EXEC_RUNNING:
-            switch(cycle_tp->exec_cmd){
-            case DO_CHOP_CMD:
-            case DO_HOME_CMD:
-            case DO_TAP_CMD:
-                cycle_tp->running_stage = BLOCK_BREAKPOINT;
-                break;
-            case DO_SKIP_CMD:   // 跳转不受空运行影响
-            case DO_DWELL_CMD:
-            case DO_MSTB_CMD:
-            default:
-                break;
-            }
-        case EXEC_PAUSING:
-        case EXEC_RESET:
-        case EXEC_IDLE:
-            cycle_tp->trigger_event = DRY_RUN_ENABLE;
-            break;
-        }
+        auto_check_dry_run_event(true);
         break;
     case SYS_EVENT_DRY_RUN_OFF:
         LOG(LOG_LEVEL_INFO, "自动模式处理关闭空运行");
-        switch (cycle_tp->exec_state)
-        {
-        case EXEC_RUNNING:
-            switch(cycle_tp->exec_cmd){
-            case DO_CHOP_CMD:
-            case DO_HOME_CMD:
-            case DO_TAP_CMD:
-                cycle_tp->running_stage = BLOCK_BREAKPOINT;
-                break;
-            case DO_SKIP_CMD:
-            case DO_DWELL_CMD:
-            case DO_MSTB_CMD:
-            default:
-                break;
-            }
-        case EXEC_PAUSING:
-        case EXEC_RESET:
-        case EXEC_IDLE:
-            cycle_tp->trigger_event = NONE_EVENT;
-            break;
-        }
+        auto_check_dry_run_event(false);
         break;
     case SYS_EVENT_MAC_LOCK_ON:
         LOG(LOG_LEVEL_INFO, "自动模式处理开启机械锁住");
-        switch (cycle_tp->exec_state)
-        {
-        case EXEC_RUNNING:
-            cycle_tp->running_stage = BLOCK_BREAKPOINT;
-        case EXEC_PAUSING:
-        case EXEC_RESET:
-        case EXEC_IDLE:
-            cycle_tp->trigger_event = MAC_LOCK_ENABLE;
-            break;
-        }
+        auto_check_mac_lock_event(true);
         break;
     case SYS_EVENT_MAC_LOCK_OFF:
         LOG(LOG_LEVEL_INFO, "自动模式处理关闭机械锁住");
-        switch (cycle_tp->exec_state)
-        {
-        case EXEC_RUNNING:
-            cycle_tp->running_stage = BLOCK_BREAKPOINT;
-        case EXEC_PAUSING:
-        case EXEC_RESET:
-        case EXEC_IDLE:
-            cycle_tp->trigger_event = NONE_EVENT;
-            break;
-        }
+        auto_check_mac_lock_event(false);
         break;    
-    // case SYS_EVENT_STLK_ON:
     case SYS_EVENT_IT_ON:
-    // case SYS_EVENT_IT1_ON:
-    // case SYS_EVENT_IT2_ON:
-    // case SYS_EVENT_IT3_ON:
-    // case SYS_EVENT_IT4_ON:
-    // case SYS_EVENT_IT5_ON:
-    // case SYS_EVENT_PMIT2_ON:
-    // case SYS_EVENT_PMIT3_ON:
-    // case SYS_EVENT_PMIT4_ON:
-    // case SYS_EVENT_PMIT5_ON:
-    // case SYS_EVENT_NMIT2_ON:
-    // case SYS_EVENT_NMIT3_ON:
-    // case SYS_EVENT_NMIT4_ON:
-    // case SYS_EVENT_NMIT5_ON:
         LOG(LOG_LEVEL_INFO, "自动模式处理开启所有轴互锁");
-        switch (cycle_tp->exec_state)
-        {
-        case EXEC_RUNNING:
-            cycle_tp->running_stage = BLOCK_BREAKPOINT;
-            break;
-        default:
-            break;
-        }
+        auto_check_it_event(true);
         break;
-    // case SYS_EVENT_STLK_OFF:
     case SYS_EVENT_IT_OFF:
-    // case SYS_EVENT_IT1_OFF:
-    // case SYS_EVENT_IT2_OFF:
-    // case SYS_EVENT_IT3_OFF:
-    // case SYS_EVENT_IT4_OFF:
-    // case SYS_EVENT_IT5_OFF:
-    // case SYS_EVENT_PMIT2_OFF:
-    // case SYS_EVENT_PMIT3_OFF:
-    // case SYS_EVENT_PMIT4_OFF:
-    // case SYS_EVENT_PMIT5_OFF:
-    // case SYS_EVENT_NMIT2_OFF:
-    // case SYS_EVENT_NMIT3_OFF:
-    // case SYS_EVENT_NMIT4_OFF:
-    // case SYS_EVENT_NMIT5_OFF:
         LOG(LOG_LEVEL_INFO, "自动模式处理关闭所有轴互锁");
-        switch (cycle_tp->exec_state)
-        {
-        case EXEC_RUNNING:
-            cycle_tp->running_stage = BLOCK_BREAKPOINT;
-            break;
-        default:
-            break;
-        }
+        auto_check_it_event(false);
         break;   
-    case SYS_EVENT_BSL_ON:
-        LOG(LOG_LEVEL_INFO, "自动模式处理开启程序段开始锁住");
-        switch (cycle_tp->exec_state)
-        {
-        case EXEC_RUNNING:
-            cycle_tp->running_stage = BLOCK_BREAKPOINT;
-            break;
-        default:
-            break;
-        }
-        break;
-    case SYS_EVENT_BSL_OFF:
-        LOG(LOG_LEVEL_INFO, "自动模式处理关闭程序段开始锁住");
-        switch (cycle_tp->exec_state)
-        {
-        case EXEC_RUNNING:
-            cycle_tp->running_stage = BLOCK_BREAKPOINT;
-            break;
-        default:
-            break;
-        }
-        break;
-    case SYS_EVENT_CSL_ON:
-        LOG(LOG_LEVEL_INFO, "自动模式处理开启切削程序段开始锁住");
-        switch (cycle_tp->exec_state)
-        {
-        case EXEC_RUNNING:
-            cycle_tp->running_stage = BLOCK_BREAKPOINT;
-            break;
-        default:
-            break;
-        }
-        break;
-    case SYS_EVENT_CSL_OFF:
-        LOG(LOG_LEVEL_INFO, "自动模式处理关闭切削程序段开始锁住");
-        switch (cycle_tp->exec_state)
-        {
-        case EXEC_RUNNING:
-            cycle_tp->running_stage = BLOCK_BREAKPOINT;
-            break;
-        default:
-            break;
-        }
-        break;
     case SYS_EVENT_BLOCK_SKIP_ON:
         LOG(LOG_LEVEL_INFO, "自动模式处理开启跳段");
         cycle_tp->trigger_event = BLOCK_SKIP_ENABLE;
@@ -485,92 +155,16 @@ static void auto_check_event(){
         break;
     case SYS_EVENT_STOP_SKIP_ON:
         LOG(LOG_LEVEL_INFO, "自动模式处理跳转信号");
-        switch (cycle_tp->exec_state)
-        {
-        case EXEC_RUNNING:
-            switch(cycle_tp->exec_cmd){
-            case DO_SKIP_CMD:
-                cycle_tp->running_stage = BLOCK_BREAKPOINT;
-                break;
-            default:
-                break;
-            }
-            break;
-        case EXEC_PAUSING:
-        case EXEC_RESET:
-        case EXEC_IDLE:
-            break;
-        }
+        auto_check_block_skip_event();
         break;
     case SYS_EVENT_STOP_SKIP_OFF:
         LOG(LOG_LEVEL_INFO, "自动模式处理跳转信号");
         break;
     case SYS_EVENT_RIGID_RETURN_ON:
-        switch (cycle_tp->exec_state)
-        {
-        case EXEC_IDLE:
-            switch (rt_data->current_mode)
-            {
-            case MODE_MDI: // MDI模式下响应攻丝回退事件
-                {
-                    LOG(LOG_LEVEL_INFO, "MDI模式处理开启攻丝回退");
-                    rt_data->sys_state[SYS_IS_RIGID_RETURN] = 1;
-                    rt_data->sys_state[SYS_IS_RIGID_RETURN_FINISH] = 0;
-                    tapreturn_update(cycle_tp->plan_block);
-                    if(!sysprog_arm(SYS_PROG_RIGID_RETURN))
-                    {
-                        rt_data->sys_state[SYS_IS_RIGID_RETURN_FINISH] = 1;
-                        setAlarm(ALARM_PS, ALARM_WARNING, TAPRET_ALARM_NO_RECORD);
-                        LOG(LOG_LEVEL_WARN, "攻丝回退条件不满足（无攻丝记录或不在孔内）");
-                        break;
-                    }    
-                    // 开始攻丝回退
-                    if(check_is_program_rerun()) break;
-                    tapreturn_clear_alarms();
-                    auto_start_run();
-                    cycle_tp->exec_state = EXEC_RUNNING;
-                    cycle_tp->running_stage = PROGRAM_START;
-                }
-                break;
-            default:
-                break;
-            }
-            break;
-        default:
-            break;
-        }
+        auto_check_rigid_return_on_event();
         break;
     case SYS_EVENT_RIGID_RETURN_OFF:
-        rt_data->sys_state[SYS_IS_RIGID_RETURN] = 0;
-        switch (cycle_tp->exec_state)
-        {
-        case EXEC_RUNNING:
-            switch (rt_data->current_mode)
-            {
-            case MODE_MDI:
-                LOG(LOG_LEVEL_INFO, "MDI模式关闭结束攻丝回退");
-                sysprog_cleanup();
-                // 取消攻丝回退
-                cycle_tp->exec_state = EXEC_RESET;
-                switch (cycle_tp->running_stage)
-                {
-                case PROGRAM_RUNNING:
-                case BLOCK_PAUSED:
-                case BLOCK_BREAKPOINT:
-                case BLOCK_ARRIVE_2_END:
-                    cycle_tp->running_stage = BLOCK_BREAKPOINT;
-                    break;
-                default:
-                    break; 
-                }
-                break;
-            default:
-                break;
-            }
-            break;
-        default:
-            break;
-        }
+        auto_check_rigid_return_off_event();
         break;
     case SYS_EVENT_FEED_OVERRIDE:
         LOG(LOG_LEVEL_INFO, "自动模式处理进给倍率切换");
@@ -1207,24 +801,31 @@ GNC_RES cycle_tp_init(){
 }
 
 static void auto_handle_alarm(){
-    if(cycle_tp->exec_state == EXEC_IDLE) return;
-    cycle_tp->exec_state = EXEC_RESET;
-    rerun_mark_interrupted();
-    switch (cycle_tp->running_stage)
-    {
-    case PROGRAM_START:
-    case PROGRAM_END:
-    case PROGRAM_WAIT:
-    case BLOCK_PAUSED:
-    case BLOCK_STOP_2_END:
-        cycle_tp->running_stage = PROGRAM_END;
-        LOG(LOG_LEVEL_DEBUG, "报警/切换模式下立刻停止");
-        break;
-    default:
-        cycle_tp->running_stage = BLOCK_BREAKPOINT;
-        LOG(LOG_LEVEL_DEBUG, "报警/切换模式下减速停止");
-        break;
-    }   
+    static bool reset_trigger = false;
+    if(rt_data->sys_state[SYS_IS_ALARMING] || rt_data->sys_state[SYS_IS_SWITCHING_MODE]){
+        if(!reset_trigger){
+            reset_trigger = true;
+            if(cycle_tp->exec_state == EXEC_IDLE) return;
+            cycle_tp->exec_state = EXEC_RESET;
+            rerun_mark_interrupted();
+            switch (cycle_tp->running_stage)
+            {
+            case PROGRAM_START:
+            case PROGRAM_END:
+            case PROGRAM_WAIT:
+            case BLOCK_PAUSED:
+            case BLOCK_STOP_2_END:
+                cycle_tp->running_stage = PROGRAM_END;
+                LOG(LOG_LEVEL_DEBUG, "报警/切换模式下立刻停止");
+                break;
+            default:
+                cycle_tp->running_stage = BLOCK_BREAKPOINT;
+                LOG(LOG_LEVEL_DEBUG, "报警/切换模式下减速停止");
+                break;
+            }   
+        }
+        return;
+    }else reset_trigger = false;
 }
 
 void auto_handle_estop(){
@@ -1233,6 +834,16 @@ void auto_handle_estop(){
         rerun_mark_interrupted();
     }
     auto_reset_run();
+}
+
+// 映射事件
+static void auto_mapping_event(){
+    if(rt_data->nc_event >= SYS_EVENT_IT_ON && rt_data->nc_event <= SYS_EVENT_NMIT5_ON){
+        rt_data->nc_event = SYS_EVENT_IT_ON;
+    }
+    else if(rt_data->nc_event >= SYS_EVENT_IT_OFF && rt_data->nc_event <= SYS_EVENT_NMIT5_OFF){
+        rt_data->nc_event = SYS_EVENT_IT_ON;
+    }
 }
 
 void cycle_tp_delete(){
@@ -1259,6 +870,175 @@ void cycle_tp_reset(){
     cycle_tp_reset_pos_cmd_data();
     cycle_tp_reset_dwell_cmd_data();
     cycle_tp_mstb_cmd_data_reset();
+}
+
+static void auto_update_idle_state(){
+    switch (rt_data->nc_event)
+    {
+    case SYS_EVENT_RERUN:
+        LOG(LOG_LEVEL_INFO, "自动模式处理循环启动");
+        if (rt_data->current_mode == MODE_MEM) {
+            // HMI 可能重启过（能力位被清），每次 MEM 启动前重新发布
+            hmi_request_publish_capabilities();
+            int32_t hmiReason = HMI_REQUEST_ERROR_NONE;
+            const int startRc = hmi_request_program_start_decide(&hmiReason);
+            if (startRc == 1) {
+                HmiProgramStartSnapshot startSnap;
+                // 从指定行启动：同步路径簿记并确保本次不走断点再启动
+                rerun_sync_program_path();
+                rerun_reset_is_rerun();
+                auto_start_run();
+                if (hmi_request_program_start_pending(&startSnap)) {
+                    // auto_start_run 内写的是 rerun_row(0)；改成实际起始行，
+                    // 让 HMI 在首块译码前就显示正确行号
+                    setVarChanInt(0, VAR_CHAN_RUN_ROW, startSnap.startLine, 0);
+                }
+                cycle_tp->exec_state = EXEC_RUNNING;
+                cycle_tp->running_stage = PROGRAM_START;
+                break;
+            }
+            if (startRc == -1) {
+                // 首按确认已报警 / HMI 正在写入：本轮不启动，也不回落 rerun
+                break;
+            }
+            if (startRc == -2) {
+                LOG(LOG_LEVEL_WARN, "HMI起始行请求未执行 reason=%d", (int)hmiReason);
+                break;
+            }
+            // startRc == 0：无起始行请求，继续原有 rerun/首行路径
+        }
+        // 判断是否从首行开始
+        if(check_is_program_rerun()) break;
+        auto_start_run();
+        cycle_tp->exec_state = EXEC_RUNNING;
+        cycle_tp->running_stage = PROGRAM_START;
+        break;
+    default:
+        break;
+    }
+}
+
+static void auto_update_running_state(){
+    switch (rt_data->nc_event)
+    {
+    case SYS_EVENT_PAUSE:
+        LOG(LOG_LEVEL_INFO, "自动模式处理进给保持");
+        switch(cycle_tp->exec_cmd){
+        case DO_MOVE_CMD:
+        case DO_CHOP_CMD:
+        case DO_DWELL_CMD:
+        case DO_HOME_CMD:
+        case DO_SKIP_CMD:
+        case DO_MSTB_CMD:
+        case DO_NULL_CMD:
+            cycle_tp->exec_state = EXEC_PAUSING;
+            switch (cycle_tp->running_stage)
+            {
+            case PROGRAM_RUNNING:
+            case BLOCK_PAUSED:
+            case BLOCK_BREAKPOINT:
+            case BLOCK_ARRIVE_2_END:
+                cycle_tp->running_stage = BLOCK_BREAKPOINT;
+                break;
+            default:
+                break; 
+            }
+            break; 
+        case DO_TAP_CMD: // 攻丝时不能暂停
+        default:
+            break;
+        }
+        break;
+    case SYS_EVENT_HMI_RESET:
+        LOG(LOG_LEVEL_INFO, "自动模式处理MDI复位");
+        cycle_tp->exec_state = EXEC_RESET;
+        switch (cycle_tp->running_stage)
+        {
+        case PROGRAM_RUNNING:
+        case BLOCK_PAUSED:
+        case BLOCK_BREAKPOINT:
+        case BLOCK_ARRIVE_2_END:
+            cycle_tp->running_stage = BLOCK_BREAKPOINT;
+            break;
+        default:
+            break; 
+        }
+        break;
+    case SYS_EVENT_OUTSIDE_RESET:
+        LOG(LOG_LEVEL_INFO, "自动模式处理外部复位");
+        cycle_tp->exec_state = EXEC_RESET;
+        break;
+    default:
+        break;
+    }
+}
+static void auto_update_pausing_state(){
+    switch (rt_data->nc_event)
+    {
+    case SYS_EVENT_HMI_RESET:
+        LOG(LOG_LEVEL_INFO, "自动模式处理复位");
+        switch(cycle_tp->exec_cmd){
+        case DO_MOVE_CMD:
+        case DO_CHOP_CMD:
+        case DO_HOME_CMD:
+        case DO_TAP_CMD:
+        case DO_SKIP_CMD:
+            cycle_tp->exec_state = EXEC_RESET;
+            break;
+        case DO_DWELL_CMD:
+        case DO_MSTB_CMD:
+        case DO_NULL_CMD:
+            cycle_tp->exec_state = EXEC_RESET;
+            switch (cycle_tp->running_stage)
+            {
+            case PROGRAM_RUNNING:
+            case BLOCK_PAUSED:
+            case BLOCK_BREAKPOINT:
+            case BLOCK_ARRIVE_2_END:
+                cycle_tp->running_stage = BLOCK_BREAKPOINT;
+                break;
+            default:
+                break; 
+            }
+            break;
+        default:
+            break;
+        } 
+        break;
+    case SYS_EVENT_RERUN:
+        LOG(LOG_LEVEL_INFO, "自动模式处理循环启动");
+        switch(cycle_tp->exec_cmd){
+        case DO_CHOP_CMD:
+            switch (cycle_tp->plan_block->type)
+            {
+            case NURBS: // nurbs暂停后不可恢复
+                setAlarm(ALARM_CH, ALARM_ERROR, 5);
+                LOG(LOG_LEVEL_ERR, "NURBS暂停后不可恢复,请重新运行");
+                return;
+            default:
+                break;
+            }
+            break;
+        default:
+            break;
+        }
+        cycle_tp->exec_state = EXEC_RUNNING;
+        auto_restart_run();
+        switch (cycle_tp->running_stage)
+        {
+        case PROGRAM_RUNNING:
+        case BLOCK_PAUSED:
+        case BLOCK_BREAKPOINT:
+        case BLOCK_ARRIVE_2_END:
+            cycle_tp->running_stage = BLOCK_BREAKPOINT;
+            break;
+        default:
+            break; 
+        }
+        break;
+    default:
+        break;
+    }
 }
 
 static void auto_check_rapid_override_event(){
@@ -1302,6 +1082,171 @@ static void auto_check_feed_override_event(){
     case EXEC_IDLE:
         break;
     }
+}
+
+static void auto_check_dry_run_event(bool is_enable){
+    switch (cycle_tp->exec_state)
+    {
+    case EXEC_RUNNING:
+        switch(cycle_tp->exec_cmd){
+        case DO_CHOP_CMD:
+        case DO_HOME_CMD:
+        case DO_TAP_CMD:
+            cycle_tp->running_stage = BLOCK_BREAKPOINT;
+            break;
+        case DO_SKIP_CMD:   // 跳转不受空运行影响
+        case DO_DWELL_CMD:
+        case DO_MSTB_CMD:
+        default:
+            break;
+        }
+    case EXEC_PAUSING:
+    case EXEC_RESET:
+    case EXEC_IDLE:
+        if(is_enable) cycle_tp->trigger_event = DRY_RUN_ENABLE;
+        else cycle_tp->trigger_event = NONE_EVENT;
+        break;
+    }
+}
+
+static void auto_check_single_block_event(bool is_enable){
+    switch (cycle_tp->exec_state)
+    {
+    case EXEC_RUNNING:
+        cycle_tp->running_stage = BLOCK_BREAKPOINT;
+    case EXEC_PAUSING:
+    case EXEC_RESET:
+    case EXEC_IDLE:
+        if(is_enable) cycle_tp->trigger_event = SINGLE_BLOCK_ENABLE;
+        else cycle_tp->trigger_event = NONE_EVENT;
+        break;
+    }
+}
+
+static void auto_check_it_event(bool is_enable){
+    switch (cycle_tp->exec_state)
+    {
+    case EXEC_RUNNING:
+        cycle_tp->running_stage = BLOCK_BREAKPOINT;
+        break;
+    default:
+        break;
+    }
+}
+
+static void auto_check_mac_lock_event(bool is_enable){
+    switch (cycle_tp->exec_state)
+    {
+    case EXEC_RUNNING:
+        cycle_tp->running_stage = BLOCK_BREAKPOINT;
+    case EXEC_PAUSING:
+    case EXEC_RESET:
+    case EXEC_IDLE:
+        if(is_enable) cycle_tp->trigger_event = MAC_LOCK_ENABLE;
+        else cycle_tp->trigger_event = NONE_EVENT;
+        break;
+    }
+}
+
+static void auto_check_block_skip_event(){
+    switch (cycle_tp->exec_state)
+    {
+    case EXEC_RUNNING:
+        switch(cycle_tp->exec_cmd){
+        case DO_SKIP_CMD:
+            cycle_tp->running_stage = BLOCK_BREAKPOINT;
+            break;
+        default:
+            break;
+        }
+        break;
+    case EXEC_PAUSING:
+    case EXEC_RESET:
+    case EXEC_IDLE:
+        break;
+    }
+}
+
+static void auto_check_rigid_return_on_event(){
+    switch (cycle_tp->exec_state)
+    {
+    case EXEC_IDLE:
+        switch (rt_data->current_mode)
+        {
+        case MODE_MDI: // MDI模式下响应攻丝回退事件
+            {
+                LOG(LOG_LEVEL_INFO, "MDI模式处理开启攻丝回退");
+                rt_data->sys_state[SYS_IS_RIGID_RETURN] = 1;
+                rt_data->sys_state[SYS_IS_RIGID_RETURN_FINISH] = 0;
+                tapreturn_update(cycle_tp->plan_block);
+                if(!sysprog_arm(SYS_PROG_RIGID_RETURN))
+                {
+                    rt_data->sys_state[SYS_IS_RIGID_RETURN_FINISH] = 1;
+                    setAlarm(ALARM_PS, ALARM_WARNING, TAPRET_ALARM_NO_RECORD);
+                    LOG(LOG_LEVEL_WARN, "攻丝回退条件不满足（无攻丝记录或不在孔内）");
+                    break;
+                }    
+                // 开始攻丝回退
+                if(check_is_program_rerun()) break;
+                tapreturn_clear_alarms();
+                auto_start_run();
+                cycle_tp->exec_state = EXEC_RUNNING;
+                cycle_tp->running_stage = PROGRAM_START;
+            }
+            break;
+        default:
+            break;
+        }
+        break;
+    default:
+        break;
+    }
+}
+
+static void auto_check_rigid_return_off_event(){
+    rt_data->sys_state[SYS_IS_RIGID_RETURN] = 0;
+    switch (cycle_tp->exec_state)
+    {
+    case EXEC_RUNNING:
+        switch (rt_data->current_mode)
+        {
+        case MODE_MDI:
+            LOG(LOG_LEVEL_INFO, "MDI模式关闭结束攻丝回退");
+            sysprog_cleanup();
+            // 取消攻丝回退
+            cycle_tp->exec_state = EXEC_RESET;
+            switch (cycle_tp->running_stage)
+            {
+            case PROGRAM_RUNNING:
+            case BLOCK_PAUSED:
+            case BLOCK_BREAKPOINT:
+            case BLOCK_ARRIVE_2_END:
+                cycle_tp->running_stage = BLOCK_BREAKPOINT;
+                break;
+            default:
+                break; 
+            }
+            break;
+        default:
+            break;
+        }
+        break;
+    default:
+        break;
+    }
+}
+
+static bool auto_buf_stop_pipeline_empty(void)
+{
+    if (parser_queue == NULL || pretreat_queue == NULL || treat_queue == NULL
+        || fix_queue == NULL || nurbs_temp_queue == NULL || unif_queue == NULL
+        || plan_queue == NULL)
+        return false;
+
+    return queue_is_empty(parser_queue) && queue_is_empty(pretreat_queue)
+        && queue_is_empty(treat_queue) && queue_is_empty(fix_queue)
+        && queue_is_empty(nurbs_temp_queue) && queue_is_empty(unif_queue)
+        && queue_is_empty(plan_queue);
 }
 
 bool is_auto_ready_to_switch(){
