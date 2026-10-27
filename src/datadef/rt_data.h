@@ -80,9 +80,8 @@ typedef struct
     bool is_rev_limit;  // 手动负方向限制
     bool plc_is_disable;
     bool is_disable;   // 轴是否被屏蔽
-    /* 主轴侧"这拍想不想带力矩"。**只有主轴会写**（spl_drv_enable/disable），
-     * hal_axis_intent_poll 把它合并进使能意图，而急停与轴屏蔽永远优先。
-     * 初值 0（不带力矩）：要上力矩必须显式要——与 v1.27.1 一致。 */
+    /* 只读诊断投影，由公共使能管理写入。
+     * 业务侧的真实需求属于 alarm.c 内部；本字段任何时候都不是输入。 */
     bool spindle_wants_torque;
     bool is_lag_error; // 是否跟随误差报警 1是 0否
     // 外部减速状态：[0~4]功能号，[0]正向减速状态寄存，[1]负向减速状态寄存

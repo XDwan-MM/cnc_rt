@@ -1,4 +1,4 @@
-#include "backend/greemaster/master.h"
+#include "backend/greemaster/bus/master.h"
 #include "hal_c_api.h"
 #include <assert.h>
 #include <stdint.h>

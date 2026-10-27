@@ -1,27 +1,11 @@
 #pragma once
-
-/* ============================================================================
- * CNC HAL 公共 C ABI —— 类型与版本闸门
- *
- * 本目录（include/）只放公共 C ABI，内部 C++ 全在 src/ 下。
- * 硬约束：传递依赖只能 <stdint.h>，不得出现 C++ 类型、STL、引用、模板、异常、
- * 厂商 SDK 类型；字符串一律定长数组，整数一律定宽。
- * 版本闸门：abi_major（+ abi_minor）与 struct_size 必须精确相等，不能用「至少」；
- * MAJOR = 契约/语义变更（函数增删、返回码含义变），MINOR = 结构布局变更（字段增删改序）。
- * 字段增删改序都要动这两个宏，并同步改 RT 侧 port_work/src/hal/rt_hal_config.c 的
- * 编译期 #error 闸门。
- * ========================================================================== */
-
 #include <stdint.h>
-
-#define HAL_C_ABI_MAJOR  9u     /* 契约/语义版本：函数增删、返回码含义变 */
-#define HAL_C_ABI_MINOR  3u     /* 结构布局版本：字段增删改序 */
-
-/* ---- HAL 发行版本 ---- */
-#define HAL_VERSION_MAJOR  0u       /* 主版本 */
-#define HAL_VERSION_MINOR  1u       /* 次版本 */
-#define HAL_VERSION_PATCH  0u       /* 修订号 */
-#define HAL_VERSION_STRING "0.1"    /* 字符串形式，日志与上报用；须与上面三个一致 */
+#define HAL_C_ABI_MAJOR 10u
+#define HAL_C_ABI_MINOR 0u
+#define HAL_VERSION_MAJOR 0u
+#define HAL_VERSION_MINOR 2u
+#define HAL_VERSION_PATCH 0u
+#define HAL_VERSION_STRING "0.2.0"
 
 #define HAL_C_MAX_DEV     30u   /* 轴 / IO / 面板 各自的容量上限 */
 #define HAL_C_MAX_SPINDLE 4u    /* 主轴容量上限 */
@@ -52,7 +36,7 @@ typedef struct {
 } HalCCapability;
 
 /* ---- 参数取值 ---- */
-#define HAL_WORK_POSITION     1   /* 位置增量模式（CSP） */
+#define HAL_WORK_POSITION     1   /* 位置用途配置；不等于已准备CSP或设备增量参数 */
 #define HAL_WORK_VELOCITY     3   /* 速度模式（CSV） */
 #define HAL_ENC_INCREMENTAL_Z 1   /* 增量式、带 Z 相；回零策略不归 HAL */
 #define HAL_ENC_ABSOLUTE      3   /* 绝对式 */
@@ -70,16 +54,6 @@ typedef struct {
 /* 急停时对该轴做什么。0 无效，必须由机床配置显式选择。 */
 #define HAL_ESTOP_DISABLE_OPERATION 1   /* 去使能：0x07 退回 SwitchedOn 后 0x06 关断，停在 Ready to switch on */
 #define HAL_ESTOP_DISABLE_VOLTAGE   2   /* 撤销电压（写 0x00，断电），最彻底 */
-/* 主轴期望模式：HAL 自己的取值，与驱动器 0x6060 不同（映射见括号） */
-#define HAL_SPINDLE_CSV 0               /* 速度模式，映射到 0x6060 = 9 */
-#define HAL_SPINDLE_CSP 1               /* 位置模式，映射到 0x6060 = 8 */
-typedef int32_t HalSpindleMode;
-
-/* ============================================================================
- * 配置
- *
- * 扁平结构，启动期传一次。没有「通道」这一维：通道是加工组织，不是硬件属性，归上层。
- * ========================================================================== */
 
 /* 通用轴属性 —— 进给轴和主轴共用；转速侧的量是主轴专有（见 HalCSpindleCfg） */
 typedef struct {
@@ -149,7 +123,12 @@ typedef struct {
     uint32_t start_timeout_ms;          /* 整个启动过程共用的总预算 */
     uint32_t cycle_timeout_ms;
     uint32_t fault_reset_timeout_ms;    /* 故障复位从发起算起的等待上限（ms），必须 > 0。
-                                           超过即判 HAL_RESET_TIMEOUT，并把该轴留在未使能态。 */
+                                           超过记录FAULT_RESET执行错误，并保持下使能要求。 */
+    uint32_t enable_timeout_ms;       /* >0：上下文统一总预算 */
+    uint32_t disable_timeout_ms;      /* >0：普通下使能/撤压总预算 */
+    uint32_t mode_timeout_ms;         /* >0：模式准备总预算 */
+    uint32_t orient_timeout_ms;       /* >0：定向总预算 */
+    uint32_t orient_exit_timeout_ms;  /* >0：保持退出总预算 */
     int32_t  dc_enable;                 /* 0 或 1；运行期间配置不可变 */
 
     /* ---- 设备数组，前 count 个有效 ---- */
@@ -163,34 +142,6 @@ typedef struct {
     HalCPanelCfg   panels[HAL_C_MAX_DEV];
 } HalCConfig;
 
-/* 状态（出参；非 RT 读取须由调用方与周期线程同步） */
-
-typedef struct {
-    int32_t  enabled;                   /* 非零 = DS402 已到 OperationEnabled */
-    int32_t  position_valid;            /* 非零 = 实际位置与目标位置 PDO 可用；速度型主轴可能为 0 */
-    double   actual_pos;                /* 用户单位 */
-    double   command_pos;               /* 用户单位 */
-    double   actual_speed;              /* 实际速度原始值：单位即驱动器速度对象（0x606C）的单位，HAL 不换算。
-                                           speed_valid 为 0 时恒为 0，表示不可得，而不是静止。 */
-    double   actual_speed_rpm;          /* 同一读数的 rpm 口径，按该轴 speed_unit 换算；显示与比较一律用这个。
-                                           speed_valid 为 0 时无意义。 */
-    int32_t  speed_valid;               /* 非零 = 该轴映射了速度 PDO（0x606C 与 0x60FF 都是 32 位），actual_speed 才有意义；
-                                           主轴上恒为 1（HAL 在 bind 阶段就拒绝没有速度 PDO 的主轴）。 */
-    uint16_t raw_status;                /* 原始状态字 0x6041，诊断用 */
-    uint16_t error_code;                /* 驱动器故障码 0x603F */
-    int32_t  error_code_valid;          /* 0x603F 未映射时为 0，error_code 此时无效 */
-    double   actual_speed_mm_min;       /* 进给轴实际线速度，mm/min；主轴及无效时为 0 */
-    int32_t  linear_speed_valid;        /* 非零 = 进给轴有速度 PDO 且配置了每转指令脉冲数 */
-} HalCAxisStatus;
-
-typedef struct {
-    int32_t  enabled;
-    int32_t  mode;                      /* HAL_SPINDLE_CSV / _CSP，来自 0x6061 */
-    double   command_speed;             /* rpm，带符号：正=正转 M03，负=反转 M04 */
-    double   actual_speed;              /* rpm（HAL 已按 speed_unit 换算）——「停稳」判据（转速 < 5）用它，必须是 rpm */
-    double   position_deg;              /* 累计转角（度），不取模；无位置能力时为 0 */
-    uint16_t raw_status;
-} HalCSpindleStatus;
 
 typedef struct {
     int32_t  type;                      /* 设备类型（字典里的 type 映射而来） */
@@ -223,3 +174,113 @@ typedef struct {
     uint32_t expect_wkc_tx;             /* 期望工作计数器（Tx 侧） */
     uint32_t expect_wkc_rx;             /* 期望工作计数器（Rx 侧） */
 } HalCBusHealth;
+
+/* Fixed-width public meanings; no C enum storage assumptions. */
+typedef int32_t HalAxisMode;
+#define HAL_AXIS_MODE_UNSET 0
+#define HAL_AXIS_MODE_CSP   1
+#define HAL_AXIS_MODE_CSV   2
+
+typedef int32_t HalDriveState;
+#define HAL_DRIVE_UNKNOWN               0
+#define HAL_DRIVE_NOT_READY             1
+#define HAL_DRIVE_SWITCH_ON_DISABLED    2
+#define HAL_DRIVE_READY                 3
+#define HAL_DRIVE_SWITCHED_ON           4
+#define HAL_DRIVE_OPERATION_ENABLED     5
+#define HAL_DRIVE_QUICK_STOP_ACTIVE     6
+#define HAL_DRIVE_FAULT_REACTION_ACTIVE 7
+#define HAL_DRIVE_FAULT                 8
+
+typedef int32_t HalControlState;
+#define HAL_CONTROL_IDLE                   0
+#define HAL_CONTROL_ENABLING               1
+#define HAL_CONTROL_DISABLING              2
+#define HAL_CONTROL_DROPPING_VOLTAGE        3
+#define HAL_CONTROL_SETTING_MODE           4
+#define HAL_CONTROL_RESETTING_FAULT         5
+#define HAL_CONTROL_ORIENTING              6
+#define HAL_CONTROL_ORIENT_HOLD            7
+#define HAL_CONTROL_EXITING_ORIENT          8
+#define HAL_CONTROL_ORIENT_HANDOVER_UNKNOWN 9
+
+typedef int32_t HalModeSettingState;
+#define HAL_MODE_SETTING_UNSET   0
+#define HAL_MODE_SETTING_SETTING 1
+#define HAL_MODE_SETTING_READY   2
+#define HAL_MODE_SETTING_FAILED  3
+
+typedef int32_t HalZeroSpeedState;
+#define HAL_ZERO_SPEED_UNAVAILABLE 0
+#define HAL_ZERO_SPEED_ZERO        1
+#define HAL_ZERO_SPEED_NONZERO     2
+
+#define HAL_FEEDBACK_STATUS       (1u << 0)
+#define HAL_FEEDBACK_POSITION     (1u << 1)
+#define HAL_FEEDBACK_SPEED        (1u << 2)
+#define HAL_FEEDBACK_MODE         (1u << 3)
+#define HAL_FEEDBACK_ERROR_CODE   (1u << 4)
+#define HAL_FEEDBACK_LINEAR_SPEED (1u << 5)
+#define HAL_COMMAND_POSITION          (1u << 0)
+#define HAL_COMMAND_SPINDLE_SPEED_RPM (1u << 1)
+
+#define HAL_BLOCK_STOP_REQUIRED       (1u << 0)
+#define HAL_BLOCK_FEEDBACK_UNTRUSTED  (1u << 1)
+#define HAL_BLOCK_NOT_ENABLED        (1u << 2)
+#define HAL_BLOCK_MODE_NOT_READY     (1u << 3)
+#define HAL_BLOCK_MODE_MISMATCH      (1u << 4)
+#define HAL_BLOCK_CONTROL_OCCUPIED   (1u << 5)
+#define HAL_BLOCK_CAPABILITY_MISSING (1u << 6)
+
+typedef int32_t HalIssueCategory;
+#define HAL_ISSUE_NONE                  0
+#define HAL_ISSUE_ENABLE                1
+#define HAL_ISSUE_DISABLE               2
+#define HAL_ISSUE_MODE                  3
+#define HAL_ISSUE_ESTOP                 4
+#define HAL_ISSUE_FAULT_RESET           5
+#define HAL_ISSUE_ORIENT                6
+#define HAL_ISSUE_EXIT_ORIENT           7
+#define HAL_ISSUE_POSITION              8
+#define HAL_ISSUE_SPINDLE_SPEED         9
+#define HAL_ISSUE_SET_POSITION         10
+#define HAL_ISSUE_CLEAR_EXECUTION_ERROR 11
+#define HAL_ISSUE_AXIS_CONDITION       12
+
+typedef struct HalAxisIssue {
+    int32_t category;
+    int32_t code;
+} HalAxisIssue;
+
+typedef struct HalAxisSnapshot {
+    uint32_t available;
+    uint32_t feedback_valid;
+    uint32_t command_valid;
+    HalZeroSpeedState zero_speed_state;
+    HalDriveState drive_state;
+    uint16_t raw_status;
+    uint16_t reserved_status; /* Always zero. */
+    uint32_t drive_error_code;
+    HalControlState control_state;
+    HalAxisMode target_mode;
+    HalAxisMode actual_mode;
+    HalModeSettingState mode_setting_state;
+    uint32_t motion_block_reasons;
+    HalAxisIssue request_rejection;
+    HalAxisIssue execution_error;
+    double coordinate_offset;
+    double actual_pos;
+    double command_pos;
+    double actual_speed_device_units;
+    double actual_speed_rpm;
+    double actual_speed_mm_min;
+    double command_speed_rpm;
+} HalAxisSnapshot;
+
+typedef struct HalOrientExitTarget {
+    int32_t kind;
+    uint32_t reserved; /* Caller sets zero. */
+    double value;
+} HalOrientExitTarget;
+#define HAL_ORIENT_EXIT_POSITION      1
+#define HAL_ORIENT_EXIT_SPINDLE_SPEED 2

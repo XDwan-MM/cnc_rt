@@ -43,6 +43,19 @@ GNC_RES reset_data_init();
 GNC_RES reset_data_reset();
 void nc_set_resetting(RESET_TRIGGER reset_trigger);
 void nc_set_resetted();
+/* 仅运动线程调用：准备动作放在反馈/轨迹更新之前，以保护停车基准；
+ * 完成推进放在 alarm_poll_hal 之后、hal_axis_intent_poll 之前。
+ * 查询类接口既不推进硬件，也不授权重新启动。 */
+void reset_prepare_motion(void);
+bool reset_stop_pending(void);
+void reset_stop_executor_finished(bool success);
+bool reset_spindle_torque_allowed(bool ordinary);
+bool reset_spindle_business_allowed(void);
+bool reset_spindle_disable_needed(void);
+void reset_spindle_disable_submitted(int rc);
+bool reset_position_rebuild_allowed(void);
+bool reset_spindle_position_required(void);
+void reset_spindle_position_rebuilt(void);
 
 #ifdef __cplusplus
 }

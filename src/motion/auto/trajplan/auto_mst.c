@@ -185,7 +185,14 @@ static void auto_deal_mstb(){
                     return;
                 }
             }else{
-                spindle_request_m29();
+                if(!spindle_request_m29()) {
+                    rt_data->sys_state[SYS_IS_RIGID]=0;
+                    auto_clear_mstb_signal();
+                    spindle_report_m29_prepare_rejected();
+                    rt_set_chan_state(0,CHAN_IS_PARSER_RESET,true);
+                    cycle_tp->mstb_cmd_data.finished=true;
+                    return;
+                }
             }
             #endif
             break;

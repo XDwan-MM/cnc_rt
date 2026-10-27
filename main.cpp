@@ -2,6 +2,7 @@
 #include <cstdio>
 #include <cerrno>
 #include <cmath>
+#include <cstdint>
 #include "shmapi.h"
 #include "rt_sem.h"
 #include "plctask.h"
@@ -179,11 +180,22 @@ int main() {
     RT_LOG(INFO, "发送实时启动完成信号");
     LOG(LOG_LEVEL_INFO, "发送实时启动完成信号");
 
-    int ret = rt_hal_spindle_set_orient_pulses((HalAxisId)3, (int)rt_data->axis_data[AXIS_SP].spdl_orient_pos, 5000);
-    printf("SDO发送主轴定向位置成功:ret = %d\n", ret);
-    if(ret == 0)
+    // 定向位置按原始整数脉冲下发。
+    const double orient_pulses = rt_data->axis_data[AXIS_SP].spdl_orient_pos;
+    int ret = HAL_ERROR_ARGUMENT;
+    if (std::isfinite(orient_pulses) && orient_pulses >= 0 &&
+        orient_pulses <= UINT32_MAX && std::trunc(orient_pulses) == orient_pulses)
     {
-        LOG(LOG_LEVEL_INFO, "SDO发送主轴定向位置成功");
+        ret = rt_hal_spindle_set_orient_pulses(
+            RT_HAL_AXIS_SP, static_cast<uint32_t>(orient_pulses), 5000u);
+    }
+    if (ret == HAL_OK)
+    {
+        LOG(LOG_LEVEL_INFO, "SDO设置主轴定向位置成功：pulses=%.0f", orient_pulses);
+    }
+    else
+    {
+        LOG(LOG_LEVEL_ERR, "SDO设置主轴定向位置失败：pulses=%.17g rc=%d", orient_pulses, ret);
     }
 
     // 注册ctrl+C

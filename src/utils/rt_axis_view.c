@@ -56,7 +56,7 @@ int rt_axis_view_speed_mm_min(int axis, double* out) {
 int rt_axis_view_pos_deg(int axis, double* out) {
     if (!out || !axis_ok(axis)) return RT_AXIS_VIEW_ERR_ARG;
     if (axis != AXIS_SP) return RT_AXIS_VIEW_ERR_UNSUPPORTED;   /* 进给轴的位置是 mm */
-    HalCSpindleStatus ss;
+    RtHalSpindleStatus ss;
     /* 主轴角度不进 rt_data（避免污染 motor_act_pos 的语义），直接读 HAL 快照 */
     if (rt_hal_spindle_status((RtHalAxisSlot)axis, &ss) != HAL_OK)
         return RT_AXIS_VIEW_ERR_UNSUPPORTED;
