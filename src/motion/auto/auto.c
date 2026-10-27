@@ -84,6 +84,12 @@ void handle_auto_cmd(){
 }
 
 static void auto_update_state(){
+    //复位放弃本次运行 
+    if (rt_data->current_mode == MODE_MEM
+        && (rt_data->nc_event == SYS_EVENT_HMI_RESET
+            || rt_data->nc_event == SYS_EVENT_OUTSIDE_RESET)) {
+        setVarChanInt(0, VAR_CHAN_RUN_ROW, 0, 0);
+    }
     if(rt_data->sys_state[SYS_IS_ALARMING] || rt_data->sys_state[SYS_IS_SWITCHING_MODE]) return;
     // 正常模式下
     switch (cycle_tp->exec_state)
@@ -646,6 +652,10 @@ static void auto_reset_run(){
     setVarChanInt(0, VAR_CHAN_IS_RUNNING, 0, 0);
     setVarChanInt(0, VAR_CHAN_IS_MOVING, 0, 0);
     setVarChanInt(0, VAR_CHAN_IS_PROGEND, 1, 0);
+    // 复位/程序结束：程序页的起始行回到开头，下次从头运行
+    if (rt_data->current_mode == MODE_MEM) {
+        setVarChanInt(0, VAR_CHAN_RUN_ROW, 0, 0);
+    }
     setVarChanInt(0, VAR_CHAN_CYCLE, 0, 0);
     setVarChanInt(0, VAR_CHAN_HOLD, 0, 0);
     sysprog_cleanup();
@@ -819,7 +829,10 @@ static void auto_handle_alarm(){
 }
 
 void auto_handle_estop(){
-    rerun_mark_interrupted();
+    
+    if (cycle_tp->exec_state != EXEC_IDLE) {
+        rerun_mark_interrupted();
+    }
     auto_reset_run();
 }
 
