@@ -298,12 +298,6 @@ void spindle_request_stop(void)
     spindle_post_event(SPINDLE_EVENT_STOP);
 }
 
-void spindle_release_torque_request(void)
-{
-    /* 上层复位流程直接接管下使能时，清除使能仲裁器使用的主轴意愿。 */
-    spindle_hal_release_torque();
-}
-
 /**
  * @brief 执行已经仲裁完成的 M3/M4 启动请求。
  *

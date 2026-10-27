@@ -47,9 +47,6 @@ bool spindle_request_manual_run(spindle_state_t direction);
 /** 提交普通 M5/面板停止请求。 */
 void spindle_request_stop(void);
 
-/** 撤销主轴力矩/使能意愿，由复位等上层流程接管下使能时调用。 */
-void spindle_release_torque_request(void);
-
 /** 标记一条 M19 正在等待完成反馈。实际定向由 PLC G70.6 上升沿触发。 */
 void spindle_begin_m19(void);
 
