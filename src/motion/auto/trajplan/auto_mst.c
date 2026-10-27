@@ -37,15 +37,13 @@ void auto_get_mstb_cmd(){
 
 void auto_update_mstb_cmd(){
     switch (cycle_tp->exec_state) {
+    // M代码运行过程中只响应复位
     case EXEC_RESET:
         cycle_tp->target_stage = PROGRAM_END;
         cycle_tp->exec_cmd = DO_NULL_CMD;
         cycle_tp_mstb_cmd_data_reset();
         break;
-    case EXEC_PAUSING:
-        break;
     default:
-        auto_get_mstb_cmd();
         break;
     }
 }
