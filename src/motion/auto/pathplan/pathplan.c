@@ -353,7 +353,6 @@ static GNC_RES block_unif_by_nurbs()
                         queue_pop(nurbs_temp_queue);
                     }
                     return GNC_OPERATOR_SUCCESS;
-                }
             }
             // unif 满则下轮再收编末段
             if (queue_is_full(unif_queue))
