@@ -7,7 +7,12 @@ for dir in lib/cncshm/api lib/cncshm lib/parser/api lib/parser lib/cnc_hal/inclu
     includes+=(-I "$ROOT/$dir")
 done
 mkdir -p "$ROOT/build"
-read -r -a qt_cflags <<< "$(pkg-config --cflags Qt5Core)"
+if command -v pkg-config >/dev/null; then
+    read -r -a qt_cflags <<< "$(pkg-config --cflags Qt5Core)"
+else
+    qt_headers="$(qmake -query QT_INSTALL_HEADERS)"
+    qt_cflags=(-I "$qt_headers" -I "$qt_headers/QtCore")
+fi
 cc -std=gnu11 -DSHM_STATIC -fPIC "${qt_cflags[@]}" -g -O0 -Wall -Wextra \
     -ffunction-sections -fdata-sections "${includes[@]}" \
     "$ROOT/test/rt_drive_health_check.c" -Wl,--gc-sections -lm \

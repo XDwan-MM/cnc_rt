@@ -6,6 +6,7 @@
  * 按 EEPROM 读到的 厂商号/产品号/版本号 查字典，得到设备类型 / 名称 / 对象映射。
  * 格式 v1（完整样例见 `config/devices.json`）：顶层 { "version": 1, "devices": [...] }。
  * - revision 为数字或 "*"（通配）；缺省视为 "*"
+ * - dc_sync_enable 可选，数字 0/1，缺省为 1；控制匹配设备的 DC 同步输出
  * - type 为 servo / gree6 / gree4 / panel / io / io_expansion
  * - profile 三选一："ds402" 用内置标准对象号（不得写 objects）；"custom" 用本条的
  *   objects 段（语义角色 → 实际对象号，必须写）；"none" 本字典不提供对象映射
@@ -17,7 +18,6 @@
  *
  * 内置最小 JSON 解析器（支持 // 注释），无堆常驻，启动时 Load 一次，单线程。
  */
-
 #include <stdint.h>
 
 #ifdef __cplusplus
@@ -63,6 +63,7 @@ typedef struct {
     char profile[DEV_DICT_PROFILE_LEN];  // "ds402"/"custom"
     DevDictObject objects[DEV_DICT_MAX_OBJECTS];
     int object_count;
+    int dc_sync_enable;                 // 0=关闭 DC 同步输出，1=允许（仍受总线总开关约束）
 } DevDictEntry;
 
 // ==================== API ====================

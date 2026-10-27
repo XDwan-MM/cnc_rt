@@ -1,4 +1,11 @@
-/* 台架本地 profile：取值须有依据，没依据的挂 RT_HAL_TODO_* 台账 */
+/* 台架本地 profile —— RT 接入 HAL 时唯一的硬件配置来源。
+ *
+ * 这里只放"硬件事实"：从站拓扑、轴绑定、当量、IO 地址、厂商专有参数。
+ * 机床策略（哪根轴什么时候该动、报警怎么处理）一律不在这里。
+ *
+ * 所有取值都必须有依据（ESI、驱动器手册、现场实测三选一）。暂时没有依据的，
+ * 不许猜：用占位值 + 挂 RT_HAL_TODO_* 台账，让台账把运动挡住，等参数域给真值。
+ */
 
 #include "rt_hal_config.h"
 
@@ -144,7 +151,7 @@ int rt_hal_config_build(HalCConfig* out, char* err, uint32_t err_len) {
     if (!out) return fail(err, err_len, RT_HAL_ERR_NULL_ARG, "配置出参为空");
     if (err && err_len) err[0] = '\0';
 
-    /* 重置模块状态：换算从占位值开始，由 set_scaling() 逐轴换真值 */
+    /*===1. 重置模块状态：换算先退回占位值，等 set_scaling() 逐轴换真值===*/
     s_built = 1;
     memset(s_scaling_ok, 0, sizeof(s_scaling_ok));
     memset(s_pulses_ok, 0, sizeof(s_pulses_ok));
@@ -152,29 +159,36 @@ int rt_hal_config_build(HalCConfig* out, char* err, uint32_t err_len) {
     /* 初始台账必须走 recompute_todo()：参数域为空时要挂满台账、挡住运动 */
     recompute_todo();
 
-    /* ABI 闸门必须拦在编译期：HalCAxisStatus 是出参、没有 struct_size 可查，HAL 加字段
-     * 时 validate() 查不出来，而 RT 备的是栈上小一号的结构体 → 写坏栈。 */
-#if HAL_C_ABI_MAJOR != 8u || HAL_C_ABI_MINOR != 3u
-#  error "HAL ABI 与 rt_hal_config 预期不符（期望 8.3）：先读 HAL/include/hal_types.h 的版本说明，再改这一行"
+    /*===2. ABI 闸门必须在编译期拦住===*
+     * HalAxisSnapshot 是出参、没有 struct_size 可查：HAL 加字段时 validate() 发现不了，
+     * 而 RT 备的是栈上小一号的结构体，会直接写坏栈。*/
+#if HAL_C_ABI_MAJOR != 10u || HAL_C_ABI_MINOR != 0u
+#  error "HAL ABI 与 rt_hal_config 预期不符（期望 10.0）：先读 HAL/include/hal_types.h 的版本说明，再改这一行"
 #endif
 
     memset(out, 0, sizeof(*out));
 
-    /* HAL 用 struct_size 精确相等挡字段插入 */
+    /*===3. ABI 头字段：struct_size 精确相等，HAL 靠它挡字段插入===*/
     out->abi_major = HAL_C_ABI_MAJOR;
     out->abi_minor = HAL_C_ABI_MINOR;
     out->struct_size = (uint16_t)sizeof(*out);
     out->reserved = 0;
     out->topology_fingerprint = 0; /* 算法未定，HAL 现在拒绝非零值 */
 
+    /*===4. 周期与各类超时===*/
     out->cycle_us = RT_CYCLE_US;
     out->start_timeout_ms = RT_START_TIMEOUT;
     out->cycle_timeout_ms = RT_CYCLE_TIMEOUT;
     /* 故障复位等待上限（ms） */
     out->fault_reset_timeout_ms = RT_FAULT_RESET_TIMEOUT;
+    out->enable_timeout_ms = 5000u;
+    out->disable_timeout_ms = 5000u;
+    out->mode_timeout_ms = 5000u;
+    out->orient_timeout_ms = 10000u;
+    out->orient_exit_timeout_ms = 5000u;
     out->dc_enable = RT_DC_ENABLE;
 
-    /* 三进给 + 一主轴；主轴也要能被 HalAxisId 寻址，logical_axis 必须 >= 0 */
+    /*===5. 三进给 + 一主轴（主轴也要能被 HalAxisId 寻址，logical_axis 必须 >= 0）===*/
     out->axis_count = 3;
     for (int i = 0; i < 3; ++i)
         fill_axis(&out->axes[i], &kBindings[i], 0);
@@ -183,8 +197,8 @@ int rt_hal_config_build(HalCConfig* out, char* err, uint32_t err_len) {
     fill_axis(&out->spindles[0].axis, &kBindings[RT_HAL_AXIS_SP], 1);
     out->spindles[0].max_speed = RT_PLACEHOLDER_SPINDLE_MAX_RPM;
 
-    /* IO 与面板共用 PLC 的 X/Y 地址域，靠起始地址分段：IO 占 X0..X3/Y0..Y3，
-     * 面板占 X4..X25/Y4..Y17。 */
+    /*===6. IO 与面板共用 PLC 的 X/Y 地址域===*
+     * 靠起始地址分段：IO 占 X0..X3 / Y0..Y3，面板占 X4..X25 / Y4..Y17。*/
     out->io_count = 1;
     out->ios[0].slave_pos = RT_SLAVE_IO;
     out->ios[0].x_start = 0;

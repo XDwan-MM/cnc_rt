@@ -1,3 +1,4 @@
+#include "rt_drive_control.h"
 #include "threads_controller.h"
 #include "debug_mode.h"
 #include "rt_sem.h"
@@ -152,6 +153,7 @@ void* motion_controller_thread_func(void*) {
         /* HAL 报警检查放在 emcmotTrajPlan 之后：先处理完本拍 NC 事件（含复位请求），
          * 再看 HAL 那边进展到哪。 */
         alarm_poll_hal();
+        nc_set_resetted();
         /* 每拍把轴使能意图同步给 HAL。 */
         hal_axis_intent_poll();
         plc_f_signal_handler_cycle();

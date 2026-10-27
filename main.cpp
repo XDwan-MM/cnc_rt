@@ -2,6 +2,7 @@
 #include <cstdio>
 #include <cerrno>
 #include <cmath>
+#include <cstdint>
 #include "shmapi.h"
 #include "rt_sem.h"
 #include "plctask.h"
@@ -19,7 +20,9 @@
 #include <QTextStream>
 #include "sysapi.h"
 #include <alarmapi.h>
-#include "spl_control.h"
+#include "rt_hal_adapter.h"
+#include "hal_types.h"
+#include "spindle_control.h"
 
 static char version[64];
 static int sys_start_rt = 0;
@@ -106,7 +109,7 @@ int main() {
     };
     RT_LOG(INFO,  "初始化全局变量成功");
     LOG(LOG_LEVEL_INFO, "初始化全局变量成功");
-    spl_context_init(&spl_context);
+    spindle_init();
     // 初始化PLC单例
     PlcTask::instance();
     RT_LOG(INFO,  "初始化PLC单例成功");
@@ -169,12 +172,31 @@ int main() {
         RT_LOG_CLOSE();
         return -1;
     }
+   
     RT_LOG(INFO, "创建所有线程成功");
     LOG(LOG_LEVEL_INFO, "创建所有线程成功");
     // 发送实时初始化完成信号 (通知界面：实时系统初始化完成)
     setSysCommInt(SYS_START_RT_FINISH, 1, 0);
     RT_LOG(INFO, "发送实时启动完成信号");
     LOG(LOG_LEVEL_INFO, "发送实时启动完成信号");
+
+    // 定向位置按原始整数脉冲下发。
+    const double orient_pulses = rt_data->axis_data[AXIS_SP].spdl_orient_pos;
+    int ret = HAL_ERROR_ARGUMENT;
+    if (std::isfinite(orient_pulses) && orient_pulses >= 0 &&
+        orient_pulses <= UINT32_MAX && std::trunc(orient_pulses) == orient_pulses)
+    {
+        ret = rt_hal_spindle_set_orient_pulses(
+            RT_HAL_AXIS_SP, static_cast<uint32_t>(orient_pulses), 5000u);
+    }
+    if (ret == HAL_OK)
+    {
+        LOG(LOG_LEVEL_INFO, "SDO设置主轴定向位置成功：pulses=%.0f", orient_pulses);
+    }
+    else
+    {
+        LOG(LOG_LEVEL_ERR, "SDO设置主轴定向位置失败：pulses=%.17g rc=%d", orient_pulses, ret);
+    }
 
     // 注册ctrl+C
     signal(SIGINT, sigint_handler);

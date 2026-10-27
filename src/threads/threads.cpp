@@ -51,9 +51,7 @@ int threads_start() {
 
     // 7. 依次创建并启动所有线程。
     //    每成功一个就记 created，退出路径据此挑着 join 真正建过的线程。
-    if (create_managed_thread(&sdo) != 0) return EXIT_FAILURE;
-    sdo.created = 1;
-    LOG(LOG_LEVEL_INFO, "创建SDO线程成功");
+    
     if (create_managed_thread(&pdo) != 0) return EXIT_FAILURE;
     pdo.created = 1;
     RT_LOG(INFO, "创建pdo线程成功");
@@ -70,6 +68,9 @@ int threads_start() {
     path_plan.created = 1;
     RT_LOG(INFO, "创建路径规划线程成功");
     LOG(LOG_LEVEL_INFO, "创建路径规划线程成功");
+    if (create_managed_thread(&sdo) != 0) return EXIT_FAILURE;
+    sdo.created = 1;
+    LOG(LOG_LEVEL_INFO, "创建SDO线程成功");
     // if (create_managed_thread(&task_controller) != 0) return EXIT_FAILURE;
     return EXIT_SUCCESS;
 }

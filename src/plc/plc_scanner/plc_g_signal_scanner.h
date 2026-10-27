@@ -27,6 +27,8 @@ extern "C"
  */
 extern void plc_g_signal_scan_cycle(void);
 
+extern void plc_lock_state_resync(void);
+
 #ifdef __cplusplus
 }
 #endif

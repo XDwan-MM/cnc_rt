@@ -63,6 +63,8 @@ typedef enum {
     DS402_MODESW_DISABLE_FIRST = 0,
     /* 直接在使能中写 0x6060；能否生效取决于驱动器。 */
     DS402_MODESW_IN_PLACE,
+    /* 台达：必须退到 Ready 再写 0x6060——6061 未使能恒 0，不能靠回读判断是否切完。 */
+    DS402_MODESW_DISABLE_THEN_MODE,
 } Ds402ModeSwitch;
 
 typedef struct {
@@ -72,12 +74,25 @@ typedef struct {
     int           preset_target;  /* 1 = 用当前实际位置预置目标位置（防飞车） */
 } Ds402Step;
 
+/**
+ * @brief 判断该步骤是否需要写控制字（NONE / DONE / 只写模式的步骤都不写）。
+ *
+ * @param[in] step 步骤。
+ * @return 非零表示要写控制字。
+ */
 static inline int Ds402_StepWritesControl(Ds402Step step) {
     return step.kind != DS402_STEP_NONE && step.kind != DS402_STEP_DONE &&
            step.kind != DS402_STEP_SWITCH_MODE;
 }
 
-/* 撤销厂商控制字时保持当前标准状态；未知、Fault、QuickStop 不恢复使能。 */
+/**
+ * @brief 撤销厂商控制字时，按当前标准状态给出一个保持原状态的普通控制字。
+ *
+ * 未知、Fault、QuickStop 一律回到断电，不擅自恢复使能。
+ *
+ * @param[in] sw 当前状态字。
+ * @return 对应的控制字。
+ */
 static inline uint16_t Ds402_HoldControlWord(uint16_t sw) {
     if ((sw & DS402_SW_MASK_OP_ENABLED) == DS402_SW_VAL_OP_ENABLED) return DS402_CW_ENABLE_OP;
     if ((sw & DS402_SW_MASK_SWITCHED_ON) == DS402_SW_VAL_SWITCHED_ON) return DS402_CW_SWITCH_ON;
@@ -85,11 +100,30 @@ static inline uint16_t Ds402_HoldControlWord(uint16_t sw) {
     return DS402_CW_DISABLE_VOLTAGE;
 }
 
+/**
+ * @brief 退出厂商动作时该补写的控制字：步骤本身要写就用步骤的，否则保持当前标准状态。
+ *
+ * @param[in] step 步骤。
+ * @param[in] sw   当前状态字。
+ * @return 要写回的控制字。
+ */
 static inline uint16_t Ds402_ReleaseControlWord(Ds402Step step, uint16_t sw) {
     return Ds402_StepWritesControl(step) ? step.control_word : Ds402_HoldControlWord(sw);
 }
 
-/* 朝请求推进一步；请求达成后返回 NONE 或 DONE。 */
+/**
+ * @brief 纯函数：按当前状态字、实际模式与请求，算出这一拍该做什么。
+ *
+ * 只回答「写什么」，不产生边沿、不记超时：故障复位的 bit7 高低交替、释放时机与
+ * 超时判定都归运行层。请求达成后返回 NONE 或 DONE。
+ *
+ * @param[in] status_word     当前状态字。
+ * @param[in] current_mode    当前实际模式。
+ * @param[in] req             推进请求。
+ * @param[in] desired_op_mode 期望运行模式。
+ * @param[in] msw             模式切换策略。
+ * @return 本拍步骤（控制字、要设的模式、是否预置目标）。
+ */
 static inline Ds402Step Ds402_NextStepReq(uint16_t status_word, uint16_t current_mode,
                                           Ds402Request req, uint16_t desired_op_mode,
                                           Ds402ModeSwitch msw) {
@@ -109,15 +143,32 @@ static inline Ds402Step Ds402_NextStepReq(uint16_t status_word, uint16_t current
             s.op_mode      = desired_op_mode;
         }
         else if ((status_word & DS402_SW_MASK_READY_TO_SWITCH_ON) == DS402_SW_VAL_READY_TO_SWITCH_ON) {
-            s.kind          = DS402_STEP_SWITCH_ON;
-            s.control_word  = DS402_CW_SWITCH_ON;
-            s.preset_target = 1;
-        }
-        else if ((status_word & DS402_SW_MASK_SWITCHED_ON) == DS402_SW_VAL_SWITCHED_ON) {
-            if (current_mode != desired_op_mode) {
+            /* 只有台达（DISABLE_THEN_MODE）在 Ready 阶段写 0x6060；
+             * 其它驱动器维持原默认：直接 SWITCH_ON，模式在 SwitchedOn 阶段处理。 */
+            if (msw == DS402_MODESW_DISABLE_THEN_MODE &&
+                current_mode != desired_op_mode) {
                 s.kind          = DS402_STEP_SWITCH_MODE;
                 s.op_mode       = desired_op_mode;
                 s.preset_target = 1;
+            } else {
+                s.kind          = DS402_STEP_SWITCH_ON;
+                s.control_word  = DS402_CW_SWITCH_ON;
+                s.preset_target = 1;
+            }
+        }
+        else if ((status_word & DS402_SW_MASK_SWITCHED_ON) == DS402_SW_VAL_SWITCHED_ON) {
+            if (current_mode != desired_op_mode) {
+                if (msw == DS402_MODESW_DISABLE_THEN_MODE) {
+                    /* 台达：先写 0x06 退到 Ready（下一拍在 0x21 写 0x6060），
+                     * 0x237 → 0x23 → 0x21 → 写模式 → 0x23 → 0x237。 */
+                    s.kind         = DS402_STEP_SHUTDOWN;
+                    s.control_word = DS402_CW_SHUTDOWN;
+                } else {
+                    /* 默认/IN_PLACE：在 SwitchedOn 写 0x6060。 */
+                    s.kind          = DS402_STEP_SWITCH_MODE;
+                    s.op_mode       = desired_op_mode;
+                    s.preset_target = 1;
+                }
             }
             else {
                 s.kind         = DS402_STEP_ENABLE_OP;

@@ -13,6 +13,9 @@
 #include <hmisysapi.h>
 #include <pthread.h>
 #include "tapreturn.h"
+#include "hmi_request.h"
+#include "debug_mode.h"
+#include "tapreturn.h"
 #include "debug_mode.h"
 
 // ==============全局变量定义===============
@@ -111,6 +114,8 @@ void shm_var_update(){
             getVarChanValue(0, VAR_CHAN_MODAL, 14, &crds_type_var, 0);
             getCrdsValue(CRDS_TYPE_G5X + crds_type_var.value.i - 1, i, &crds_oft);
             act_pos_wcs_ex = rt_data->axis_data[i].wcs_cmd_pos_cur - crds_oft;
+            // todo:优化为对进给值和旋转轴的显示处理
+            if(i == AXIS_SP) act_pos_wcs_ex = fmod(act_pos_wcs_ex, 360);
             setVarAxisDouble(i, VAR_AXIS_CMD_POS_WCS_EX, act_pos_wcs_ex, 0);
         }
         if(rt_data->current_mode == MODE_MEM || rt_data->current_mode == MODE_MDI || rt_data->current_mode == MODE_DNC){
@@ -135,10 +140,12 @@ void shm_var_update(){
         // 相对坐标 = 相对指令位置
         double real_zero = 0.0;
         getVarAxisDouble(i, VAR_AXIS_REAL_ZERO_EX, &real_zero, 0);
-        double real = var_axis[i][VAR_AXIS_CMD_POS_WCS_EX].value.f - real_zero;
+        double real = rt_data->axis_data[i].mac_cmd_pos - real_zero;
+        if(i == AXIS_SP) real = fmod(real, 360);
         setVarAxisDouble(i, VAR_AXIS_CMD_POS_RCS_EX, real, 0);
         // 机械坐标 = 机床指令位置
         setVarAxisDouble(i, VAR_AXIS_CMD_POS_EX, rt_data->axis_data[i].mac_cmd_pos, 0);
+        if(i == AXIS_SP) setVarAxisDouble(i, VAR_AXIS_CMD_POS_EX, fmod(rt_data->axis_data[i].mac_cmd_pos, 360), 0);
         // 机床实际位置。仿真反馈包含误差补偿，显示机械坐标时去除补偿。
         #ifdef DEBUG_MODE_ENABLED
         setVarAxisDouble(i, VAR_AXIS_ACT_POS_EX, rt_data->axis_data[i].fb_pos_no_comp, 0);
@@ -235,6 +242,7 @@ static GNC_RES tp_init(){
 GNC_RES tp_reset(){
     ref_tp_reset();
     cycle_tp_reset();
+    rt_set_chan_state(0, CHAN_IS_PARSER_RESET, true);
     queue_reset(parser_queue);
     queue_reset(pretreat_queue);
     queue_reset(treat_queue);
@@ -276,6 +284,13 @@ GNC_RES rt_global_init(){
         rt_global_delete();
         return res;
     }
+    res = sysprog_init();
+    if(res != GNC_OPERATOR_SUCCESS){
+        rt_global_delete();
+        return res;
+    }
+    rerun_restore();
+    tapreturn_data_restore();
         res = sysprog_init();
     if(res != GNC_OPERATOR_SUCCESS){
         rt_global_delete();
@@ -287,6 +302,8 @@ GNC_RES rt_global_init(){
         return GNC_OPERATOR_ERROR;
     }
     shm_mutex_initialized = true;
+    // 向 HMI 发布本版 RT 支持的请求能力位（HMI 启动的 ResetAll 会清掉，MEM 启动前会重写）
+    hmi_request_publish_capabilities();
     return GNC_OPERATOR_SUCCESS;
 }
 

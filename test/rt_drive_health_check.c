@@ -1,3 +1,4 @@
+#include "rt_drive_control.h"
 #include <assert.h>
 #include <stdio.h>
 #include <string.h>
@@ -6,12 +7,13 @@
 #undef LOG
 static void discard_log(const char *format, ...) { (void)format; }
 #define LOG(level, ...) discard_log(__VA_ARGS__)
+#include "../src/drive/rt_drive_control.c"
 #include "../src/protect/alarm.c"
 #include "../src/plc/plc_scanner/plc_f_signal_handler.c"
 
 static RT_DATA data;
 RT_DATA *rt_data = &data;
-static HalCAxisStatus feedback[RT_HAL_AXIS_COUNT];
+static RtHalAxisStatus feedback[RT_HAL_AXIS_COUNT];
 static unsigned char f[512];
 static int unreadable = -1;
 static int alarms[256], reset_requests, settled, reset_timeout, request_error;
@@ -31,6 +33,7 @@ GNC_RES tp_reset(void) { return 0; }
 GNC_RES rt_data_reset(void) { return 0; }
 GNC_RES event_queue_reset(EVENT_QUEUE *queue) { (void)queue; return 0; }
 void Axis_Limit_Manager_Init(void) {}
+void plc_lock_state_resync(void) {}
 void reset_ferror_control(void) {}
 void rt_set_parser_state(int error, int line) { (void)error; (void)line; }
 int32_t rt_hal_cycle_error(void) { return HAL_OK; }
@@ -39,17 +42,35 @@ void hal_error_text(int32_t code, char *out, uint32_t size)
 int rt_hal_fault_reset_settled(int *timeout)
 { *timeout = reset_timeout; return settled; }
 int rt_hal_fault_reset_state(RtHalAxisSlot slot, int32_t *out)
-{ (void)slot; *out = settled ? HAL_RESET_DONE : HAL_RESET_PENDING; return HAL_OK; }
+{ (void)slot; *out = settled ? RT_HAL_RESET_DONE : RT_HAL_RESET_PENDING; return HAL_OK; }
 int rt_hal_config_hal_axis(RtHalAxisSlot slot) { return (int)slot; }
 int rt_hal_config_is_spindle(RtHalAxisSlot slot) { return slot == RT_HAL_AXIS_SP; }
 int rt_hal_request_fault_reset(RtHalAxisSlot slot)
 { (void)slot; ++reset_requests; return request_error; }
+/* 这个孤立的报警用例没有启用公共复位协调器。完整的复位行为由
+ * tst_hal_h1_spindle 通过真实的 reset.c 覆盖。 */
+bool reset_spindle_torque_allowed(bool ordinary) { return ordinary; }
+bool reset_spindle_business_allowed(void) { return true; }
+bool reset_spindle_disable_needed(void) { return false; }
+void reset_spindle_disable_submitted(int rc) { (void)rc; }
+static unsigned enable_calls;
 int rt_hal_request_axis_enable(RtHalAxisSlot slot, int on)
-{ enabled[slot] = on; return HAL_OK; }
+{ ++enable_calls;enabled[slot] = on;feedback[slot].enabled=on;return HAL_OK; }
+int rt_hal_clear_execution_error(RtHalAxisSlot slot) { (void)slot; return HAL_OK; }
+int rt_hal_request_axis_mode(RtHalAxisSlot slot, HalAxisMode mode) { (void)slot;(void)mode;return HAL_OK; }
+int rt_hal_axis_snapshot(RtHalAxisSlot slot, HalAxisSnapshot* out) {
+    if ((int)slot==unreadable)return HAL_ERROR_NOT_RUNNING;
+    memset(out,0,sizeof(*out));
+    out->feedback_valid=HAL_FEEDBACK_STATUS|HAL_FEEDBACK_MODE;
+    out->drive_state=feedback[slot].enabled?HAL_DRIVE_OPERATION_ENABLED:HAL_DRIVE_READY;
+    out->actual_mode=out->target_mode=HAL_AXIS_MODE_CSP;
+    out->mode_setting_state=HAL_MODE_SETTING_READY;
+    return HAL_OK;
+}
 int rt_hal_request_estop(RtHalAxisSlot slot)
 { (void)slot; ++estops; return HAL_OK; }
 
-int rt_hal_axis_status(RtHalAxisSlot slot, HalCAxisStatus *out)
+int rt_hal_axis_status(RtHalAxisSlot slot, RtHalAxisStatus *out)
 {
     assert(slot >= 0 && slot < RT_HAL_AXIS_COUNT);
     if ((int)slot == unreadable) return HAL_ERROR_STATE;
@@ -131,12 +152,26 @@ int main(void)
     publish();
     assert(healthy());
     hal_axis_intent_poll();
+    hal_axis_intent_poll();
+    hal_axis_intent_poll();
     assert(enabled[0] == 1);
     data.sys_state[SYS_IS_ALARMING] = true;
     hal_axis_intent_poll();
     assert(enabled[0] == 1); // Unrelated alarms do not change the enable policy.
     data.sys_state[SYS_IS_ALARMING] = false;
     puts("PASS: drive-only alarm -> HMI reset -> four requests -> confirmed recovery");
+    /* 使能完成后若观察到状态丢失，不会再回放那个旧请求。 */
+    feedback[0].enabled=0;
+    unsigned before=enable_calls;
+    for(int n=0;n<10;++n)hal_axis_intent_poll();
+    assert(enable_calls==before);
+    puts("PASS: completed enable loss does not automatically re-enable");
+    feedback[0].error_code=0xDEAD;publish();hal_axis_intent_poll();
+    assert(enabled[0]==0);
+    before=enable_calls;feedback[0].error_code=0;publish();
+    for(int n=0;n<10;++n)hal_axis_intent_poll();
+    assert(enable_calls==before && enabled[0]==0);
+    puts("PASS: drive feedback clearing is not a new enable authorization");
 
     feedback[0].error_code = 0xFF43;
     publish();

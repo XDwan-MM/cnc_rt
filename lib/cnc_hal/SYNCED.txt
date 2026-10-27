@@ -1,8 +1,10 @@
-同步自   : /home/mxh/CNC/cnc_hal
-提交     : 623bcf5
-提交说明 : 下使能终点改回 Ready to switch on（恢复 VTS400 旧驱动层行为）
-同步时间 : 2026-10-20T21:15:28+08:00
-ABI      : 8u.3u
+同步自   : ../cnc_hal
+提交     : 4229b06
+提交说明 : 完善主轴定向保持退出
+同步时间 : 2026-10-26T15:29:23+08:00
+静态库源 : /tmp/hal-orient-exit-build/libcnc_hal.a
+静态库   : libcnc_hal.a sha256=4737a60440687b9dd6e8a4c5692e9987da624db51e59c4c8a1819e2e2d569e66
+ABI      : 10u.0u
 公共头   : 5 个
 内部头   : 9 个
-设备字典 : devices.json sha256=f65db141b952c6fd
+设备字典 : devices.json sha256=d36a2d611b29c187

@@ -6,6 +6,7 @@
 #include <string.h>
 
 #define MPG_FEED_AXIS_COUNT 3
+#define MPG_POSITION_SYNC_TOLERANCE 1.0e-8
 
 /*
  * MPG 控制层负责把面板选择和手轮计数转换成单轴目标，再将规划器结果写回
@@ -26,6 +27,8 @@ static mpg_context_t mpg_context = {
     .selected_multiplier = -1};
 static uint32_t mpg_switch_word = 0;    /* 面板轴/倍率开关的原始位域 */
 static uint32_t mpg_hardware_count = 0; /* 最近一次从手轮硬件读取的 32 位计数 */
+static double mpg_position_snapshot[MPG_FEED_AXIS_COUNT];
+static bool mpg_position_snapshot_valid = false;
 
 /* 内部函数声明 */
 static int mpg_decode_multiplier(int switch_value);
@@ -39,7 +42,10 @@ static int mpg_get_motion_direction(const mpg_planner_t *planner);
 static double mpg_get_external_decel_velocity(int axis, int direction);
 static double mpg_get_velocity_limit(int axis, const mpg_planner_t *planner);
 static void mpg_update_active_axis(void);
+static bool mpg_position_changed_since_last_output(void);
+static void mpg_update_position_snapshot(void);
 
+// 机械锁住：请求/生效分离；事件只改请求，停稳后由周期末尾的检查点落生效位
 // 机械锁住：请求/生效分离；事件只改请求，停稳后由周期末尾的检查点落生效位
 static bool handwheel_is_mac_lock_switching(void);
 static bool handwheel_motion_is_stopped(void);
@@ -48,6 +54,8 @@ static void handwheel_apply_mac_lock_if_stopped(void);
 //全轴锁住
 static void handwheel_update_it_lock(void);
 static void handwheel_process_it_lock(mpg_planner_t *planner,int selected_axis);
+static void handwheel_apply_mac_lock_if_stopped(void);
+
 /* 外部函数定义 */
 
 /*
@@ -61,6 +69,7 @@ void handwheel_handle_estop(void)
     memset(&mpg_context, 0, sizeof(mpg_context));
     mpg_context.selected_axis = -1;
     mpg_context.selected_multiplier = -1;
+    mpg_position_snapshot_valid = false;
     if (rt_data != NULL)
     {
         for (int axis_index = 0; axis_index < MPG_FEED_AXIS_COUNT; axis_index++)
@@ -84,6 +93,7 @@ void handle_mpg_cmd(void)
     int selected_axis;
     int selected_multiplier;
     int previous_axis;
+    bool position_changed_outside_mpg;
     mpg_planner_t *planner;
     bool is_mpg_interlock;
 
@@ -97,12 +107,25 @@ void handle_mpg_cmd(void)
     handwheel_update_it_lock();
     
 
+    /* 机械锁住：先处理本周期开关事件。事件只改“请求”，生效位由周期末尾的检查点落。 */
+    handwheel_update_mac_lock();
+
     /* 轴选择位于 bits 3..7，倍率选择位于 bits 0..2；解码后再做轴槽位校验。 */
     HW_Get_Count(&mpg_hardware_count);
     HW_Get_Axis_And_Rate(&mpg_switch_word);
     selected_multiplier = mpg_decode_multiplier((int)(mpg_switch_word & 0x7U));
     selected_axis = mpg_decode_axis((int)((mpg_switch_word >> 3) & 0x1fU));
     valid_selection = mpg_selection_is_valid(selected_axis, selected_multiplier);
+
+    position_changed_outside_mpg = mpg_position_changed_since_last_output();
+    if (position_changed_outside_mpg)
+    {
+        /* 其他模式可能已移动轴；下方选择变化路径会从实时位置和当前计数重建。 */
+        mpg_context.selected_axis = -1;
+        mpg_context.selected_multiplier = -1;
+        mpg_context.enabled = false;
+        mpg_context.initialized = false;
+    }
 
     if (!valid_selection)
     {
@@ -120,6 +143,7 @@ void handle_mpg_cmd(void)
         mpg_update_active_axis();
         /* 无效轴选（OFF/非法编码）也必须落一次锁住状态，否则待处理的切换会一直挂着。 */
         handwheel_apply_mac_lock_if_stopped();
+        mpg_update_position_snapshot();
         return;
     }
     /*所选轴有效且互锁打开，执行轴停止追踪功能*/
@@ -215,25 +239,19 @@ void handle_mpg_cmd(void)
     mpg_planner_step(planner, rt_data->ncu_data.cycle);
     planner->reference_position = planner->current_position;
     mpg_update_axis_output(selected_axis);
-    
     /* 周期末尾：当前轴已停稳则让机械锁住的生效位跟随请求 */
     handwheel_apply_mac_lock_if_stopped();
+    mpg_update_position_snapshot();
 }
 
+/* 模式入口或反馈坐标重建时，强制下一 MPG 周期从当前指令位置建立基准。 */
 void handwheel_resync_position(void)
 {
-    /*
-     * 清掉轴选/倍率的历史状态，使下一次 handle_mpg_cmd() 走“选择变化”分支：
-     * 以实时数据中的 wcs_cmd_pos_cur 重建目标位置和规划位置、速度清零，
-     * 并把 first_pass 置 1，从而丢弃未选择期间的累计计数。
-     * 由 emcmot 在重新进入手轮模式时调用：离开手轮后其他模式可能已经移动过机床，
-     * 不能沿用上一次手轮会话的规划位置（否则回到手轮的第一个周期会产生位置跳变）。
-     */
-
     mpg_context.selected_axis = -1;
     mpg_context.selected_multiplier = -1;
     mpg_context.enabled = false;
     mpg_context.initialized = false;
+    mpg_position_snapshot_valid = false;
 }
 
 /* 内部函数定义 */
@@ -490,6 +508,8 @@ static void mpg_update_active_axis(void)
  * 机械锁住请求与实际生效状态不一致：正在锁住或正在解除。
  * 此时 handle_mpg_cmd() 不再接收新的手轮位移、并把目标收至当前位置让规划器停稳，
  * 停稳后由周期末尾的 handwheel_apply_mac_lock_if_stopped() 让 READY 跟随 ON。
+ * 此时 handle_mpg_cmd() 不再接收新的手轮位移、并把目标收至当前位置让规划器停稳，
+ * 停稳后由周期末尾的 handwheel_apply_mac_lock_if_stopped() 让 READY 跟随 ON。
  */
 static bool handwheel_is_mac_lock_switching(void)
 {
@@ -501,8 +521,37 @@ static bool handwheel_is_mac_lock_switching(void)
  * 判据用规划器的 active 标志（速度高于静止阈值时由 mpg_planner_step() 维护），
  * 这里不另外采样速度；还没有建立过有效轴选时视为已停稳。
  */
+/*
+ * 手轮是否已停稳（锁住切换的判定条件）。
+ * 判据用规划器的 active 标志（速度高于静止阈值时由 mpg_planner_step() 维护），
+ * 这里不另外采样速度；还没有建立过有效轴选时视为已停稳。
+ */
 static bool handwheel_motion_is_stopped(void)
 {
+    if (!mpg_context.initialized || !mpg_axis_is_valid(mpg_context.selected_axis))
+        return true;
+    return !mpg_context.planner_by_axis[mpg_context.selected_axis].active;
+}
+
+/*
+ * 周期末尾的检查点：手轮停稳时让“生效位”跟随“请求位”。
+ * 与自动模式同一套路——auto_update_stage() 也是在“本段结束 / 没有运动指令”的分支里
+ * 无条件写 READY，而不是每个周期去采样速度判断能不能切换。
+ */
+static void handwheel_apply_mac_lock_if_stopped(void)
+{
+    bool lock_request;
+
+    if (!handwheel_motion_is_stopped())
+        return;                                     /* 还在按斜坡减速：下一周期再看 */
+
+    lock_request = rt_data->sys_state[SYS_IS_MAC_LOCK];
+    /* 只有真的变化才打日志，避免停稳后每周期刷屏；赋值本身与 auto 一样是无条件的 */
+    if (rt_data->sys_state[SYS_IS_MAC_LOCK_READY] != lock_request)
+    {
+        LOG(LOG_LEVEL_INFO, "手动模式机械锁住%s", lock_request ? "生效" : "解除");
+    }
+    rt_data->sys_state[SYS_IS_MAC_LOCK_READY] = lock_request;
     if (!mpg_context.initialized || !mpg_axis_is_valid(mpg_context.selected_axis))
         return true;
     return !mpg_context.planner_by_axis[mpg_context.selected_axis].active;
@@ -596,3 +645,33 @@ static void handwheel_process_it_lock(mpg_planner_t *planner,int selected_axis)
 }
 
 
+
+
+/* 发现共享指令位置偏离 MPG 上次输出时，说明有其他运动源更新过位置。 */
+static bool mpg_position_changed_since_last_output(void)
+{
+    if (!mpg_position_snapshot_valid)
+        return false;
+
+    for (int axis = 0; axis < MPG_FEED_AXIS_COUNT; axis++)
+    {
+        double position;
+        double position_difference;
+
+        position = rt_data->axis_data[axis].wcs_cmd_pos_cur;
+        if (!isfinite(position))
+            return true;
+        position_difference = position - mpg_position_snapshot[axis];
+        if (fabs(position_difference) > MPG_POSITION_SYNC_TOLERANCE)
+            return true;
+    }
+    return false;
+}
+
+/* 记录本周期 MPG 输出后的三根进给轴位置，供下周期识别外部位置更新。 */
+static void mpg_update_position_snapshot(void)
+{
+    for (int axis = 0; axis < MPG_FEED_AXIS_COUNT; axis++)
+        mpg_position_snapshot[axis] = rt_data->axis_data[axis].wcs_cmd_pos_cur;
+    mpg_position_snapshot_valid = true;
+}

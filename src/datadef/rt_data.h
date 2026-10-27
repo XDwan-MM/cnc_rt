@@ -64,6 +64,7 @@ typedef enum
     CHAN_IS_PARSER_RERUN,       // 译码器是否运行中 is_parser_running
     CHAN_IS_FIRST_RUN,          // 是否为第一次运行 is_first_run
     CHAN_IS_MOTION_SYNC,        // 等待运动完成同步握手
+    CHAN_IS_BUFSTOP_PASSED,     // 阻止缓冲：某个停止块已运行完（与 MOTION_SYNC 同构）
 } ChanStateIndex;
 
 typedef struct
@@ -79,9 +80,8 @@ typedef struct
     bool is_rev_limit;  // 手动负方向限制
     bool plc_is_disable;
     bool is_disable;   // 轴是否被屏蔽
-    /* 主轴侧"这拍想不想带力矩"。**只有主轴会写**（spl_drv_enable/disable），
-     * hal_axis_intent_poll 把它合并进使能意图，而急停与轴屏蔽永远优先。
-     * 初值 0（不带力矩）：要上力矩必须显式要——与 v1.27.1 一致。 */
+    /* 只读诊断投影，由公共使能管理写入。
+     * 业务侧的真实需求属于 alarm.c 内部；本字段任何时候都不是输入。 */
     bool spindle_wants_torque;
     bool is_lag_error; // 是否跟随误差报警 1是 0否
     // 外部减速状态：[0~4]功能号，[0]正向减速状态寄存，[1]负向减速状态寄存
@@ -178,7 +178,7 @@ typedef struct
     int lmt2_type;                      // 第二级正软极限类型
     int lmt2_enable;                    // 第二级正软极限开启
     int lmt3_enable;                    // 第三级负软极限开启
-    double spl_default_speed;           // 主轴缺省速度
+    double spdl_default_speed;          // 主轴缺省速度
     double spdl_max_speed;              // 主轴最大转速(r/min)
     bool ex_dec_enable_pos_cut;         // 外部减速信号对正向切削进给是否生效
     bool ex_dec_enable_neg_cut;         // 外部减速信号对负向切削进给是否生效
@@ -203,6 +203,7 @@ typedef struct
      * 不同：这个是电机侧的每转脉冲数，HAL 用它做模循环展开的模。
      * 参数域里没填时为 0，此时 HAL 侧退回用 pm_pulse（见 main.cpp 的说明）。 */
     int mt_ppr;
+    double spdl_orient_pos;             // 主轴定向位置
     // 内部
     double act_vel;                     // 轴实际速度
     double act_acc;                     // 轴实际加速度
@@ -249,6 +250,7 @@ typedef struct
     NC_MODE current_mode;
     bool sys_state[SYS_STATE_NUM];
     bool chan_state[SYS_CHAN_NUM][CHAN_STATE_NUM];
+    unsigned int buf_stop_passed_id;   // 放行事件对应的停止块 ID（0=无）
     PATH_DATA path_data;
     pthread_mutex_t mutex;
     // 参数
@@ -267,6 +269,10 @@ void rt_set_sys_state(SysStateIndex state, bool value);
 bool rt_get_sys_state(SysStateIndex state);
 void rt_set_chan_state(int chan_index, ChanStateIndex state, bool value);
 bool rt_get_chan_state(int chan_index, ChanStateIndex state);
+/* 阻止缓冲放行事件：带 ID，避免上一轮的放行被误当成这一轮 */
+void rt_set_buf_stop_passed(unsigned int id);
+unsigned int rt_get_buf_stop_passed_id(void);
+void rt_clear_buf_stop_passed(void);
 void rt_set_zero_vel_params();
 void rt_set_axis_zero_vel_params(AXIS_TYPE axis_type);
 

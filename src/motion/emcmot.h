@@ -29,8 +29,17 @@ void emcmotPathPlan();
 /// axis_write_out 轴输出与伺服处理：获取通道周期生成的轴增量、检查正负软限位、更新编码器/反馈命令位置、执行补偿
 void emcmotTrajPlan();
 
+/* 运动线程内的交接判据，须在本拍输出/意图提交之前调用。
+ * 判断已对齐的 CSP 归属、释放条件与 CSV 可进入性。
+ * 返回 -1 反馈非法、0 位置运动/跟随仍在进行、1 已可释放。 */
+bool motion_spindle_take_position(double target);
+bool motion_spindle_position_active(void);
+void motion_spindle_release_position(void);
+int motion_spindle_prepare_velocity(void);
+
 #ifdef UNIT_TEST
 void emcmot_test_rebuild_axis_positions_from_feedback();
+void emcmot_test_spindle_position_period(void);
 #endif
 
 #ifdef __cplusplus

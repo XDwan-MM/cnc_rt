@@ -174,44 +174,44 @@ typedef enum {
     SYS_EVENT_SINGLE_BLOCK_OFF,         
     SYS_EVENT_MAC_LOCK_ON,              // 开启机械锁住
     SYS_EVENT_MAC_LOCK_OFF,             
-    SYS_EVENT_IT_ON,                    // 开启所有轴互锁
-    SYS_EVENT_IT_OFF,                   
-    SYS_EVENT_STLK_ON,                  // 开启启停锁停
-    SYS_EVENT_STLK_OFF,                 
-    SYS_EVENT_BSL_ON,                   // 开启程序段开始互锁
-    SYS_EVENT_BSL_OFF,  
-    SYS_EVENT_CSL_ON,                   // 开启切削程序段开始互锁
-    SYS_EVENT_CSL_OFF,  
-    SYS_EVENT_IT1_ON,                   // 开启轴1互锁
-    SYS_EVENT_IT1_OFF,  
-    SYS_EVENT_IT2_ON,                   // 开启轴2互锁
-    SYS_EVENT_IT2_OFF,  
-    SYS_EVENT_IT3_ON,                   // 开启轴3互锁
-    SYS_EVENT_IT3_OFF,  
+    SYS_EVENT_IT_ON,                    // 开启所有轴互锁                
+    SYS_EVENT_STLK_ON,                  // 开启启停锁停                    
+    SYS_EVENT_BSL_ON,                   // 开启程序段开始互锁    
+    SYS_EVENT_CSL_ON,                   // 开启切削程序段开始互锁     
+    SYS_EVENT_IT1_ON,                   // 开启轴1互锁   
+    SYS_EVENT_IT2_ON,                   // 开启轴2互锁      
+    SYS_EVENT_IT3_ON,                   // 开启轴3互锁 
     SYS_EVENT_IT4_ON,                   // 开启轴4互锁
-    SYS_EVENT_IT4_OFF,  
     SYS_EVENT_IT5_ON,                   // 开启轴5互锁
-    SYS_EVENT_IT5_OFF,  
-    SYS_EVENT_PMIT1_ON,                 // 开启轴1正向互锁
-    SYS_EVENT_PMIT1_OFF,    
-    SYS_EVENT_PMIT2_ON,                 // 开启轴2正向互锁
-    SYS_EVENT_PMIT2_OFF,    
-    SYS_EVENT_PMIT3_ON,                 // 开启轴3正向互锁
-    SYS_EVENT_PMIT3_OFF,    
-    SYS_EVENT_PMIT4_ON,                 // 开启轴4正向互锁
-    SYS_EVENT_PMIT4_OFF,    
-    SYS_EVENT_PMIT5_ON,                 // 开启轴5正向互锁
-    SYS_EVENT_PMIT5_OFF,    
-    SYS_EVENT_NMIT1_ON,                 // 开启轴1负向互锁
-    SYS_EVENT_NMIT1_OFF,    
-    SYS_EVENT_NMIT2_ON,                 // 开启轴2负向互锁
-    SYS_EVENT_NMIT2_OFF,    
-    SYS_EVENT_NMIT3_ON,                 // 开启轴3负向互锁
-    SYS_EVENT_NMIT3_OFF,    
+    SYS_EVENT_PMIT1_ON,                 // 开启轴1正向互锁       
+    SYS_EVENT_PMIT2_ON,                 // 开启轴2正向互锁  
+    SYS_EVENT_PMIT3_ON,                 // 开启轴3正向互锁  
+    SYS_EVENT_PMIT4_ON,                 // 开启轴4正向互锁   
+    SYS_EVENT_PMIT5_ON,                 // 开启轴5正向互锁  
+    SYS_EVENT_NMIT1_ON,                 // 开启轴1负向互锁       
+    SYS_EVENT_NMIT2_ON,                 // 开启轴2负向互锁   
+    SYS_EVENT_NMIT3_ON,                 // 开启轴3负向互锁 
     SYS_EVENT_NMIT4_ON,                 // 开启轴4负向互锁
-    SYS_EVENT_NMIT4_OFF,    
-    SYS_EVENT_NMIT5_ON,                 // 开启轴5负向互锁
-    SYS_EVENT_NMIT5_OFF,    
+    SYS_EVENT_NMIT5_ON,                 // 开启轴5负向互锁 
+    SYS_EVENT_IT_OFF,  
+    SYS_EVENT_STLK_OFF, 
+    SYS_EVENT_BSL_OFF, 
+    SYS_EVENT_CSL_OFF,
+    SYS_EVENT_IT1_OFF,  
+    SYS_EVENT_IT2_OFF,
+    SYS_EVENT_IT3_OFF,
+    SYS_EVENT_IT4_OFF,
+    SYS_EVENT_IT5_OFF,
+    SYS_EVENT_PMIT1_OFF,
+    SYS_EVENT_PMIT2_OFF,
+    SYS_EVENT_PMIT3_OFF,
+    SYS_EVENT_PMIT4_OFF,
+    SYS_EVENT_PMIT5_OFF,
+    SYS_EVENT_NMIT1_OFF,
+    SYS_EVENT_NMIT2_OFF,
+    SYS_EVENT_NMIT3_OFF,
+    SYS_EVENT_NMIT4_OFF,
+    SYS_EVENT_NMIT5_OFF,
     SYS_EVENT_DRY_RUN_ON,               // 开启空运行
     SYS_EVENT_DRY_RUN_OFF,  
     SYS_EVENT_PROGRAM_RESTART_ON,       // 开启程序段重启

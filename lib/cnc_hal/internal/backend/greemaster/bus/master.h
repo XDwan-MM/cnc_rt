@@ -7,8 +7,8 @@
 #include <stdbool.h>
 #include "/opt/GreeMaster/include/libGREEMASTER/GreeMasterAPI.h"
 #include "/opt/GreeMaster/include/libGREEMASTER/gm_errcode.h"
-#include "slave_list.h"
-#include "export.h"
+#include "backend/greemaster/mapping/slave_list.h"
+#include "backend/greemaster/export.h"
 
 #define GM_MIN_CYCLE_US 250     /* GM_Master_Set_Cycle 支持的最小周期 */
 
@@ -28,21 +28,52 @@ typedef struct {
 #define MASTER_STOP_REQUESTED (-28673)
 #define MASTER_START_TIMEOUT  (-28674)
 #define MASTER_DEVICE_DICTIONARY_ERROR (-28675)
+
+/**
+ * @brief 取最近一次启动失败的原因文本。
+ *
+ * @return 静态缓冲中的中文原因；成功启动后内容无意义。
+ */
 const char* Master_StartupError(void);
+
+/**
+ * @brief 取已扫到的从站数；主站未就绪时恒为 0。
+ *
+ * @return 从站数。
+ */
 int Master_SlaveCount(void);
-/* 仅非实时线程调用；返回 0 成功，-2 超时，-3 SDO 应答错误，-4 主站停止。 */
+
+/**
+ * @brief 执行一笔 SDO 传输（非实时线程）。
+ *
+ * @param[in]  slave_pos  从站位置号。
+ * @param[in]  index      对象索引。
+ * @param[in]  subindex   对象子索引。
+ * @param[in,out] data    读写缓冲。
+ * @param[in]  size       数据字节数，只接受 1/2/4。
+ * @param[in]  write      非零表示写。
+ * @param[in]  timeout_ms 总等待时间。
+ * @return 0 成功；-1 一般失败；-2 超时；-3 SDO 应答错误；-4 主站停止。
+ */
 int Master_SdoTransfer(int slave_pos, uint16_t index, uint8_t subindex,
                        void* data, uint16_t size, int write, uint32_t timeout_ms);
-/* 打断标志的取址与查询：device.c 的 EEPROM / PDO 映射读取要用，才能被停下来。 */
 
+/**
+ * @brief 取打断标志地址，供 SDK 阻塞调用轮询。
+ *
+ * @return 打断标志地址。
+ */
 int* Master_InterruptFlag(void);
+
+/**
+ * @brief 是否已被要求打断。
+ *
+ * @return 非零表示已置位。
+ */
 int  Master_Interrupted(void);
 
-/* 设备字典路径：取 CNC_HAL_DEVICES_JSON 环境变量，未设置时用构建期指定的安装路径。
- * 加载失败会阻止主站启动。 */
-#ifndef DEVICES_JSON_PATH
-#define DEVICES_JSON_PATH NULL
-#endif
+/* 设备字典优先使用可执行文件目录下 ../lib/cnc_hal/lib/devices.json。
+ * 文件不存在时取 CNC_HAL_DEVICES_JSON；访问或解析失败直接阻止启动。 */
 
 #define PARAM_CHANG 1          /* 是否修改主站参数 */
 
@@ -57,6 +88,9 @@ typedef struct {
     int ErrorID;    /* 预定义的枚举 ID */
 } ErrorContext;
 
+/**
+ * @brief 清空全局错误上下文，供每次启动前复位。
+ */
 void error_module_init(void);
 
 typedef enum _EcatMasterError
@@ -79,31 +113,49 @@ typedef enum _EcatMasterError
 extern int slave_num;
 
 
-/** @brief 启动主站到「周期收发模式可用」。
- *  @param cfg  主站配置（周期、毫秒超时、DC）；资源申请由驱动决定
- *  @return 0 成功；< 0 失败 */
+/**
+ * @brief 启动主站到「周期收发模式可用」。
+ *
+ * @param[in] cfg 主站配置（周期、毫秒超时、DC）。
+ * @return 0 成功；< 0 失败。
+ */
 MASTER_API int ethercat_init(const MasterConfig* cfg);
 
-/** @brief 关闭主站，释放资源；幂等。调用方须先退出周期调用。
- *  @return 0 成功；< 0 失败（错误码查主站手册） */
+/**
+ * @brief 关闭主站并释放资源；幂等，调用方须先退出周期调用。
+ *
+ * @return 0 成功；< 0 失败。
+ */
 MASTER_API int ethercat_close(void);
 
-/** @brief 等本周期节拍并收一帧——周期里唯一的阻塞点。
- *  @note  只在实时线程调用；超时用 MasterConfig.cycle_timeout_ms。
- *  @return 0 成功；< 0 = 等节拍超时或收帧失败 */
+/**
+ * @brief 等本周期节拍并收一帧——周期里唯一的阻塞点；只在实时线程调用。
+ *
+ * @return 0 成功；< 0 等节拍超时或收帧失败。
+ */
 MASTER_API int Master_WaitCycle(void);
 
-/** @brief 下发本帧输出：只把已写入的 PDO 发出去，不做计算。
- *  @note  只在实时线程调用；标准周期 WaitCycle → 读写 → CommitCycle。
- *  @return 0 成功；< 0 失败 */
+/**
+ * @brief 下发本帧输出；只在实时线程调用。
+ *
+ * 标准周期顺序：WaitCycle → 读写 → CommitCycle。
+ *
+ * @return 0 成功；< 0 失败。
+ */
 MASTER_API int Master_CommitCycle(void);
 
-/** @brief 主站是否出过错或已停机。
- *  @return 0 = 正常；非 0 = 出错或已停机 */
+/**
+ * @brief 主站是否出过错或已停机。
+ *
+ * @return 0 正常；非 0 出错或已停机。
+ */
 MASTER_API int Master_StopFlag(void);
 
-/** @brief 非阻塞停止通知；等待中的周期调用在 SDK 返回后报告 MASTER_STOP_REQUESTED。
- *  @note  不释放资源、不承诺唤醒 SDK；与周期调用可并发，生命周期调用串行。 */
+/**
+ * @brief 非阻塞停止通知：等待中的周期调用会在 SDK 返回后报告 MASTER_STOP_REQUESTED。
+ *
+ * 不释放资源、不承诺唤醒 SDK；与周期调用可并发，生命周期调用仍须串行。
+ */
 MASTER_API void Master_RequestStop(void);
 
 /** 总线健康快照 —— 主站自己累计的警告与计数，掉电清零。 */
@@ -120,9 +172,12 @@ typedef struct {
     unsigned expect_wkc_rx;        /* 期望工作计数器（Rx 侧） */
 } MasterBusHealth;
 
-/** @brief 取最近一次收帧的总线健康快照：只记录不判断，报警策略归上层。
- *  @param out  带出快照；未收过帧时全零
- *  @return 0 成功；< 0 = out 为空 */
+/**
+ * @brief 取最近一次收帧的总线健康快照：只记录不判断。
+ *
+ * @param[out] out 带出快照；未收过帧时全零。
+ * @return 0 成功；< 0 out 为空。
+ */
 MASTER_API int Master_BusHealth(MasterBusHealth* out);
 
 #endif

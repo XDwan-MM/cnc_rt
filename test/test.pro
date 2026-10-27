@@ -5,7 +5,7 @@ CONFIG -= app_bundle
 
 DEFINES += MASTER_RUN_ON
 DEFINES += UNIT_TEST
-DEFINES += DEBUG_MODE_ENABLED
+!contains(CONFIG, h1_production_business): DEFINES += DEBUG_MODE_ENABLED
 
 TEMPLATE = app
 
@@ -47,8 +47,8 @@ LIBS += -L"$$PWD/../lib/kinematic/bin/" -lkinematic
 INCLUDEPATH += $$PWD/../lib/kinematic/include $$PWD/../lib/kinematic
 
 # 添加nurbs库
-# LIBS += -L"$$PWD/lib/nurbs/bin/" -lnurbsfit
-# INCLUDEPATH += $$PWD/lib/nurbs/include $$PWD/lib/nurbsfit
+LIBS += -L"$$PWD/../lib/nurbs/bin/" -lnurbsfit
+INCLUDEPATH += $$PWD/../lib/nurbs/include
 
 # 添加误差补偿库
 LIBS += -L"$$PWD/../lib/CNC_ErrorComp/lib" -lCNC_ErrorComp
@@ -65,7 +65,7 @@ INCLUDEPATH += $$PWD/../lib/cnc_hal/include
 INCLUDEPATH += $$PWD/../lib/cnc_hal/internal
 
 unix:!macx: {
-    DESTDIR = $$PWD/bin
+    isEmpty(DESTDIR): DESTDIR = $$PWD/bin
 }
 
 LIBS += -L/opt/GreeMaster/lib -lGREEMASTER -lpthread -Wl,--no-as-needed -lxml2 -Wl,--as-needed
@@ -82,6 +82,7 @@ HEADERS += \
     ../src/datadef/plan_queue.h \
     ../src/datadef/rt_data.h \
     ../src/datadef/record_queue.h \
+    ../src/drive/rt_drive_control.h \
     ../src/hal/rt_hal_config.h \
     ../src/hal/rt_hal_adapter.h \
     ../src/hal/rt_hal_sdo.h \
@@ -92,9 +93,9 @@ HEADERS += \
     ../src/motion/auto/interp/interpolation.h \
     ../src/motion/auto/pathplan/parser.h \
     ../src/motion/auto/pathplan/pathplan.h \
-    ../src/motion/spindle/spl_control.h \
-    ../src/motion/spindle/spl_orient.h \
-    ../src/motion/spindle/spl_pos_planner.h \
+    ../src/motion/spindle/spindle_control.h \
+    ../src/motion/spindle/spindle_velocity_planner.h \
+    ../src/motion/motion_csp_stop.h \
     ../src/motion/emcmot.h \
     ../src/motion/manual/mpg/mpg.h \
     ../src/motion/manual/mpg/mpg_planner.h \
@@ -141,6 +142,7 @@ SOURCES += \
     ../src/hal/rt_hal_adapter.c \
     ../src/hal/rt_hal_sdo.c \
     ../src/hal/rt_hal_sim_backend.c \
+    ../src/drive/rt_drive_control.c \
     ../src/motion/auto/auto.c \
     ../src/motion/auto/trajplan/auto_gcode.c \
     ../src/motion/auto/trajplan/auto_mst.c \
@@ -148,10 +150,15 @@ SOURCES += \
     ../src/motion/auto/interp/interpolation.c \
     ../src/motion/auto/pathplan/parser.cpp \
     ../src/motion/auto/pathplan/pathplan.c \
-    ../src/motion/spindle/spl_control.c \
-    ../src/motion/spindle/spl_orient.c \
-    ../src/motion/spindle/spl_vel_planner.c \
-    ../src/motion/spindle/spl_pos_planner.c \
+    ../src/motion/auto/pathplan/hmi_request.c \
+    ../src/motion/spindle/spindle_control.c \
+    ../src/motion/spindle/spindle_hal.c \
+    ../src/motion/spindle/spindle_m29.c \
+    ../src/motion/spindle/spindle_safety.c \
+    ../src/motion/spindle/spindle_speed.c \
+    ../src/motion/spindle/spindle_orientation.c \
+    ../src/motion/spindle/spindle_velocity_planner.c \
+    ../src/motion/motion_csp_stop.c \
     ../src/motion/emcmot.cpp \
     ../src/motion/manual/mpg/mpg.c \
     ../src/motion/manual/mpg/mpg_planner.c \
@@ -160,6 +167,8 @@ SOURCES += \
     ../src/motion/manual/jog/jog_planner.c \
     ../src/motion/servo_sample/servosamplesampler.cpp \
     ../src/motion/rerun/rerun.c \
+    ../src/motion/sysprog/tapreturn.c \
+    ../src/motion/sysprog/sysprog.c \
     ../src/protect/alarm.c \
     ../src/protect/ferror_control.c \
     ../src/protect/stored_stroke_check.c \
@@ -187,6 +196,7 @@ INCLUDEPATH += \
     ../src/common \
     ../src/compensation \
     ../src/datadef \
+    ../src/drive \
     ../src/hal \
     ../src/motion \
     ../src/motion/auto \
@@ -237,11 +247,6 @@ isEmpty(TEST_SOURCES) {
     SOURCES += $$TEST_SOURCES
 }
 
-contains(SOURCES, .*tst_spindle.cpp) {
-    # 单元测试不访问真实 EtherCAT 控制字 PDO。
-    QMAKE_LFLAGS += -Wl,--wrap=Ethercat_Driver_Write_Controlword
-}
-
 SOURCES = $$unique(SOURCES)
 HEADERS = $$unique(HEADERS)
 
@@ -257,3 +262,13 @@ SOURCES -= $$PWD/test_motion/tst_spindle.cpp
 # homing_profile / traj_data），跟本工程的 ref.h 对不上——在同事的原始树里
 # 也一样编不过，与 HAL 移植无关。先排除，等测试自己更新。
 SOURCES -= $$PWD/test_motion/tst_homing.cpp
+
+# H1 business regression uses the real adapter through a test-only frame fixture.
+contains(DEFINES, RT_HAL_H1_TEST) {
+    SOURCES -= ../src/hal/rt_hal_adapter.c
+    SOURCES += $$PWD/rt_hal_h1_cycle_fixture.c \
+        ../src/motion/sysprog/sysprog.c \
+        ../src/motion/sysprog/tapreturn.c \
+        ../src/motion/auto/pathplan/hmi_request.c
+    LIBS += -L"$$PWD/../lib/nurbs/bin" -lnurbsfit
+}

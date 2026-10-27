@@ -250,7 +250,8 @@ static void auto_cal_target_vel(){
             else cycle_tp->pos_cmd_data.target_vel = MIN(cycle_tp->plan_block->feed_vel * var_chan[0][VAR_CHAN_RAPID_OVERRIDE].value.f / OVERRIDE_PERCENT, cycle_tp->plan_block->param_vel);
             break;
         case PROBE:
-            cycle_tp->pos_cmd_data.target_vel = MIN(cycle_tp->plan_block->feed_vel, cycle_tp->plan_block->param_vel);
+            if(rt_data->sys_state[SYS_IS_STOP_SKIP]) cycle_tp->pos_cmd_data.target_vel = 0;
+            else cycle_tp->pos_cmd_data.target_vel = MIN(cycle_tp->plan_block->feed_vel, cycle_tp->plan_block->param_vel);
             break;
         default:
             if(rt_get_sys_state(SYS_IS_DRY_RUN)) cycle_tp->pos_cmd_data.target_vel = MIN(rt_data->chan_data[0].dryrun_spd * var_chan[0][VAR_CHAN_FEED_OVERRIDE].value.f / OVERRIDE_PERCENT, cycle_tp->plan_block->param_vel);
@@ -258,7 +259,7 @@ static void auto_cal_target_vel(){
             break;
         }
         if(rt_data->sys_state[SYS_IS_MAC_LOCK_READY] != rt_data->sys_state[SYS_IS_MAC_LOCK]) cycle_tp->pos_cmd_data.target_vel = 0;
-        if(rt_data->sys_state[SYS_IS_IT_LOCK] || rt_data->sys_state[SYS_IS_STOP_SKIP]) cycle_tp->pos_cmd_data.target_vel = 0;
+        if(rt_data->sys_state[SYS_IS_IT_LOCK]) cycle_tp->pos_cmd_data.target_vel = 0;
         break;
     case EXEC_PAUSING:
     case EXEC_RESET:

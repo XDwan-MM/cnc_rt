@@ -2,7 +2,7 @@
 #include "global.h"
 #include "regapi.h"       /**< 寄存器访问 API */
 #include "signal_utils.h" /**< 边沿检测宏定义 */
-#include "spl_control.h"
+#include "spindle_control.h"
 #include <hmisysapi.h>
 #include <string.h>
 
@@ -414,6 +414,34 @@ static void plc_auto_g_signal_scan_cycle(const G_INPUT_MAP *curr_g, const G_INPU
     }
 }
 
+/// @brief  按照G寄存器电平重新同步互锁/锁住等开关状态
+void plc_lock_state_resync(void)
+{
+    G_INPUT_MAP cur;
+    memset(&cur, 0, sizeof(cur));
+    plc_input_fetch_snapshot(&cur);
+
+    /* 所有轴/切削段/程序段开始互锁（G8.0/G8.1/G8.3，0 有效） */
+    rt_set_sys_state(SYS_IS_IT_LOCK,  !GET_BIT(cur.g_regs[8], 0));
+    rt_set_sys_state(SYS_IS_CSL_LOCK, !GET_BIT(cur.g_regs[8], 1));
+    rt_set_sys_state(SYS_IS_BSL_LOCK, !GET_BIT(cur.g_regs[8], 3));
+
+    /* 各轴互锁（G130.0-4，0 有效） */
+    for (int i = 0; i < 5; ++i)
+        rt_set_sys_state((SysStateIndex)(SYS_IS_IT1_LOCK + i),
+                         !GET_BIT(cur.g_regs[130], i));
+
+    /* 机床锁住（G4.1，1 有效）。READY 表示位置输出已按锁住处理：复位时轴已停，
+     * 直接拉到同一电平，避免两者不等把 target_vel 永久压成 0。 */
+    const bool mac_lock = GET_BIT(cur.g_regs[4], 1);
+    rt_set_sys_state(SYS_IS_MAC_LOCK, mac_lock);
+    rt_set_sys_state(SYS_IS_MAC_LOCK_READY, mac_lock);
+
+    /* 跳过信号 G6.6、程序再启动 G6.0（1 有效）：都会直接拦住循环启动/运动 */
+    rt_set_sys_state(SYS_IS_STOP_SKIP,   GET_BIT(cur.g_regs[6], 6));
+    rt_set_sys_state(SYS_IS_PROG_RESTAR, GET_BIT(cur.g_regs[6], 0));
+}
+
 static void plc_lock_g_signal_scan_cycle(const G_INPUT_MAP *curr_g, const G_INPUT_MAP *last_g){
     /* 机床锁住 G4.1 */
     if (SIGNAL_RISING(curr_g->g_regs[4], last_g->g_regs[4], 1))
@@ -464,16 +492,16 @@ static void plc_lock_g_signal_scan_cycle(const G_INPUT_MAP *curr_g, const G_INPU
     }
 
     /* 起动锁停 G7.1 1有效*/
-    if (SIGNAL_RISING(curr_g->g_regs[7], last_g->g_regs[7], 1))
-    {
-        LOG(LOG_LEVEL_INFO, "扫描到G7.1 发生上升沿");
-        plc_dispatch_event(PLC_EV_MSG_ENANLE, STLK, 1, 0, 0);
-    }
-    if (SIGNAL_FALLING(curr_g->g_regs[7], last_g->g_regs[7], 1))
-    {
-        LOG(LOG_LEVEL_INFO, "扫描到G7.1 发生下降沿");
-        plc_dispatch_event(PLC_EV_MSG_ENANLE, STLK, 0, 0, 0);
-    }
+    // if (SIGNAL_RISING(curr_g->g_regs[7], last_g->g_regs[7], 1))
+    // {
+    //     LOG(LOG_LEVEL_INFO, "扫描到G7.1 发生上升沿");
+    //     plc_dispatch_event(PLC_EV_MSG_ENANLE, STLK, 1, 0, 0);
+    // }
+    // if (SIGNAL_FALLING(curr_g->g_regs[7], last_g->g_regs[7], 1))
+    // {
+    //     LOG(LOG_LEVEL_INFO, "扫描到G7.1 发生下降沿");
+    //     plc_dispatch_event(PLC_EV_MSG_ENANLE, STLK, 0, 0, 0);
+    // }
 
     /* 所有互锁 G8.0 0有效*/
     if (SIGNAL_RISING(curr_g->g_regs[8], last_g->g_regs[8], 0))
@@ -488,28 +516,28 @@ static void plc_lock_g_signal_scan_cycle(const G_INPUT_MAP *curr_g, const G_INPU
     }
 
     /* 切削程序段开始互锁 G8.1 0有效*/
-    if (SIGNAL_RISING(curr_g->g_regs[8], last_g->g_regs[8], 1))
-    {
-        LOG(LOG_LEVEL_INFO, "扫描到G8.1 发生上升沿");
-        plc_dispatch_event(PLC_EV_MSG_ENANLE, CSL, 0, 0, 0);
-    }
-    if (SIGNAL_FALLING(curr_g->g_regs[8], last_g->g_regs[8], 1))
-    {
-        LOG(LOG_LEVEL_INFO, "扫描到G8.1 发生下降沿");
-        plc_dispatch_event(PLC_EV_MSG_ENANLE, CSL, 1, 0, 0);
-    }
+    // if (SIGNAL_RISING(curr_g->g_regs[8], last_g->g_regs[8], 1))
+    // {
+    //     LOG(LOG_LEVEL_INFO, "扫描到G8.1 发生上升沿");
+    //     plc_dispatch_event(PLC_EV_MSG_ENANLE, CSL, 0, 0, 0);
+    // }
+    // if (SIGNAL_FALLING(curr_g->g_regs[8], last_g->g_regs[8], 1))
+    // {
+    //     LOG(LOG_LEVEL_INFO, "扫描到G8.1 发生下降沿");
+    //     plc_dispatch_event(PLC_EV_MSG_ENANLE, CSL, 1, 0, 0);
+    // }
 
     /* 程序段开始互锁 G8.3 0有效*/
-    if (SIGNAL_RISING(curr_g->g_regs[8], last_g->g_regs[8], 3))
-    {
-        LOG(LOG_LEVEL_INFO, "扫描到G8.3 发生上升沿");
-        plc_dispatch_event(PLC_EV_MSG_ENANLE, BSL, 0, 0, 0);
-    }
-    if (SIGNAL_FALLING(curr_g->g_regs[8], last_g->g_regs[8], 3))
-    {
-        LOG(LOG_LEVEL_INFO, "扫描到G8.3 发生下降沿");
-        plc_dispatch_event(PLC_EV_MSG_ENANLE, BSL, 1, 0, 0);
-    }
+    // if (SIGNAL_RISING(curr_g->g_regs[8], last_g->g_regs[8], 3))
+    // {
+    //     LOG(LOG_LEVEL_INFO, "扫描到G8.3 发生上升沿");
+    //     plc_dispatch_event(PLC_EV_MSG_ENANLE, BSL, 0, 0, 0);
+    // }
+    // if (SIGNAL_FALLING(curr_g->g_regs[8], last_g->g_regs[8], 3))
+    // {
+    //     LOG(LOG_LEVEL_INFO, "扫描到G8.3 发生下降沿");
+    //     plc_dispatch_event(PLC_EV_MSG_ENANLE, BSL, 1, 0, 0);
+    // }
 
     /* 各轴互锁 G130.0-130.4 0有效*/
     for (int i = 0; i < 5; i++)
@@ -564,32 +592,34 @@ static void process_spindle_speed_command(const G_INPUT_MAP *curr_g)
         par_axis[AXIS_SP][PAR_SPDL_MAX_SPEED].value.val_real;
 
     /* G32/G33 的模拟量编码按机床最大主轴速度换算为 rpm。 */
-    spl_context.plc_speed = spindle_max_speed * raw_speed / 4095.0;
+    spindle_set_plc_speed(spindle_max_speed * raw_speed / 4095.0);
 
     /* G33.7=0：使用 CNC/M 代码速度；G33.7=1：使用 PLC 速度。 */
     if (GET_BIT(curr_g->g_regs[33], 7))
     {
-        spl_context.speed_source = SPINDLE_SPEED_SOURCE_PLC;
+        spindle_set_speed_source(SPINDLE_SPEED_SOURCE_PLC);
     }
     else
     {
-        spl_context.speed_source = SPINDLE_SPEED_SOURCE_CNC;
+        spindle_set_speed_source(SPINDLE_SPEED_SOURCE_CNC);
     }
 }
 
 static uint16_t read_spindle_speed_command_raw(const G_INPUT_MAP *curr_g)
 {
-    uint16_t low_bits = 0;
-    uint16_t high_bits = 0;
+    uint16_t low_bits;
+    uint16_t high_bits;
 
-    for (int bit = 0; bit < 8; bit++)
-    {
-        low_bits |= (uint16_t)(GET_BIT(curr_g->g_regs[32], bit) & 1) << bit;
-        high_bits |= (uint16_t)(GET_BIT(curr_g->g_regs[33], bit) & 1) << bit;
-    }
+    /*
+     * G32.0~G32.7 对应速度值 bit0~bit7；
+     * G33.0~G33.3 对应速度值 bit8~bit11；
+     * G33.7 是速度源选择信号，不属于速度值。
+     * 因此 12 位原始值范围为 0~4095，不能按 5 位偏移拼接。
+     */
+    low_bits = (uint16_t)curr_g->g_regs[32] & 0x00FFU;
+    high_bits = (uint16_t)curr_g->g_regs[33] & 0x000FU;
 
-    /* G32/G33 的编码格式由 PLC 接口协议定义，保留原始位拼接方式。 */
-    return (uint16_t)((high_bits & 0x0F) << 5) | (low_bits & 0xFF);
+    return (uint16_t)(low_bits | (uint16_t)(high_bits << 8));
 }
 
 /** @brief 从寄存器系统同步数据到本地结构体

@@ -342,3 +342,73 @@ TEST_F(TestMpg, EstopClearsPlannerAndVelocityOutputs)
     EXPECT_DOUBLE_EQ(rt_data->axis_data[AXIS_X].cmd_vel, 0.0);
     EXPECT_DOUBLE_EQ(rt_data->chan_data[0].cmd_vel, 0.0);
 }
+
+TEST_F(TestMpg, ExternalAxisPositionChangeResynchronizesPlannerForXyz)
+{
+    const int axes[] = {AXIS_X, AXIS_Y, AXIS_Z};
+    const int switches[] = {HANDWHEEL_AXIS_X, HANDWHEEL_AXIS_Y, HANDWHEEL_AXIS_Z};
+
+    for (int index = 0; index < 3; index++)
+    {
+        handwheel_handle_estop();
+        for (int axis = AXIS_X; axis <= AXIS_Z; axis++)
+        {
+            rt_data->axis_data[axis].max_feed_acc = 100.0;
+            rt_data->axis_data[axis].mpg_spd = 10.0;
+            rt_data->axis_data[axis].wcs_cmd_pos_cur = 10.0 * (axis + 1);
+        }
+
+        const int axis = axes[index];
+        configure_mpg_input(100U, switches[index], HANDWHEEL_RATE_X1);
+        handle_mpg_cmd();
+        configure_mpg_input(4100U, switches[index], HANDWHEEL_RATE_X1);
+        handle_mpg_cmd();
+        run_mpg_cycles(20);
+
+        const double external_position = rt_data->axis_data[axis].wcs_cmd_pos_cur + 5.0;
+        rt_data->axis_data[axis].wcs_cmd_pos_cur = external_position;
+        configure_mpg_input(12100U, switches[index], HANDWHEEL_RATE_X1);
+        handle_mpg_cmd();
+
+        EXPECT_DOUBLE_EQ(rt_data->axis_data[axis].wcs_cmd_pos_cur, external_position);
+        EXPECT_DOUBLE_EQ(rt_data->axis_data[axis].cmd_vel, 0.0);
+
+        configure_mpg_input(12104U, switches[index], HANDWHEEL_RATE_X1);
+        handle_mpg_cmd();
+        EXPECT_GT(rt_data->axis_data[axis].wcs_cmd_pos_cur, external_position);
+    }
+}
+
+TEST_F(TestMpg, CrossAxisExternalPositionChangeDoesNotRestoreStaleMpgAxis)
+{
+    const int mpg_axes[] = {AXIS_X, AXIS_Y, AXIS_Z};
+    const int mpg_switches[] = {HANDWHEEL_AXIS_X, HANDWHEEL_AXIS_Y, HANDWHEEL_AXIS_Z};
+    const int external_axes[] = {AXIS_Y, AXIS_Z, AXIS_X};
+
+    for (int index = 0; index < 3; index++)
+    {
+        handwheel_handle_estop();
+        for (int axis = AXIS_X; axis <= AXIS_Z; axis++)
+        {
+            rt_data->axis_data[axis].max_feed_acc = 100.0;
+            rt_data->axis_data[axis].mpg_spd = 10.0;
+            rt_data->axis_data[axis].wcs_cmd_pos_cur = 10.0 * (axis + 1);
+        }
+
+        configure_mpg_input(200U, mpg_switches[index], HANDWHEEL_RATE_X1);
+        handle_mpg_cmd();
+        configure_mpg_input(4200U, mpg_switches[index], HANDWHEEL_RATE_X1);
+        handle_mpg_cmd();
+        run_mpg_cycles(20);
+
+        const double mpg_position = rt_data->axis_data[mpg_axes[index]].wcs_cmd_pos_cur;
+        const int external_axis = external_axes[index];
+        const double external_position = rt_data->axis_data[external_axis].wcs_cmd_pos_cur + 7.0;
+        rt_data->axis_data[external_axis].wcs_cmd_pos_cur = external_position;
+        configure_mpg_input(13000U, mpg_switches[index], HANDWHEEL_RATE_X1);
+        handle_mpg_cmd();
+
+        EXPECT_DOUBLE_EQ(rt_data->axis_data[mpg_axes[index]].wcs_cmd_pos_cur, mpg_position);
+        EXPECT_DOUBLE_EQ(rt_data->axis_data[external_axis].wcs_cmd_pos_cur, external_position);
+    }
+}

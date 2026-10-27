@@ -10,6 +10,12 @@
 #include <alarmapi.h>
 #include "nurbsfit.h"
 #include "circle_smooth.h"
+#include "ncitpstopdef.h"
+#include "bufstop.h"
+
+#include "ncitpstopdef.h"
+#include "bufstop.h"
+
 
 static void block_cal_pos(PLAN_BLOCK* parser_block, PLAN_BLOCK* current_block, POS* start_pos);
 static void block_cal_circle_vector(PLAN_BLOCK* current_block);
@@ -29,6 +35,8 @@ static int block_cal_segment(PLAN_BLOCK* pretreat_block, double seg_theta_thre,P
 static void block_fix_pos(PLAN_BLOCK* pretreat_block, double l_theta_thre ,double theta_thre, PLAN_QUEUE* temp);
 static bool is_length_valid(PLAN_BLOCK* parser_block);
 static void block_deal_nurbs_enable(PLAN_BLOCK* pretreat_block,PLAN_QUEUE* temp);
+
+static bool noMoreBlocks(void);
 
 /// @brief 将译码结果转换成插补段
 GNC_RES chan_add_block(){
@@ -59,7 +67,7 @@ GNC_RES pretreat_block()
     PLAN_BLOCK* treat_block;
 
     //结束逻辑：
-    if ((rt_data->chan_state[0][CHAN_IS_PARSERING] == false)&&queue_is_empty(parser_queue))
+    if (noMoreBlocks()&&queue_is_empty(parser_queue))
     {
         // 如果一致性队列已满，提前结束
         if(queue_is_full(treat_queue)) return GNC_DATA_FULL;
@@ -122,30 +130,38 @@ static void block_deal_run_row(PLAN_BLOCK* parser_block, PLAN_BLOCK* pretreat_bl
     {
     // 再启动行号前
     case BEFORE_THE_RERUN_ROW:
+        rerun_mst_collect(parser_block);
+        {
+            //再启动如果丢掉的阻止缓冲块，阻止缓冲直接按照ID进行放行
+            unsigned int buf_stop_id = (unsigned int)PLAN_BLOCK_BUF_STOP_ID(parser_block);
+            if(buf_stop_id !=0)
+                parser_buf_stop_publish_passed(buf_stop_id);
+        }
         queue_pop(parser_queue);
         break;
 
     // 再启动行号
     case EXACT_THE_RERUN_ROW:
         // 再启动断点
-        if(!check_rerun_row_is_valid()) break;
+        if(!check_rerun_row_is_valid(parser_block)) break;
+        rerun_program_changed(parser_block);
         // fanuc恢复辅助功能
-        for(int i = 0; i < rerun_data->record_mcode.length; i++){
-            if(record_queue_is_empty(&rerun_data->record_mcode)) break;
-            PLAN_BLOCK* mcode_block = record_queue_peak(&rerun_data->record_mcode);
-            mcode_block->line_number = rerun_data->rerun_row;
-            pretreat_block = queue_peak_tail(pretreat_queue);
-            memcpy(pretreat_block, mcode_block, sizeof(PLAN_BLOCK));
-            block_deal_parser_block(mcode_block, pretreat_block);
-            record_queue_pop(&rerun_data->record_mcode);
+        for(int i = 0; i < rerun_data->mst.count; i++){
+            if(queue_is_full(pretreat_queue)) break;
+            PLAN_BLOCK* slot = queue_peak_tail(pretreat_queue);
+            if(slot == NULL) break;
+            PLAN_BLOCK mst_blk = {0};
+            rerun_make_mst_block(&rerun_data->mst, i, parser_block, &mst_blk);
+            memcpy(slot, &mst_blk, sizeof(PLAN_BLOCK));
+            block_deal_parser_block(&mst_blk, slot);
             queue_soft_push(pretreat_queue);
-            LOG(LOG_LEVEL_DEBUG, "恢复第%d个辅助指令M%d", i+1, mcode_block->mst_data.m_code);
+
         }
         pretreat_block = queue_peak_tail(pretreat_queue);
         PLAN_BLOCK* rerun_block = (PLAN_BLOCK*)calloc(sizeof(PLAN_BLOCK), 1);
         if(rerun_block == NULL) break;
         // 华中回到断点位置
-        create_rerun_block(rerun_block);
+        create_rerun_block(parser_block, rerun_block);
         memcpy(pretreat_block, rerun_block, sizeof(PLAN_BLOCK));
         block_deal_parser_block(rerun_block, pretreat_block);
         // fanuc回到程序终点
@@ -224,21 +240,25 @@ static void block_deal_outlier(PLAN_BLOCK* pretreat_block, PLAN_BLOCK* treat_blo
     default:
         // 长度小于阈值不放入队列
         if(!is_length_valid(pretreat_block)){
-            PLAN_BLOCK* next_block;
-            PLAN_BLOCK* last_block;
             queue_pop(pretreat_queue);
 
-            // 更新上一段终点，长度，
-            last_block=queue_peak_pre_tail(treat_queue);
-            last_block->end_pos=pretreat_block->end_pos;
-            block_cal_length(last_block);
-            // 更新下一段起点，长度，
-            next_block=queue_peak(pretreat_queue);
-            next_block->start_pos=pretreat_block->end_pos;
-            block_cal_length(next_block);
-            // 矢量，角度计算放到后面（circle,fix或cy—tp—add）
-
-        }else{
+            // 更新上一段终点、长度；treat 队列为空（首段即异常段）时无法衔接 → 记日志跳过
+            PLAN_BLOCK* last_block = queue_peak_pre_tail(treat_queue);
+            if(last_block == NULL){
+                setAlarm(ALARM_CH, ALARM_WARNING, 3);   // 报警号按贵司现行约定选取，避免与现有冲突
+                LOG(LOG_LEVEL_WARN, "异常点剔除：treat 队列为空，无法衔接上一段 end_pos");
+            }else{
+                last_block->end_pos = pretreat_block->end_pos;
+                block_cal_length(last_block);
+            }
+            // 更新下一段起点；pop 后队列为空（末段被剔除）时同样跳过
+            PLAN_BLOCK* next_block = queue_peak(pretreat_queue);
+            if(next_block != NULL){
+                next_block->start_pos = pretreat_block->end_pos;
+                block_cal_length(next_block);
+            }
+        }
+        else{
             queue_pop(pretreat_queue);
             queue_soft_push(treat_queue);
         }
@@ -309,16 +329,35 @@ static GNC_RES block_unif_by_nurbs()
     // 如果前瞻队列已满，提前结束
     if (queue_is_full(unif_queue))
         return GNC_OPERATOR_SUCCESS;
-    
-    //结束逻辑：
-    if ((rt_data->chan_state[0][CHAN_IS_PARSERING] == false)&&queue_is_empty(treat_queue))
-    {
-            // 如果前瞻队列已满，提前结束
-        if (queue_is_full(unif_queue))
-            return GNC_OPERATOR_SUCCESS;
 
-        if(queue_get_size(fix_queue)==1)
+    // 结束逻辑：
+    if (noMoreBlocks() && queue_is_empty(treat_queue))
+    {
+        if (queue_get_size(fix_queue) == 1)
         {
+            // 收尾前解算连续段缓存：凡有缓存一律回退为 LINE 逐段放出，不参与拟合。
+            // （修复原缺陷：程序以连续段/M 指令收尾时，余数段曾滞留在缓存中丢失）
+            if (!queue_is_empty(nurbs_temp_queue))
+            {
+                    for (int i = 0; i < PRE_TREAT_SIZE; i++)
+                    {
+                        // 如果预处理队列无数据，提前结束
+                        if (queue_is_empty(nurbs_temp_queue))
+                            break;
+                        // 如果前瞻队列已满，提前结束
+                        if (queue_is_full(unif_queue))
+                            break;
+                        treat_block = queue_peak(nurbs_temp_queue);
+                        treat_block->type = LINE;
+                        queue_push(unif_queue, treat_block);
+                        queue_pop(nurbs_temp_queue);
+                    }
+                    return GNC_OPERATOR_SUCCESS;
+            }
+            // unif 满则下轮再收编末段
+            if (queue_is_full(unif_queue))
+                return GNC_OPERATOR_SUCCESS;
+
             treat_block = queue_peak(fix_queue);
             queue_push(unif_queue, treat_block);
             queue_pop(fix_queue);
@@ -528,7 +567,7 @@ static GNC_RES block_unif_by_circle_smooth(void)
     for (int i = 0; i < PRE_TREAT_SIZE; ++i)
     {
         // 需同时检查两个上游队列。
-        bool flush = !rt_data->chan_state[0][CHAN_IS_PARSERING] && queue_is_empty(parser_queue) && queue_is_empty(pretreat_queue);
+        bool flush = noMoreBlocks() && queue_is_empty(parser_queue) && queue_is_empty(pretreat_queue);
 
         // 每次处理一对相邻段，仅进行几何平滑和队列传递。
         GNC_RES res = circle_smooth_queue_step(treat_queue, unif_queue, flush, &cfg, &map);
@@ -567,7 +606,10 @@ static GNC_RES block_unif_by_treat()
 
 
 static bool is_length_valid(PLAN_BLOCK* parser_block){
-    if((parser_block->length != 0) && (parser_block->length <= rt_data->chan_data[0].l_min_thre))
+    /* G31/G53 是语义边界，不能被小线段剔除 */
+    if (itp_isBufStopGCode(parser_block->state.modal[0]))
+        return true;
+    if((parser_block->length != 0.0) && (parser_block->length <= rt_data->chan_data[0].l_min_thre))
     {
         return false;
     }
@@ -575,6 +617,9 @@ static bool is_length_valid(PLAN_BLOCK* parser_block){
 } 
 
 static void block_deal_nurbs_enable(PLAN_BLOCK* pretreat_block, PLAN_QUEUE *temp){
+    /* G31/G53 不做逆行点修复/合并 */
+    if (itp_isBufStopGCode(pretreat_block->state.modal[0]))
+        return;
     if (rt_data->chan_data[0].nurbs_enable)
     {
         // 逆行点修复
@@ -696,16 +741,30 @@ static void block_cal_curvature(PLAN_BLOCK* current_block, POS* pre_start_pos, P
 
 //新增长度比
 static int block_cal_segment(PLAN_BLOCK* pretreat_block, double seg_theta_thre,PLAN_QUEUE *temp){
-    if ((pretreat_block->angle_rad>(seg_theta_thre*PI/180.0))||(pretreat_block->angle_rad==0))
+    /* G31/G53 是语义边界：不允许与前后段合并、不转 NURBS。
+     * 否则停止块 ID/探针语义会被合并块覆盖。只保护这两个码。 */
+    if (itp_isBufStopGCode(pretreat_block->state.modal[0]))
+    {
+        pretreat_block->isContinue = 0;
+        return 0;
+    }
+    if ((pretreat_block->angle_rad>(seg_theta_thre*PI/180.0))||(fabs(pretreat_block->angle_rad)<EPS))
     {   
         pretreat_block->isContinue=0;
         return 0;
     }
     if( rt_data->path_data.fix_blocknum >1)
-    if (fabs((queue_peak_pre_tail(temp)->length)/pretreat_block->length)>20|| fabs((queue_peak_pre_tail(temp)->length)/pretreat_block->length)<0.05)
     {
-        pretreat_block->isContinue=0;
-        return 0;
+        PLAN_BLOCK *preblock= queue_peak_pre_tail(temp);
+        if((preblock!=NULL)&&(pretreat_block->length>=0.0))
+        {
+            double length_ratio=fabs(preblock->length/pretreat_block->length);
+            if (length_ratio>20.0|| length_ratio<0.05)
+            {
+                pretreat_block->isContinue=0;
+                return 0;
+            }
+        }
     }
     if(pretreat_block->type==LINE)
     {    
@@ -728,8 +787,8 @@ static void block_fix_pos(PLAN_BLOCK* pretreat_block, double l_theta_thre, doubl
     block_cal_angle(last_pretreat_block, &lastlast_pretreat_block->end_vec);
     block_cal_angle(pretreat_block, &last_pretreat_block->end_vec);
 
-    if((last_pretreat_block->angle_rad!=0)&&(pretreat_block->angle_rad!=0))
-    if((last_pretreat_block->length<l_theta_thre)&&(last_pretreat_block->angle_rad>(theta_thre*PI/180))&&(pretreat_block->angle_rad>(theta_thre*PI/180)))
+    if((last_pretreat_block->angle_rad!=0.0)&&(pretreat_block->angle_rad!=0.0))
+    if((last_pretreat_block->length<l_theta_thre)&&(last_pretreat_block->angle_rad>(theta_thre*PI/180.0))&&(pretreat_block->angle_rad>(theta_thre*PI/180.0)))
     {
         VECTOR v24= VECTOR_Unit(&last_pretreat_block->start_pos,&pretreat_block->end_pos);//24
         VECTOR v12= VECTOR_Unit(&lastlast_pretreat_block->start_pos,&last_pretreat_block->start_pos);//12
@@ -867,7 +926,7 @@ static double block_cal_circle_length(PLAN_BLOCK* current_block){
         case CIRCLE_CCW:
             return current_block->circular_data.rad * current_block->circular_data.radius;
         case HELIX_CW:
-        case HELIX_CCW:block_cal_circle_length(current_block);
+        case HELIX_CCW:
             current_block->helical_data.screw_rad = atan2(current_block->helical_data.screw_offset, current_block->circular_data.rad * current_block->circular_data.radius);
             return sqrt(pow(current_block->circular_data.rad * current_block->circular_data.radius, 2) + pow(current_block->helical_data.screw_offset, 2));
         default:
@@ -886,11 +945,13 @@ static double block_cal_nurbs_length(PLAN_BLOCK *current_block)
             u_vals[i] = (double)i / (num_samples - 1);
         }
         current_block->length  = getlength(u_vals, num_samples,current_block->nurbs_data.control_point, 3, current_block->nurbs_data.U, current_block->nurbs_data.num,current_block->nurbs_data.w);
+        return current_block->length;
     }
     else
     {
         setAlarm(ALARM_CH, ALARM_ERROR, 2);
         LOG(LOG_LEVEL_ERR, "尚未进行nurbs拟合/拟合失败，在%d段出现", current_block->line_number);
+        return 0;
     }
 }
 
@@ -937,7 +998,7 @@ void block_cal_vector(PLAN_BLOCK* current_block){
         case NURBS:
             POS start_vec, end_vec;
             nurbs_curve_derivative(1, current_block->nurbs_data.control_point, current_block->nurbs_data.w, current_block->nurbs_data.U,current_block->nurbs_data.num, current_block->nurbs_data.k, &end_vec);
-            nurbs_curve_derivative(0, current_block->nurbs_data.control_point, current_block->nurbs_data.w, current_block->nurbs_data.U,current_block->nurbs_data.num, current_block->nurbs_data.k, &end_vec);
+            nurbs_curve_derivative(0, current_block->nurbs_data.control_point, current_block->nurbs_data.w, current_block->nurbs_data.U,current_block->nurbs_data.num, current_block->nurbs_data.k, &start_vec);
             POS_Divide(&end_vec, POS_Norm(end_vec));
             POS_Divide(&start_vec, POS_Norm(start_vec));
             current_block->end_vec = end_vec;
@@ -1056,7 +1117,7 @@ void block_cal_max_vel(PLAN_BLOCK* current_block){
                 current_block->feed_vel = MIN(MIN(rt_data->axis_data[0].jog_lowspd, rt_data->axis_data[1].jog_lowspd), rt_data->axis_data[2].jog_lowspd);
                 current_block->max_vel = MIN(current_block->feed_vel, current_block->param_vel);
                 current_block->max_acc = MIN3(rt_data->axis_data[0].max_rapid_acc, rt_data->axis_data[1].max_rapid_acc, rt_data->axis_data[2].max_rapid_acc);
-                current_block->max_jerk = MIN3(rt_data->axis_data[0].max_rapid_jk, rt_data->axis_data[1].max_rapid_jk, rt_data->axis_data[3].max_rapid_jk);
+                current_block->max_jerk = MIN3(rt_data->axis_data[0].max_rapid_jk, rt_data->axis_data[1].max_rapid_jk, rt_data->axis_data[2].max_rapid_jk);
                 break;
             }
             break;
@@ -1157,4 +1218,11 @@ void block_cal_max_vel(PLAN_BLOCK* current_block){
         default:
             break;
     }
+}
+
+/// @brief 程序结束或译码器暂时暂停（G31等待运动同步指令、阻止缓冲指令）
+static bool noMoreBlocks(void)
+{
+    return rt_data->chan_state[0][CHAN_IS_PARSERING] == false
+        || parser_hasNoMoreBlocks();
 }

@@ -126,6 +126,7 @@ void cycle_tp_add_block();
 void handle_auto_cmd();
 void handle_edit_cmd();
 void auto_handle_estop();
+bool is_auto_ready_to_switch();
 
 #ifdef __cplusplus
 }
