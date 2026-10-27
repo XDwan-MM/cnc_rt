@@ -47,6 +47,10 @@ void nc_set_resetting(RESET_TRIGGER reset_trigger){
     alarm_reset_latch_clear();
     nc_reset->reset_trigger = reset_trigger;
     nc_reset->is_resetting = 1;
+    //即放弃当前运行：程序页起始行回到开头
+    if (rt_data->current_mode == MODE_MEM) {
+        setVarChanInt(0, VAR_CHAN_RUN_ROW, 0, 0);
+    }
     LOG(LOG_LEVEL_DEBUG, "复位中F1.1信号来源：%s", reset_trigger_name[reset_trigger]);
     switch (nc_reset->reset_trigger)
     {
