@@ -586,13 +586,13 @@ static void handwheel_process_it_lock(mpg_planner_t *planner,int selected_axis)
         planner->max_velocity = mpg_get_velocity_limit(selected_axis, planner);
         mpg_planner_step(planner, rt_data->ncu_data.cycle);
         planner->reference_position = planner->current_position;
-        mpg_update_axis_output(selected_axis);
+        //跟新规划器
+        mpg_planner_update_target(planner);
+       
         //停止机械坐标的更新
-        rt_data->axis_data[selected_axis].mac_cmd_pos = planner->current_position;
-        
-        mpg_update_channel_output();
+        rt_data->axis_data[i].mac_cmd_pos += (rt_data->axis_data[i].wcs_cmd_pos_cur - rt_data->axis_data[i].wcs_cmd_pos_pre);
+        mpg_update_axis_output(selected_axis);
     }
-    else
-        return;
 }
+
 

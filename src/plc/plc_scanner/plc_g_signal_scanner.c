@@ -198,6 +198,7 @@ void plc_g_signal_scan_cycle(void)
         }
         /* p1=0 代表进给倍率类型 (PLC_EV_MSG_OVERRIDE) */
         plc_dispatch_event(PLC_EV_MSG_OVERRIDE, 0, feed_override, 0, 0);
+        if() plc_dispatch_event(PLC_EV_MSG_OVERRIDE, 0, feed_override, 0, 0);
     }
     // 快速进给倍率检测G14
     if (is_first_scan || ((curr_g.g_regs[14] & 0x03) != (last_g.g_regs[14] & 0x03)))
