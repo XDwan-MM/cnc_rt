@@ -171,7 +171,7 @@ void plc_g_signal_scan_cycle(void)
     if (is_first_scan || SIGNAL_BYTE_CHANGED(curr_g.g_regs[12], last_g.g_regs[12]))
     {
         int feed_override = 0;
-
+        int replace_feed_override = 0;
         /* 核心修正：强制转换为无符号字节，避免符号位干扰位运算 */
         unsigned char raw_val = (unsigned char)curr_g.g_regs[12];
 
@@ -198,7 +198,16 @@ void plc_g_signal_scan_cycle(void)
         }
         /* p1=0 代表进给倍率类型 (PLC_EV_MSG_OVERRIDE) */
         plc_dispatch_event(PLC_EV_MSG_OVERRIDE, 0, feed_override, 0, 0);
-        if() plc_dispatch_event(PLC_EV_MSG_OVERRIDE, 0, feed_override, 0, 0);
+        // if(rt_data->ncu_data.feed_replace_rapid){
+        //     replace_feed_override = (int)(feed_override * (100/254));
+        //     plc_dispatch_event(PLC_EV_MSG_OVERRIDE, 1, replace_feed_override, 0, 0);
+        //     LOG(LOG_LEVEL_DEBUG,"replace_feed_override is %d\n",replace_feed_override);
+        // }
+        //以20为档位限制，0-10为0，20-30为25，40-50为50，60-70为75，80-90为100
+        replace_feed_override = 25*(feed_override / 20) ;
+        replace_feed_override = replace_feed_override > 100 ? 100 : replace_feed_override;
+        plc_dispatch_event(PLC_EV_MSG_OVERRIDE, 1, replace_feed_override, 0, 0);
+        //LOG(LOG_LEVEL_DEBUG,"rt_data->ncu_data.feed_replace_rapid is %d\n",rt_data->ncu_data.feed_replace_rapid);
     }
     // 快速进给倍率检测G14
     if (is_first_scan || ((curr_g.g_regs[14] & 0x03) != (last_g.g_regs[14] & 0x03)))

@@ -557,26 +557,6 @@ static void handwheel_apply_mac_lock_if_stopped(void)
     return !mpg_context.planner_by_axis[mpg_context.selected_axis].active;
 }
 
-/*
- * 周期末尾的检查点：手轮停稳时让“生效位”跟随“请求位”。
- * 与自动模式同一套路——auto_update_stage() 也是在“本段结束 / 没有运动指令”的分支里
- * 无条件写 READY，而不是每个周期去采样速度判断能不能切换。
- */
-static void handwheel_apply_mac_lock_if_stopped(void)
-{
-    bool lock_request;
-
-    if (!handwheel_motion_is_stopped())
-        return;                                     /* 还在按斜坡减速：下一周期再看 */
-
-    lock_request = rt_data->sys_state[SYS_IS_MAC_LOCK];
-    /* 只有真的变化才打日志，避免停稳后每周期刷屏；赋值本身与 auto 一样是无条件的 */
-    if (rt_data->sys_state[SYS_IS_MAC_LOCK_READY] != lock_request)
-    {
-        LOG(LOG_LEVEL_INFO, "手动模式机械锁住%s", lock_request ? "生效" : "解除");
-    }
-    rt_data->sys_state[SYS_IS_MAC_LOCK_READY] = lock_request;
-}
 
 /*
  * 机械锁住：处理开关事件，并维护“请求(ON)”与“生效(READY)”两个状态。
@@ -628,18 +608,14 @@ static void handwheel_update_it_lock(void)
 static void handwheel_process_it_lock(mpg_planner_t *planner,int selected_axis)
 {
     if(rt_data->sys_state[SYS_IS_IT_LOCK]){
-        //将手轮目标位置设为当前位置
-        planner->active = false;
-        planner->target_position = planner->current_position;
         //减速到0
-        planner->max_velocity = mpg_get_velocity_limit(selected_axis, planner);
+        planner->max_velocity = 0;
         mpg_planner_step(planner, rt_data->ncu_data.cycle);
-        planner->reference_position = planner->current_position;
-        //跟新规划器
+        //更新新规划器
         mpg_planner_update_target(planner);
        
         //停止机械坐标的更新
-        rt_data->axis_data[i].mac_cmd_pos += (rt_data->axis_data[i].wcs_cmd_pos_cur - rt_data->axis_data[i].wcs_cmd_pos_pre);
+        //rt_data->axis_data[selected_axis].mac_cmd_pos += (rt_data->axis_data[selected_axis].wcs_cmd_pos_cur - rt_data->axis_data[selected_axis].wcs_cmd_pos_pre);
         mpg_update_axis_output(selected_axis);
     }
 }

@@ -192,7 +192,7 @@ void handle_jog_cmd(void)
 }
 
 /*检查全局锁住事件是否开启，更新实时数据的系统状态*/
-static bool jog_update_it_lock(void){
+static void jog_update_it_lock(void){
     SYS_EVENT event;
     event  = rt_data->nc_event;
     switch ( event)
