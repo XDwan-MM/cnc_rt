@@ -110,9 +110,11 @@ void nc_set_resetting(RESET_TRIGGER reset_trigger){
 void reset_prepare_motion(void)
 {
     if (!nc_reset || !nc_reset->is_resetting || s_phase == RESET_FAILED) return;
+    /* SYS_IS_ALARMING 汇总所有轴的报警。其他轴的限位报警不应中断主轴受控停车；
+     * 急停和故障复位状态仍通过下面的专用条件拦截。 */
     if (rt_data->sys_state[SYS_ESTOP_INPUT] ||
         rt_data->sys_state[SYS_IS_ESTOP_ACTIVE] ||
-        rt_data->sys_state[SYS_IS_ALARMING] || alarm_fault_reset_pending()) {
+        alarm_fault_reset_pending()) {
         spindle_csv_stop_cancel();
         motion_csp_stop_cancel();
         if (s_phase != RESET_FAILED) s_phase = RESET_WAIT_OFF;
@@ -157,10 +159,11 @@ bool reset_spindle_business_allowed(void)
 bool reset_spindle_torque_allowed(bool ordinary)
 {
     if (s_phase == RESET_IDLE || s_phase == RESET_COMPLETE) return ordinary;
+    /* 受控停车期间需要主轴力矩完成减速，不以其他轴的汇总报警位撤销需求。 */
     return s_phase == RESET_STOPPING && reset_stop_pending() &&
            !rt_data->sys_state[SYS_ESTOP_INPUT] &&
            !rt_data->sys_state[SYS_IS_ESTOP_ACTIVE] &&
-           !rt_data->sys_state[SYS_IS_ALARMING] && !alarm_fault_reset_pending();
+           !alarm_fault_reset_pending();
 }
 
 bool reset_spindle_disable_needed(void)
@@ -201,7 +204,8 @@ void nc_set_resetted(void)
 {
     if (!nc_reset || !nc_reset->is_resetting || s_phase == RESET_IDLE ||
         s_phase == RESET_COMPLETE || s_phase == RESET_FAILED) return;
-    if (rt_data->sys_state[SYS_ESTOP_INPUT] || rt_data->sys_state[SYS_IS_ALARMING] ||
+    /* 普通轴报警可在复位后继续存在；复位完成仍由运动、下使能和轴基准条件裁决。 */
+    if (rt_data->sys_state[SYS_ESTOP_INPUT] ||
         rt_data->sys_state[SYS_IS_ESTOP_ACTIVE] || alarm_fault_reset_pending()) return;
 
     /* 1. 保留原按加工模式判断运动结束的规则；此处不推进或清理插补。 */

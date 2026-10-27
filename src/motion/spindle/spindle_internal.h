@@ -16,6 +16,10 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /** 每周期最多处理一个已仲裁的主轴事件。 */
 typedef enum
 {
@@ -214,9 +218,6 @@ void spindle_internal_handle_rotation(spindle_context_t *context, spindle_state_
 /* 安全仲裁和 HMI 复位受控停车。 */
 bool spindle_internal_stop_is_required(const spindle_context_t *context);
 bool spindle_internal_reset_or_estop_active(void);
-#ifdef __cplusplus
-extern "C" {
-#endif
 bool spindle_internal_reset_stop_abort_required(void);
 void spindle_internal_update_csv_stop(void);
 
@@ -241,5 +242,9 @@ void spindle_internal_publish_rigid_state(void);
 
 /* 只供主轴实现文件协作的内部函数。 */
 void spindle_internal_clear_velocity_arrival(void);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* SPINDLE_INTERNAL_H */
