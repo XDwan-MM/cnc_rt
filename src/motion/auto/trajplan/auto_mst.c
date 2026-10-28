@@ -178,6 +178,7 @@ static void auto_deal_mstb(){
         case M30: // 复位
             setRegValue8(REG_F, 10, 0x1e); 
             setRegBit(REG_F, 9, 4);  
+            spindle_request_program_end_stop();
             cycle_tp->target_stage = PROGRAM_END;
             break;
         case M03: // 主轴正转

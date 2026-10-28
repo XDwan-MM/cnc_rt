@@ -46,6 +46,7 @@ static bool spindle_is_in_csp_mode(void);
 static void spindle_cancel_business(void)
 {
     g_spindle.reset_requires_start=true;
+    g_spindle.program_end_stop_pending=false;
     if(!reset_stop_pending())g_spindle_hal.velocity_submitted=false;
     g_spindle.run_authorized=g_spindle.program_run_authorized=false;
     g_spindle.start_request_pending=g_spindle.deferred_start_pending=false;
@@ -191,6 +192,16 @@ void spindle_control_update(void)
     spindle_process_event(&g_spindle);
     /* HAL 负责驱动器完成判据；这里只推进 M19 业务阶段。 */
     spindle_internal_update_orientation();
+    if (g_spindle.program_end_stop_pending &&
+        g_spindle.orient_phase == SPINDLE_ORIENT_IDLE &&
+        g_spindle.orient_request_pending == false)
+    {
+        if (spindle_hal_orientation_state() == RT_HAL_ORIENT_NONE)
+        {
+            g_spindle.program_end_stop_pending = false;
+            spindle_request_stop();
+        }
+    }
     /* 同一周期消费定向 DONE；M29 先保持稳定，再请求切 CSP。 */
     spindle_internal_update_m29();
     /* 根据安全状态、定向状态和速度状态决定使能、模式及 60FF 目标值。 */
@@ -226,6 +237,8 @@ bool spindle_request_program_run(spindle_state_t direction, double speed)
         return false;
     }
 
+    g_spindle.program_end_stop_pending = false;
+
     /* 一条新的 M3/M4 必须先清除上一条指令锁存的完成状态。后续只有
      * 规划速度和驱动器实际速度重新满足到速条件时，F45.3 才能再次置位。 */
     g_spindle.command_speed = speed;
@@ -242,6 +255,10 @@ bool spindle_request_program_run(spindle_state_t direction, double speed)
 bool spindle_request_manual_run(spindle_state_t direction)
 {
     if (direction != SPINDLE_CW && direction != SPINDLE_CCW)
+    {
+        return false;
+    }
+    if (g_spindle.program_end_stop_pending)
     {
         return false;
     }
@@ -310,6 +327,37 @@ void spindle_request_stop(void)
     }
 
     spindle_post_event(SPINDLE_EVENT_STOP);
+}
+
+void spindle_request_program_end_stop(void)
+{
+    bool orient_active;
+
+    orient_active = (g_spindle.orient_phase != SPINDLE_ORIENT_IDLE ||
+                     g_spindle.orient_request_pending ||
+                     g_spindle.pending_event == SPINDLE_EVENT_ORIENT);
+    if (spindle_hal_orientation_state() != RT_HAL_ORIENT_NONE)
+    {
+        orient_active = true;
+    }
+    if (orient_active == false)
+    {
+        spindle_request_stop();
+        return;
+    }
+
+    g_spindle.command_state = SPINDLE_STOP;
+    g_spindle.command_speed = 0.0;
+    g_spindle.run_authorized = false;
+    g_spindle.program_run_authorized = false;
+    g_spindle.start_request_pending = false;
+    g_spindle.deferred_start_pending = false;
+    g_spindle.program_end_stop_pending = true;
+    if (g_spindle.pending_event == SPINDLE_EVENT_STOP)
+    {
+        g_spindle.pending_event = SPINDLE_EVENT_NONE;
+    }
+    spindle_request_orientation(false);
 }
 
 /**

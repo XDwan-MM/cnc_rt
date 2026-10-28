@@ -164,6 +164,7 @@ typedef struct
 
     /* 复位/急停后的启动锁和受控停车状态。 */
     bool reset_requires_start;         /**< 复位/急停后启动锁；清除前须收到新的有效启动请求。 */
+    bool program_end_stop_pending;    /**< 程序结束等待退出定向后停车。 */
     bool csv_stop_pending;             /* 公共复位已把 CSV 减速交给本模块执行 */
     uint32_t csv_stop_cycles;
     uint32_t csv_stop_stable_cycles;
