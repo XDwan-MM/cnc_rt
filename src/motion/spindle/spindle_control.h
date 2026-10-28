@@ -77,7 +77,7 @@ bool spindle_request_m29(void);
 /** 不定向 M29：受控停车后在当前位置切换 CSP。 */
 bool spindle_request_m29_no_orient(void);
 
-/** M29 是否仍处于有效握手流程。 */
+/** M29 是否仍处于有效准备及等待 PLC FIN 的流程。 */
 bool spindle_m29_is_active(void);
 
 /** M29 是否已经进入不可继续的错误状态。 */
@@ -86,14 +86,11 @@ bool spindle_m29_has_error(void);
 /** M29 的 CSP、使能、零速及位置保持条件是否全部满足。 */
 bool spindle_m29_is_ready(void);
 
-/** PLC FIN 与 NC 就绪均完成后交给运动模块，不下使能、不清 CSP 保持目标。 */
+/** 通用 PLC FIN 结束 M29 时收尾，不下使能、不清运动模块的 CSP 保持目标。 */
 void spindle_complete_m29(void);
 
-/** 报告不定向 M29 在入口联锁检查阶段被拒绝。 */
+/** 报告 M29 在入口联锁检查阶段被拒绝。 */
 void spindle_report_m29_prepare_rejected(void);
-
-/** 报告 M29 的外部 PLC FIN 握手超时。 */
-void spindle_report_m29_handshake_timeout(void);
 
 /** CSV 停车执行器；公共复位流程负责调度和最终裁决。 */
 bool spindle_csv_stop_pending(void);

@@ -114,14 +114,19 @@ void spindle_control_update(void)
     spindle_hal_poll_mode_switch();
     csp_mode = spindle_is_in_csp_mode();
 
-    if (spindle_internal_m29_no_orient_preparing() &&
-        !(nc_reset && nc_reset->is_resetting) &&
-        !rt_data->sys_state[SYS_ESTOP_INPUT] && !rt_data->sys_state[SYS_IS_ESTOP_ACTIVE])
+    if (spindle_internal_m29_no_orient_preparing())
     {
-        spindle_internal_update_m29_no_orient();
-        spindle_internal_publish_status();
-        spindle_internal_publish_rigid_state();
-        return;
+        if (nc_reset == NULL || nc_reset->is_resetting == false)
+        {
+            if (rt_data->sys_state[SYS_ESTOP_INPUT] == 0 &&
+                rt_data->sys_state[SYS_IS_ESTOP_ACTIVE] == 0)
+            {
+                spindle_internal_update_m29_no_orient();
+                spindle_internal_publish_status();
+                spindle_internal_publish_rigid_state();
+                return;
+            }
+        }
     }
 
     release_orient_event =
@@ -148,6 +153,17 @@ void spindle_control_update(void)
            (cycle_tp==NULL || cycle_tp->exec_state==EXEC_IDLE) &&
            fabs(spindle_hal_actual_velocity())<=SPINDLE_ACTUAL_ZERO_EPSILON)
             (void)alarm_spindle_request_torque(false);
+    }
+
+    /* 两条路径的公共准备阶段独占主轴，不能再经过普通事件和速度控制。
+     * 复位、急停先由上面的公共取消流程处理。 */
+    if (g_spindle.m29_phase == SPINDLE_M29_SWITCHING_CSP ||
+        g_spindle.m29_phase == SPINDLE_M29_ALIGNING)
+    {
+        spindle_internal_update_m29();
+        spindle_internal_publish_status();
+        spindle_internal_publish_rigid_state();
+        return;
     }
 
     if (!csp_mode && spindle_internal_stop_is_required(&g_spindle) &&
@@ -240,8 +256,7 @@ bool spindle_request_manual_run(spindle_state_t direction)
      * 抢占。READY 状态例外：新的 M3/M4 会触发 CSP 到 CSV 的安全交接。 */
     if (g_spindle.m29_active ||
         (g_spindle.m29_phase != SPINDLE_M29_IDLE &&
-         g_spindle.m29_phase != SPINDLE_M29_READY &&
-         g_spindle.m29_phase != SPINDLE_M29_COMPLETE))
+         g_spindle.m29_phase != SPINDLE_M29_READY))
     {
         return false;
     }
@@ -283,8 +298,7 @@ void spindle_request_stop(void)
 
     if (g_spindle.m29_active ||
         (g_spindle.m29_phase != SPINDLE_M29_IDLE &&
-         g_spindle.m29_phase != SPINDLE_M29_READY &&
-         g_spindle.m29_phase != SPINDLE_M29_COMPLETE))
+         g_spindle.m29_phase != SPINDLE_M29_READY))
     {
         return;
     }
@@ -347,12 +361,6 @@ void spindle_internal_handle_rotation(spindle_context_t *context,
         context->m29_phase = SPINDLE_M29_IDLE;
         context->m29_feedback_stable = false;
     }
-    else if (context->m29_phase == SPINDLE_M29_COMPLETE)
-    {
-        context->m29_phase = SPINDLE_M29_IDLE;
-        context->m29_feedback_stable = false;
-    }
-
 
     /*
      * 新 M3/M4 是急停/复位后的明确启动授权。清除 reset_requires_start
@@ -436,11 +444,6 @@ static void spindle_process_event(spindle_context_t *context)
         if (context->m29_phase == SPINDLE_M29_READY)
         {
             context->m29_active = false;
-            context->m29_phase = SPINDLE_M29_IDLE;
-            context->m29_feedback_stable = false;
-        }
-        else if (context->m29_phase == SPINDLE_M29_COMPLETE)
-        {
             context->m29_phase = SPINDLE_M29_IDLE;
             context->m29_feedback_stable = false;
         }

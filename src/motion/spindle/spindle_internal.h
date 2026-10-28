@@ -68,23 +68,22 @@ typedef enum
 /**
  * M29 状态机。
  *
- * 普通流程：定向 -> 保持稳定 -> CSP -> 坐标对齐 -> READY。
- * NO_ORIENT_* 用于当前位置停车及回退准备；FIN 完成后归还 IDLE，CSP 输出由运动模块接管。
+ * 两种流程在分支专属定向/停车准备后，共用 CSP 切换、坐标对齐及 READY 阶段。
+ * FIN 完成后归还 IDLE，CSP 输出由运动模块接管。
  */
 typedef enum
 {
     SPINDLE_M29_IDLE = 0,            /**< 没有正在执行的 M29 事务。 */
     SPINDLE_M29_ORIENTING,           /**< 普通流程：等待 M19 定向完成。 */
     SPINDLE_M29_ORIENT_SETTLING,     /* 保持定向，确认反馈稳定后再切模式 */
-    SPINDLE_M29_SWITCHING_CSP,       /**< 普通流程：等待驱动器切换到 CSP。 */
-    SPINDLE_M29_ALIGNING,            /* 普通流程：确认软件偏置及保持目标 */
-    SPINDLE_M29_READY,               /**< CSP 对齐及稳定性检查完成，M29 可完成。 */
-    SPINDLE_M29_COMPLETE,            /**< M29握手完成；退出M29周期控制，CSP交由插补/其他模块。 */
-    SPINDLE_M29_ERROR,               /**< M29 流程失败或超时，等待外部恢复/复位。 */
     SPINDLE_M29_NO_ORIENT_WAIT_CSV,  /**< 无定向流程：等待切换到 CSV。 */
     SPINDLE_M29_NO_ORIENT_STOPPING,  /**< 无定向流程：在 CSV 下受控停稳。 */
-    SPINDLE_M29_NO_ORIENT_SWITCHING, /**< 无定向流程：等待切换到 CSP。 */
-    SPINDLE_M29_NO_ORIENT_ALIGNING   /**< 无定向流程：等待当前位置 CSP 反馈稳定。 */
+    SPINDLE_M29_SWITCHING_CSP,       /**< 两种流程共用：等待驱动器切换到 CSP。 */
+    SPINDLE_M29_ALIGNING,            /**< 两种流程共用：确认软件偏置及保持目标。 */
+    SPINDLE_M29_READY,               /**< CSP 对齐及稳定性检查完成，M29 可完成。 */
+    SPINDLE_M29_ERROR,               /**< M29 流程失败或超时，等待外部恢复/复位。 */
+    SPINDLE_M29_NO_ORIENT_SWITCHING = SPINDLE_M29_SWITCHING_CSP, /**< 兼容现有诊断名称。 */
+    SPINDLE_M29_NO_ORIENT_ALIGNING = SPINDLE_M29_ALIGNING       /**< 兼容现有诊断名称。 */
 } spindle_m29_phase_t;
 
 /** 主轴业务等待模式准备的阶段；不是第二份硬件完成状态机。 */
