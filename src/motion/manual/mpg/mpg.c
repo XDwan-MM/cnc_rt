@@ -150,6 +150,7 @@ void handle_mpg_cmd(void)
     if(is_mpg_interlock && valid_selection){
         mpg_stop_axis_chasing(selected_axis);
         handwheel_process_it_lock(planner,selected_axis);
+        return;
     }
     /* 失效后重新启用也视为切换，使被忽略期间的计数不进入目标位置。 */
     selection_changed = (!mpg_context.initialized || !mpg_context.enabled ||
