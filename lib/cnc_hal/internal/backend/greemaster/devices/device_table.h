@@ -1,7 +1,7 @@
 #pragma once
 
-#include "device.h"
-#include "export.h"
+#include "backend/greemaster/devices/device.h"
+#include "backend/greemaster/export.h"
 
 #ifdef __cplusplus
 extern "C" {

@@ -108,19 +108,19 @@ GNC_RES pretreat_block()
     return GNC_CAL_SUCCESS;
 }
 
-/// @brief 一致性处理：nubrs、贝塞尔、hermit、圆弧过渡等平滑处理
+/// @brief 一致性处理：圆弧过渡、nubrs、贝塞尔、hermit等平滑处理
 GNC_RES unif_block()
 {   
     GNC_RES res = GNC_CAL_SUCCESS;
     // 根据类型选择拟合方案
     switch (rt_data->chan_data[0].unif_type)
     {
+    case UNIF_CIRCLE:                        // 圆弧过渡
+        res = block_unif_by_circle_smooth();    
+        break;
     case UNIF_NURBS:
         res = block_fixturnning_point();
         res = block_unif_by_nurbs();         // nurbs拟合
-        break;
-    case UNIF_CIRCLE:
-        res = block_unif_by_circle_smooth();
         break;
     default:
         res = block_unif_by_treat();         // 不做处理，treat传到unif队列
@@ -249,21 +249,25 @@ static void block_deal_outlier(PLAN_BLOCK* pretreat_block, PLAN_BLOCK* treat_blo
     default:
         // 长度小于阈值不放入队列
         if(!is_length_valid(pretreat_block)){
-            PLAN_BLOCK* next_block;
-            PLAN_BLOCK* last_block;
             queue_pop(pretreat_queue);
 
-            // 更新上一段终点，长度，
-            last_block=queue_peak_pre_tail(treat_queue);
-            last_block->end_pos=pretreat_block->end_pos;
-            block_cal_length(last_block);
-            // 更新下一段起点，长度，
-            next_block=queue_peak(pretreat_queue);
-            next_block->start_pos=pretreat_block->end_pos;
-            block_cal_length(next_block);
-            // 矢量，角度计算放到后面（circle,fix或cy—tp—add）
-
-        }else{
+            // 更新上一段终点、长度；treat 队列为空（首段即异常段）时无法衔接 → 记日志跳过
+            PLAN_BLOCK* last_block = queue_peak_pre_tail(treat_queue);
+            if(last_block == NULL){
+                setAlarm(ALARM_CH, ALARM_WARNING, 3);   // 报警号按贵司现行约定选取，避免与现有冲突
+                LOG(LOG_LEVEL_WARN, "异常点剔除：treat 队列为空，无法衔接上一段 end_pos");
+            }else{
+                last_block->end_pos = pretreat_block->end_pos;
+                block_cal_length(last_block);
+            }
+            // 更新下一段起点；pop 后队列为空（末段被剔除）时同样跳过
+            PLAN_BLOCK* next_block = queue_peak(pretreat_queue);
+            if(next_block != NULL){
+                next_block->start_pos = pretreat_block->end_pos;
+                block_cal_length(next_block);
+            }
+        }
+        else{
             queue_pop(pretreat_queue);
             queue_soft_push(treat_queue);
         }
@@ -334,16 +338,35 @@ static GNC_RES block_unif_by_nurbs()
     // 如果前瞻队列已满，提前结束
     if (queue_is_full(unif_queue))
         return GNC_OPERATOR_SUCCESS;
-    
-    //结束逻辑：
+
+    // 结束逻辑：
     if (noMoreBlocks() && queue_is_empty(treat_queue))
     {
-            // 如果前瞻队列已满，提前结束
-        if (queue_is_full(unif_queue))
-            return GNC_OPERATOR_SUCCESS;
-
-        if(queue_get_size(fix_queue)==1)
+        if (queue_get_size(fix_queue) == 1)
         {
+            // 收尾前解算连续段缓存：凡有缓存一律回退为 LINE 逐段放出，不参与拟合。
+            // （修复原缺陷：程序以连续段/M 指令收尾时，余数段曾滞留在缓存中丢失）
+            if (!queue_is_empty(nurbs_temp_queue))
+            {
+                    for (int i = 0; i < PRE_TREAT_SIZE; i++)
+                    {
+                        // 如果预处理队列无数据，提前结束
+                        if (queue_is_empty(nurbs_temp_queue))
+                            break;
+                        // 如果前瞻队列已满，提前结束
+                        if (queue_is_full(unif_queue))
+                            break;
+                        treat_block = queue_peak(nurbs_temp_queue);
+                        treat_block->type = LINE;
+                        queue_push(unif_queue, treat_block);
+                        queue_pop(nurbs_temp_queue);
+                    }
+                    return GNC_OPERATOR_SUCCESS;
+            }
+            // unif 满则下轮再收编末段
+            if (queue_is_full(unif_queue))
+                return GNC_OPERATOR_SUCCESS;
+
             treat_block = queue_peak(fix_queue);
             queue_push(unif_queue, treat_block);
             queue_pop(fix_queue);
@@ -595,7 +618,7 @@ static bool is_length_valid(PLAN_BLOCK* parser_block){
     /* G31/G53 是语义边界，不能被小线段剔除 */
     if (itp_isBufStopGCode(parser_block->state.modal[0]))
         return true;
-    if((parser_block->length != 0) && (parser_block->length <= rt_data->chan_data[0].l_min_thre))
+    if((parser_block->length != 0.0) && (parser_block->length <= rt_data->chan_data[0].l_min_thre))
     {
         return false;
     }
@@ -734,16 +757,23 @@ static int block_cal_segment(PLAN_BLOCK* pretreat_block, double seg_theta_thre,P
         pretreat_block->isContinue = 0;
         return 0;
     }
-    if ((pretreat_block->angle_rad>(seg_theta_thre*PI/180.0))||(pretreat_block->angle_rad==0))
+    if ((pretreat_block->angle_rad>(seg_theta_thre*PI/180.0))||(fabs(pretreat_block->angle_rad)<EPS))
     {   
         pretreat_block->isContinue=0;
         return 0;
     }
     if( rt_data->path_data.fix_blocknum >1)
-    if (fabs((queue_peak_pre_tail(temp)->length)/pretreat_block->length)>20|| fabs((queue_peak_pre_tail(temp)->length)/pretreat_block->length)<0.05)
     {
-        pretreat_block->isContinue=0;
-        return 0;
+        PLAN_BLOCK *preblock= queue_peak_pre_tail(temp);
+        if((preblock!=NULL)&&(pretreat_block->length>=0.0))
+        {
+            double length_ratio=fabs(preblock->length/pretreat_block->length);
+            if (length_ratio>20.0|| length_ratio<0.05)
+            {
+                pretreat_block->isContinue=0;
+                return 0;
+            }
+        }
     }
     if(pretreat_block->type==LINE)
     {    
@@ -766,8 +796,8 @@ static void block_fix_pos(PLAN_BLOCK* pretreat_block, double l_theta_thre, doubl
     block_cal_angle(last_pretreat_block, &lastlast_pretreat_block->end_vec);
     block_cal_angle(pretreat_block, &last_pretreat_block->end_vec);
 
-    if((last_pretreat_block->angle_rad!=0)&&(pretreat_block->angle_rad!=0))
-    if((last_pretreat_block->length<l_theta_thre)&&(last_pretreat_block->angle_rad>(theta_thre*PI/180))&&(pretreat_block->angle_rad>(theta_thre*PI/180)))
+    if((last_pretreat_block->angle_rad!=0.0)&&(pretreat_block->angle_rad!=0.0))
+    if((last_pretreat_block->length<l_theta_thre)&&(last_pretreat_block->angle_rad>(theta_thre*PI/180.0))&&(pretreat_block->angle_rad>(theta_thre*PI/180.0)))
     {
         VECTOR v24= VECTOR_Unit(&last_pretreat_block->start_pos,&pretreat_block->end_pos);//24
         VECTOR v12= VECTOR_Unit(&lastlast_pretreat_block->start_pos,&last_pretreat_block->start_pos);//12
@@ -924,12 +954,13 @@ static double block_cal_nurbs_length(PLAN_BLOCK *current_block)
             u_vals[i] = (double)i / (num_samples - 1);
         }
         current_block->length  = getlength(u_vals, num_samples,current_block->nurbs_data.control_point, 3, current_block->nurbs_data.U, current_block->nurbs_data.num,current_block->nurbs_data.w);
-        return 0;
+        return current_block->length;
     }
     else
     {
         setAlarm(ALARM_CH, ALARM_ERROR, 2);
         LOG(LOG_LEVEL_ERR, "尚未进行nurbs拟合/拟合失败，在%d段出现", current_block->line_number);
+        return 0;
     }
 }
 
@@ -950,7 +981,7 @@ void block_cal_length(PLAN_BLOCK* current_block){
             current_block->length = block_cal_circle_length(current_block);
             break;
         case NURBS:
-            block_cal_nurbs_length(current_block);
+            current_block->length = block_cal_nurbs_length(current_block);
             break;
         default:
             break;

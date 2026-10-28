@@ -121,9 +121,9 @@ static bool jog_fault_reset_in_progress(void)
 
     for (i = 0; i < sizeof(slots) / sizeof(slots[0]); ++i)
     {
-        int32_t state = HAL_RESET_NONE;
+        int32_t state = RT_HAL_RESET_NONE;
         if (rt_hal_fault_reset_state(slots[i], &state) == HAL_OK &&
-            state == HAL_RESET_PENDING)
+            state == RT_HAL_RESET_PENDING)
         {
             return true;
         }

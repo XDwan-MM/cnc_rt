@@ -466,7 +466,8 @@ void parser_run_mode(){
             CHECK_RES(parser_check_res(res));
             break;
         case PARSER_WAITING_FOR_BUFSTOP:
-            parser_waiting_for_bufstop();
+            res=parser_waiting_for_bufstop();
+            CHECK_RES(parser_check_res(res));
             break;
         default:
             break;
@@ -487,11 +488,6 @@ GNC_RES parser_reading(){
     if (parser_data->itp_datas.count > PARSER_BUF_SIZE) return GNC_PARSER_OVER;
     int error_no = ItpError();
     rt_set_parser_state(error_no, parser_data->itp_line_no);
-    if (error_no >= 0)
-    {
-        LOG(LOG_LEVEL_DEBUG, "error line: %d", parser_data->itp_line_no);
-        return GNC_PARSER_OVER;
-    }
     if (parser_data->itp_datas.count <= 0)
     {
         parser_loadBufStopCfg();
@@ -508,6 +504,11 @@ GNC_RES parser_reading(){
             res = parser_handle_recieve(&motion_data, &parser_data->itp_state, &parser_data->itp_line_no);
             CHECK_RES(parser_check_res(res));
         }
+    }
+    if (error_no >= 0)
+    {
+        LOG(LOG_LEVEL_DEBUG, "error line: %d", parser_data->itp_line_no);
+        return GNC_PARSER_OVER;
     }
     if (res == GNC_PARSER_WAIT)
     {
@@ -694,6 +695,14 @@ static GNC_RES parser_handle_gcode(pmc_data* motion_data, NcItpState *itp_state,
     }
     // 进给速度
     plan_block.feed_vel = motion_data->feed.value / TIME_MINUS_2_S;
+    /* 攻丝/回退的进给必须由 S×螺距 决定。回退程序（G90 M29 S... G30 P99）没有显式 F，
+     * 解析器会把模态 F 再按 G95 换算一次，得到 (S×F)×S 的异常值（现场 4166.667 mm/s），
+     * 最终被参数上限 clamp 成快速。这里按本段的 S 与螺距直接覆盖。 */
+    if (plan_block.type == RIGID_TAP || plan_block.type == TAP_RETURN) {
+        const double pitch = motion_data->screw_offset < 0.0 ? -motion_data->screw_offset : motion_data->screw_offset;
+        if (pitch > 0.0 && motion_data->spindle.speed > 0)
+            plan_block.feed_vel = (double)motion_data->spindle.speed * pitch / 60.0;
+    }
     // 位置
     plan_block.end_pos.x = motion_data->position.x;
     plan_block.end_pos.y = motion_data->position.y;
@@ -851,6 +860,8 @@ static GNC_RES parser_waiting_for_bufstop()
     buf_stop_hold_done(&parser_data->bufstop);
     buf_stop_release(&parser_data->bufstop);
     parser_data->parser_state = PARSER_READING;
+    if(ItpIsOver())
+        return GNC_PARSER_OVER;
     ItpNextLine();                      // 停止块执行完毕，开始译下一段
     return GNC_CAL_SUCCESS;
 }
