@@ -209,6 +209,7 @@ static void set_operating_mode()
         break;
     case MODE_EDIT:
         rt_data->current_mode = rt_data->target_mode;
+        rerun_update_when_switching();
         LOG(LOG_LEVEL_INFO, "系统模式切换为 %s", mode_names[rt_data->current_mode]);
         break;
     default:
