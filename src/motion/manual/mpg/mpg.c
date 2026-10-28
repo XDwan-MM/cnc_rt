@@ -54,7 +54,6 @@ static void handwheel_apply_mac_lock_if_stopped(void);
 //全轴锁住
 static void handwheel_update_it_lock(void);
 static void handwheel_process_it_lock(mpg_planner_t *planner,int selected_axis);
-static void handwheel_apply_mac_lock_if_stopped(void);
 
 /* 外部函数定义 */
 
@@ -613,9 +612,6 @@ static void handwheel_process_it_lock(mpg_planner_t *planner,int selected_axis)
         mpg_planner_step(planner, rt_data->ncu_data.cycle);
         //更新新规划器
         mpg_planner_update_target(planner);
-       
-        //停止机械坐标的更新
-        //rt_data->axis_data[selected_axis].mac_cmd_pos += (rt_data->axis_data[selected_axis].wcs_cmd_pos_cur - rt_data->axis_data[selected_axis].wcs_cmd_pos_pre);
         mpg_update_axis_output(selected_axis);
     }
 }
