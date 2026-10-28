@@ -488,11 +488,6 @@ GNC_RES parser_reading(){
     if (parser_data->itp_datas.count > PARSER_BUF_SIZE) return GNC_PARSER_OVER;
     int error_no = ItpError();
     rt_set_parser_state(error_no, parser_data->itp_line_no);
-    if (error_no >= 0)
-    {
-        LOG(LOG_LEVEL_DEBUG, "error line: %d", parser_data->itp_line_no);
-        return GNC_PARSER_OVER;
-    }
     if (parser_data->itp_datas.count <= 0)
     {
         parser_loadBufStopCfg();
@@ -509,6 +504,11 @@ GNC_RES parser_reading(){
             res = parser_handle_recieve(&motion_data, &parser_data->itp_state, &parser_data->itp_line_no);
             CHECK_RES(parser_check_res(res));
         }
+    }
+    if (error_no >= 0)
+    {
+        LOG(LOG_LEVEL_DEBUG, "error line: %d", parser_data->itp_line_no);
+        return GNC_PARSER_OVER;
     }
     if (res == GNC_PARSER_WAIT)
     {

@@ -443,7 +443,6 @@ static void auto_update_stage(){
 // 检查程序是否结束
 static bool auto_check_program_end(){
     if(auto_is_program_end()) {
-
         if(cycle_tp->running_stage !=PROGRAM_END ) 
             rerun_data_reset();
         // 检查程序是否结束
@@ -464,7 +463,9 @@ static void auto_check_error_line(){
     int error_no = rt_get_parser_error_no();
     int error_line = rt_get_parser_error_line();
     if(error_no >= 0){
-        setVarChanInt(0, VAR_CHAN_RUN_ROW, error_line, 0);
+        int run_row  = 0;
+        getVarChanInt(0, VAR_CHAN_RUN_ROW, &run_row, 0);
+        if(error_line > run_row) return;
         int res = setAlarm(ALARM_PS, ALARM_ERROR, error_no);
         if(res == -8) return;
         LOG(LOG_LEVEL_INFO, "error line: %d", error_line);
