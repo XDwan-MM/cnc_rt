@@ -163,12 +163,21 @@ void handle_jog_cmd(void)
     switching_mode = rt_data->sys_state[SYS_IS_SWITCHING_MODE];
     is_rapid = rt_data->sys_state[SYS_IS_RAPID];
     reset_requested = (event == SYS_EVENT_HMI_RESET || jog_fault_reset_in_progress());
+    global_fatal = jog_is_global_fatal_alarm();
     /*处理所有轴锁住状态事件*/
     jog_update_it_lock();
     is_interlocked = rt_data->sys_state[SYS_IS_IT_LOCK];
     if(is_interlocked) 
     {
-        event = SYS_EVENT_NONE;
+        //屏蔽事件
+        //event = SYS_EVENT_NONE;
+        for(int i =0;i<JOG_AXIS_COUNT;i++){
+            //如果没停住，先减速,设置状态为停止中
+            jog_context.axis[i].state = JOG_AXIS_STATE_STOPPING;
+            jog_context.axis[i].stop_reason = JOG_STOP_REASON_LOCK;
+            jog_process_axis(i, is_rapid, global_fatal, reset_requested, switching_mode);
+        }
+        return;
     }
 
     /* 机械锁住：点动模式下由本模块维护请求与生效状态，停稳后生效状态才跟随请求。 */
@@ -183,7 +192,7 @@ void handle_jog_cmd(void)
 
     /* 2. 将事件转换为按键保持状态，报警只在本周期计算一次。 */
     jog_update_key_latches(event);
-    global_fatal = jog_is_global_fatal_alarm();
+
     for (int i = 0; i < JOG_AXIS_COUNT; i++)
         jog_process_axis(i, is_rapid, global_fatal, reset_requested, switching_mode);
 
