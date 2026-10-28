@@ -129,11 +129,10 @@ typedef enum {
 // 一致性处理类型
 typedef enum {
     NONE = 0,
-    UNIF_ARC,       
+    UNIF_CIRCLE,    // 圆弧过渡    
+    UNIF_NURBS,     // NURBS
     UNIF_BESIER,    // 贝塞尔
     UNIF_HERMIT,    // hermit
-    UNIF_NURBS,     // NURBS
-    UNIF_CIRCLE,    // 圆弧过渡     
 } UNIF_TYPE;
 
 // NC 运行模式

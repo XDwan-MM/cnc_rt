@@ -99,19 +99,19 @@ GNC_RES pretreat_block()
     return GNC_CAL_SUCCESS;
 }
 
-/// @brief 一致性处理：nubrs、贝塞尔、hermit、圆弧过渡等平滑处理
+/// @brief 一致性处理：圆弧过渡、nubrs、贝塞尔、hermit等平滑处理
 GNC_RES unif_block()
 {   
     GNC_RES res = GNC_CAL_SUCCESS;
     // 根据类型选择拟合方案
     switch (rt_data->chan_data[0].unif_type)
     {
+    case UNIF_CIRCLE:                        // 圆弧过渡
+        res = block_unif_by_circle_smooth();    
+        break;
     case UNIF_NURBS:
         res = block_fixturnning_point();
         res = block_unif_by_nurbs();         // nurbs拟合
-        break;
-    case UNIF_CIRCLE:
-        res = block_unif_by_circle_smooth();
         break;
     default:
         res = block_unif_by_treat();         // 不做处理，treat传到unif队列
