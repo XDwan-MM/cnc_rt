@@ -16,6 +16,10 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /** 每周期最多处理一个已仲裁的主轴事件。 */
 typedef enum
 {
@@ -64,23 +68,22 @@ typedef enum
 /**
  * M29 状态机。
  *
- * 普通流程：定向 -> 保持稳定 -> CSP -> 坐标对齐 -> READY。
- * NO_ORIENT_* 用于当前位置停车及回退准备；FIN 完成后归还 IDLE，CSP 输出由运动模块接管。
+ * 两种流程在分支专属定向/停车准备后，共用 CSP 切换、坐标对齐及 READY 阶段。
+ * FIN 完成后归还 IDLE，CSP 输出由运动模块接管。
  */
 typedef enum
 {
     SPINDLE_M29_IDLE = 0,            /**< 没有正在执行的 M29 事务。 */
     SPINDLE_M29_ORIENTING,           /**< 普通流程：等待 M19 定向完成。 */
     SPINDLE_M29_ORIENT_SETTLING,     /* 保持定向，确认反馈稳定后再切模式 */
-    SPINDLE_M29_SWITCHING_CSP,       /**< 普通流程：等待驱动器切换到 CSP。 */
-    SPINDLE_M29_ALIGNING,            /* 普通流程：确认软件偏置及保持目标 */
-    SPINDLE_M29_READY,               /**< CSP 对齐及稳定性检查完成，M29 可完成。 */
-    SPINDLE_M29_COMPLETE,            /**< M29握手完成；退出M29周期控制，CSP交由插补/其他模块。 */
-    SPINDLE_M29_ERROR,               /**< M29 流程失败或超时，等待外部恢复/复位。 */
     SPINDLE_M29_NO_ORIENT_WAIT_CSV,  /**< 无定向流程：等待切换到 CSV。 */
     SPINDLE_M29_NO_ORIENT_STOPPING,  /**< 无定向流程：在 CSV 下受控停稳。 */
-    SPINDLE_M29_NO_ORIENT_SWITCHING, /**< 无定向流程：等待切换到 CSP。 */
-    SPINDLE_M29_NO_ORIENT_ALIGNING   /**< 无定向流程：等待当前位置 CSP 反馈稳定。 */
+    SPINDLE_M29_SWITCHING_CSP,       /**< 两种流程共用：等待驱动器切换到 CSP。 */
+    SPINDLE_M29_ALIGNING,            /**< 两种流程共用：确认软件偏置及保持目标。 */
+    SPINDLE_M29_READY,               /**< CSP 对齐及稳定性检查完成，M29 可完成。 */
+    SPINDLE_M29_ERROR,               /**< M29 流程失败或超时，等待外部恢复/复位。 */
+    SPINDLE_M29_NO_ORIENT_SWITCHING = SPINDLE_M29_SWITCHING_CSP, /**< 兼容现有诊断名称。 */
+    SPINDLE_M29_NO_ORIENT_ALIGNING = SPINDLE_M29_ALIGNING       /**< 兼容现有诊断名称。 */
 } spindle_m29_phase_t;
 
 /** 主轴业务等待模式准备的阶段；不是第二份硬件完成状态机。 */
@@ -125,6 +128,7 @@ typedef struct
     bool run_authorized; /**< M3/M4 或手动启动授予的运行/使能授权；零速时也可保持为 true。 */
     /* 仅程序 M3/M4 授权屏蔽 PLC 方向边沿，纯手动运行仍可沿用原换向语义。 */
     bool program_run_authorized; /**< 当前授权来自程序 M3/M4；用于屏蔽 PLC 方向边沿对程序方向的干扰。 */
+    bool manual_run_uses_program_speed; /**< 面板手动启动使用记忆程序转速，并应用主轴倍率。 */
 
     /* CNC/PLC 速度输入，单位均为 rpm。 */
     double command_speed;                /**< 当前 NC 命令速度，单位 rpm；随新的程序/手动速度命令更新。 */
@@ -161,6 +165,7 @@ typedef struct
 
     /* 复位/急停后的启动锁和受控停车状态。 */
     bool reset_requires_start;         /**< 复位/急停后启动锁；清除前须收到新的有效启动请求。 */
+    bool program_end_stop_pending;    /**< 程序结束等待退出定向后停车。 */
     bool csv_stop_pending;             /* 公共复位已把 CSV 减速交给本模块执行 */
     uint32_t csv_stop_cycles;
     uint32_t csv_stop_stable_cycles;
@@ -214,9 +219,6 @@ void spindle_internal_handle_rotation(spindle_context_t *context, spindle_state_
 /* 安全仲裁和 HMI 复位受控停车。 */
 bool spindle_internal_stop_is_required(const spindle_context_t *context);
 bool spindle_internal_reset_or_estop_active(void);
-#ifdef __cplusplus
-extern "C" {
-#endif
 bool spindle_internal_reset_stop_abort_required(void);
 void spindle_internal_update_csv_stop(void);
 
@@ -241,5 +243,9 @@ void spindle_internal_publish_rigid_state(void);
 
 /* 只供主轴实现文件协作的内部函数。 */
 void spindle_internal_clear_velocity_arrival(void);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* SPINDLE_INTERNAL_H */

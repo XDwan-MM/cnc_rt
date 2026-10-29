@@ -64,22 +64,46 @@ void mpg_planner_step(mpg_planner_t *planner, double period)
     double acceleration;
     double velocity_limit;
 
-    if (planner == NULL || !mpg_planner_axis_is_valid(planner->axis))
+    if (planner == NULL || mpg_planner_axis_is_valid(planner->axis) == false)
         return;
-    if (!isfinite(period) || period <= 0.0)
+    if (isfinite(planner->current_position) == false)
     {
+        if (rt_data != NULL && isfinite(rt_data->axis_data[planner->axis].wcs_cmd_pos_cur))
+            planner->current_position = rt_data->axis_data[planner->axis].wcs_cmd_pos_cur;
+        else if (isfinite(planner->reference_position))
+            planner->current_position = planner->reference_position;
+
+        if (isfinite(planner->current_position))
+        {
+            planner->target_position = planner->current_position;
+            planner->reference_position = planner->current_position;
+        }
         planner->current_velocity = 0.0;
         planner->active = false;
         return;
     }
 
-    acceleration = mpg_planner_limit_value(planner->max_acceleration);
-    velocity_limit = mpg_planner_limit_value(planner->max_velocity);
-    if (acceleration <= 0.0 || !isfinite(planner->current_position) ||
-        !isfinite(planner->current_velocity) || !isfinite(planner->target_position))
+    if (isfinite(period) == false || period <= 0.0)
     {
         planner->current_velocity = 0.0;
         planner->active = false;
+        planner->target_position = planner->current_position;
+        planner->reference_position = planner->current_position;
+        return;
+    }
+
+    acceleration = mpg_planner_limit_value(planner->max_acceleration);
+    velocity_limit = mpg_planner_limit_value(planner->max_velocity);
+    if (isfinite(planner->reference_position) == false)
+        planner->reference_position = planner->current_position;
+
+    if (acceleration <= 0.0 || isfinite(planner->current_velocity) == false ||
+        isfinite(planner->target_position) == false)
+    {
+        planner->current_velocity = 0.0;
+        planner->active = false;
+        planner->target_position = planner->current_position;
+        planner->reference_position = planner->current_position;
         return;
     }
 
@@ -95,15 +119,9 @@ void mpg_planner_step(mpg_planner_t *planner, double period)
                              sqrt(-2.0 * acceleration * position_error +
                                   max_delta_velocity * max_delta_velocity);
     else
-    {
-        if (rt_data != NULL &&
-            (rt_data->axis_data[planner->axis].status.is_fwd_limit ||
-             rt_data->axis_data[planner->axis].status.is_rev_limit))
-            rt_data->axis_data[planner->axis].status.is_decel_done = 1;
         requested_velocity = 0.0;
-    }
 
-    if (!isfinite(requested_velocity))
+    if (isfinite(requested_velocity) == false)
         requested_velocity = 0.0;
     if (requested_velocity > velocity_limit)
         requested_velocity = velocity_limit;
@@ -120,12 +138,24 @@ void mpg_planner_step(mpg_planner_t *planner, double period)
 
     /* 速度积分得到规划位置；保留原周期积分形式。 */
     planner->current_position += planner->current_velocity * period;
-    if (!isfinite(planner->current_position) || !isfinite(planner->current_velocity))
+    if (isfinite(planner->current_position) == false ||
+        isfinite(planner->current_velocity) == false)
     {
-        planner->current_position = planner->reference_position;
+        if (rt_data != NULL && isfinite(rt_data->axis_data[planner->axis].wcs_cmd_pos_cur))
+            planner->current_position = rt_data->axis_data[planner->axis].wcs_cmd_pos_cur;
+        else
+            planner->current_position = planner->reference_position;
+        planner->target_position = planner->current_position;
+        planner->reference_position = planner->current_position;
         planner->current_velocity = 0.0;
     }
     planner->active = (fabs(planner->current_velocity) > 1.0e-9);
+    if (rt_data != NULL && planner->active == false && fabs(position_error) <= 1.0e-8)
+    {
+        if (rt_data->axis_data[planner->axis].status.is_fwd_limit ||
+            rt_data->axis_data[planner->axis].status.is_rev_limit)
+            rt_data->axis_data[planner->axis].status.is_decel_done = 1;
+    }
 }
 
 /* 内部函数定义 */

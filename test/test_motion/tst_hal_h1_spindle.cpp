@@ -563,6 +563,18 @@ TEST_F(HalH1SpindleTest, FullResetCompletesAfterFeedbackAndDoesNotRestart) {
     for(int i=0;i<30;++i)fullFrame();
     EXPECT_EQ(axis().drive_state,HAL_DRIVE_OPERATION_ENABLED);
 }
+TEST_F(HalH1SpindleTest, UnrelatedAxisAlarmDoesNotBlockSpindleAfterReset) {
+    runZero();fullResetSetup();rt_data->nc_event=SYS_EVENT_HMI_RESET;
+    rt_data->sys_state[SYS_IS_ALARMING]=true;
+    for(int i=0;i<30;++i)fullFrame();
+    EXPECT_FALSE(nc_reset->is_resetting);
+    EXPECT_NE(axis().drive_state,HAL_DRIVE_OPERATION_ENABLED);
+
+    ASSERT_TRUE(spindle_request_manual_run(SPINDLE_CW));
+    for(int i=0;i<30;++i)fullFrame();
+    EXPECT_EQ(axis().drive_state,HAL_DRIVE_OPERATION_ENABLED);
+    EXPECT_EQ(axis().actual_mode,HAL_AXIS_MODE_CSV);
+}
 TEST_F(HalH1SpindleTest, RepeatedResetKeepsCsvDecelerationAndStopsOnce) {
     runZero();fullResetSetup();g_spindle.velocity_planner.current_vel=100;
     rt_data->nc_event=SYS_EVENT_HMI_RESET;fullFrame();
