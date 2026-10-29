@@ -175,7 +175,8 @@ void handle_jog_cmd(void)
             //如果没停住，先减速,设置状态为停止中
             jog_context.axis[i].state = JOG_AXIS_STATE_STOPPING;
             jog_context.axis[i].stop_reason = JOG_STOP_REASON_LOCK;
-            jog_process_axis(i, is_rapid, global_fatal, reset_requested, switching_mode);
+            //jog_process_axis(i, is_rapid, global_fatal, reset_requested, switching_mode);
+            jog_execute_axis(i,&jog_context.axis[i],is_rapid);
         }
         return;
     }
