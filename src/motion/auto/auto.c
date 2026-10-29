@@ -786,6 +786,7 @@ static void auto_update_buf_stop()
 
 static void auro_reset_stop_skip(){
     if(cycle_tp->plan_block->mode == PMC_MODE_STOPSKIP){
+        rt_set_chan_state(0, CHAN_IS_FIRST_RUN, true);
         rt_set_sys_state(SYS_IS_STOP_SKIP, false);
         // 更新宏变量轴地址
         ItpSetOriginMacPos(rt_data->axis_data[AXIS_X].motor_cmd_pos,
@@ -800,6 +801,7 @@ static void auro_reset_stop_skip(){
 static void auto_set_stop_skip_macro(){
     if(rt_data->sys_state[SYS_IS_STOP_SKIP]){
         auto_pop_current_block();
+        rt_set_chan_state(0, CHAN_IS_FIRST_RUN, true);
         rt_set_sys_state(SYS_IS_STOP_SKIP, false);
         // 更新宏变量轴地址
         ItpSetOriginMacPos(rt_data->axis_data[AXIS_X].motor_cmd_pos,
