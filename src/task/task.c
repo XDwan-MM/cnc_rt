@@ -693,6 +693,7 @@ static void task_handle_enable_event(PLC_EVENT *event_data)
         {
             rt_data->nc_event = SYS_EVENT_STOP_SKIP_OFF;
             rt_set_sys_state(SYS_IS_STOP_SKIP, false);
+            rt_set_sys_state(SYS_IS_STOP_SKIP_READY, false);
             LOG(LOG_LEVEL_INFO, "处理跳转信号关闭事件");
         }
         break;

@@ -50,6 +50,7 @@ typedef enum
     SYS_IS_RAPID,               // 是否快速
     SYS_IS_PROG_RESTAR,         // 程序再启动
     SYS_IS_STOP_SKIP,           // 外部跳转
+    SYS_IS_STOP_SKIP_READY,
     SYS_IS_RIGID,               // 刚性攻丝
     SYS_IS_RIGID_RETURN,        // 攻丝回退
     SYS_IS_RIGID_RETURN_FINISH, // 刚性攻丝返回完成
