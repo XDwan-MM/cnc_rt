@@ -199,14 +199,11 @@ void plc_g_signal_scan_cycle(void)
         /* p1=0 代表进给倍率类型 (PLC_EV_MSG_OVERRIDE) */
         
         plc_dispatch_event(PLC_EV_MSG_OVERRIDE, 0, feed_override, 0, 0);
-        /*进给倍率代替快速进给倍率*/
-        bool is_feed_replace_rapid = true;
-        is_feed_replace_rapid = rt_data->ncu_data.feed_replace_rapid;
-        if(is_feed_replace_rapid){
+        if(rt_data->ncu_data.feed_replace_rapid){
             if(feed_override>100){
                 replace_feed_override = 100;
             }
-            else if(feed_override <0){
+            else if(feed_override<0){
                 replace_feed_override = 0;
             }
             else{

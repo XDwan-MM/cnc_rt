@@ -234,7 +234,7 @@ static void rt_reset_axis_data()
 
 static void rt_reboot_ncu_data(){
     rt_data->ncu_data.cycle = CONV_US_TO_S(par_ncu[PAR_NCU_CYCLE].value.val_uint);          // 插补周期 (HMI unit: us | 实时 单位: s)
-    rt_data->ncu_data.feed_replace_rapid = par_ncu[PAR_NCU_FEED_REPLACE_RAPID].value.val_int;
+    rt_data->ncu_data.feed_replace_rapid = par_ncu[PAR_NCU_FEED_REPLACE_RAPID].value.val_uint; 
 }
 
 static void rt_reboot_chan_data()
@@ -255,7 +255,7 @@ static void rt_reboot_axis_data()
         /* 电机每转脉冲数。参数域里没填就是 0——调用方要能区分"没填"和"填了 0"，
          * 所以这里不做任何兜底，兜底放在消费侧（main.cpp 的 fill_hal_params）。 */
         rt_data->axis_data[i].mt_ppr = par_axis[i][PAR_AX_MT_PPR].value.val_int;
-        rt_data->axis_data[i].spdl_orient_pos = par_axis[i][PAR_AX_SP_ORI_POS].value.val_real;
+        rt_data->axis_data[i].spdl_orient_pos = par_axis[i][PAR_AX_SP_ORI_POS].value.val_int;
     }
     printf("rt_data->axis_data[AXIS_SP].spdl_orient_pos=%f\n",rt_data->axis_data[AXIS_SP].spdl_orient_pos);
 }

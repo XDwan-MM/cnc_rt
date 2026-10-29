@@ -64,10 +64,6 @@ void rerun_data_reset_keep_breakpoint(){
     rerun_mst_reset();
     delAlarm(ALARM_CH, ALARM_WARNING, 3);
     delAlarm(ALARM_CH, ALARM_ERROR, 4);
-    // 记忆模式下复位：光标回到程序开头
-    if (rt_data->current_mode == MODE_MEM) {
-        setVarChanInt(0, VAR_CHAN_RUN_ROW, 0, 0);
-    }
     rerun_persist_force();
 }
 

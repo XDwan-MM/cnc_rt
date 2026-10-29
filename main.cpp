@@ -181,7 +181,7 @@ int main() {
     LOG(LOG_LEVEL_INFO, "发送实时启动完成信号");
 
     // 定向位置按原始整数脉冲下发。
-    const double orient_pulses = rt_data->axis_data[AXIS_SP].spdl_orient_pos;
+    const int orient_pulses = rt_data->axis_data[AXIS_SP].spdl_orient_pos;
     int ret = HAL_ERROR_ARGUMENT;
     if (std::isfinite(orient_pulses) && orient_pulses >= 0 &&
         orient_pulses <= UINT32_MAX && std::trunc(orient_pulses) == orient_pulses)

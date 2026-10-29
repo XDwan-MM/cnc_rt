@@ -25,6 +25,7 @@ static void task_handle_hmi_event(PLC_EVENT *event_data);
 static void task_handle_external_decel_event(PLC_EVENT *event_data);
 static void task_handle_mpg_external_decel_event(PLC_EVENT *event_data);
 static bool task_external_decel_enabled(int function);
+static const char *task_external_decel_axis_name(int axis);
 static void task_handle_spd_ori_event(PLC_EVENT *event_data);
 
 /* 外部函数定义 */
@@ -117,18 +118,7 @@ static GNC_RES task_handle_plc_event(PLC_EVENT *event_data)
     }
     case PLC_EV_MSG_EXTERNAL_DECEL:
     {
-        if (task_external_decel_enabled(event_data->external_decel_payload.function))
-        {
-            LOG(LOG_LEVEL_INFO,
-                "处理PLC外部减速事件: 功能号=%d, 轴号=%d, 方向=%s(%d), 状态=%s(%d)",
-                event_data->external_decel_payload.function,
-                event_data->external_decel_payload.axis_num,
-                event_data->external_decel_payload.direction > 0 ? "正向" :
-                    (event_data->external_decel_payload.direction < 0 ? "负向" : "未知"),
-                event_data->external_decel_payload.direction,
-                event_data->external_decel_payload.active != 0 ? "生效" : "解除",
-                event_data->external_decel_payload.active);
-        }
+        /* 统一在 task_handle_external_decel_event() 里打印详细日志（功能/轴/方向/状态/事件号） */
         task_handle_external_decel_event(event_data);
         break;
     }
@@ -775,17 +765,60 @@ static void task_handle_hmi_event(PLC_EVENT *event_data)
     }
 }
 
+#define TASK_EXT_DECEL_EVENT_PAIR(f, a, d) \
+    { SYS_EVENT_EXTERNAL_DECEL##f##_AXIS##a##_##d##_OFF, SYS_EVENT_EXTERNAL_DECEL##f##_AXIS##a##_##d##_ON }
+
+/* 外部减速事件映射：[功能1~3][轴X/Y/Z][方向0正/1负][0=OFF/1=ON] */
+static const SYS_EVENT task_external_decel_event_map[3][3][2][2] = {
+    {
+        { TASK_EXT_DECEL_EVENT_PAIR(1, 1, POS), TASK_EXT_DECEL_EVENT_PAIR(1, 1, NEG) },
+        { TASK_EXT_DECEL_EVENT_PAIR(1, 2, POS), TASK_EXT_DECEL_EVENT_PAIR(1, 2, NEG) },
+        { TASK_EXT_DECEL_EVENT_PAIR(1, 3, POS), TASK_EXT_DECEL_EVENT_PAIR(1, 3, NEG) },
+    },
+    {
+        { TASK_EXT_DECEL_EVENT_PAIR(2, 1, POS), TASK_EXT_DECEL_EVENT_PAIR(2, 1, NEG) },
+        { TASK_EXT_DECEL_EVENT_PAIR(2, 2, POS), TASK_EXT_DECEL_EVENT_PAIR(2, 2, NEG) },
+        { TASK_EXT_DECEL_EVENT_PAIR(2, 3, POS), TASK_EXT_DECEL_EVENT_PAIR(2, 3, NEG) },
+    },
+    {
+        { TASK_EXT_DECEL_EVENT_PAIR(3, 1, POS), TASK_EXT_DECEL_EVENT_PAIR(3, 1, NEG) },
+        { TASK_EXT_DECEL_EVENT_PAIR(3, 2, POS), TASK_EXT_DECEL_EVENT_PAIR(3, 2, NEG) },
+        { TASK_EXT_DECEL_EVENT_PAIR(3, 3, POS), TASK_EXT_DECEL_EVENT_PAIR(3, 3, NEG) },
+    },
+};
+
+static const char *task_external_decel_axis_name(int axis)
+{
+    switch (axis)
+    {
+    case 0:
+        return "X";
+    case 1:
+        return "Y";
+    case 2:
+        return "Z";
+    default:
+        return "扩展轴";
+    }
+}
+
 static void task_handle_external_decel_event(PLC_EVENT *event_data)
 {
     int axis;
     int function;
     int direction;
     int direction_index;
+    int active_index;
     bool active;
+    bool enabled;
     AXIS_STATUS *status;
+    SYS_EVENT nc_event;
 
     if (event_data == NULL || rt_data == NULL)
+    {
+        LOG(LOG_LEVEL_ERR, "外部减速事件: event_data 或 rt_data 为空");
         return;
+    }
 
     axis = event_data->external_decel_payload.axis_num;
     function = event_data->external_decel_payload.function;
@@ -793,23 +826,60 @@ static void task_handle_external_decel_event(PLC_EVENT *event_data)
     active = (event_data->external_decel_payload.active != 0);
 
     if (axis < 0 || axis >= SYS_AXES_NUM)
+    {
+        LOG(LOG_LEVEL_ERR, "外部减速事件: 轴号越界 axis=%d", axis);
         return;
+    }
     if (function < 1 || function > SYS_EXTERNAL_DECEL_FUNCTION_COUNT)
+    {
+        LOG(LOG_LEVEL_ERR, "外部减速事件: 功能号越界 function=%d", function);
         return;
+    }
     if (direction != 1 && direction != -1)
+    {
+        LOG(LOG_LEVEL_ERR, "外部减速事件: 方向非法 direction=%d", direction);
         return;
+    }
 
     direction_index = (direction > 0) ? 0 : 1;
+    active_index = active ? 1 : 0;
+
+    /* 先更新 JOG 使用的电平矩阵（功能1~5、轴0~4 都保留） */
     status = &rt_data->axis_data[axis].status;
     status->external_decel_active[function - 1][direction_index] = active;
 
-    if (direction > 0)
+    enabled = task_external_decel_enabled(function);
+
+    /*
+     * 自动模式只认 3 功能 × 3 轴 × 正负 = 18 种模式：
+     * 功能1~3、轴0~2（X/Y/Z）才翻译成按轴/按功能事件；
+     * 功能4/5 或扩展轴只更新 JOG 矩阵，不产生自动模式事件。
+     */
+    if (function <= 3 && axis <= 2)
     {
-        rt_data->nc_event = active ? SYS_EVENT_EXTERNAL_DECEL_POS_ON : SYS_EVENT_EXTERNAL_DECEL_POS_OFF;
+        nc_event = task_external_decel_event_map[function - 1][axis][direction_index][active_index];
+        rt_data->nc_event = nc_event;
+        LOG(LOG_LEVEL_INFO,
+            "外部减速事件: 功能%d 轴%s(%d) 方向%s(%d) 状态%s -> nc_event=%d (%s)",
+            function,
+            task_external_decel_axis_name(axis),
+            axis,
+            direction > 0 ? "正" : "负",
+            direction,
+            active ? "生效" : "解除",
+            nc_event,
+            enabled ? "功能已使能" : "功能未使能，仅锁存状态");
     }
     else
     {
-        rt_data->nc_event = active ? SYS_EVENT_EXTERNAL_DECEL_NEG_ON : SYS_EVENT_EXTERNAL_DECEL_NEG_OFF;
+        LOG(LOG_LEVEL_INFO,
+            "外部减速事件: 功能%d 轴%s(%d) 方向%s(%d) 状态%s -> 仅更新JOG矩阵（功能/轴超出18模式，无自动事件）",
+            function,
+            task_external_decel_axis_name(axis),
+            axis,
+            direction > 0 ? "正" : "负",
+            direction,
+            active ? "生效" : "解除");
     }
 }
 

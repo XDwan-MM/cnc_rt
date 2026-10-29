@@ -13,6 +13,7 @@
 
 #include "auto_gcode.h"
 #include "auto_mst.h"
+#include "rt_data.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -20,6 +21,18 @@ extern "C" {
 
 #define AUTO_END_TOL 0.001    
 #define LOOK_AHEAD_SIZE 200  // 速度前瞻的最大段数
+
+// 活性兜底宽限：目标块一直没弹出、流水线又全空，说明它不可能再执行。 
+#define AUTO_BUFSTOP_LOST_TICKS 2000
+
+#define AUTO_EXTERNAL_DECEL_FUNCTION_COUNT 3
+
+#define AUTO_EXT_DECEL_EVENT_ON(f, a, d)  \
+    { SYS_EVENT_EXTERNAL_DECEL##f##_AXIS##a##_##d##_ON, SYS_IS_EXTERNAL_DECLINE##f##_AXIS##a##_##d, true }
+#define AUTO_EXT_DECEL_EVENT_OFF(f, a, d) \
+    { SYS_EVENT_EXTERNAL_DECEL##f##_AXIS##a##_##d##_OFF, SYS_IS_EXTERNAL_DECLINE##f##_AXIS##a##_##d, false }
+#define AUTO_EXT_DECEL_EVENT_PAIR(f, a, d) \
+    AUTO_EXT_DECEL_EVENT_ON(f, a, d), AUTO_EXT_DECEL_EVENT_OFF(f, a, d)
 
 typedef enum
 {
@@ -90,15 +103,18 @@ typedef struct{
     bool signal_tf;         // 刀具功能选通信号
     bool signal_den;        // 分配结束信号
     bool signal_fin;        // 结束信号
-    bool m29_fin_low_seen;   /* M29：当前指令内见过 FIN 低电平 */
-    bool m29_fin_latched;    /* M29：当前指令的 FIN 已锁存（指令内独占） */
-    int  m29_wait_cycles;    /* M29：等握手已过的拍数（只诊断/超时，不参与判定） */
-    bool m29_wait_alarmed;   /* M29：等待超时是否已报警（每条指令只报一次） */
     bool pmc_end;           // pmc侧动作完成
     int tfin_count;         // 完成信号计数
     int tmf_count;          // 选通脉冲延时计数
     bool finished;
 }MSTB_CMD_DATA;
+
+typedef struct
+{
+    SYS_EVENT event;
+    SysStateIndex state;
+    bool value;
+} AUTO_EXTERNAL_DECEL_EVENT;
 
 typedef struct{
     // 加工参数

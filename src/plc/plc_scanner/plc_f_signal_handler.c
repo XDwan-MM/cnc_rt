@@ -10,6 +10,8 @@
 #include "reset.h"
 #include "ref.h"
 
+/* 内部函数声明 */
+
 static void plc_output_alarm();
 static void plc_output_mode();
 static void plc_output_home();
@@ -20,6 +22,8 @@ static void plc_output_spindle_velocity_status();
 static void plc_output_spindle_orientation_status();
 static void plc_output_spindle_command_speed();
 static void plc_output_rigid();
+
+/* 外部函数定义 */
 
 void plc_f_signal_handler_cycle()
 {
@@ -34,6 +38,8 @@ void plc_f_signal_handler_cycle()
     plc_output_spindle_command_speed();
     plc_output_rigid();
 }
+
+/* 内部函数定义 */
 
 static void plc_output_alarm()
 {
@@ -357,6 +363,7 @@ static void plc_output_spindle_velocity_status()
 {
     double actual_velocity;
     bool feedback_valid;
+    char m_code[4];
 
     /* 主轴速度到达信号 F45.3。 */
     /* 只查询，不反向改任何主轴控制状态：到速/完成反馈完全由主轴控制层判定
@@ -373,7 +380,24 @@ static void plc_output_spindle_velocity_status()
         clearRegBit(REG_F, 45, 3);
     }
 
-    /* 主轴零速信号 F45.1 独立反映有效的实际速度反馈。读取失败时
+    /* M29 代码输出期间，F45.1 由 M29 流程维护；这里只避让。
+     * 检查完整的 F10～F13，避免将低字节同为 29 的其他 M 代码误判。 */
+    for (int i = 0; i < 4; ++i)
+    {
+        if (getRegValue8(REG_F, 10 + i, &m_code[i]) != 0)
+        {
+            return;
+        }
+    }
+    if (m_code[0] == M29)
+    {
+        if (m_code[1] == 0 && m_code[2] == 0 && m_code[3] == 0)
+        {
+            return;
+        }
+    }
+
+    /* 非 M29 期间，F45.1 反映有效的实际速度反馈。读取失败时
      * 必须清零，不能把通信失败返回的默认值误判为主轴已经停止。 */
     feedback_valid =
         (rt_hal_spindle_speed(RT_HAL_AXIS_SP, &actual_velocity) == HAL_OK &&
@@ -390,8 +414,8 @@ static void plc_output_spindle_velocity_status()
 
 static void plc_output_spindle_orientation_status()
 {
-    /* F45.7 是普通 M19 定向完成信号；M29 的完成由 auto_mst.c 用
-     * PLC FIN + NC CSP 就绪的双条件握手判定，不在这里发布。 */
+    /* F45.7 是普通 M19 定向完成信号；M29 通过 F45.1 通知准备完成，
+     * 再由 PLC 发送通用 FIN 结束指令，不在这里发布。 */
     if (spindle_orientation_is_done())
     {
         setRegBit(REG_F, 45, 7);

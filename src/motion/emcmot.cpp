@@ -209,6 +209,7 @@ static void set_operating_mode()
         break;
     case MODE_EDIT:
         rt_data->current_mode = rt_data->target_mode;
+        rerun_update_when_switching();
         LOG(LOG_LEVEL_INFO, "系统模式切换为 %s", mode_names[rt_data->current_mode]);
         break;
     default:
@@ -671,7 +672,10 @@ bool motion_spindle_take_position(double target)
        a.drive_state!=HAL_DRIVE_OPERATION_ENABLED || a.actual_mode!=HAL_AXIS_MODE_CSP ||
        !(a.command_valid&HAL_COMMAND_POSITION) || !isfinite(a.command_pos) ||
        !isfinite(a.actual_pos) || fabs(a.command_pos-target)>1e-6 ||
-       !alarm_spindle_request_torque(true)) return false;
+       !alarm_spindle_request_torque(true)) {
+        LOG(LOG_LEVEL_ERR, "主轴位置控制接管失败：target=%.6f", target);
+        return false;
+    }
     rt_data->axis_data[AXIS_SP].wcs_cmd_pos_cur=target;
     rt_data->axis_data[AXIS_SP].wcs_cmd_pos_pre=target;
     s_position_active=true;

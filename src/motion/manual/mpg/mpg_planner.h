@@ -3,7 +3,6 @@
 
 #include <stdbool.h>
 #include <stdint.h>
-
 #include "datatype.h"
 
 #ifdef __cplusplus
@@ -40,7 +39,8 @@ typedef struct
 /* 消费本周期计数，按方向限位、倍率及停止距离约束更新目标位置。 */
 void mpg_planner_update_target(mpg_planner_t *planner);
 
-/* 按周期推进速度斜坡和位置积分；参数无效时清除运动速度。 */
+/* 推进速度斜坡和位置积分；无效参数使速度归零并丢弃待执行目标。
+ * 位置无效时仅从有限的共享指令位置或参考位置恢复，无基准时保留无效状态。 */
 void mpg_planner_step(mpg_planner_t *planner, double period);
 
 #ifdef __cplusplus

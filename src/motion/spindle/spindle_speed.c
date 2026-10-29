@@ -83,6 +83,7 @@ void spindle_internal_fail_velocity(int result)
         snap_rc==HAL_OK?(int)axis.execution_error.code:-1);
     g_spindle_hal.velocity_submitted=false;
     g_spindle.run_authorized=g_spindle.program_run_authorized=false;
+    g_spindle.manual_run_uses_program_speed=false;
     g_spindle.start_request_pending=g_spindle.deferred_start_pending=false;
     g_spindle.csv_switch_pending=false;
     g_spindle.reset_requires_start=true;
@@ -177,6 +178,11 @@ bool spindle_internal_validate_start_request(const spindle_context_t *context)
 
 double spindle_internal_get_selected_speed(const spindle_context_t *context)
 {
+    if (context->manual_run_uses_program_speed)
+    {
+        return context->remembered_program_speed;
+    }
+
     /* G33.7 选择 PLC 速度，否则使用 CNC M3/M4 的 S 值。 */
     if (context->speed_source == SPINDLE_SPEED_SOURCE_PLC)
     {
@@ -297,13 +303,17 @@ static bool spindle_report_missing_speed_alarm(const char *message)
 
 static double spindle_calculate_target_velocity(const spindle_context_t *context)
 {
-    /* 对当前选定速度源统一应用主轴倍率和最大转速限制，再按 CW/CCW 输出符号。 */
+    /* PLC 给定直接作为目标速度；程序或面板记忆转速应用主轴倍率。 */
     const double max_speed = fabs(rt_data->axis_data[AXIS_SP].spdl_max_speed);
     const double override = var_chan[0][VAR_CHAN_SPDL_OVERRIDE].value.f / 100.0;
     double target_speed = fabs(spindle_internal_get_selected_speed(context));
 
     /* 规划与到速均使用限幅后的目标，避免超上限 S 指令永久等不到 FIN。 */
-    target_speed *= fmax(0.0, override);
+    if (context->speed_source != SPINDLE_SPEED_SOURCE_PLC ||
+        context->manual_run_uses_program_speed)
+    {
+        target_speed *= fmax(0.0, override);
+    }
 
     target_speed = fmin(max_speed, target_speed);
     if (context->run_state == SPINDLE_CCW)
