@@ -151,7 +151,7 @@ static void rt_reset_chan_data()
     {
         rt_data->chan_data[i].dryrun_spd = CONV_MM_MIN_TO_MM_S(par_chan[i][PAR_CH_DRYRUN_SPD].value.val_real);           // 空运行进给速度 (HMI unit: mm/min | 实时 单位：mm/s)
         rt_data->chan_data[i].vplan_mode = par_chan[i][PAR_CH_VPLAN_MODE].value.val_uint;                                // 速度规划模式 0:T_SHAPE
-        rt_data->chan_data[i].max_tang_acc = par_chan[i][PAR_CH_MAX_ECEN_ACC].value.val_real;                            // 最大向心加速度
+        rt_data->chan_data[i].max_ecen_acc = par_chan[i][PAR_CH_MAX_ECEN_ACC].value.val_real;                            // 最大向心加速度
         rt_data->chan_data[i].lookahead_num = par_chan[i][PAR_CH_LOOKAHEAD_NUM].value.val_uint;                          // 速度规划前瞻段数
         rt_data->chan_data[i].path_tolerance = par_chan[i][PAR_CH_PATH_TOLERANCE].value.val_real;                        // 轨迹轮廓允差
         rt_data->chan_data[i].corner_dec_factor = par_chan[i][PAR_CH_CONER_DEC_FACTOR].value.val_int;                    // 拐角降速比例因子 ("def": "100", "min": "1", "max": "200")
@@ -177,7 +177,7 @@ static void rt_reset_chan_data()
         rt_data->chan_data[i].nurbs_fiterror = par_chan[i][PAR_CH_NURBS_FIT_ERROR].value.val_real;                       // 拟合误差
         rt_data->chan_data[i].nurbs_sagittaerror = par_chan[i][PAR_CH_NURBS_SAGITTA_ERROR].value.val_real;               // 弓高误差
         rt_data->chan_data[i].nurbs_enable = par_chan[i][PAR_CH_NURBS_ENABLE].value.val_int;                             // 1 开启nurbs  0 关闭nurbs
-        rt_data->chan_data[i].unif_type = par_chan[i][PAR_CH_UNIF_TYPE].value.val_int;                                   // 选择一致性类型
+        rt_data->chan_data[i].unif_type = par_chan[i][PAR_CH_UNIF_TYPE].value.val_int;                                   // 选择一致性类型 1圆弧 2nurbs
         // LOG(LOG_LEVEL_DEBUG, "nurbs_enable %d, unif_type %d", rt_data->chan_data[i].nurbs_enable, rt_data->chan_data[i].unif_type);
     }
 }

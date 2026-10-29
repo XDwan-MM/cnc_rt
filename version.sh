@@ -1,1 +1,1 @@
-Version=1.38.11
+Version=1.38.12

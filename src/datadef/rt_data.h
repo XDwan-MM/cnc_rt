@@ -143,7 +143,7 @@ typedef struct
     double cut_ex_dec4_vel;     // 外部减速4对切削进给的减速速度
     double cut_ex_dec5_vel;     // 外部减速5对切削进给的减速速度
     double dryrun_spd;          // 空运行速度
-    double max_tang_acc;        // 最大向心加速度
+    double max_ecen_acc;        // 最大向心加速度
     int vplan_mode;             // 速度规划模式
     int lookahead_num;          // 速度规划前瞻段数
     double path_tolerance;      // 轨迹轮廓允差
