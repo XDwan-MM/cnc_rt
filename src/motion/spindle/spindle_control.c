@@ -243,6 +243,7 @@ bool spindle_request_program_run(spindle_state_t direction, double speed)
      * 规划速度和驱动器实际速度重新满足到速条件时，F45.3 才能再次置位。 */
     g_spindle.command_speed = speed;
     g_spindle.remembered_program_speed = speed;
+    g_spindle.manual_run_uses_program_speed = false;
     g_spindle.m19_active = false;
     g_spindle.orient_hold_stop = false;
     g_spindle.command_state = direction;
@@ -288,6 +289,7 @@ bool spindle_request_manual_run(spindle_state_t direction)
         g_spindle.deferred_start_pending = true;
         g_spindle.deferred_start_state = direction;
         g_spindle.deferred_start_speed = g_spindle.remembered_program_speed;
+        g_spindle.manual_run_uses_program_speed = true;
         return true;
     }
 
@@ -295,6 +297,7 @@ bool spindle_request_manual_run(spindle_state_t direction)
         SPINDLE_EVENT_CCW : SPINDLE_EVENT_CW);
     g_spindle.orient_hold_stop = false;
     g_spindle.command_speed = g_spindle.remembered_program_speed;
+    g_spindle.manual_run_uses_program_speed = true;
     g_spindle.command_state = direction;
     g_spindle.start_request_pending = true;
     g_spindle.program_run_authorized = false;
@@ -307,6 +310,7 @@ void spindle_request_stop(void)
     /* 停止命令总是先取消排队启动。即使当前 M29 或 M19 拥有控制权而不能
      * 立即执行普通 M5，也不能在稍后释放时重新播放已经作废的启动请求。 */
     g_spindle.command_speed = 0.0;
+    g_spindle.manual_run_uses_program_speed = false;
     g_spindle.command_state = SPINDLE_STOP;
     g_spindle.run_authorized = false;
     g_spindle.program_run_authorized = false;
@@ -348,6 +352,7 @@ void spindle_request_program_end_stop(void)
 
     g_spindle.command_state = SPINDLE_STOP;
     g_spindle.command_speed = 0.0;
+    g_spindle.manual_run_uses_program_speed = false;
     g_spindle.run_authorized = false;
     g_spindle.program_run_authorized = false;
     g_spindle.start_request_pending = false;

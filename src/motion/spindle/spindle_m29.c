@@ -412,6 +412,7 @@ void spindle_complete_m29(void)
     g_spindle.orient_hold_stop = false;
     g_spindle.command_state = SPINDLE_STOP;
     g_spindle.command_speed = 0;
+    g_spindle.manual_run_uses_program_speed = false;
     g_spindle.run_authorized = g_spindle.program_run_authorized = false;
     spindle_internal_clear_velocity_arrival();
 }
@@ -440,6 +441,7 @@ static void prepare_failed(const char *reason)
     g_spindle.start_request_pending = g_spindle.deferred_start_pending = false;
     g_spindle.command_state = g_spindle.run_state = SPINDLE_STOP;
     g_spindle.command_speed = 0;
+    g_spindle.manual_run_uses_program_speed = false;
     g_spindle.velocity_planner.enable = false;
     g_spindle.velocity_planner.target_vel = g_spindle_hal.target_velocity = 0;
     spindle_internal_clear_velocity_arrival();
@@ -466,6 +468,7 @@ static void begin_preparation(spindle_m29_phase_t phase)
     g_spindle.command_state = g_spindle.run_state = SPINDLE_STOP;
     g_spindle.run_authorized = g_spindle.program_run_authorized = false;
     g_spindle.command_speed = 0;
+    g_spindle.manual_run_uses_program_speed = false;
 }
 static bool start_alignment(void)
 {

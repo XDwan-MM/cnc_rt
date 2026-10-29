@@ -128,6 +128,7 @@ typedef struct
     bool run_authorized; /**< M3/M4 或手动启动授予的运行/使能授权；零速时也可保持为 true。 */
     /* 仅程序 M3/M4 授权屏蔽 PLC 方向边沿，纯手动运行仍可沿用原换向语义。 */
     bool program_run_authorized; /**< 当前授权来自程序 M3/M4；用于屏蔽 PLC 方向边沿对程序方向的干扰。 */
+    bool manual_run_uses_program_speed; /**< 面板手动启动使用记忆程序转速，并应用主轴倍率。 */
 
     /* CNC/PLC 速度输入，单位均为 rpm。 */
     double command_speed;                /**< 当前 NC 命令速度，单位 rpm；随新的程序/手动速度命令更新。 */
