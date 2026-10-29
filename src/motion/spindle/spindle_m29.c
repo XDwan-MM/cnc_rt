@@ -8,7 +8,6 @@
 #include "rt_hal_config.h"
 #include "spindle_control.h"
 #include "spindle_internal.h"
-#include <alarmapi.h>
 #include <hmisysapi.h>
 #include <math.h>
 #include <regapi.h>
@@ -19,8 +18,6 @@
 #define M29_ORIENT_STABLE_CYCLES 50U /* 连续 50 ms 保持稳定 */
 #define M29_ORIENT_POSITION_TOL 0.5  /* 稳定窗口及模式交接允差，度；4096ppr 下 0.5°≈5.7 count，覆盖实测 2 count 抖动 */
 #define M29_PREP_CYCLES 10000U
-#define M29_ALARM_TIMEOUT 2100
-#define M29_ALARM_REJECT 2102
 
 /* 内部函数声明 */
 
@@ -36,7 +33,7 @@ static void update_csp_preparation(void);
 
 bool spindle_m29_is_active(void) { return g_spindle.m29_active; }
 bool spindle_m29_has_error(void) { return g_spindle.m29_phase == SPINDLE_M29_ERROR; }
-void spindle_report_m29_prepare_rejected(void) { setAlarm(ALARM_AX, ALARM_ERROR, M29_ALARM_REJECT); }
+void spindle_report_m29_prepare_rejected(void) { LOG(LOG_LEVEL_ERR, "M29主轴准备请求被拒绝"); }
 
 bool spindle_request_m29(void)
 {
@@ -63,7 +60,7 @@ bool spindle_request_m29(void)
                 a.actual_speed_rpm,
                 a.actual_pos,
                 a.command_pos);
-            return false; /* caller retains the existing rejection alarm/cleanup */
+            return false; /* 调用方负责记录拒绝并清理指令。 */
         }
         if (ready == 0)
         {
@@ -138,16 +135,57 @@ void spindle_internal_update_m29_no_orient(void)
 {
     HalAxisSnapshot a;
     int32_t orient;
-    if (spindle_internal_stop_is_required(&g_spindle) || rt_data->axis_data[AXIS_SP].status.is_disable ||
-        rt_data->axis_data[AXIS_SP].status.is_error || spindle_hal_snapshot(&a) != HAL_OK ||
-        !(a.feedback_valid & HAL_FEEDBACK_STATUS) || (a.raw_status & 0x0008U) ||
-        ((a.feedback_valid & HAL_FEEDBACK_ERROR_CODE) && a.drive_error_code) ||
-        !isfinite(rt_data->axis_data[AXIS_SP].max_feed_acc) || rt_data->axis_data[AXIS_SP].max_feed_acc <= 0 ||
-        rt_hal_spindle_orient_state(RT_HAL_AXIS_SP, &orient) != HAL_OK || orient != RT_HAL_ORIENT_NONE ||
-        g_spindle.pending_event == SPINDLE_EVENT_ORIENT || g_spindle.pending_event == SPINDLE_EVENT_RELEASE_ORIENT ||
-        ++g_spindle.orient_elapsed_cycles >= M29_PREP_CYCLES)
+    if (spindle_internal_stop_is_required(&g_spindle))
     {
-        prepare_failed("无预定向准备中止");
+        prepare_failed("无预定向准备收到停止请求");
+        return;
+    }
+    if (rt_data->axis_data[AXIS_SP].status.is_disable || rt_data->axis_data[AXIS_SP].status.is_error)
+    {
+        prepare_failed("无预定向准备主轴禁用或故障");
+        return;
+    }
+    if (spindle_hal_snapshot(&a) != HAL_OK)
+    {
+        prepare_failed("无预定向准备读取驱动反馈失败");
+        return;
+    }
+    if ((a.feedback_valid & HAL_FEEDBACK_STATUS) == 0 || (a.raw_status & 0x0008U) != 0)
+    {
+        prepare_failed("无预定向准备驱动状态无效或故障");
+        return;
+    }
+    if ((a.feedback_valid & HAL_FEEDBACK_ERROR_CODE) != 0 && a.drive_error_code != 0)
+    {
+        LOG(LOG_LEVEL_ERR, "主轴驱动故障：error_code=%d", (int)a.drive_error_code);
+        prepare_failed("无预定向准备驱动故障");
+        return;
+    }
+    if (isfinite(rt_data->axis_data[AXIS_SP].max_feed_acc) == false ||
+        rt_data->axis_data[AXIS_SP].max_feed_acc <= 0)
+    {
+        prepare_failed("无预定向停车加速度无效");
+        return;
+    }
+    if (rt_hal_spindle_orient_state(RT_HAL_AXIS_SP, &orient) != HAL_OK)
+    {
+        prepare_failed("无预定向准备读取定向状态失败");
+        return;
+    }
+    if (orient != RT_HAL_ORIENT_NONE)
+    {
+        prepare_failed("无预定向准备出现定向动作");
+        return;
+    }
+    if (g_spindle.pending_event == SPINDLE_EVENT_ORIENT ||
+        g_spindle.pending_event == SPINDLE_EVENT_RELEASE_ORIENT)
+    {
+        prepare_failed("无预定向准备收到定向事件");
+        return;
+    }
+    if (++g_spindle.orient_elapsed_cycles >= M29_PREP_CYCLES)
+    {
+        prepare_failed("无预定向停车或CSV准备超时");
         return;
     }
     g_spindle.pending_event = SPINDLE_EVENT_NONE;
@@ -408,7 +446,6 @@ static void prepare_failed(const char *reason)
     spindle_hal_mode_switch_reset();
     motion_spindle_release_position();
     (void)alarm_spindle_request_torque(false);
-    setAlarm(ALARM_AX, ALARM_ERROR, M29_ALARM_TIMEOUT);
     LOG(LOG_LEVEL_ERR, "M29准备失败：%s", reason);
 }
 static void begin_preparation(spindle_m29_phase_t phase)

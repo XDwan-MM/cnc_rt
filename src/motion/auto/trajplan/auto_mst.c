@@ -67,40 +67,6 @@ void auto_execute_mstb_cmd(){
                     setRegBit(REG_F, 7, 3);
                     cycle_tp->mstb_cmd_data.signal_tf = true;
                     break;
-                case M29:
-                    /* 本次 M29 选通后，准备完成之前不能通知 PLC。 */
-                    clearRegBit(REG_F, 45, 1);
-                    setRegBit(REG_F, 7, 0);
-                    // RTAP：通知PMC处在刚性攻丝方式中的信号
-                    rt_data->sys_state[SYS_IS_RIGID] = 1;
-                    #ifndef DEBUG_MODE_ENABLED
-                    // 刚性攻丝时回参考点，攻丝回退时不返回参考点。
-                    if (rt_data->sys_state[SYS_IS_RIGID_RETURN])
-                    {
-                        if (spindle_request_m29_no_orient() == false)
-                        {
-                            rt_data->sys_state[SYS_IS_RIGID] = 0;
-                            auto_clear_mstb_signal();
-                            spindle_report_m29_prepare_rejected();
-                            rt_set_chan_state(0, CHAN_IS_PARSER_RESET, true);
-                            cycle_tp->mstb_cmd_data.finished = true;
-                            return;
-                        }
-                    }
-                    else
-                    {
-                        if (spindle_request_m29() == false)
-                        {
-                            rt_data->sys_state[SYS_IS_RIGID] = 0;
-                            auto_clear_mstb_signal();
-                            spindle_report_m29_prepare_rejected();
-                            rt_set_chan_state(0, CHAN_IS_PARSER_RESET, true);
-                            cycle_tp->mstb_cmd_data.finished = true;
-                            return;
-                        }
-                    }
-                    #endif
-                    break;
                 default:
                     // MF辅助功能选通信号
                     setRegBit(REG_F, 7, 0);
@@ -206,8 +172,39 @@ static void auto_deal_mstb(){
             spindle_begin_m19();
             /* G70.6 上升沿由 PLC 扫描器统一转换为 SPINDLE_EVENT_ORIENT。 */
             break;
-        case M29: // 刚性攻丝：先输出代码，MF 选通后启动主轴准备。
+        case M29: // 刚性攻丝
             setRegValue8(REG_F, 10, 0x1d);
+            clearRegBit(REG_F, 45, 1);
+            setRegBit(REG_F, 7, 0);
+            // RTAP: 通知PMC处在刚性攻丝方式中的信号
+            rt_data->sys_state[SYS_IS_RIGID] = 1;
+            #ifndef DEBUG_MODE_ENABLED
+            // 回参考点(刚性攻丝时回参考点，攻丝回退时不返回参考点)
+            if (rt_data->sys_state[SYS_IS_RIGID_RETURN])
+            {
+                if (spindle_request_m29_no_orient() == false)
+                {
+                    rt_data->sys_state[SYS_IS_RIGID] = 0;
+                    auto_clear_mstb_signal();
+                    spindle_report_m29_prepare_rejected();
+                    rt_set_chan_state(0, CHAN_IS_PARSER_RESET, true);
+                    cycle_tp->mstb_cmd_data.finished = true;
+                    return;
+                }
+            }
+            else
+            {
+                if (spindle_request_m29() == false)
+                {
+                    rt_data->sys_state[SYS_IS_RIGID] = 0;
+                    auto_clear_mstb_signal();
+                    spindle_report_m29_prepare_rejected();
+                    rt_set_chan_state(0, CHAN_IS_PARSER_RESET, true);
+                    cycle_tp->mstb_cmd_data.finished = true;
+                    return;
+                }
+            }
+            #endif
             break;
         default:
             // 判断M代码大小
