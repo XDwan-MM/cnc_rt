@@ -1292,8 +1292,6 @@ static void auto_check_rigid_return_on_event(){
         case MODE_MDI: // MDI模式下响应攻丝回退事件
             {
                 LOG(LOG_LEVEL_INFO, "MDI模式处理开启攻丝回退");
-                rt_data->sys_state[SYS_IS_RIGID_RETURN] = 1;
-                rt_data->sys_state[SYS_IS_RIGID_RETURN_FINISH] = 0;
                 tapreturn_update(cycle_tp->plan_block);
                 if(!sysprog_arm(SYS_PROG_RIGID_RETURN))
                 {

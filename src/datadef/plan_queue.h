@@ -55,6 +55,7 @@ typedef struct mcode_block{
     pmc_spindle spindle;    // 主轴
     int tool_number;        // 刀具号
     bool sub_program;       // 子程序或宏程序标志
+    bool rigid_tap_return;  // 刚性攻丝回退段内M29标志
 }MST_DATA;
 
 typedef struct{
