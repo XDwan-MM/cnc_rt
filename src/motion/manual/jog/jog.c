@@ -92,10 +92,12 @@ static bool jog_is_global_fatal_alarm(void);
 static bool jog_is_mac_lock_switching(void);
 static void jog_apply_mac_lock(void);
 static void jog_update_mac_lock(void);
+static void jog_update_it_lock(void);
 static double jog_get_axis_acceleration(int axis, bool is_rapid);
 static bool jog_is_hard_limit_active(int axis, jog_direction_t direction);
 static bool jog_is_direction_blocked(int axis, jog_direction_t direction, double max_acc);
 static int jog_get_direction_index(jog_direction_t direction);
+
 /*
  * 状态迁移规则：
  *   IDLE -> RUNNING    有效按键且目标方向未被阻挡
@@ -109,6 +111,7 @@ static double jog_get_external_decel_velocity(int axis, const jog_axis_t *jog_ax
 static void jog_execute_axis(int axis, jog_axis_t *jog_axis, bool is_rapid);
 static void jog_process_axis(int axis, bool is_rapid, bool global_fatal, bool reset_requested, bool switching_mode);
 static void jog_update_outputs(void);
+
 
 /* 基线里这个信号是 master.c 的 reset_sem：驱动器报警复位已发出、还没收口。
  * HAL 把它拆成了每轴的复位进展，这里逐轴查一遍。 */
@@ -143,6 +146,7 @@ void handle_jog_cmd(void)
     bool reset_requested;
     bool switching_mode;
     bool is_rapid;
+    bool is_interlocked;
     SYS_EVENT event;
 
     if (rt_data == NULL)
@@ -159,6 +163,35 @@ void handle_jog_cmd(void)
     switching_mode = rt_data->sys_state[SYS_IS_SWITCHING_MODE];
     is_rapid = rt_data->sys_state[SYS_IS_RAPID];
     reset_requested = (event == SYS_EVENT_HMI_RESET || jog_fault_reset_in_progress());
+    global_fatal = jog_is_global_fatal_alarm();
+    /*处理所有轴锁住状态事件*/
+    jog_update_it_lock();
+    is_interlocked = rt_data->sys_state[SYS_IS_IT_LOCK];
+    if(is_interlocked) 
+    {
+        jog_update_key_latches(event);
+        for(int i =0;i<JOG_AXIS_COUNT;i++){
+            // 1. 强制状态为停止中
+            jog_context.axis[i].state = JOG_AXIS_STATE_STOPPING;
+            jog_context.axis[i].stop_reason = JOG_STOP_REASON_LOCK;
+        
+            // 2. 【关键】直接操作规划器，强制减速，绕过 jog_execute_axis 的状态机逻辑
+            // 这样可以确保即使外部任务干扰，规划器也在减速
+            jog_context.axis[i].planner.target_vel = 0.0;
+            jog_context.axis[i].planner.enable = 1; 
+        
+            // 3. 调用规划器更新
+            jog_planner_update(&jog_context.axis[i].planner, rt_data->ncu_data.cycle);
+        
+            // 4. 检查是否真的停了
+            if (fabs(jog_context.axis[i].planner.curr_vel) < 1e-9) {
+                jog_context.axis[i].state = JOG_AXIS_STATE_IDLE;
+                jog_context.axis[i].planner.enable = 0;
+                jog_context.axis[i].planner.target_vel = 0.0;
+            }
+        }
+        return;
+    }
 
     /* 机械锁住：点动模式下由本模块维护请求与生效状态，停稳后生效状态才跟随请求。 */
     jog_update_mac_lock();
@@ -172,9 +205,7 @@ void handle_jog_cmd(void)
 
     /* 2. 将事件转换为按键保持状态，报警只在本周期计算一次。 */
     jog_update_key_latches(event);
-    global_fatal = jog_is_global_fatal_alarm();
 
-    /* 3. 每轴独立完成状态迁移和规划器更新。 */
     for (int i = 0; i < JOG_AXIS_COUNT; i++)
         jog_process_axis(i, is_rapid, global_fatal, reset_requested, switching_mode);
 
@@ -182,6 +213,24 @@ void handle_jog_cmd(void)
     jog_update_outputs();
 }
 
+/*检查全局锁住事件是否开启，更新实时数据的系统状态*/
+static void jog_update_it_lock(void){
+    SYS_EVENT event;
+    event  = rt_data->nc_event;
+    switch ( event)
+    {
+    case SYS_EVENT_IT_ON:
+        LOG(LOG_LEVEL_INFO, "手动模式全轴锁住开启");
+        rt_data->sys_state[SYS_IS_IT_LOCK] = true;
+        break;
+    case SYS_EVENT_IT_OFF:
+        LOG(LOG_LEVEL_INFO, "手动模式全轴锁住关闭");
+        rt_data->sys_state[SYS_IS_IT_LOCK] = false;
+        break;
+    default:
+        break;
+    }
+}
 /**
  * @brief 处理急停异常情况
  */
@@ -467,15 +516,7 @@ static void jog_transition_axis(jog_axis_t *axis, int axis_index, jog_direction_
      * 全轴空闲后由 jog_update_outputs() 落生效状态。按键锁存保留 —— 切换完成后
      * 若键还按着，下一周期就会恢复 RUNNING（锁住期间只走账面）。
      */
-    if (jog_is_mac_lock_switching())
-    {
-        if (axis->state != JOG_AXIS_STATE_IDLE)
-        {
-            axis->stop_reason = JOG_STOP_REASON_LOCK;
-            axis->state = JOG_AXIS_STATE_STOPPING;
-        }
-        return;
-    }
+    
 
     /* 当前方向只检查硬限位；软限位通过 desired_direction 的阻挡处理，允许换向退出。 */
     current_direction_hard_blocked = jog_is_hard_limit_active(axis_index, axis->direction);
@@ -634,6 +675,7 @@ static void jog_execute_axis(int axis, jog_axis_t *jog_axis, bool is_rapid)
             /* 报警原因必须保留到 RESET；其他停止原因在停稳后即可清除。 */
             if (jog_axis->stop_reason != JOG_STOP_REASON_ALARM)
                 jog_axis->stop_reason = JOG_STOP_REASON_NONE;
+          
             jog_axis->planner.enable = 0;
         }
         break;
@@ -658,7 +700,6 @@ static void jog_process_axis(int axis, bool is_rapid, bool global_fatal, bool re
 {
     jog_axis_t *jog_axis;
     jog_direction_t desired_direction;
-    double previous_position;
 
     jog_axis = &jog_context.axis[axis];
 
@@ -678,8 +719,6 @@ static void jog_process_axis(int axis, bool is_rapid, bool global_fatal, bool re
     jog_execute_axis(axis, jog_axis, is_rapid);
 
     /* 规划器是 JOG 的唯一运动输出源。 */
-    previous_position = rt_data->axis_data[axis].wcs_cmd_pos_cur;
-    rt_data->axis_data[axis].wcs_cmd_pos_pre = previous_position;
     rt_data->axis_data[axis].wcs_cmd_pos_cur = jog_axis->planner.curr_pos;
     rt_data->axis_data[axis].cmd_vel = jog_axis->planner.curr_vel;
 }

@@ -43,10 +43,13 @@ static bool mpg_position_changed_since_last_output(void);
 static void mpg_update_position_snapshot(void);
 
 // 机械锁住：请求/生效分离；事件只改请求，停稳后由周期末尾的检查点落生效位
+// 机械锁住：请求/生效分离；事件只改请求，停稳后由周期末尾的检查点落生效位
 static bool handwheel_is_mac_lock_switching(void);
 static bool handwheel_motion_is_stopped(void);
 static void handwheel_update_mac_lock(void);
 static void handwheel_apply_mac_lock_if_stopped(void);
+//全轴锁住
+static void handwheel_process_it_lock(mpg_planner_t *planner,int selected_axis);
 
 /* 外部函数定义 */
 
@@ -90,6 +93,7 @@ void handle_mpg_cmd(void)
     uint32_t mpg_switch_word;
     bool position_changed_outside_mpg;
     mpg_planner_t *planner;
+    bool is_mpg_interlock;
 
     /* 实时数据尚未就绪或系统处于急停时，不读取/推进 MPG；急停清理由专用入口完成。 */
     if (rt_data == NULL || rt_data->sys_state[SYS_IS_ESTOP_ACTIVE])
@@ -98,6 +102,17 @@ void handle_mpg_cmd(void)
     /* 机械锁住：先处理本周期开关事件。事件只改“请求”，生效位由周期末尾的检查点落。 */
     handwheel_update_mac_lock();
 
+    
+
+    /* 机械锁住：先处理本周期开关事件。事件只改“请求”，生效位由周期末尾的检查点落。 */
+    handwheel_update_mac_lock();
+
+    /* 轴选择位于 bits 3..7，倍率选择位于 bits 0..2；解码后再做轴槽位校验。 */
+    HW_Get_Count(&mpg_hardware_count);
+    HW_Get_Axis_And_Rate(&mpg_switch_word);
+    selected_multiplier = mpg_decode_multiplier((int)(mpg_switch_word & 0x7U));
+    selected_axis = mpg_decode_axis((int)((mpg_switch_word >> 3) & 0x1fU));
+    valid_selection = mpg_selection_is_valid(selected_axis, selected_multiplier);
     /* 两个接口分别读取；失败时不使用其输出，正常值再按轴选和倍率位域解码。 */
     mpg_hardware_count = 0;
     mpg_switch_word = 0;
@@ -160,7 +175,14 @@ void handle_mpg_cmd(void)
         mpg_update_position_snapshot();
         return;
     }
-
+    planner = &mpg_context.planner_by_axis[selected_axis];
+    /*所选轴有效且互锁打开，执行轴停止追踪功能*/
+    is_mpg_interlock = rt_data->sys_state[SYS_IS_IT_LOCK];
+    if(is_mpg_interlock && valid_selection){
+        mpg_stop_axis_chasing(selected_axis);
+        handwheel_process_it_lock(planner,selected_axis);
+        return;
+    }
     /* 失效后重新启用也视为切换，使被忽略期间的计数不进入目标位置。 */
     selection_changed = false;
     if (mpg_context.initialized == false || mpg_context.enabled == false)
@@ -177,7 +199,7 @@ void handle_mpg_cmd(void)
         }
     }
 
-    planner = &mpg_context.planner_by_axis[selected_axis];
+  
     if (selection_changed)
     {
         bool preserve_velocity;
@@ -244,7 +266,6 @@ void handle_mpg_cmd(void)
         else
             mpg_context.last_count_direction[selected_axis] = 0;
     }
-
     /*
      * 先用基础 mpg_spd 计算目标允许超前量和停止距离，保持原有手轮目标跟随行为；
      * 再计算当前方向的最终速度上限并推进规划器。外部减速只影响速度规划，信号
@@ -557,6 +578,8 @@ static double mpg_get_velocity_limit(int axis, const mpg_planner_t *planner)
  * 机械锁住请求与实际生效状态不一致：正在锁住或正在解除。
  * 此时 handle_mpg_cmd() 不再接收新的手轮位移、并把目标收至当前位置让规划器停稳，
  * 停稳后由周期末尾的 handwheel_apply_mac_lock_if_stopped() 让 READY 跟随 ON。
+ * 此时 handle_mpg_cmd() 不再接收新的手轮位移、并把目标收至当前位置让规划器停稳，
+ * 停稳后由周期末尾的 handwheel_apply_mac_lock_if_stopped() 让 READY 跟随 ON。
  */
 static bool handwheel_is_mac_lock_switching(void)
 {
@@ -566,6 +589,11 @@ static bool handwheel_is_mac_lock_switching(void)
 /*
  * 手轮是否已停稳（锁住切换的判定条件）。
  * 检查当前轴及切轴后仍在减速的旧轴；还没有建立过有效轴选时视为已停稳。
+ */
+/*
+ * 手轮是否已停稳（锁住切换的判定条件）。
+ * 判据用规划器的 active 标志（速度高于静止阈值时由 mpg_planner_step() 维护），
+ * 这里不另外采样速度；还没有建立过有效轴选时视为已停稳。
  */
 static bool handwheel_motion_is_stopped(void)
 {
@@ -600,7 +628,11 @@ static void handwheel_apply_mac_lock_if_stopped(void)
         LOG(LOG_LEVEL_INFO, "手动模式机械锁住%s", lock_request ? "生效" : "解除");
     }
     rt_data->sys_state[SYS_IS_MAC_LOCK_READY] = lock_request;
+    if (!mpg_context.initialized || !mpg_axis_is_valid(mpg_context.selected_axis))
+        return true;
+    return !mpg_context.planner_by_axis[mpg_context.selected_axis].active;
 }
+
 
 /*
  * 机械锁住：处理开关事件，并维护“请求(ON)”与“生效(READY)”两个状态。
@@ -629,6 +661,22 @@ static void handwheel_update_mac_lock(void)
         break;
     }
 }
+
+
+static void handwheel_process_it_lock(mpg_planner_t *planner,int selected_axis)
+{
+    if(rt_data->sys_state[SYS_IS_IT_LOCK]){
+        //减速到0
+        planner->max_velocity = 0;
+        mpg_planner_step(planner, rt_data->ncu_data.cycle);
+        //更新新规划器
+        mpg_planner_update_target(planner);
+        mpg_update_axis_output(selected_axis);
+    }
+}
+
+
+
 
 /* 发现共享指令位置偏离 MPG 上次输出时，说明有其他运动源更新过位置。 */
 static bool mpg_position_changed_since_last_output(void)

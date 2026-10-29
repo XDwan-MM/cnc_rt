@@ -117,6 +117,7 @@ typedef struct
 
 typedef struct{
     double cycle;           // 插补周期
+    int feed_replace_rapid; // 开启进给拨档替代快速拨档
 } RT_NCU;
 
 // 目前仅轨迹线程使用

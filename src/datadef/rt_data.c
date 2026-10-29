@@ -234,6 +234,7 @@ static void rt_reset_axis_data()
 
 static void rt_reboot_ncu_data(){
     rt_data->ncu_data.cycle = CONV_US_TO_S(par_ncu[PAR_NCU_CYCLE].value.val_uint);          // 插补周期 (HMI unit: us | 实时 单位: s)
+    rt_data->ncu_data.feed_replace_rapid = par_ncu[PAR_NCU_FEED_REPLACE_RAPID].value.val_uint; 
 }
 
 static void rt_reboot_chan_data()

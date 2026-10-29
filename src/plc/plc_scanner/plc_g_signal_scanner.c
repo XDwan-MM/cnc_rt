@@ -171,7 +171,7 @@ void plc_g_signal_scan_cycle(void)
     if (is_first_scan || SIGNAL_BYTE_CHANGED(curr_g.g_regs[12], last_g.g_regs[12]))
     {
         int feed_override = 0;
-
+        int replace_feed_override = 0;
         /* 核心修正：强制转换为无符号字节，避免符号位干扰位运算 */
         unsigned char raw_val = (unsigned char)curr_g.g_regs[12];
 
@@ -197,7 +197,21 @@ void plc_g_signal_scan_cycle(void)
             feed_override = (int)inverted_val;
         }
         /* p1=0 代表进给倍率类型 (PLC_EV_MSG_OVERRIDE) */
+        
         plc_dispatch_event(PLC_EV_MSG_OVERRIDE, 0, feed_override, 0, 0);
+        if(rt_data->ncu_data.feed_replace_rapid){
+            if(feed_override>100){
+                replace_feed_override = 100;
+            }
+            else if(feed_override<0){
+                replace_feed_override = 0;
+            }
+            else{
+                replace_feed_override = feed_override;
+            }
+             /* p1=1 代表快速进给倍率类型 (PLC_EV_MSG_OVERRIDE) */
+            plc_dispatch_event(PLC_EV_MSG_OVERRIDE, 1, replace_feed_override, 0, 0);
+        }
     }
     // 快速进给倍率检测G14
     if (is_first_scan || ((curr_g.g_regs[14] & 0x03) != (last_g.g_regs[14] & 0x03)))
