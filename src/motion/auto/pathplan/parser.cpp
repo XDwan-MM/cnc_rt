@@ -747,7 +747,7 @@ static GNC_RES parser_handle_gcode(pmc_data* motion_data, NcItpState *itp_state,
 }
 
 static GNC_RES parser_handle_mcode(pmc_data* motion_data, NcItpState *itp_state, int *line_no){
-    PLAN_BLOCK plan_block;
+    PLAN_BLOCK plan_block = {};
     PLAN_BLOCK_BUF_STOP_ID(&plan_block) = 0;   // 默认普通块；命中停止码时下面改写
     // 子程序调用M98和M99
     if(motion_data->m_code == 98 || motion_data->m_code == 99){
@@ -774,6 +774,7 @@ static GNC_RES parser_handle_mcode(pmc_data* motion_data, NcItpState *itp_state,
     // 子程序或宏程序
     // printf("motion_data->m_code=%d \n", motion_data->m_code);
     plan_block.mst_data.sub_program = motion_data->sub_program;
+    plan_block.mst_data.rigid_tap_return = motion_data->rigid_tap_return;
     // LOG(LOG_LEVEL_DEBUG, "no %d m%d", plan_block.line_number, plan_block.mst_data.m_code);
     // 预留
     plan_block.mst_data.size = 1;

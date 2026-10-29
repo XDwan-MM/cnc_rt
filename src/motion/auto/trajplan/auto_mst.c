@@ -175,7 +175,8 @@ static void auto_deal_mstb(){
             rt_data->sys_state[SYS_IS_RIGID] = 1;
             #ifndef DEBUG_MODE_ENABLED
             // 回参考点（刚性攻丝时回参考点，攻丝回退时不返回参考点）
-            if(rt_data->sys_state[SYS_IS_RIGID_RETURN]){
+            const bool rigid_tap_return = cycle_tp->plan_block->mst_data.rigid_tap_return;
+            if(rt_data->sys_state[SYS_IS_RIGID_RETURN] || rigid_tap_return){
                 if (!spindle_request_m29_no_orient()) {
                     rt_data->sys_state[SYS_IS_RIGID] = 0;
                     auto_clear_mstb_signal();
