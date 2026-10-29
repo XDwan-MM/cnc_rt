@@ -2,15 +2,19 @@
 #include "global.h"
 #include <hmisysapi.h>
 #include "alarmapi.h"
-#include "cnc_math.h"        
+#include "cnc_math.h"
 #include "bufstop.h"
 #include "ncitpstopdef.h"
+
 
 #define RERUN_SNAPSHOT_TICKS (1) //运行时存储数据刷新频率
 
 // 停止是否记断点标志（急停、报警、切换模式停止）需要置1
 // 复位、程序跑完不置位
-static bool rerun_interrupted =false; 
+static bool rerun_interrupted =false;
+
+
+static void rerun_persist_force(void);
 
 ///
 static int rerun_block_m_code(const PLAN_BLOCK* block)
@@ -45,7 +49,7 @@ void rerun_data_reset(){
     rerun_mst_reset();
     delAlarm(ALARM_CH, ALARM_WARNING, 3);
     delAlarm(ALARM_CH, ALARM_ERROR, 4);
-    rerun_persist();
+    rerun_persist_force();
 }
 /// @brief 复位：只清运行状态，保留断点记录
 /// @note is_rerun /is_mem_rerun 关掉，要拿记录跳行，后续有页面把rerun_row设成
@@ -60,11 +64,7 @@ void rerun_data_reset_keep_breakpoint(){
     rerun_mst_reset();
     delAlarm(ALARM_CH, ALARM_WARNING, 3);
     delAlarm(ALARM_CH, ALARM_ERROR, 4);
-    // 记忆模式下复位：光标回到程序开头
-    if (rt_data->current_mode == MODE_MEM) {
-        setVarChanInt(0, VAR_CHAN_RUN_ROW, 0, 0);
-    }
-    rerun_persist();
+    rerun_persist_force();
 }
 
 /// @brief 模态分组分类表
@@ -175,7 +175,7 @@ void rerun_data_clear_breakpoint(void)
     rerun_mst_reset();
     delAlarm(ALARM_CH, ALARM_WARNING, 3);
     delAlarm(ALARM_CH, ALARM_ERROR, 4);
-    rerun_persist();
+    rerun_persist_force();
 }
 
 /// @brief 程序段换行时把这一行的段信息写进断电块
@@ -184,7 +184,7 @@ static void rerun_snapshot_row(const PLAN_BLOCK* block)
     rerun_data->break_block.line_number = block->line_number;
     rerun_data->break_block.mode        = block->mode;
     rerun_data->break_block.type        = block->type;
-    rerun_data->break_block.m_code      = rerun_block_m_code(block);
+    rerun_data->break_block.m_code      = rerun_block_m_code(block);   
     // valid = 这份段信息有效（有行号、有坐标可参考）
     // 但是不等于可以自动再启动—— 能不能自动跳行看 is_mem_rerun，那个只由打断路径置位
     rerun_data->break_block.valid       = true;
@@ -264,10 +264,40 @@ void rerun_record_if_interrupted(const PLAN_BLOCK* block)
     rerun_interrupted = false;
     rerun_store_breakpoint(block);
 }
+/// @brief 断点页"载入"的武装请求：页面把 RERUN_SAVE.rerun_row 设成断点记录行
+static bool rerun_take_ui_arm_request(void)
+{
+    if (rerun_data == NULL || rerun_data->is_rerun)
+        return false;
+
+    RERUN_SAVE save = {0};
+    if (getRerunSave(&save) != 0)
+        return false;
+    if (!save.break_block.valid)
+        return false;
+    if (save.rerun_row <= 0 || save.rerun_row != save.break_block.line_number)
+        return false;
+
+    char path[NCFILEPATH_CHAR_LEN] = {0};
+    getNcFilePath(path);
+    if (path[0] == '\0'
+        || strncmp(path, save.parser_file_path, NCFILEPATH_CHAR_LEN) != 0)
+        return false;
+
+    rerun_data->is_rerun = 1;
+    rerun_data->is_mem_rerun = 1;
+    rerun_data->rerun_row = save.rerun_row;
+    rerun_data->is_first_time_click_rerun = true;
+    LOG(LOG_LEVEL_INFO, "断点页载入：武装再启动，目标行 %d", save.rerun_row);
+    return true;
+}
+
 /// @brief 切换模式
 void rerun_update_when_switching(){
     delAlarm(ALARM_CH, ALARM_WARNING, 3);
     rerun_mst_reset();  //本次再启动重新收集辅助码
+    /* 先收武装请求：切出 MEM 时 RAM 里的 rerun_row 还是 0，直接持久化会覆盖掉请求。 */
+    (void)rerun_take_ui_arm_request();
     switch (rt_data->target_mode)
     {
     case MODE_MDI:
@@ -275,7 +305,7 @@ void rerun_update_when_switching(){
         rerun_data->rerun_row = 0;
         break;
     case MODE_MEM:
-
+        /* 用记录行重写 rerun_row；take 的值与它相等，若以后允许页面指定不同行需保留 take 结果。 */
         rerun_data->is_rerun = rerun_data->is_mem_rerun && rerun_data->break_block.valid;
         rerun_data->rerun_row = rerun_data->is_rerun ? rerun_data->break_block.line_number : 0;
         rerun_data->is_first_time_click_rerun = true;
@@ -283,7 +313,7 @@ void rerun_update_when_switching(){
     default:
         break;
     }
-    rerun_persist();    // 锁存结果变了 → 落一次盘
+    rerun_persist_force();    // 锁存结果变了 → 落一次盘
 }
 
 /// @brief 同步当前程序路径到 rerun 记录：切换程序时重置断点
@@ -304,11 +334,16 @@ void rerun_sync_program_path(){
 /// @brief 判断是否程序再启动
 bool check_is_program_rerun(){
     rerun_sync_program_path();
+    /* 断点模式下程序页不发起始行请求，启动会落到这里；手动选行时起始行请求优先，武装由 rerun_reset_is_rerun() 清掉。 */
+    (void)rerun_take_ui_arm_request();
     // 程序再启动时提示用户风险
     if (rerun_data->is_rerun){
         if (rerun_data->is_first_time_click_rerun) {
             LOG(LOG_LEVEL_WARN, "从程序中间开始，请确保刀具安全后按开始继续");
+            /* 报警号 3 与"从指定行启动"的首按确认共用，两条路径互斥。 */
             setAlarm(ALARM_CH, ALARM_WARNING, 3);
+
+            setVarChanInt(0, VAR_CHAN_RUN_ROW, rerun_data->rerun_row, 0);
             rerun_data->is_first_time_click_rerun = false;
             return true;
         }
@@ -324,11 +359,6 @@ void rerun_reset_is_rerun(){
     rerun_data->rerun_row = 0;
     rerun_data_clear_breakpoint();
 
-}
-
-/// @brief 界面修改行信息
-void rt_update_rerun_row(){
-    getVarChanInt(0, VAR_CHAN_RUN_ROW, &rerun_data->rerun_row, 0);
 }
 
 /// @brief 记下程序起点
@@ -500,7 +530,8 @@ static bool rerun_save_is_sane(const RERUN_SAVE* in)
     if (in->break_block.line_number < 0) return false;
     if (in->break_block.m_code < -1) return false;
     if (in->break_block.mode < 0 || in->break_block.mode > (int)PMC_MODE_NULL) return false;
-    if (in->break_block.type < 0 || in->break_block.type > (int)PROBE) return false;
+    /* type 只用于留档/显示；NURBS 是快照可能出现的真实类型，不能按 PROBE 判废整条记录。 */
+    if (in->break_block.type < 0 || in->break_block.type > (int)NURBS) return false;
     return true;
 }
 
@@ -533,23 +564,36 @@ bool rerun_save_unpack(const RERUN_SAVE* in)
     return true;
 }
 
-void rerun_persist(void)
+static RERUN_SAVE s_last_saved;
+static bool s_last_saved_valid = false;
+
+static void rerun_persist_ex(bool force)
 {
     if (rerun_data == NULL) return;
-    static RERUN_SAVE last; 
-    static bool last_valid = false;
 
-    RERUN_SAVE save ;
+    RERUN_SAVE save;
     rerun_save_pack(&save);
 
-    if (last_valid && memcmp(&last, &save, sizeof(save)) == 0) return;
+
+    if (!force && s_last_saved_valid && memcmp(&s_last_saved, &save, sizeof(save)) == 0)
+        return;
     if (setRerunSave(&save) != 0)
     {
         LOG(LOG_LEVEL_WARN, "程序断电块写入失败");
         return;
     }
-    last =save;
-    last_valid = true;// 防止程序暂停每周器写一次存储块
+    s_last_saved = save;
+    s_last_saved_valid = true;// 防止程序暂停每周器写一次存储块
+}
+
+void rerun_persist(void)
+{
+    rerun_persist_ex(false);
+}
+
+static void rerun_persist_force(void)
+{
+    rerun_persist_ex(true);
 }
 
 void rerun_restore(void)

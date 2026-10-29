@@ -178,6 +178,11 @@ static void auto_deal_mstb(){
             setRegBit(REG_F, 7, 0);
             // RTAP: 通知PMC处在刚性攻丝方式中的信号
             rt_data->sys_state[SYS_IS_RIGID] = 1;
+            // 判断是否为攻丝回退
+            if(cycle_tp->plan_block->mst_data.rigid_tap_return){
+                rt_data->sys_state[SYS_IS_RIGID_RETURN] = 1;
+                rt_data->sys_state[SYS_IS_RIGID_RETURN_FINISH] = 0;
+            }
             #ifndef DEBUG_MODE_ENABLED
             // 回参考点(刚性攻丝时回参考点，攻丝回退时不返回参考点)
             if (rt_data->sys_state[SYS_IS_RIGID_RETURN])

@@ -488,11 +488,6 @@ GNC_RES parser_reading(){
     if (parser_data->itp_datas.count > PARSER_BUF_SIZE) return GNC_PARSER_OVER;
     int error_no = ItpError();
     rt_set_parser_state(error_no, parser_data->itp_line_no);
-    if (error_no >= 0)
-    {
-        LOG(LOG_LEVEL_DEBUG, "error line: %d", parser_data->itp_line_no);
-        return GNC_PARSER_OVER;
-    }
     if (parser_data->itp_datas.count <= 0)
     {
         parser_loadBufStopCfg();
@@ -509,6 +504,11 @@ GNC_RES parser_reading(){
             res = parser_handle_recieve(&motion_data, &parser_data->itp_state, &parser_data->itp_line_no);
             CHECK_RES(parser_check_res(res));
         }
+    }
+    if (error_no >= 0)
+    {
+        LOG(LOG_LEVEL_DEBUG, "error line: %d", parser_data->itp_line_no);
+        return GNC_PARSER_OVER;
     }
     if (res == GNC_PARSER_WAIT)
     {
@@ -747,7 +747,7 @@ static GNC_RES parser_handle_gcode(pmc_data* motion_data, NcItpState *itp_state,
 }
 
 static GNC_RES parser_handle_mcode(pmc_data* motion_data, NcItpState *itp_state, int *line_no){
-    PLAN_BLOCK plan_block;
+    PLAN_BLOCK plan_block = {};
     PLAN_BLOCK_BUF_STOP_ID(&plan_block) = 0;   // 默认普通块；命中停止码时下面改写
     // 子程序调用M98和M99
     if(motion_data->m_code == 98 || motion_data->m_code == 99){
@@ -774,7 +774,8 @@ static GNC_RES parser_handle_mcode(pmc_data* motion_data, NcItpState *itp_state,
     // 子程序或宏程序
     // printf("motion_data->m_code=%d \n", motion_data->m_code);
     plan_block.mst_data.sub_program = motion_data->sub_program;
-    // LOG(LOG_LEVEL_DEBUG, "no %d m%d", plan_block.line_number, plan_block.mst_data.m_code);
+    plan_block.mst_data.rigid_tap_return = motion_data->rigid_tap_return;
+    // LOG(LOG_LEVEL_DEBUG, "no %d, m %d, rigid_tap_return %d", plan_block.line_number, plan_block.mst_data.m_code, motion_data->rigid_tap_return);
     // 预留
     plan_block.mst_data.size = 1;
     plan_block.is_breakpoint = false;

@@ -347,10 +347,21 @@ int hmi_request_program_start_decide(int32_t *errOut)
         s_program_start_confirmed_seq = 0;
         s_program_start_last_seq = snap.seq;
     }
-
+    if (snap.startLine == 0) {
+        if (s_program_start_warning_active) {
+            delAlarm(ALARM_CH, ALARM_WARNING, 3);
+            s_program_start_warning_active = false;
+        }
+        s_program_start_confirmed_seq = 0;
+        s_program_start_last_seq = 0;
+        return 0;
+    }
     if (snap.startLine > 0 && snap.seq != s_program_start_confirmed_seq) {
         // 首按确认：只报警、不启动；第二次按循环启动才执行
+
         setAlarm(ALARM_CH, ALARM_WARNING, 3);
+        // 与断点再启动一致：把运行行对到目标行；复位清 0 后页面据此把光标回到开头
+        setVarChanInt(0, VAR_CHAN_RUN_ROW, snap.startLine, 0);
         s_program_start_warning_active = true;
         s_program_start_confirmed_seq = snap.seq;
         LOG(LOG_LEVEL_WARN,
