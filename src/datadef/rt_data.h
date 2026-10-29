@@ -54,6 +54,24 @@ typedef enum
     SYS_IS_RIGID_RETURN,        // 攻丝回退
     SYS_IS_RIGID_RETURN_FINISH, // 刚性攻丝返回完成
     SYS_IS_MPG_EX_DEC_ENABLE,   // G23.3允许外部减速作用于手轮
+    SYS_IS_EXTERNAL_DECLINE1_AXIS1_POS,    // 外部减速1轴1正向
+    SYS_IS_EXTERNAL_DECLINE1_AXIS1_NEG,    // 外部减速1轴1负向
+    SYS_IS_EXTERNAL_DECLINE2_AXIS1_POS,    // 外部减速2轴1正向
+    SYS_IS_EXTERNAL_DECLINE2_AXIS1_NEG,    // 外部减速2轴1负向
+    SYS_IS_EXTERNAL_DECLINE3_AXIS1_POS,    // 外部减速3轴1正向
+    SYS_IS_EXTERNAL_DECLINE3_AXIS1_NEG,    // 外部减速3轴1负向
+    SYS_IS_EXTERNAL_DECLINE1_AXIS2_POS,    // 外部减速1轴2正向
+    SYS_IS_EXTERNAL_DECLINE1_AXIS2_NEG,    // 外部减速1轴2负向
+    SYS_IS_EXTERNAL_DECLINE2_AXIS2_POS,    // 外部减速2轴2正向
+    SYS_IS_EXTERNAL_DECLINE2_AXIS2_NEG,    // 外部减速2轴2负向
+    SYS_IS_EXTERNAL_DECLINE3_AXIS2_POS,    // 外部减速3轴2正向
+    SYS_IS_EXTERNAL_DECLINE3_AXIS2_NEG,    // 外部减速3轴2负向
+    SYS_IS_EXTERNAL_DECLINE1_AXIS3_POS,    // 外部减速1轴3正向
+    SYS_IS_EXTERNAL_DECLINE1_AXIS3_NEG,    // 外部减速1轴3负向
+    SYS_IS_EXTERNAL_DECLINE2_AXIS3_POS,    // 外部减速2轴3正向
+    SYS_IS_EXTERNAL_DECLINE2_AXIS3_NEG,    // 外部减速2轴3负向
+    SYS_IS_EXTERNAL_DECLINE3_AXIS3_POS,    // 外部减速3轴3正向
+    SYS_IS_EXTERNAL_DECLINE3_AXIS3_NEG,    // 外部减速3轴3负向
 } SysStateIndex;
 
 // 路径和轨迹两个线程使用
@@ -111,8 +129,8 @@ typedef struct
     double cmd_acc;             // 通道指令合成加速度 
     double cmd_jk;              // 通道指令合成加加速度
     // 重启生效 
-    bool ex_dec_enable;         // 是否开启外部减速功能
     // 复位生效 
+    bool ex_dec_enable;         // 是否开启外部减速功能
     bool ex_dec2_enable;        // 是否开启外部减速功能2
     bool ex_dec3_enable;        // 是否开启外部减速功能3
     bool ex_dec4_enable;        // 是否开启外部减速功能4
