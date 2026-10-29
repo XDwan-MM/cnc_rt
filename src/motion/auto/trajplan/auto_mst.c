@@ -80,6 +80,12 @@ void auto_execute_mstb_cmd(){
         }
         else cycle_tp->mstb_cmd_data.tmf_count ++;
     }
+    #ifdef DEBUG_MODE_ENABLED
+    if (cycle_tp->plan_block->mst_data.m_code == M19 || cycle_tp->plan_block->mst_data.m_code == M29)
+    {
+        cycle_tp->mstb_cmd_data.signal_fin = 1;
+    }
+    #else
     // FIN信号 G4.3
     getRegBit(REG_G, 4, 3, &cycle_tp->mstb_cmd_data.signal_fin);
     /* M29 双条件：有效 PLC FIN（选通+低电平+宽度）与实时 NC 就绪都满足才推进；
@@ -87,7 +93,6 @@ void auto_execute_mstb_cmd(){
     if (cycle_tp->plan_block->mst_data.m_code == M29)
     {
         const bool m29_complete = auto_m29_handshake_complete(selected_before_cycle);
-
         auto_m29_diag_tick(m29_complete);
         if (m29_complete)
         {
@@ -99,7 +104,7 @@ void auto_execute_mstb_cmd(){
         }
         return;
     }
-
+    #endif
     // FIN为1时，nc侧将MF选通信号置为0
     if(cycle_tp->mstb_cmd_data.signal_fin){
         // 完成信号宽幅时间，缺省值2ms
@@ -173,10 +178,14 @@ static void auto_deal_mstb(){
             setRegValue8(REG_F, 10, 0x1d);
             // RTAP：通知PMC处在刚性攻丝方式中的信号
             rt_data->sys_state[SYS_IS_RIGID] = 1;
+            // 判断是否为攻丝回退
+            if(cycle_tp->plan_block->mst_data.rigid_tap_return){
+                rt_data->sys_state[SYS_IS_RIGID_RETURN] = 1;
+                rt_data->sys_state[SYS_IS_RIGID_RETURN_FINISH] = 0;
+            }
             #ifndef DEBUG_MODE_ENABLED
             // 回参考点（刚性攻丝时回参考点，攻丝回退时不返回参考点）
-            const bool rigid_tap_return = cycle_tp->plan_block->mst_data.rigid_tap_return;
-            if(rt_data->sys_state[SYS_IS_RIGID_RETURN] || rigid_tap_return){
+            if(rt_data->sys_state[SYS_IS_RIGID_RETURN]){
                 if (!spindle_request_m29_no_orient()) {
                     rt_data->sys_state[SYS_IS_RIGID] = 0;
                     auto_clear_mstb_signal();
@@ -187,11 +196,11 @@ static void auto_deal_mstb(){
                 }
             }else{
                 if(!spindle_request_m29()) {
-                    rt_data->sys_state[SYS_IS_RIGID]=0;
+                    rt_data->sys_state[SYS_IS_RIGID] = 0;
                     auto_clear_mstb_signal();
                     spindle_report_m29_prepare_rejected();
-                    rt_set_chan_state(0,CHAN_IS_PARSER_RESET,true);
-                    cycle_tp->mstb_cmd_data.finished=true;
+                    rt_set_chan_state(0, CHAN_IS_PARSER_RESET, true);
+                    cycle_tp->mstb_cmd_data.finished = true;
                     return;
                 }
             }

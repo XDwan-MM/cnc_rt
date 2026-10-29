@@ -775,7 +775,7 @@ static GNC_RES parser_handle_mcode(pmc_data* motion_data, NcItpState *itp_state,
     // printf("motion_data->m_code=%d \n", motion_data->m_code);
     plan_block.mst_data.sub_program = motion_data->sub_program;
     plan_block.mst_data.rigid_tap_return = motion_data->rigid_tap_return;
-    // LOG(LOG_LEVEL_DEBUG, "no %d m%d", plan_block.line_number, plan_block.mst_data.m_code);
+    // LOG(LOG_LEVEL_DEBUG, "no %d, m %d, rigid_tap_return %d", plan_block.line_number, plan_block.mst_data.m_code, motion_data->rigid_tap_return);
     // 预留
     plan_block.mst_data.size = 1;
     plan_block.is_breakpoint = false;
