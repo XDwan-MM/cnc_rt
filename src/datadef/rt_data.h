@@ -220,7 +220,7 @@ typedef struct
      * 不同：这个是电机侧的每转脉冲数，HAL 用它做模循环展开的模。
      * 参数域里没填时为 0，此时 HAL 侧退回用 pm_pulse（见 main.cpp 的说明）。 */
     int mt_ppr;
-    double spdl_orient_pos;             // 主轴定向位置
+    int spdl_orient_pos;             // 主轴定向位置
     // 内部
     double act_vel;                     // 轴实际速度
     double act_acc;                     // 轴实际加速度
