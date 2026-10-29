@@ -13,6 +13,7 @@
 #include "spindle_internal.h"
 #include "rt_hal_adapter.h"
 #include "alarm.h"
+#include <hmisysapi.h>
 #include <math.h>
 
 /*
@@ -174,6 +175,10 @@ int spindle_hal_request_mode(int mode)
     if(g_spindle_hal.mode_switch_state==SPINDLE_MODE_SWITCH_PENDING &&
        g_spindle_hal.requested_mode==mode)return HAL_OK;
     int rc=rt_hal_request_axis_mode(RT_HAL_AXIS_SP,(HalAxisMode)mode);
+    if (rc != HAL_OK)
+    {
+        LOG(LOG_LEVEL_ERR, "主轴模式请求失败：mode=%d rc=%d", mode, rc);
+    }
     g_spindle_hal.mode_switch_result=rc;
     g_spindle_hal.mode_switch_state=rc?SPINDLE_MODE_SWITCH_ERROR:SPINDLE_MODE_SWITCH_PENDING;
     if(!rc) {
@@ -195,6 +200,7 @@ void spindle_hal_poll_mode_switch(void)
     if(!rc && axis.mode_setting_state==HAL_MODE_SETTING_FAILED)
         rc=axis.execution_error.category==HAL_ISSUE_MODE?axis.execution_error.code:HAL_ERROR_STATE;
     if(rc) {
+        LOG(LOG_LEVEL_ERR, "主轴模式切换失败：mode=%d rc=%d", g_spindle_hal.requested_mode, rc);
         g_spindle_hal.mode_switch_result=rc;
         g_spindle_hal.mode_switch_state=SPINDLE_MODE_SWITCH_ERROR;
     } else if(axis.target_mode==g_spindle_hal.requested_mode &&

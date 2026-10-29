@@ -150,6 +150,7 @@ typedef struct pmc_data_t
     int m_code;                 // M代码
     bool sub_program;           // 子程序或宏程序标志
     bool rigid_tap;             // 刚性攻丝（M29）
+    bool rigid_tap_return;      // 刚性攻丝回退段内（M29）
 
     int splineCurveMode;        //样条曲线模式
     double baseCirRadius;       //基圆半径

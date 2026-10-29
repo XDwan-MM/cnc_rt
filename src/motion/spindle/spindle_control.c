@@ -46,6 +46,7 @@ static bool spindle_is_in_csp_mode(void);
 static void spindle_cancel_business(void)
 {
     g_spindle.reset_requires_start=true;
+    g_spindle.program_end_stop_pending=false;
     if(!reset_stop_pending())g_spindle_hal.velocity_submitted=false;
     g_spindle.run_authorized=g_spindle.program_run_authorized=false;
     g_spindle.start_request_pending=g_spindle.deferred_start_pending=false;
@@ -114,14 +115,19 @@ void spindle_control_update(void)
     spindle_hal_poll_mode_switch();
     csp_mode = spindle_is_in_csp_mode();
 
-    if (spindle_internal_m29_no_orient_preparing() &&
-        !(nc_reset && nc_reset->is_resetting) &&
-        !rt_data->sys_state[SYS_ESTOP_INPUT] && !rt_data->sys_state[SYS_IS_ESTOP_ACTIVE])
+    if (spindle_internal_m29_no_orient_preparing())
     {
-        spindle_internal_update_m29_no_orient();
-        spindle_internal_publish_status();
-        spindle_internal_publish_rigid_state();
-        return;
+        if (nc_reset == NULL || nc_reset->is_resetting == false)
+        {
+            if (rt_data->sys_state[SYS_ESTOP_INPUT] == 0 &&
+                rt_data->sys_state[SYS_IS_ESTOP_ACTIVE] == 0)
+            {
+                spindle_internal_update_m29_no_orient();
+                spindle_internal_publish_status();
+                spindle_internal_publish_rigid_state();
+                return;
+            }
+        }
     }
 
     release_orient_event =
@@ -150,6 +156,17 @@ void spindle_control_update(void)
             (void)alarm_spindle_request_torque(false);
     }
 
+    /* 两条路径的公共准备阶段独占主轴，不能再经过普通事件和速度控制。
+     * 复位、急停先由上面的公共取消流程处理。 */
+    if (g_spindle.m29_phase == SPINDLE_M29_SWITCHING_CSP ||
+        g_spindle.m29_phase == SPINDLE_M29_ALIGNING)
+    {
+        spindle_internal_update_m29();
+        spindle_internal_publish_status();
+        spindle_internal_publish_rigid_state();
+        return;
+    }
+
     if (!csp_mode && spindle_internal_stop_is_required(&g_spindle) &&
         !release_orient_event)
     {
@@ -175,6 +192,16 @@ void spindle_control_update(void)
     spindle_process_event(&g_spindle);
     /* HAL 负责驱动器完成判据；这里只推进 M19 业务阶段。 */
     spindle_internal_update_orientation();
+    if (g_spindle.program_end_stop_pending &&
+        g_spindle.orient_phase == SPINDLE_ORIENT_IDLE &&
+        g_spindle.orient_request_pending == false)
+    {
+        if (spindle_hal_orientation_state() == RT_HAL_ORIENT_NONE)
+        {
+            g_spindle.program_end_stop_pending = false;
+            spindle_request_stop();
+        }
+    }
     /* 同一周期消费定向 DONE；M29 先保持稳定，再请求切 CSP。 */
     spindle_internal_update_m29();
     /* 根据安全状态、定向状态和速度状态决定使能、模式及 60FF 目标值。 */
@@ -210,10 +237,13 @@ bool spindle_request_program_run(spindle_state_t direction, double speed)
         return false;
     }
 
+    g_spindle.program_end_stop_pending = false;
+
     /* 一条新的 M3/M4 必须先清除上一条指令锁存的完成状态。后续只有
      * 规划速度和驱动器实际速度重新满足到速条件时，F45.3 才能再次置位。 */
     g_spindle.command_speed = speed;
     g_spindle.remembered_program_speed = speed;
+    g_spindle.manual_run_uses_program_speed = false;
     g_spindle.m19_active = false;
     g_spindle.orient_hold_stop = false;
     g_spindle.command_state = direction;
@@ -229,6 +259,10 @@ bool spindle_request_manual_run(spindle_state_t direction)
     {
         return false;
     }
+    if (g_spindle.program_end_stop_pending)
+    {
+        return false;
+    }
 
     /* 程序 M3/M4 已授权时，PLC 方向边沿不能覆盖程序方向或速度源目标。 */
     if (g_spindle.program_run_authorized)
@@ -240,8 +274,7 @@ bool spindle_request_manual_run(spindle_state_t direction)
      * 抢占。READY 状态例外：新的 M3/M4 会触发 CSP 到 CSV 的安全交接。 */
     if (g_spindle.m29_active ||
         (g_spindle.m29_phase != SPINDLE_M29_IDLE &&
-         g_spindle.m29_phase != SPINDLE_M29_READY &&
-         g_spindle.m29_phase != SPINDLE_M29_COMPLETE))
+         g_spindle.m29_phase != SPINDLE_M29_READY))
     {
         return false;
     }
@@ -256,6 +289,7 @@ bool spindle_request_manual_run(spindle_state_t direction)
         g_spindle.deferred_start_pending = true;
         g_spindle.deferred_start_state = direction;
         g_spindle.deferred_start_speed = g_spindle.remembered_program_speed;
+        g_spindle.manual_run_uses_program_speed = true;
         return true;
     }
 
@@ -263,6 +297,7 @@ bool spindle_request_manual_run(spindle_state_t direction)
         SPINDLE_EVENT_CCW : SPINDLE_EVENT_CW);
     g_spindle.orient_hold_stop = false;
     g_spindle.command_speed = g_spindle.remembered_program_speed;
+    g_spindle.manual_run_uses_program_speed = true;
     g_spindle.command_state = direction;
     g_spindle.start_request_pending = true;
     g_spindle.program_run_authorized = false;
@@ -275,6 +310,7 @@ void spindle_request_stop(void)
     /* 停止命令总是先取消排队启动。即使当前 M29 或 M19 拥有控制权而不能
      * 立即执行普通 M5，也不能在稍后释放时重新播放已经作废的启动请求。 */
     g_spindle.command_speed = 0.0;
+    g_spindle.manual_run_uses_program_speed = false;
     g_spindle.command_state = SPINDLE_STOP;
     g_spindle.run_authorized = false;
     g_spindle.program_run_authorized = false;
@@ -283,8 +319,7 @@ void spindle_request_stop(void)
 
     if (g_spindle.m29_active ||
         (g_spindle.m29_phase != SPINDLE_M29_IDLE &&
-         g_spindle.m29_phase != SPINDLE_M29_READY &&
-         g_spindle.m29_phase != SPINDLE_M29_COMPLETE))
+         g_spindle.m29_phase != SPINDLE_M29_READY))
     {
         return;
     }
@@ -296,6 +331,38 @@ void spindle_request_stop(void)
     }
 
     spindle_post_event(SPINDLE_EVENT_STOP);
+}
+
+void spindle_request_program_end_stop(void)
+{
+    bool orient_active;
+
+    orient_active = (g_spindle.orient_phase != SPINDLE_ORIENT_IDLE ||
+                     g_spindle.orient_request_pending ||
+                     g_spindle.pending_event == SPINDLE_EVENT_ORIENT);
+    if (spindle_hal_orientation_state() != RT_HAL_ORIENT_NONE)
+    {
+        orient_active = true;
+    }
+    if (orient_active == false)
+    {
+        spindle_request_stop();
+        return;
+    }
+
+    g_spindle.command_state = SPINDLE_STOP;
+    g_spindle.command_speed = 0.0;
+    g_spindle.manual_run_uses_program_speed = false;
+    g_spindle.run_authorized = false;
+    g_spindle.program_run_authorized = false;
+    g_spindle.start_request_pending = false;
+    g_spindle.deferred_start_pending = false;
+    g_spindle.program_end_stop_pending = true;
+    if (g_spindle.pending_event == SPINDLE_EVENT_STOP)
+    {
+        g_spindle.pending_event = SPINDLE_EVENT_NONE;
+    }
+    spindle_request_orientation(false);
 }
 
 /**
@@ -347,12 +414,6 @@ void spindle_internal_handle_rotation(spindle_context_t *context,
         context->m29_phase = SPINDLE_M29_IDLE;
         context->m29_feedback_stable = false;
     }
-    else if (context->m29_phase == SPINDLE_M29_COMPLETE)
-    {
-        context->m29_phase = SPINDLE_M29_IDLE;
-        context->m29_feedback_stable = false;
-    }
-
 
     /*
      * 新 M3/M4 是急停/复位后的明确启动授权。清除 reset_requires_start
@@ -436,11 +497,6 @@ static void spindle_process_event(spindle_context_t *context)
         if (context->m29_phase == SPINDLE_M29_READY)
         {
             context->m29_active = false;
-            context->m29_phase = SPINDLE_M29_IDLE;
-            context->m29_feedback_stable = false;
-        }
-        else if (context->m29_phase == SPINDLE_M29_COMPLETE)
-        {
             context->m29_phase = SPINDLE_M29_IDLE;
             context->m29_feedback_stable = false;
         }

@@ -129,11 +129,10 @@ typedef enum {
 // 一致性处理类型
 typedef enum {
     NONE = 0,
-    UNIF_ARC,       
+    UNIF_CIRCLE,    // 圆弧过渡    
+    UNIF_NURBS,     // NURBS
     UNIF_BESIER,    // 贝塞尔
     UNIF_HERMIT,    // hermit
-    UNIF_NURBS,     // NURBS
-    UNIF_CIRCLE,    // 圆弧过渡     
 } UNIF_TYPE;
 
 // NC 运行模式
@@ -226,6 +225,42 @@ typedef enum {
     SYS_EVENT_EXTERNAL_DECEL_POS_OFF,   /* 外部减速正向解除 */
     SYS_EVENT_EXTERNAL_DECEL_NEG_ON,    /* 外部减速负向生效 */
     SYS_EVENT_EXTERNAL_DECEL_NEG_OFF,   /* 外部减速负向解除 */
+    SYS_EVENT_EXTERNAL_DECEL1_AXIS1_POS_ON,    /* 外部减速1轴1正向生效 */
+    SYS_EVENT_EXTERNAL_DECEL1_AXIS1_POS_OFF,   /* 外部减速1轴1正向解除 */
+    SYS_EVENT_EXTERNAL_DECEL1_AXIS1_NEG_ON,    /* 外部减速1轴1负向生效 */
+    SYS_EVENT_EXTERNAL_DECEL1_AXIS1_NEG_OFF,   /* 外部减速1轴1负向解除 */
+    SYS_EVENT_EXTERNAL_DECEL2_AXIS1_POS_ON,    /* 外部减速2轴1正向生效 */
+    SYS_EVENT_EXTERNAL_DECEL2_AXIS1_POS_OFF,   /* 外部减速2轴1正向解除 */
+    SYS_EVENT_EXTERNAL_DECEL2_AXIS1_NEG_ON,    /* 外部减速2轴1负向生效 */
+    SYS_EVENT_EXTERNAL_DECEL2_AXIS1_NEG_OFF,   /* 外部减速2轴1负向解除 */
+    SYS_EVENT_EXTERNAL_DECEL3_AXIS1_POS_ON,    /* 外部减速3轴1正向生效 */
+    SYS_EVENT_EXTERNAL_DECEL3_AXIS1_POS_OFF,   /* 外部减速3轴1正向解除 */
+    SYS_EVENT_EXTERNAL_DECEL3_AXIS1_NEG_ON,    /* 外部减速3轴1负向生效 */
+    SYS_EVENT_EXTERNAL_DECEL3_AXIS1_NEG_OFF,   /* 外部减速3轴1负向解除 */
+    SYS_EVENT_EXTERNAL_DECEL1_AXIS2_POS_ON,    /* 外部减速1轴2正向生效 */
+    SYS_EVENT_EXTERNAL_DECEL1_AXIS2_POS_OFF,   /* 外部减速1轴2正向解除 */
+    SYS_EVENT_EXTERNAL_DECEL1_AXIS2_NEG_ON,    /* 外部减速1轴2负向生效 */
+    SYS_EVENT_EXTERNAL_DECEL1_AXIS2_NEG_OFF,   /* 外部减速1轴2负向解除 */
+    SYS_EVENT_EXTERNAL_DECEL2_AXIS2_POS_ON,    /* 外部减速2轴2正向生效 */
+    SYS_EVENT_EXTERNAL_DECEL2_AXIS2_POS_OFF,   /* 外部减速2轴2正向解除 */
+    SYS_EVENT_EXTERNAL_DECEL2_AXIS2_NEG_ON,    /* 外部减速2轴2负向生效 */
+    SYS_EVENT_EXTERNAL_DECEL2_AXIS2_NEG_OFF,   /* 外部减速2轴2负向解除 */
+    SYS_EVENT_EXTERNAL_DECEL3_AXIS2_POS_ON,    /* 外部减速3轴2正向生效 */
+    SYS_EVENT_EXTERNAL_DECEL3_AXIS2_POS_OFF,   /* 外部减速3轴2正向解除 */
+    SYS_EVENT_EXTERNAL_DECEL3_AXIS2_NEG_ON,    /* 外部减速3轴2负向生效 */
+    SYS_EVENT_EXTERNAL_DECEL3_AXIS2_NEG_OFF,   /* 外部减速3轴2负向解除 */
+    SYS_EVENT_EXTERNAL_DECEL1_AXIS3_POS_ON,    /* 外部减速1轴3正向生效 */
+    SYS_EVENT_EXTERNAL_DECEL1_AXIS3_POS_OFF,   /* 外部减速1轴3正向解除 */
+    SYS_EVENT_EXTERNAL_DECEL1_AXIS3_NEG_ON,    /* 外部减速1轴3负向生效 */
+    SYS_EVENT_EXTERNAL_DECEL1_AXIS3_NEG_OFF,   /* 外部减速1轴3负向解除 */
+    SYS_EVENT_EXTERNAL_DECEL2_AXIS3_POS_ON,    /* 外部减速2轴3正向生效 */
+    SYS_EVENT_EXTERNAL_DECEL2_AXIS3_POS_OFF,   /* 外部减速2轴3正向解除 */
+    SYS_EVENT_EXTERNAL_DECEL2_AXIS3_NEG_ON,    /* 外部减速2轴3负向生效 */
+    SYS_EVENT_EXTERNAL_DECEL2_AXIS3_NEG_OFF,   /* 外部减速2轴3负向解除 */
+    SYS_EVENT_EXTERNAL_DECEL3_AXIS3_POS_ON,    /* 外部减速3轴3正向生效 */
+    SYS_EVENT_EXTERNAL_DECEL3_AXIS3_POS_OFF,   /* 外部减速3轴3正向解除 */
+    SYS_EVENT_EXTERNAL_DECEL3_AXIS3_NEG_ON,    /* 外部减速3轴3负向生效 */
+    SYS_EVENT_EXTERNAL_DECEL3_AXIS3_NEG_OFF,   /* 外部减速3轴3负向解除 */
     // MDI事件
     SYS_EVENT_HMI_RESET,                // 按下reset
     SYS_EVENT_COMP_PARAM_CHANGED,       /* 误差补偿参数变更（需 sync + on_params_synced） */

@@ -266,9 +266,6 @@ SOURCES -= $$PWD/test_motion/tst_homing.cpp
 # H1 business regression uses the real adapter through a test-only frame fixture.
 contains(DEFINES, RT_HAL_H1_TEST) {
     SOURCES -= ../src/hal/rt_hal_adapter.c
-    SOURCES += $$PWD/rt_hal_h1_cycle_fixture.c \
-        ../src/motion/sysprog/sysprog.c \
-        ../src/motion/sysprog/tapreturn.c \
-        ../src/motion/auto/pathplan/hmi_request.c
+    SOURCES += $$PWD/rt_hal_h1_cycle_fixture.c
     LIBS += -L"$$PWD/../lib/nurbs/bin" -lnurbsfit
 }

@@ -1,6 +1,6 @@
 #include "mpg.h"
-#include "mpg_planner.h"
 #include "global.h"
+#include "mpg_planner.h"
 #include <GreeMasterAPI.h>
 #include <math.h>
 #include <string.h>
@@ -17,16 +17,13 @@ typedef struct
     mpg_planner_t planner_by_axis[MPG_FEED_AXIS_COUNT]; /* X/Y/Z 各自独立的轨迹状态 */
     int selected_axis;                                  /* 当前面板选中的轴数组下标；-1 表示无效 */
     int selected_multiplier;                            /* 当前倍率数值：1、10 或 100 */
+    bool stopping_by_axis[MPG_FEED_AXIS_COUNT];         /* 切轴后仍需逐周期减速的旧轴 */
     bool enabled;                                       /* 最近一次采样是否为有效的轴和倍率组合 */
     bool initialized;                                   /* 是否已经建立过有效选择及计数基准 */
     int last_count_direction[MPG_FEED_AXIS_COUNT];      /* 最近采样计数差的符号：正 1、负 -1、无增量 0 */
 } mpg_context_t;
 
-static mpg_context_t mpg_context = {
-    .selected_axis = -1,
-    .selected_multiplier = -1};
-static uint32_t mpg_switch_word = 0;    /* 面板轴/倍率开关的原始位域 */
-static uint32_t mpg_hardware_count = 0; /* 最近一次从手轮硬件读取的 32 位计数 */
+static mpg_context_t mpg_context = {.selected_axis = -1, .selected_multiplier = -1};
 static double mpg_position_snapshot[MPG_FEED_AXIS_COUNT];
 static bool mpg_position_snapshot_valid = false;
 
@@ -41,7 +38,7 @@ static void mpg_stop_axis_chasing(int axis);
 static int mpg_get_motion_direction(const mpg_planner_t *planner);
 static double mpg_get_external_decel_velocity(int axis, int direction);
 static double mpg_get_velocity_limit(int axis, const mpg_planner_t *planner);
-static void mpg_update_active_axis(void);
+static void mpg_update_stopping_axes(int active_axis);
 static bool mpg_position_changed_since_last_output(void);
 static void mpg_update_position_snapshot(void);
 
@@ -80,7 +77,7 @@ void handwheel_handle_estop(void)
  * 每个运动周期调用一次，完成以下处理：读取手轮计数和面板开关、校验轴/倍率、
  * 更新目标位置、选择基础或外部减速速度上限、推进加速度斜坡，最后写回轴/通道。
  *
- * 无效选择会停止接收新的计数，并把当前轴的追踪目标收至当前位置，让规划器按
+ * 读取失败或无效选择会停止接收新的计数，并把当前轴的追踪目标收至当前位置，让规划器按
  * 加速度限制减速；轴或倍率变化则先用本周期计数重置计数基准，避免把切换前后的
  * 计数差误当成新的手轮输入。急停状态由急停入口统一清理，本周期在此直接返回。
  */
@@ -90,7 +87,10 @@ void handle_mpg_cmd(void)
     bool selection_changed;
     int selected_axis;
     int selected_multiplier;
-    int previous_axis;
+    int count_result;
+    int switch_result;
+    uint32_t mpg_hardware_count;
+    uint32_t mpg_switch_word;
     bool position_changed_outside_mpg;
     mpg_planner_t *planner;
     bool is_mpg_interlock;
@@ -113,31 +113,63 @@ void handle_mpg_cmd(void)
     selected_multiplier = mpg_decode_multiplier((int)(mpg_switch_word & 0x7U));
     selected_axis = mpg_decode_axis((int)((mpg_switch_word >> 3) & 0x1fU));
     valid_selection = mpg_selection_is_valid(selected_axis, selected_multiplier);
+    /* 两个接口分别读取；失败时不使用其输出，正常值再按轴选和倍率位域解码。 */
+    mpg_hardware_count = 0;
+    mpg_switch_word = 0;
+    count_result = HW_Get_Count(&mpg_hardware_count);
+    if(count_result != 0)
+    {
+        LOG(LOG_LEVEL_ERR, "手轮模式：手轮计数器读取函数调用失败，函数返回值非0");
+    }
+    switch_result = HW_Get_Axis_And_Rate(&mpg_switch_word);
+    if(switch_result != 0)
+    {
+        LOG(LOG_LEVEL_ERR, "手轮模式：轴选和倍率读取函数调用失败，函数返回值非0");
+    }
+    selected_axis = -1;
+    selected_multiplier = -1;
+    valid_selection = false;
+    if (count_result == 0 && switch_result == 0)
+    {
+        selected_multiplier = mpg_decode_multiplier((int)(mpg_switch_word & 0x7U));
+        selected_axis = mpg_decode_axis((int)((mpg_switch_word >> 3) & 0x1fU));
+        valid_selection = mpg_selection_is_valid(selected_axis, selected_multiplier);
+    }
 
     position_changed_outside_mpg = mpg_position_changed_since_last_output();
     if (position_changed_outside_mpg)
     {
         /* 其他模式可能已移动轴；下方选择变化路径会从实时位置和当前计数重建。 */
+        for (int axis = 0; axis < MPG_FEED_AXIS_COUNT; axis++)
+        {
+            if (axis == mpg_context.selected_axis || mpg_context.stopping_by_axis[axis])
+                rt_data->axis_data[axis].cmd_vel = 0.0;
+            mpg_context.stopping_by_axis[axis] = false;
+        }
         mpg_context.selected_axis = -1;
         mpg_context.selected_multiplier = -1;
         mpg_context.enabled = false;
         mpg_context.initialized = false;
+        mpg_update_channel_output();
     }
 
-    if (!valid_selection)
+    if (valid_selection == false)
     {
-        /* OFF 或非法编码会禁止新输入；同步计数可避免无效期间的转动延迟到恢复后执行。 */
+        /* 读取失败或无效选择禁止新输入；仅用成功读取的计数同步基准。 */
         mpg_context.enabled = false;
         if (mpg_context.initialized && mpg_axis_is_valid(mpg_context.selected_axis))
         {
             planner = &mpg_context.planner_by_axis[mpg_context.selected_axis];
-            planner->count = mpg_hardware_count;
-            planner->previous_count = mpg_hardware_count;
-            /* 目标收至当前位置，保留当前速度并由规划器按加速度上限减速。 */
-            mpg_stop_axis_chasing(mpg_context.selected_axis);
+            if (count_result == 0)
+            {
+                planner->count = mpg_hardware_count;
+                planner->previous_count = mpg_hardware_count;
+            }
+            mpg_context.stopping_by_axis[mpg_context.selected_axis] = true;
         }
-        /* 保留当前有效轴的速度/位置输出，或在没有有效轴时清零通道速度。 */
-        mpg_update_active_axis();
+        /* 无效选择后所有退出中的轴都继续减速，最后重算通道速度。 */
+        mpg_update_stopping_axes(-1);
+        mpg_update_channel_output();
         /* 无效轴选（OFF/非法编码）也必须落一次锁住状态，否则待处理的切换会一直挂着。 */
         handwheel_apply_mac_lock_if_stopped();
         mpg_update_position_snapshot();
@@ -152,34 +184,54 @@ void handle_mpg_cmd(void)
         return;
     }
     /* 失效后重新启用也视为切换，使被忽略期间的计数不进入目标位置。 */
-    selection_changed = (!mpg_context.initialized || !mpg_context.enabled ||
-                         selected_axis != mpg_context.selected_axis ||
-                         selected_multiplier != mpg_context.selected_multiplier);
-    if (selection_changed && mpg_context.initialized &&
-        mpg_axis_is_valid(mpg_context.selected_axis) &&
-        mpg_context.selected_axis != selected_axis)
+    selection_changed = false;
+    if (mpg_context.initialized == false || mpg_context.enabled == false)
+        selection_changed = true;
+    else if (selected_axis != mpg_context.selected_axis || selected_multiplier != mpg_context.selected_multiplier)
+        selection_changed = true;
+
+    if (selection_changed && mpg_context.initialized)
     {
-        previous_axis = mpg_context.selected_axis;
-        /* 切换到另一根轴时，旧轴不再接收脉冲，但仍沿规划加速度斜坡减速。 */
-        mpg_stop_axis_chasing(previous_axis);
-        mpg_update_axis_output(previous_axis);
+        if (mpg_axis_is_valid(mpg_context.selected_axis) && mpg_context.selected_axis != selected_axis)
+        {
+            /* 旧轴停止接收脉冲，并在后续周期继续按加速度斜坡减速。 */
+            mpg_context.stopping_by_axis[mpg_context.selected_axis] = true;
+        }
     }
 
   
     if (selection_changed)
     {
+        bool preserve_velocity;
+        double current_position;
+
         /*
          * 切换轴或倍率时，用当前计数建立新基准，并从实时命令位置重建规划器。
          * first_cycle 让规划器消费本周期计数但不产生位置增量，避免选择变化时跳动。
          */
+        preserve_velocity = false;
+        if (mpg_context.stopping_by_axis[selected_axis])
+            preserve_velocity = true;
+        else if (mpg_context.initialized && selected_axis == mpg_context.selected_axis)
+            preserve_velocity = true;
+
+        current_position = rt_data->axis_data[selected_axis].wcs_cmd_pos_cur;
+        if (isfinite(current_position) == false && mpg_position_snapshot_valid)
+            current_position = mpg_position_snapshot[selected_axis];
+
         planner->count = mpg_hardware_count;
         planner->previous_count = mpg_hardware_count;
         planner->first_cycle = true;
         planner->axis = (AXIS_TYPE)selected_axis;
-        planner->target_position = rt_data->axis_data[selected_axis].wcs_cmd_pos_cur;
-        planner->reference_position = rt_data->axis_data[selected_axis].wcs_cmd_pos_cur;
-        planner->current_position = rt_data->axis_data[selected_axis].wcs_cmd_pos_cur;
-        planner->current_velocity = 0.0;
+        planner->target_position = current_position;
+        planner->reference_position = current_position;
+        planner->current_position = current_position;
+        if (preserve_velocity == false)
+        {
+            planner->current_velocity = 0.0;
+            planner->active = false;
+        }
+        mpg_context.stopping_by_axis[selected_axis] = false;
         mpg_context.last_count_direction[selected_axis] = 0;
     }
 
@@ -193,7 +245,8 @@ void handle_mpg_cmd(void)
     planner->axis = (AXIS_TYPE)selected_axis;
     planner->max_velocity = rt_data->axis_data[selected_axis].mpg_spd;
     planner->max_acceleration = rt_data->axis_data[selected_axis].max_feed_acc;
-    planner->reference_position = rt_data->axis_data[selected_axis].wcs_cmd_pos_cur;
+    if (isfinite(rt_data->axis_data[selected_axis].wcs_cmd_pos_cur))
+        planner->reference_position = rt_data->axis_data[selected_axis].wcs_cmd_pos_cur;
 
     /*
      * 记录本周期新计数差的方向。无新计数时置零；减速方向随后会回退到未完成的
@@ -227,6 +280,7 @@ void handle_mpg_cmd(void)
          */
         planner->count = mpg_hardware_count;
         planner->previous_count = mpg_hardware_count;
+        planner->first_cycle = false;
         planner->target_position = planner->current_position;
         mpg_context.last_count_direction[selected_axis] = 0;
     }
@@ -238,6 +292,7 @@ void handle_mpg_cmd(void)
     mpg_planner_step(planner, rt_data->ncu_data.cycle);
     planner->reference_position = planner->current_position;
     mpg_update_axis_output(selected_axis);
+    mpg_update_stopping_axes(selected_axis);
     /* 周期末尾：当前轴已停稳则让机械锁住的生效位跟随请求 */
     handwheel_apply_mac_lock_if_stopped();
     mpg_update_position_snapshot();
@@ -250,6 +305,8 @@ void handwheel_resync_position(void)
     mpg_context.selected_multiplier = -1;
     mpg_context.enabled = false;
     mpg_context.initialized = false;
+    for (int axis = 0; axis < MPG_FEED_AXIS_COUNT; axis++)
+        mpg_context.stopping_by_axis[axis] = false;
     mpg_position_snapshot_valid = false;
 }
 
@@ -332,11 +389,19 @@ static void mpg_update_axis_output(int axis)
     mpg_planner_t *planner;
     double previous_position;
 
-    if (rt_data == NULL || !mpg_axis_is_valid(axis))
+    if (rt_data == NULL || mpg_axis_is_valid(axis) == false)
         return;
     planner = &mpg_context.planner_by_axis[axis];
+    if (isfinite(planner->current_position) == false)
+    {
+        rt_data->axis_data[axis].cmd_vel = 0.0;
+        mpg_update_channel_output();
+        return;
+    }
     /* 保存更新前的位置供 emcmot 按本周期位置增量累计机床坐标。 */
     previous_position = rt_data->axis_data[axis].wcs_cmd_pos_cur;
+    if (isfinite(previous_position) == false)
+        previous_position = planner->current_position;
     rt_data->axis_data[axis].wcs_cmd_pos_pre = previous_position;
     rt_data->axis_data[axis].wcs_cmd_pos_cur = planner->current_position;
     /* 运动正负方向由位置及计数方向表示，轴速度输出保持非负。 */
@@ -372,16 +437,38 @@ static void mpg_stop_axis_chasing(int axis)
 {
     mpg_planner_t *planner;
 
-    if (!mpg_axis_is_valid(axis))
+    if (mpg_axis_is_valid(axis) == false)
         return;
     planner = &mpg_context.planner_by_axis[axis];
     /* 停止追踪只撤销未完成的位置请求，不直接清零当前速度，避免速度阶跃。 */
     planner->target_position = planner->current_position;
+    planner->first_cycle = false;
     mpg_context.last_count_direction[axis] = 0;
+    planner->max_acceleration = rt_data->axis_data[axis].max_feed_acc;
     planner->max_velocity = mpg_get_velocity_limit(axis, planner);
     mpg_planner_step(planner, rt_data->ncu_data.cycle);
     planner->reference_position = planner->current_position;
     mpg_update_axis_output(axis);
+}
+
+/* 逐周期推进切轴后旧轴的受控停止，直到其速度状态完全清零。 */
+static void mpg_update_stopping_axes(int active_axis)
+{
+    mpg_planner_t *planner;
+
+    if (rt_data == NULL)
+        return;
+
+    for (int axis = 0; axis < MPG_FEED_AXIS_COUNT; axis++)
+    {
+        if (axis == active_axis || mpg_context.stopping_by_axis[axis] == false)
+            continue;
+
+        mpg_stop_axis_chasing(axis);
+        planner = &mpg_context.planner_by_axis[axis];
+        if (planner->active == false && planner->current_velocity == 0.0)
+            mpg_context.stopping_by_axis[axis] = false;
+    }
 }
 
 /*
@@ -426,10 +513,8 @@ static double mpg_get_external_decel_velocity(int axis, int direction)
     int direction_index;
 
     /* 总开关或G23.3许可关闭、轴无效或方向不明确时，不施加外部速度限制。 */
-    if (rt_data == NULL || !mpg_axis_is_valid(axis) ||
-        !rt_data->chan_data[0].ex_dec_enable ||
-        !rt_data->sys_state[SYS_IS_MPG_EX_DEC_ENABLE] ||
-        (direction != 1 && direction != -1))
+    if (rt_data == NULL || !mpg_axis_is_valid(axis) || !rt_data->chan_data[0].ex_dec_enable ||
+        !rt_data->sys_state[SYS_IS_MPG_EX_DEC_ENABLE] || (direction != 1 && direction != -1))
         return HUGE_VAL;
 
     /*
@@ -490,20 +575,6 @@ static double mpg_get_velocity_limit(int axis, const mpg_planner_t *planner)
 }
 
 /*
- * 更新当前有效轴的输出，供 OFF/非法选择路径使用。
- * 轴选择仍有效时保留规划器正在执行的受控减速；从未建立有效选择时仅清零通道速度，
- * 不触碰其他轴的位置和速度数据。
- */
-static void mpg_update_active_axis(void)
-{
-    /* 无效选择时继续输出已选轴的受控减速过程；从未选中过有效轴则清通道速度。 */
-    if (mpg_axis_is_valid(mpg_context.selected_axis))
-        mpg_update_axis_output(mpg_context.selected_axis);
-    else if (rt_data != NULL)
-        mpg_update_channel_output();
-}
-
-/*
  * 机械锁住请求与实际生效状态不一致：正在锁住或正在解除。
  * 此时 handle_mpg_cmd() 不再接收新的手轮位移、并把目标收至当前位置让规划器停稳，
  * 停稳后由周期末尾的 handwheel_apply_mac_lock_if_stopped() 让 READY 跟随 ON。
@@ -517,8 +588,7 @@ static bool handwheel_is_mac_lock_switching(void)
 
 /*
  * 手轮是否已停稳（锁住切换的判定条件）。
- * 判据用规划器的 active 标志（速度高于静止阈值时由 mpg_planner_step() 维护），
- * 这里不另外采样速度；还没有建立过有效轴选时视为已停稳。
+ * 检查当前轴及切轴后仍在减速的旧轴；还没有建立过有效轴选时视为已停稳。
  */
 /*
  * 手轮是否已停稳（锁住切换的判定条件）。
@@ -527,9 +597,16 @@ static bool handwheel_is_mac_lock_switching(void)
  */
 static bool handwheel_motion_is_stopped(void)
 {
-    if (!mpg_context.initialized || !mpg_axis_is_valid(mpg_context.selected_axis))
+    if (mpg_context.initialized == false)
         return true;
-    return !mpg_context.planner_by_axis[mpg_context.selected_axis].active;
+    for (int axis = 0; axis < MPG_FEED_AXIS_COUNT; axis++)
+    {
+        if (axis != mpg_context.selected_axis && mpg_context.stopping_by_axis[axis] == false)
+            continue;
+        if (mpg_context.planner_by_axis[axis].active)
+            return false;
+    }
+    return true;
 }
 
 /*
@@ -541,8 +618,8 @@ static void handwheel_apply_mac_lock_if_stopped(void)
 {
     bool lock_request;
 
-    if (!handwheel_motion_is_stopped())
-        return;                                     /* 还在按斜坡减速：下一周期再看 */
+    if (handwheel_motion_is_stopped() == false)
+        return; /* 还在按斜坡减速：下一周期再看 */
 
     lock_request = rt_data->sys_state[SYS_IS_MAC_LOCK];
     /* 只有真的变化才打日志，避免停稳后每周期刷屏；赋值本身与 auto 一样是无条件的 */
@@ -625,6 +702,11 @@ static bool mpg_position_changed_since_last_output(void)
 /* 记录本周期 MPG 输出后的三根进给轴位置，供下周期识别外部位置更新。 */
 static void mpg_update_position_snapshot(void)
 {
+    for (int axis = 0; axis < MPG_FEED_AXIS_COUNT; axis++)
+    {
+        if (isfinite(rt_data->axis_data[axis].wcs_cmd_pos_cur) == false)
+            return;
+    }
     for (int axis = 0; axis < MPG_FEED_AXIS_COUNT; axis++)
         mpg_position_snapshot[axis] = rt_data->axis_data[axis].wcs_cmd_pos_cur;
     mpg_position_snapshot_valid = true;
