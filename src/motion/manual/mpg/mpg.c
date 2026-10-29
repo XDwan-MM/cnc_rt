@@ -52,7 +52,6 @@ static bool handwheel_motion_is_stopped(void);
 static void handwheel_update_mac_lock(void);
 static void handwheel_apply_mac_lock_if_stopped(void);
 //全轴锁住
-static void handwheel_update_it_lock(void);
 static void handwheel_process_it_lock(mpg_planner_t *planner,int selected_axis);
 
 /* 外部函数定义 */
@@ -102,8 +101,7 @@ void handle_mpg_cmd(void)
 
     /* 机械锁住：先处理本周期开关事件。事件只改“请求”，生效位由周期末尾的检查点落。 */
     handwheel_update_mac_lock();
-    /*是否所有轴互锁*/
-    handwheel_update_it_lock();
+
     
 
     /* 机械锁住：先处理本周期开关事件。事件只改“请求”，生效位由周期末尾的检查点落。 */
@@ -145,6 +143,7 @@ void handle_mpg_cmd(void)
         mpg_update_position_snapshot();
         return;
     }
+    planner = &mpg_context.planner_by_axis[selected_axis];
     /*所选轴有效且互锁打开，执行轴停止追踪功能*/
     is_mpg_interlock = rt_data->sys_state[SYS_IS_IT_LOCK];
     if(is_mpg_interlock && valid_selection){
@@ -166,7 +165,7 @@ void handle_mpg_cmd(void)
         mpg_update_axis_output(previous_axis);
     }
 
-    planner = &mpg_context.planner_by_axis[selected_axis];
+  
     if (selection_changed)
     {
         /*
@@ -586,24 +585,6 @@ static void handwheel_update_mac_lock(void)
     }
 }
 
-static void handwheel_update_it_lock(void)
-{
-
-   
-    switch (rt_data->nc_event)
-    {
-    case SYS_EVENT_IT_ON:
-        LOG(LOG_LEVEL_INFO, "手动模式全轴锁住开启");
-        rt_data->sys_state[SYS_IS_IT_LOCK] = true;
-        break;
-    case SYS_EVENT_IT_OFF:
-        LOG(LOG_LEVEL_INFO, "手动模式全轴锁住关闭");
-        rt_data->sys_state[SYS_IS_IT_LOCK] = false;
-        break;
-    default:
-        break;
-    }
-}
 
 static void handwheel_process_it_lock(mpg_planner_t *planner,int selected_axis)
 {
