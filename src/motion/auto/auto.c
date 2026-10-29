@@ -39,14 +39,16 @@ static bool auto_is_program_end();
 static bool auto_check_program_end();
 static void auto_pop_current_block();
 static void auto_update_buf_stop();
-static void auto_set_stop_skip_macro();
 static void auro_reset_stop_skip();
+static void auto_pause_stop_skip();
+static void auto_set_stop_skip_macro();
 static void auto_update_idle_state();
 static void auto_update_running_state();
 static void auto_update_pausing_state();
 static void auto_check_feed_override_event();
 static void auto_check_rapid_override_event();
-static void auto_check_block_skip_event();
+static void auto_check_block_skip_on_event();
+static void auto_check_block_skip_off_event();
 static void auto_check_rigid_return_on_event();
 static void auto_check_rigid_return_off_event();
 static void auto_check_dry_run_event(bool is_enable);
@@ -191,10 +193,11 @@ static void auto_check_event(){
         break;
     case SYS_EVENT_STOP_SKIP_ON:
         LOG(LOG_LEVEL_INFO, "自动模式处理跳转信号");
-        auto_check_block_skip_event();
+        auto_check_block_skip_on_event();
         break;
     case SYS_EVENT_STOP_SKIP_OFF:
         LOG(LOG_LEVEL_INFO, "自动模式处理跳转信号");
+        auto_check_block_skip_off_event();
         break;
     case SYS_EVENT_RIGID_RETURN_ON:
         auto_check_rigid_return_on_event();
@@ -390,6 +393,7 @@ static void auto_update_stage(){
             switch (cycle_tp->target_stage)
             {
             case BLOCK_STOP_2_END:
+            case PROGRAM_WAIT:
                 auto_pop_current_block();
                 auro_reset_stop_skip();
                 cycle_tp->exec_cmd = DO_NULL_CMD;
@@ -400,8 +404,7 @@ static void auto_update_stage(){
                 rt_data->sys_state[SYS_IS_MAC_LOCK_READY] = rt_data->sys_state[SYS_IS_MAC_LOCK];
                 break;
             case BLOCK_PAUSED:
-            case PROGRAM_WAIT:
-                auto_set_stop_skip_macro();
+                auto_pause_stop_skip();
                 rt_data->sys_state[SYS_IS_MAC_LOCK_READY] = rt_data->sys_state[SYS_IS_MAC_LOCK];
                 break;
             default:
@@ -787,7 +790,6 @@ static void auto_update_buf_stop()
 static void auro_reset_stop_skip(){
     if(cycle_tp->plan_block->mode == PMC_MODE_STOPSKIP){
         rt_set_chan_state(0, CHAN_IS_FIRST_RUN, true);
-        rt_set_sys_state(SYS_IS_STOP_SKIP, false);
         // 更新宏变量轴地址
         ItpSetOriginMacPos(rt_data->axis_data[AXIS_X].motor_cmd_pos,
                     rt_data->axis_data[AXIS_Y].motor_cmd_pos,
@@ -798,19 +800,25 @@ static void auro_reset_stop_skip(){
     }
 }
 
-static void auto_set_stop_skip_macro(){
-    if(rt_data->sys_state[SYS_IS_STOP_SKIP]){
+static void auto_pause_stop_skip(){
+    if(rt_data->sys_state[SYS_IS_STOP_SKIP] && !rt_data->sys_state[SYS_IS_STOP_SKIP_READY]){
         auto_pop_current_block();
         rt_set_chan_state(0, CHAN_IS_FIRST_RUN, true);
-        rt_set_sys_state(SYS_IS_STOP_SKIP, false);
-        // 更新宏变量轴地址
-        ItpSetOriginMacPos(rt_data->axis_data[AXIS_X].motor_cmd_pos,
-                    rt_data->axis_data[AXIS_Y].motor_cmd_pos,
-                    rt_data->axis_data[AXIS_Z].motor_cmd_pos,
-                    0);
-        rt_set_chan_state(0, CHAN_IS_MOTION_SYNC, true);
-        LOG(LOG_LEVEL_DEBUG, "获取到外部跳转信号后减速停止 %f %f %f", rt_data->axis_data[AXIS_X].motor_cmd_pos, rt_data->axis_data[AXIS_Y].motor_cmd_pos, rt_data->axis_data[AXIS_Z].motor_cmd_pos);
+        rt_set_sys_state(SYS_IS_STOP_SKIP_READY, true);
+        LOG(LOG_LEVEL_DEBUG, "外部跳转信号后减速停止 %f %f %f", rt_data->axis_data[AXIS_X].motor_cmd_pos, rt_data->axis_data[AXIS_Y].motor_cmd_pos, rt_data->axis_data[AXIS_Z].motor_cmd_pos);
+        auto_set_stop_skip_macro();
     }
+}
+
+// 设置跳转时位置
+static void auto_set_stop_skip_macro(){
+    // 更新宏变量轴地址
+    ItpSetOriginMacPos(rt_data->axis_data[AXIS_X].motor_cmd_pos,
+                rt_data->axis_data[AXIS_Y].motor_cmd_pos,
+                rt_data->axis_data[AXIS_Z].motor_cmd_pos,
+                0);
+    rt_set_chan_state(0, CHAN_IS_MOTION_SYNC, true);
+    LOG(LOG_LEVEL_DEBUG, "获取到外部跳转信号的位置 %f %f %f", rt_data->axis_data[AXIS_X].motor_cmd_pos, rt_data->axis_data[AXIS_Y].motor_cmd_pos, rt_data->axis_data[AXIS_Z].motor_cmd_pos);
 }
 
 static GNC_RES cycle_tp_pos_cmd_data_init(POS_CMD_DATA* pos_cmd_data){
@@ -1266,7 +1274,7 @@ static void auto_check_mac_lock_event(bool is_enable){
     }
 }
 
-static void auto_check_block_skip_event(){
+static void auto_check_block_skip_on_event(){
     switch (cycle_tp->exec_state)
     {
     case EXEC_RUNNING:
@@ -1277,12 +1285,16 @@ static void auto_check_block_skip_event(){
         default:
             break;
         }
-        break;
     case EXEC_PAUSING:
     case EXEC_RESET:
     case EXEC_IDLE:
+        cycle_tp->trigger_event = STOP_SKIP_ENABLE;
         break;
     }
+}
+
+static void auto_check_block_skip_off_event(){
+    cycle_tp->trigger_event = NONE_EVENT;
 }
 
 static void auto_check_rigid_return_on_event(){
