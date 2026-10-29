@@ -689,10 +689,6 @@ static void auto_reset_run(){
     setVarChanInt(0, VAR_CHAN_IS_RUNNING, 0, 0);
     setVarChanInt(0, VAR_CHAN_IS_MOVING, 0, 0);
     setVarChanInt(0, VAR_CHAN_IS_PROGEND, 1, 0);
-    // 复位/程序结束：程序页的起始行回到开头，下次从头运行
-    if (rt_data->current_mode == MODE_MEM) {
-        setVarChanInt(0, VAR_CHAN_RUN_ROW, 0, 0);
-    }
     setVarChanInt(0, VAR_CHAN_CYCLE, 0, 0);
     setVarChanInt(0, VAR_CHAN_HOLD, 0, 0);
     sysprog_cleanup();
@@ -713,7 +709,7 @@ static void auto_update_var(){
         setVarChanValue(0, VAR_CHAN_MODAL, i, &set_modal, 0);
     }
     // 运行行号
-    if(cycle_tp->plan_block->line_number >= 0)
+    if(cycle_tp->exec_state != EXEC_RESET && cycle_tp->plan_block->line_number >= 0)
         setVarChanInt(0, VAR_CHAN_RUN_ROW, cycle_tp->plan_block->line_number, 0);
     // LOG(LOG_LEVEL_DEBUG, "line number:%d type:%d", cycle_tp->plan_block->line_number, cycle_tp->plan_block->type);
     // 速度
