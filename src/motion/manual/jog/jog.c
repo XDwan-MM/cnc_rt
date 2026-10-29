@@ -97,6 +97,7 @@ static double jog_get_axis_acceleration(int axis, bool is_rapid);
 static bool jog_is_hard_limit_active(int axis, jog_direction_t direction);
 static bool jog_is_direction_blocked(int axis, jog_direction_t direction, double max_acc);
 static int jog_get_direction_index(jog_direction_t direction);
+static void jog_process_it_lock();
 
 /*
  * 状态迁移规则：
@@ -169,15 +170,7 @@ void handle_jog_cmd(void)
     is_interlocked = rt_data->sys_state[SYS_IS_IT_LOCK];
     if(is_interlocked) 
     {
-        //屏蔽事件
-        //event = SYS_EVENT_NONE;
-        for(int i =0;i<JOG_AXIS_COUNT;i++){
-            //如果没停住，先减速,设置状态为停止中
-            jog_context.axis[i].state = JOG_AXIS_STATE_STOPPING;
-            jog_context.axis[i].stop_reason = JOG_STOP_REASON_LOCK;
-            //jog_process_axis(i, is_rapid, global_fatal, reset_requested, switching_mode);
-            jog_execute_axis(i,&jog_context.axis[i],is_rapid);
-        }
+        jog_process_it_lock();
         return;
     }
 
@@ -745,4 +738,32 @@ static void jog_update_outputs(void)
         jog_apply_mac_lock();
         rt_data->nc_event = SYS_EVENT_NONE;
     }
+}
+
+static void jog_process_it_lock(){
+    SYS_EVENT event = rt_data->nc_event;
+    bool is_rapid = rt_data->sys_state[SYS_IS_RAPID];
+    event = SYS_EVENT_NONE;
+        for(int i =0;i<JOG_AXIS_COUNT;i++){
+            // 1. 强制状态为停止中
+            jog_context.axis[i].state = JOG_AXIS_STATE_STOPPING;
+            jog_context.axis[i].stop_reason = JOG_STOP_REASON_LOCK;
+        
+            // 2. 【关键】直接操作规划器，强制减速，绕过 jog_execute_axis 的状态机逻辑
+            // 这样可以确保即使外部任务干扰，规划器也在减速
+            jog_context.axis[i].planner.target_vel = 0.0;
+            jog_context.axis[i].planner.enable = 1; 
+        
+            // 3. 调用规划器更新
+            jog_execute_axis(i, &jog_context.axis[i], is_rapid);
+            jog_planner_update(&jog_context.axis[i].planner, rt_data->ncu_data.cycle);
+        
+            // 4. 检查是否真的停了
+            if (fabs(jog_context.axis[i].planner.curr_vel) < 1e-9) {
+                jog_context.axis[i].state = JOG_AXIS_STATE_IDLE;
+                jog_context.axis[i].planner.enable = 0;
+                jog_context.axis[i].planner.target_vel = 0.0;
+            }
+        }
+        return;
 }
