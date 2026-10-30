@@ -10,11 +10,10 @@
 /* 停车判据与预算沿用从 spindle_safety.c 原样搬过来的那一套，数值未改。 */
 #define STOP_SPEED_RPM 1.0
 #define STOP_SP_POSITION 10.0
-#define STOP_FEED_POSITION_FLOOR .01
+#define STOP_FEED_POSITION_FLOOR .005
 #define STOP_STABLE_CYCLES 10U
 #define STOP_TOTAL_CYCLES 30000U
 #define STOP_IDLE_CYCLES 10000U
-#define STOP_LOG_CYCLES 500U
 #define STOP_ALARM 2103
 static struct {
     bool pending, hold_valid;
@@ -92,19 +91,6 @@ void motion_csp_stop_update(void)
        fabs(feed.command_pos-feed.actual_pos)<=feed_tolerance())++s_stop.stable_cycles;
     else {
         s_stop.stable_cycles=0;
-        if(s_stop.cycles%STOP_LOG_CYCLES==0)
-            LOG(LOG_LEVEL_DEBUG,
-                "CSP复位停车等待：cycles=%u idle=%u rpm=%.3f sp_err=%.3f feed_err=%.4f tol=%.4f "
-                "cmd=%.4f act=%.4f wcs=%.4f hold=%.4f active=%d rej=%d/%d exec=%d/%d ctl=%d block=0x%x",
-                s_stop.cycles,s_stop.idle_cycles,sp.actual_speed_rpm,
-                fabs(sp.command_pos-sp.actual_pos),fabs(feed.command_pos-feed.actual_pos),feed_tolerance(),
-                sp.command_pos,sp.actual_pos,
-                rt_data->axis_data[AXIS_SP].wcs_cmd_pos_cur,
-                s_stop.hold_valid?s_stop.hold_target:NAN,
-                (int)motion_spindle_position_active(),
-                (int)snapshot.request_rejection.category,(int)snapshot.request_rejection.code,
-                (int)snapshot.execution_error.category,(int)snapshot.execution_error.code,
-                (int)snapshot.control_state,(unsigned)snapshot.motion_block_reasons);
     }
     if(s_stop.stable_cycles>=STOP_STABLE_CYCLES) {
         /* 当前策略是停稳后交公共流程下使能，不包含丝锥在孔内的保持策略。 */

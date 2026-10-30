@@ -656,8 +656,10 @@ void ServoSampleSampler::sampleOne()
         // 保持不变，而双轴攻丝会话可以明确采集同步轴。
         const uint32_t axis = _config.channels[i].axis;
         const bool spindleSignal = isSpindleSignal(_config.channels[i].signalId);
-        const double channelCmdPos = spindleSignal ? rt_data->axis_data[AXIS_SP].motor_cmd_pos
-                                                    : rt_data->axis_data[axis].mac_cmd_pos;
+        // 主轴采集实际用于下发的累计规划角度，不读取旧电机指令镜像。
+        const double channelCmdPos = (spindleSignal || axis == AXIS_SP)
+            ? rt_data->axis_data[AXIS_SP].wcs_cmd_pos_cur
+            : rt_data->axis_data[axis].mac_cmd_pos;
         const double channelActPos = spindleSignal ? rt_data->axis_data[AXIS_SP].motor_act_pos
                                                     : rt_data->axis_data[axis].motor_act_pos;
         // 直接采集实时值，避免依赖共享变量镜像造成一个周期的延迟，
@@ -684,7 +686,7 @@ void ServoSampleSampler::sampleOne()
             frame.values[i] = rt_data->axis_data[AXIS_SP].motor_act_pos;
             break;
         case CNC_SERVO_SIGNAL_CMD_SPINDLE_ANGLE:
-            frame.values[i] = rt_data->axis_data[AXIS_SP].motor_cmd_pos;
+            frame.values[i] = channelCmdPos;
             break;
         case CNC_SERVO_SIGNAL_RIGID_POS_SYNC_ERROR:
             /* 直接使用 cal_rigid_pos_sync_error() 的原始返回值，不做螺距/µm 换算。 */

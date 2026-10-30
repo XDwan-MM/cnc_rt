@@ -88,6 +88,17 @@ static void publish(void)
 static int healthy(void) { return (f[0] >> 6) & 1; }
 static int spindle_fault(void) { return f[45] & 1; }
 
+static void expire_reset_wait(void)
+{
+    s_reset_started.tv_sec -= 7;
+    alarm_poll_hal();
+#ifdef DEBUG_MODE_ENABLED
+    assert(s_reset_waiting && !s_reset_failed);
+    s_reset_started.tv_sec -= DEBUG_HAL_TIMEOUT_MS / 1000u;
+    alarm_poll_hal();
+#endif
+}
+
 int main(void)
 {
     memset(&data, 0, sizeof(data));
@@ -179,8 +190,7 @@ int main(void)
     assert(enabled[0] == 0 && enabled[1] == 1);
     settled = 0;
     handle_alarm_cmd();
-    s_reset_started.tv_sec -= 7;
-    alarm_poll_hal();
+    expire_reset_wait();
     assert(!s_reset_waiting && s_reset_failed && alarms[131] && alarms[30]);
     hal_axis_intent_poll();
     for (int i = 0; i < 4; ++i) assert(enabled[i] == 0);
@@ -190,16 +200,14 @@ int main(void)
     unreadable = 0;
     alarm_poll_hal();
     assert(s_reset_waiting);
-    s_reset_started.tv_sec -= 7;
-    alarm_poll_hal();
+    expire_reset_wait();
     assert(s_reset_failed && alarms[131]);
     unreadable = -1;
     request_error = HAL_ERROR_NOT_RUNNING;
     settled = 0;
     handle_alarm_cmd();
     assert(alarms[123]);
-    s_reset_started.tv_sec -= 7;
-    alarm_poll_hal();
+    expire_reset_wait();
     assert(s_reset_failed && !s_reset_waiting);
     request_error = 0;
     handle_alarm_cmd();

@@ -108,12 +108,18 @@ void shm_var_update(){
     double act_pos_wcs_ex = 0.0;
     for (int i = 0; i < SYS_AXES_NUM; i++)
     {
-        // 绝对坐标 = 工件指令位置
+        /* 主轴坐标显示实际反馈，指令角度由采样曲线单独记录；XYZ 保持原口径。 */
+        const double display_pos = i == AXIS_SP ? rt_data->axis_data[i].motor_act_pos
+                                                : rt_data->axis_data[i].mac_cmd_pos;
+        // 绝对坐标：主轴使用实际位置，XYZ 使用工件指令位置。
         if (!rt_data->axis_data[i].status.is_disable)
         {
             getVarChanValue(0, VAR_CHAN_MODAL, 14, &crds_type_var, 0);
-            getCrdsValue(CRDS_TYPE_G5X + crds_type_var.value.i - 1, i, &crds_oft);
-            act_pos_wcs_ex = rt_data->axis_data[i].wcs_cmd_pos_cur - crds_oft;
+            /* 未配置主轴工件偏置时不能沿用上一轴的偏置。 */
+            crds_oft = 0.0;
+            if (getCrdsValue(CRDS_TYPE_G5X + crds_type_var.value.i - 1, i, &crds_oft) != 0)
+                crds_oft = 0.0;
+            act_pos_wcs_ex = (i == AXIS_SP ? display_pos : rt_data->axis_data[i].wcs_cmd_pos_cur) - crds_oft;
             // todo:优化为对进给值和旋转轴的显示处理
             if(i == AXIS_SP) act_pos_wcs_ex = fmod(act_pos_wcs_ex, 360);
             setVarAxisDouble(i, VAR_AXIS_CMD_POS_WCS_EX, act_pos_wcs_ex, 0);
@@ -137,18 +143,20 @@ void shm_var_update(){
         }
         // 剩余移动
         setVarAxisDouble(i, VAR_AXIS_LEFT_TOGO_EX, crds_remain, 0);
-        // 相对坐标 = 相对指令位置
+        // 相对坐标：按各轴显示位置减相对零点。
         double real_zero = 0.0;
         getVarAxisDouble(i, VAR_AXIS_REAL_ZERO_EX, &real_zero, 0);
-        double real = rt_data->axis_data[i].mac_cmd_pos - real_zero;
+        double real = display_pos - real_zero;
         if(i == AXIS_SP) real = fmod(real, 360);
         setVarAxisDouble(i, VAR_AXIS_CMD_POS_RCS_EX, real, 0);
-        // 机械坐标 = 机床指令位置
-        setVarAxisDouble(i, VAR_AXIS_CMD_POS_EX, rt_data->axis_data[i].mac_cmd_pos, 0);
-        if(i == AXIS_SP) setVarAxisDouble(i, VAR_AXIS_CMD_POS_EX, fmod(rt_data->axis_data[i].mac_cmd_pos, 360), 0);
+        // 机械坐标：主轴显示实际角度，XYZ 保持机床指令位置。
+        setVarAxisDouble(i, VAR_AXIS_CMD_POS_EX,
+                         i == AXIS_SP ? fmod(display_pos, 360) : display_pos, 0);
         // 机床实际位置。仿真反馈包含误差补偿，显示机械坐标时去除补偿。
         #ifdef DEBUG_MODE_ENABLED
-        setVarAxisDouble(i, VAR_AXIS_ACT_POS_EX, rt_data->axis_data[i].fb_pos_no_comp, 0);
+        setVarAxisDouble(i, VAR_AXIS_ACT_POS_EX,
+                         i == AXIS_SP ? rt_data->axis_data[i].motor_act_pos
+                                      : rt_data->axis_data[i].fb_pos_no_comp, 0);
         #else
         setVarAxisDouble(i, VAR_AXIS_ACT_POS_EX, rt_data->axis_data[i].motor_act_pos, 0);
         #endif

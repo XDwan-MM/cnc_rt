@@ -8,6 +8,7 @@
  */
 
 #include "rt_hal_config.h"
+#include "../common/debug_mode.h"
 
 #include <math.h>
 #include <stdio.h>
@@ -186,6 +187,16 @@ int rt_hal_config_build(HalCConfig* out, char* err, uint32_t err_len) {
     out->mode_timeout_ms = 5000u;
     out->orient_timeout_ms = 10000u;
     out->orient_exit_timeout_ms = 5000u;
+#ifdef DEBUG_MODE_ENABLED
+    out->start_timeout_ms = DEBUG_HAL_TIMEOUT_MS;
+    out->cycle_timeout_ms = DEBUG_HAL_TIMEOUT_MS;
+    out->fault_reset_timeout_ms = DEBUG_HAL_TIMEOUT_MS;
+    out->enable_timeout_ms = DEBUG_HAL_TIMEOUT_MS;
+    out->disable_timeout_ms = DEBUG_HAL_TIMEOUT_MS;
+    out->mode_timeout_ms = DEBUG_HAL_TIMEOUT_MS;
+    out->orient_timeout_ms = DEBUG_HAL_TIMEOUT_MS;
+    out->orient_exit_timeout_ms = DEBUG_HAL_TIMEOUT_MS;
+#endif
     out->dc_enable = RT_DC_ENABLE;
 
     /*===5. 三进给 + 一主轴（主轴也要能被 HalAxisId 寻址，logical_axis 必须 >= 0）===*/

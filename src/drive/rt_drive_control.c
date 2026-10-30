@@ -15,6 +15,7 @@
 #include "rt_hal_adapter.h"
 #include "reset.h"
 #include "rt_hal_config.h"
+#include "../common/debug_mode.h"
 #include <alarmapi.h>
 #include <hmisysapi.h>
 #include <time.h>
@@ -279,11 +280,6 @@ void hal_axis_intent_poll(void) {
             HalAxisSnapshot chk;
             if(rt_hal_axis_snapshot(slot,&chk)==HAL_OK &&
                (chk.motion_block_reasons&HAL_BLOCK_STOP_REQUIRED)) {
-                static unsigned s_expired_count[RT_HAL_AXIS_COUNT];
-                if(++s_expired_count[i]==1||(s_expired_count[i]%1000)==0)
-                    LOG(LOG_LEVEL_WARN,
-                        "轴槽 %d 使能完成结论已过期：drive=%d block=0x%x，重新走使能序列",
-                        i,(int)chk.drive_state,(unsigned)chk.motion_block_reasons);
                 s_enable_stage[i]=ENABLE_MODE_WAIT;
             }
         }
@@ -354,8 +350,6 @@ void hal_axis_intent_poll(void) {
             } else if(++s_enable_wait_cycles[i]>=ENABLE_WAIT_RETRY_CYCLES) {
                 /* 没有使能动作、没有 ENABLE 拒绝、也没有执行错误：请求多半被执行过但被
                  * 拒，而拒绝记录被同一拍后续的定向/位置请求类别覆盖。重新提交一次。 */
-                LOG(LOG_LEVEL_WARN,
-                    "轴槽 %d 使能等待无进展（拒绝记录可能被其它请求覆盖），重新提交使能",i);
                 s_enable_stage[i]=ENABLE_MODE_WAIT;s_enable_wait_cycles[i]=0;
             }
         }
@@ -476,14 +470,20 @@ void alarm_poll_hal() {
     const int settled = rt_hal_fault_reset_settled(&timed_out);
     struct timespec now;
     clock_gettime(CLOCK_MONOTONIC, &now);
-    /* 外层预算 6 秒：在 HAL 默认的 5 秒之外，还要覆盖三种拖尾——
+    /* 外层比 HAL 多留 1 秒，仿真调试跟随放宽，正式运行仍为 6 秒。
+     * 还要覆盖三种拖尾——
      * 请求没被受理、快照缺失、以及驱动器残留 0x603F 的情况。 */
+#ifdef DEBUG_MODE_ENABLED
+    const double reset_budget = (double)DEBUG_HAL_TIMEOUT_MS / 1000.0 + 1.0;
+#else
+    const double reset_budget = 6.0;
+#endif
     const double elapsed = (double)(now.tv_sec - s_reset_started.tv_sec) +
                            (double)(now.tv_nsec - s_reset_started.tv_nsec) / 1e9;
     /* 收口条件只认 HAL 的复位终态：原先还要求"四轴反馈全干净"，任一轴残留 0x603F
      * 就超时并把整机锁成未使能；残留故障由 alarm_poll_drive_errors() 按轴报 30..33。 */
     if (!settled) {
-        if (elapsed < 6.0) return;
+        if (elapsed < reset_budget) return;
         timed_out = 1;
     }
 
