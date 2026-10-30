@@ -170,6 +170,7 @@ GNC_RES parser_init(NC_MODE nc_mode)
     ItpCfgGetParamCB(t_getParamValue);
     ItpCfgSetParamCB(t_setParamValue);
     parser_loadBufStopCfg();
+    ItpSyncLocalVars();
     // 是否跳过注释段
     ItpSetBlockSkipEnable(rt_get_sys_state(SYS_IS_BLOCK_SKIP));
     // 刀偏
@@ -441,6 +442,7 @@ void parser_run_mode(){
     if (rt_get_chan_state(0, CHAN_IS_PARSER_RESET) == true)
     {
         parser_reset();
+        ItpClearLocalVars();
         queue_reset(parser_queue);
         rt_set_chan_state(0, CHAN_IS_PARSER_RESET, false);
     }

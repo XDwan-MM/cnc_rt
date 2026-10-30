@@ -39,6 +39,9 @@ extern void ItpCfgSetMacroVarCB(SetMacroVarCB cb);
 
 extern void ItpCfgGetParamCB(GetParamCB cb);
 extern void ItpCfgSetParamCB(SetParamCB cb);
+extern void ItpSyncLocalVars();     //
+extern void ItpClearLocalVars();    //重置局部变量
+
 /**
  * @brief ItpGetMotionData
  * @param data 参考ncitpdatadef.h
