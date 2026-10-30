@@ -304,12 +304,6 @@ void spindle_internal_update_m29(void)
         {
             g_spindle.m29_orient_reference = position;
             g_spindle.m29_orient_reference_valid = true;
-            LOG(LOG_LEVEL_INFO,
-                "M29定向稳定参考：physical=%.4f actual=%.4f offset=%.4f rpm=%.3f",
-                position,
-                a.actual_pos,
-                a.coordinate_offset,
-                a.actual_speed_rpm);
             /* 真正的 CSV→CSP 模式切换会让驱动器取消定向。H1 不支持同模式下
              * 假装正常释放的做法。 */
             if (spindle_hal_mode() == HAL_AXIS_MODE_CSP || spindle_hal_request_mode(HAL_AXIS_MODE_CSP) != HAL_OK)

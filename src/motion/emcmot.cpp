@@ -400,44 +400,6 @@ static void report_axis_position_rejection(int axis, RtHalAxisSlot slot, int sta
     }
 }
 
-/* 攻丝/回退期间的 SP/Z 轨迹诊断：用来区分"指令在跳"和"指令单调但反馈在摆"。
- * 只在攻丝块或攻丝回退流程中按 50 Hz 采样，避免平时刷屏。 */
-static void trace_tap_motion(void)
-{
-    static unsigned s_count;
-    const int block_type = (cycle_tp && cycle_tp->plan_block) ? (int)cycle_tp->plan_block->type : -1;
-    if (block_type != RIGID_TAP && block_type != TAP_RETURN &&
-        !rt_data->sys_state[SYS_IS_RIGID_RETURN]) return;
-    if ((++s_count % 20U) != 0U) return;
-
-    HalAxisSnapshot sp;
-    if (rt_hal_axis_snapshot(RT_HAL_AXIS_SP, &sp) != HAL_OK) return;
-
-    LOG(LOG_LEVEL_DEBUG,
-        "攻丝轨迹：blk=%d ret=%d accum=%.4f len=%.4f wcs=%.4f cmd=%.4f act=%.4f rpm=%.3f "
-        "mode=%d/%d ctl=%d hblk=0x%x rej=%d/%d active=%d stop=%d "
-        "feed=%.3f max=%.3f tgt=%.3f pv=%.3f ovr=%.1f/%.1f "
-        "rig=%.1f/%.4f zcmd=%.4f zact=%.4f",
-        block_type, (int)rt_data->sys_state[SYS_IS_RIGID_RETURN],
-        cycle_tp ? cycle_tp->pos_cmd_data.accum_distance : 0.0,
-        (cycle_tp && cycle_tp->plan_block) ? cycle_tp->plan_block->length : 0.0,
-        rt_data->axis_data[AXIS_SP].wcs_cmd_pos_cur,
-        sp.command_pos, sp.actual_pos, sp.actual_speed_rpm,
-        (int)sp.actual_mode, (int)sp.target_mode, (int)sp.control_state,
-        (unsigned)sp.motion_block_reasons,
-        (int)sp.request_rejection.category, (int)sp.request_rejection.code,
-        (int)motion_spindle_position_active(), (int)motion_csp_stop_pending(),
-        (cycle_tp && cycle_tp->plan_block) ? cycle_tp->plan_block->feed_vel : 0.0,
-        (cycle_tp && cycle_tp->plan_block) ? cycle_tp->plan_block->max_vel : 0.0,
-        cycle_tp ? cycle_tp->pos_cmd_data.target_vel : 0.0,
-        (cycle_tp && cycle_tp->plan_block) ? cycle_tp->plan_block->param_vel : 0.0,
-        var_chan[0][VAR_CHAN_FEED_OVERRIDE].value.f,
-        var_chan[0][VAR_CHAN_RAPID_OVERRIDE].value.f,
-        (cycle_tp && cycle_tp->plan_block) ? (double)cycle_tp->plan_block->rigid_data.speed : 0.0,
-        (cycle_tp && cycle_tp->plan_block) ? cycle_tp->plan_block->rigid_data.screw_offset : 0.0,
-        rt_data->axis_data[AXIS_Z].motor_cmd_pos,
-        rt_data->axis_data[AXIS_Z].motor_act_pos);
-}
 
 static void output_to_hal()
 {
@@ -465,7 +427,6 @@ static void output_to_hal()
         (void)alarm_spindle_request_torque(false);
         alarm_report_hal_error(rc);
     }
-    trace_tap_motion();
 }
 
 static void compute_error_comp()

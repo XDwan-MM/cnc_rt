@@ -15,6 +15,12 @@ HAL_INC="$HAL_PKG/include"
 HAL_LIB="$HAL_PKG/lib/libcnc_hal.a"
 OUT_DIR="$RT_ROOT/build"
 OUT="$OUT_DIR/rt_hal_config_check"
+flags=()
+case "${1:-production}" in
+    production) ;;
+    debug) flags+=(-DDEBUG_MODE_ENABLED); OUT+="_debug" ;;
+    *) echo "usage: $0 [production|debug]" >&2; exit 2 ;;
+esac
 
 if [[ ! -f "$HAL_INC/hal_types.h" || ! -f "$HAL_LIB" ]]; then
     echo "lib/cnc_hal/ 下的 vendored 副本不完整" >&2
@@ -33,7 +39,7 @@ echo
 # 配置层只用到 hal_config_validate，归档里只有 hal_config.o 会被拉进来，
 # 所以连 GREEMASTER/xml2 都不需要。
 set -x
-cc -std=c11 -g -O0 -Wall -Wextra \
+cc -std=c11 -g -O0 -Wall -Wextra "${flags[@]}" \
     -I "$RT_ROOT/src/hal" \
     -I "$HAL_INC" \
     -o "$OUT" \

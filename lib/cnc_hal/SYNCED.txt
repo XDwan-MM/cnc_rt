@@ -1,9 +1,9 @@
-同步自   : ../cnc_hal
-提交     : 4229b06
-提交说明 : 完善主轴定向保持退出
-同步时间 : 2026-10-26T15:29:23+08:00
-静态库源 : /tmp/hal-orient-exit-build/libcnc_hal.a
-静态库   : libcnc_hal.a sha256=4737a60440687b9dd6e8a4c5692e9987da624db51e59c4c8a1819e2e2d569e66
+同步自   : /mnt/e/数控系统项目/1.项目代码/cnc_hal
+提交     : 0159bbb
+提交说明 : 删除不需要的测试用例
+同步时间 : 2026-10-28T13:35:25+08:00
+静态库源 : /mnt/e/数控系统项目/1.项目代码/cnc_hal/build/all/libcnc_hal.a
+静态库   : libcnc_hal.a sha256=7ff0f9f03769477391fcf476a1c5952f50282859742a4b26ce01f4a04db46137
 ABI      : 10u.0u
 公共头   : 5 个
 内部头   : 9 个

@@ -7,6 +7,7 @@
 
 #include "rt_hal_config.h"
 #include "hal_config_api.h"
+#include "../src/common/debug_mode.h"
 
 static int g_pass = 0;
 static int g_fail = 0;
@@ -35,6 +36,25 @@ int main(void) {
     print_rc("build", rc);
     expect(rc == 0, "build 返回 0");
     if (rc) { printf("err=%s\n", err); return 1; }
+
+    expect(cfg.cycle_us == 1000u, "调试/实时周期均保持 1ms");
+#ifdef DEBUG_MODE_ENABLED
+    expect(cfg.start_timeout_ms == 600000u, "仿真启动预算 10 分钟");
+    expect(cfg.cycle_timeout_ms == 600000u, "仿真周期等待预算 10 分钟");
+    expect(cfg.fault_reset_timeout_ms == 600000u, "仿真故障复位预算 10 分钟");
+    expect(cfg.enable_timeout_ms == 600000u && cfg.disable_timeout_ms == 600000u,
+           "仿真使能/下使能预算 10 分钟");
+    expect(cfg.mode_timeout_ms == 600000u && cfg.orient_timeout_ms == 600000u &&
+           cfg.orient_exit_timeout_ms == 600000u, "仿真模式/定向/退出定向预算 10 分钟");
+#else
+    expect(cfg.start_timeout_ms == 120000u, "正式启动预算保持 120 秒");
+    expect(cfg.cycle_timeout_ms == 5000u && cfg.fault_reset_timeout_ms == 5000u,
+           "正式周期等待/故障复位保持 5 秒");
+    expect(cfg.enable_timeout_ms == 5000u && cfg.disable_timeout_ms == 5000u &&
+           cfg.mode_timeout_ms == 5000u && cfg.orient_exit_timeout_ms == 5000u,
+           "正式使能/模式/退出定向保持 5 秒");
+    expect(cfg.orient_timeout_ms == 10000u, "正式定向预算保持 10 秒");
+#endif
 
     /* ---- 2. 正向校验 ---- */
     printf("\n[2] hal_config_validate（正向）\n");

@@ -283,20 +283,6 @@ void spindle_internal_update_orientation(void) {
             }
             if(spindle_hal_mode_switch_is_done()&&spindle_hal_is_enabled()) {
                 if(!spindle_orientation_submit())spindle_orientation_failed(false,"定向请求提交失败");
-            } else {
-                /* 现场：M29 之后紧接 M19，CSP→CSV 交接迟迟不完成，M19 等 FIN 到复位。
-                 * 每 500 拍打一次模式/使能状态，定位卡在哪一步。 */
-                static unsigned s_wait_log;
-                if((++s_wait_log % 500U)==0U)
-                    LOG(LOG_LEVEL_WARN,
-                        "定向等待模式/使能：sw_done=%d sw_result=%d enabled=%d "
-                        "mode=%d/%d ctl=%d block=0x%x rej=%d/%d rpm=%.3f",
-                        (int)spindle_hal_mode_switch_is_done(),(int)spindle_hal_mode_switch_result(),
-                        (int)spindle_hal_is_enabled(),
-                        (int)axis.actual_mode,(int)axis.target_mode,(int)axis.control_state,
-                        (unsigned)axis.motion_block_reasons,
-                        (int)axis.request_rejection.category,(int)axis.request_rejection.code,
-                        axis.actual_speed_rpm);
             }
         }
         if(++g_spindle.orient_elapsed_cycles>=SPINDLE_ORIENT_TIMEOUT_CYCLES) {
@@ -332,8 +318,6 @@ static void spindle_orientation_apply_deferred_start(void)
         g_spindle.command_state = g_spindle.deferred_start_state;
         g_spindle.command_speed = g_spindle.deferred_start_speed;
         g_spindle.start_request_pending = true;
-        LOG(LOG_LEVEL_DEBUG, "定向释放：执行定向期间排队的启动，方向=%d 速度=%.0f",
-            (int)g_spindle.command_state, g_spindle.command_speed);
     }
     g_spindle.deferred_start_pending = false;
 

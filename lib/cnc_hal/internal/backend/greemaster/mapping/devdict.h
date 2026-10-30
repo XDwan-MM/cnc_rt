@@ -13,7 +13,7 @@
  * - index 支持 "0x2000" 字符串（推荐）或十进制数字；它只是对象号，不是 PDO offset，
  *   实际句柄仍要从 PDO 映射里查
  * - objects 的键必须是 DevDictRole 的角色名；写错、重复即 Load 失败
- * - bits/dir 缺省按角色确定，显式给值必须一致；custom servo 必须包含 mode_display
+ * - bits/dir 缺省按角色确定，显式给值必须一致；模式命令/反馈对象可缺省
  * - version 必须为 1；整数不接受负数、溢出、小数或指数；失败清空旧字典
  *
  * 内置最小 JSON 解析器（支持 // 注释），无堆常驻，启动时 Load 一次，单线程。

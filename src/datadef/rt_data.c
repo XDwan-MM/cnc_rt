@@ -257,7 +257,6 @@ static void rt_reboot_axis_data()
         rt_data->axis_data[i].mt_ppr = par_axis[i][PAR_AX_MT_PPR].value.val_int;
         rt_data->axis_data[i].spdl_orient_pos = par_axis[i][PAR_AX_SP_ORI_POS].value.val_int;
     }
-    printf("rt_data->axis_data[AXIS_SP].spdl_orient_pos=%f\n",rt_data->axis_data[AXIS_SP].spdl_orient_pos);
 }
 
 void rt_set_zero_vel_params(){

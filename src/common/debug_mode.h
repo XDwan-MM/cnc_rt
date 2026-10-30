@@ -26,6 +26,11 @@
 #define DEBUG_CYCLE_TIME_US 1000  // 调试模式周期: 1ms 
 #define RT_CYCLE_TIME_US    1000   // 实时模式周期: 1ms
 
+#ifdef DEBUG_MODE_ENABLED
+// 仅仿真调试放宽 HAL 等待预算，便于断点暂停；不改变周期长度。
+#define DEBUG_HAL_TIMEOUT_MS (10u * 60u * 1000u)
+#endif
+
 // ============ 调试模式线程配置 ============
 #ifdef DEBUG_MODE_ENABLED
     #define DEBUG_THREAD_POLICY   SCHED_OTHER  // 普通调度策略
