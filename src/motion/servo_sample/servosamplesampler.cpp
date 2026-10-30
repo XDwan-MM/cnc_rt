@@ -666,7 +666,7 @@ void ServoSampleSampler::sampleOne()
         // 并使调试反馈与实时运动控制器使用相同的数据源。
         /* cmd_vel 是 mm/s，乘 60 换成 mm/min；act_vel 在 emcmot 里已经换算成
          * 用户单位的 mm/min（见 rt_axis_view_speed_mm_min 的约定），不能再乘。 */
-        const double channelCmdVel = rt_data->axis_data[axis].cmd_vel * TIME_MINUS_2_S;
+        const double channelCmdVel = rt_data->axis_data[axis].fir_vel * TIME_MINUS_2_S;
         const double channelActVel = rt_data->axis_data[axis].act_vel;
         const double channelFollowErrUm = (channelCmdPos - channelActPos) * 1000.0;
         switch (_config.channels[i].signalId) {

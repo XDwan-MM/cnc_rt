@@ -16,8 +16,13 @@ extern "C" {
 
 #include "cnc_math.h"
 #include "plan_queue.h"
+#include "gncdatadef.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
 #define TOL 1E-6;
+#define MAX_WINDOW_SIZE 50   // 最大支持指令平滑周期
 
 typedef struct profile
 {
@@ -56,6 +61,19 @@ typedef struct round_profile
     double T_cycle;
     double de;
 }R_VEL_PROFILE;
+
+typedef struct {
+    double buffer[MAX_WINDOW_SIZE]; // 环形历史数据缓冲区
+    int capacity;                   // 设定的滤波窗口长度 N
+    int head;                       // 当前写入位置指针
+    double sum;                     // 当前窗口内数据的累加和
+    int count;                      // 系统启动阶段已存入的有效点数
+} FIR_MA;
+
+int fir_ma_init(FIR_MA** fir_ma, int window_size);
+void fir_ma_delete(FIR_MA** fir_ma);
+void fir_ma_reset(FIR_MA *filter, int window_size);
+double fir_ma_update(FIR_MA *filter, double input);
 
 /// @brief 计算加减速曲线
 /// @param velplan_type 加减速类型：T_SHAPE, S_SHAPE, SIN_SHAPE
