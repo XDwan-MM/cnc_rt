@@ -178,7 +178,6 @@ static void rt_reset_chan_data()
         rt_data->chan_data[i].nurbs_sagittaerror = par_chan[i][PAR_CH_NURBS_SAGITTA_ERROR].value.val_real;               // 弓高误差
         rt_data->chan_data[i].nurbs_enable = par_chan[i][PAR_CH_NURBS_ENABLE].value.val_int;                             // 1 开启nurbs  0 关闭nurbs
         rt_data->chan_data[i].unif_type = par_chan[i][PAR_CH_UNIF_TYPE].value.val_int;                                   // 选择一致性类型 1圆弧 2nurbs
-        // LOG(LOG_LEVEL_DEBUG, "nurbs_enable %d, unif_type %d", rt_data->chan_data[i].nurbs_enable, rt_data->chan_data[i].unif_type);
     }
 }
 
@@ -242,6 +241,7 @@ static void rt_reboot_chan_data()
     for (int i = 0; i < SYS_CHAN_NUM; i++)
     {
         rt_data->chan_data[i].ex_dec_enable = par_chan[i][PAR_CH_EX_DEC_ENABLE].value.val_bool; // 是否开启外部减速功能
+        rt_data->chan_data[i].rectify_num = par_chan[i][PAR_CH_RECTIFY_NUM].value.val_int;      // 指令速度平滑周期数
     }
 }
 

@@ -37,20 +37,21 @@ ParamUnit *par_table = NULL;                                // 刀具和刀库�
 SysData* sys_data = NULL; 
 
 // 实时数据
-RT_DATA* rt_data;                   // 实时数据
-RERUN_DATA* rerun_data;
-RESET_DATA* nc_reset;
-EVENT_QUEUE* event_queue;           // 事件队列
-PLAN_QUEUE *parser_queue;           // 译码队列
-PLAN_QUEUE *pretreat_queue;         // 预处理队列
-PLAN_QUEUE *treat_queue;            // 预处理——小线段剔除队列
-PLAN_QUEUE *fix_queue;              // 预处理——逆行修复队列
-PLAN_QUEUE *nurbs_temp_queue;       // 拟合——nurbs缓存队列
-PLAN_QUEUE *circle_smooth_temp_queue;// 圆弧平滑队列
-PLAN_QUEUE *unif_queue;             // 一致性队列
-PLAN_QUEUE *plan_queue;             // 插补队列
-COORD_TP *cycle_tp;                 // 循环轨迹规划
-REF_TP *ref_tp;                     // 回零轨迹规划
+RT_DATA* rt_data = NULL;                   // 实时数据
+RERUN_DATA* rerun_data = NULL;
+RESET_DATA* nc_reset = NULL;
+EVENT_QUEUE* event_queue = NULL;           // 事件队列
+PLAN_QUEUE *parser_queue = NULL;           // 译码队列
+PLAN_QUEUE *pretreat_queue = NULL;         // 预处理队列
+PLAN_QUEUE *treat_queue = NULL;            // 预处理——小线段剔除队列
+PLAN_QUEUE *fix_queue = NULL;              // 预处理——逆行修复队列
+PLAN_QUEUE *nurbs_temp_queue = NULL;       // 拟合——nurbs缓存队列
+PLAN_QUEUE *circle_smooth_temp_queue = NULL;// 圆弧平滑队列
+PLAN_QUEUE *unif_queue = NULL;             // 一致性队列
+PLAN_QUEUE *plan_queue = NULL;             // 插补队列
+FIR_MA* filter_ma = NULL;                  // 指令平滑
+COORD_TP *cycle_tp = NULL;                 // 循环轨迹规划
+REF_TP *ref_tp = NULL;                     // 回零轨迹规划
 
 // 读写共享内存锁（路径规划读时加锁）
 pthread_mutex_t shm_mutex;
@@ -297,6 +298,11 @@ GNC_RES rt_global_init(){
         rt_global_delete();
         return res;
     }
+    res = fir_ma_init(&filter_ma, rt_data->chan_data[0].rectify_num);
+    if(res != GNC_OPERATOR_SUCCESS){
+        fir_ma_delete(&filter_ma);
+        return res;
+    }
     rerun_restore();
     tapreturn_data_restore();
         res = sysprog_init();
@@ -355,6 +361,9 @@ GNC_RES rt_global_delete(){
         queue_delete(plan_queue);
         free(plan_queue);
         plan_queue = NULL;
+    }
+    if(filter_ma != NULL){
+        fir_ma_delete(&filter_ma);
     }
     cycle_tp_delete();
     ref_tp_delete();

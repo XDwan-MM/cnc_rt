@@ -99,8 +99,9 @@ extern PLAN_QUEUE *fix_queue;                   // 预处理——逆行修复�
 extern PLAN_QUEUE *nurbs_temp_queue;            // 拟合——nurbs缓存队列
 extern PLAN_QUEUE *unif_queue;                  // 一致性队列
 extern PLAN_QUEUE *plan_queue;                  // 插补队列
+extern FIR_MA *filter_ma;                       // 指令平滑
 extern COORD_TP *cycle_tp;                      // 循环轨迹规划
-extern REF_TP *ref_tp;                  // 回零轨迹规划
+extern REF_TP *ref_tp;                          // 回零轨迹规划
 
 // 读写共享内存锁
 extern pthread_mutex_t shm_mutex;

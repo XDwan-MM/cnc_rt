@@ -400,7 +400,6 @@ static void report_axis_position_rejection(int axis, RtHalAxisSlot slot, int sta
     }
 }
 
-
 static void output_to_hal()
 {
     /* 以用户单位（mm）发布命令，只放进适配层的按拍缓冲；真正的写入由 PDO 线程
@@ -537,17 +536,36 @@ static void compute_error_comp()
 }
 
 static void calcul_mac_cmd_pos()
-{
+{ 
+    double pitch_pos[SYS_AXES_NUM] = {0};
+    double fir_ma_pos[SYS_AXES_NUM] = {0};
     for (int i = 0; i < SYS_AXES_NUM; i++)
     {
-        // 机床锁住或者轴拆卸，不下发位置
+        // 机床锁住或者轴拆卸，不更新机械位置
         if (!rt_data->sys_state[SYS_IS_MAC_LOCK_READY] && !rt_data->axis_data[i].status.is_disable)
         {
-            rt_data->axis_data[i].mac_cmd_pos += (rt_data->axis_data[i].wcs_cmd_pos_cur - rt_data->axis_data[i].wcs_cmd_pos_pre);
+            pitch_pos[i] = (rt_data->axis_data[i].wcs_cmd_pos_cur - rt_data->axis_data[i].wcs_cmd_pos_pre);
         }
         // 上一周期插补位置
         rt_data->axis_data[i].wcs_cmd_pos_pre = rt_data->axis_data[i].wcs_cmd_pos_cur;
+        // 指令速度平滑
+        fir_ma_pos[i] = fir_ma_update(&filter_ma[i], pitch_pos[i]);
+        // 更新指令位置
+        rt_data->axis_data[i].mac_cmd_pos += fir_ma_pos[i];
+        // 计算轴平滑速度
+        rt_data->axis_data[i].fir_vel = fir_ma_pos[0] / rt_data->ncu_data.cycle;
     }
+    // 计算通道指令平滑速度
+    rt_data->chan_data[0].fir_vel = sqrt(pow(fir_ma_pos[0] / rt_data->ncu_data.cycle, 2) + pow(fir_ma_pos[1] / rt_data->ncu_data.cycle, 2) + pow(fir_ma_pos[2] / rt_data->ncu_data.cycle, 2));
+    // if(cycle_tp->exec_state == EXEC_RUNNING){
+    //     printf("FIR %f %f %f, CMD %f %f %f\n", 
+    //     rt_data->axis_data[AXIS_X].mac_cmd_pos,
+    //     rt_data->axis_data[AXIS_Y].mac_cmd_pos,
+    //     rt_data->axis_data[AXIS_Z].mac_cmd_pos,
+    //     rt_data->axis_data[AXIS_X].wcs_cmd_pos_cur,
+    //     rt_data->axis_data[AXIS_Y].wcs_cmd_pos_cur,
+    //     rt_data->axis_data[AXIS_Z].wcs_cmd_pos_cur);
+    // }
 }
 
 // 更新运动状态数据

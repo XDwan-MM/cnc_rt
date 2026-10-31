@@ -68,6 +68,7 @@ void handle_alarm_cmd()
         // 状态复位、数据重置
         tp_reset();
         rt_data_reset();
+        fir_ma_reset(filter_ma, rt_data->chan_data[0].rectify_num);
         /* 05ed630 修复"急停后互锁复位无效"时删掉了这里的 event_queue_reset：
          * 复位处理中清事件队列会把随后的急停释放/复位事件一起清掉，导致
          * 拔起急停后再按复位无效。7b7404b 又把它加回来了，这里恢复 05ed630 的行为。 */

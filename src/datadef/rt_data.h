@@ -127,10 +127,12 @@ typedef struct
     double act_vel;             // 通道实际合成速度 
     double act_acc;             // 通道实际合成加速度 
     double act_jk;              // 通道实际合成加加速度 
-    double cmd_vel;             // 通道指令合成速度 
+    double cmd_vel;             // 通道指令合成速度
+    double fir_vel;             // 通达指令平滑速度
     double cmd_acc;             // 通道指令合成加速度 
     double cmd_jk;              // 通道指令合成加加速度
     // 重启生效 
+    int rectify_num;            // 指令速度平滑周期数
     // 复位生效 
     bool ex_dec_enable;         // 是否开启外部减速功能
     bool ex_dec2_enable;        // 是否开启外部减速功能2
@@ -228,6 +230,7 @@ typedef struct
     double act_acc;                     // 轴实际加速度
     double act_jk;                      // 轴实际加加速度
     double cmd_vel;                     // 轴指令速度
+    double fir_vel;                     // 轴指令平滑速度
     double cmd_acc;                     // 轴指令加速度
     double cmd_jk;                      // 轴指令加加速度
     int enc_cntr;                       // 电机位置
