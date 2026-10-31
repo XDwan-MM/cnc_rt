@@ -111,6 +111,12 @@ void hmi_request_program_start_commit(void);
 void hmi_request_program_start_cancel(void);
 
 /**
+ * @brief hmi_request_program_start_warning_active 首按确认提示是否还在显示
+ * @return true = 已提示、还没按第二次启动
+ */
+bool hmi_request_program_start_warning_active(void);
+
+/**
  * @brief hmi_request_program_start_validate_file 校验程序文件可读且行号在范围内
  * @param path      程序完整路径
  * @param startLine 0 基起始行号

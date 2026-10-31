@@ -118,11 +118,13 @@ void handle_auto_cmd(){
 }
 
 static void auto_update_state(){
-    //复位放弃本次运行 
+    // 首按提示中按复位，放弃从指定行启动，光标移动到程序开头
     if (rt_data->current_mode == MODE_MEM
         && (rt_data->nc_event == SYS_EVENT_HMI_RESET
-            || rt_data->nc_event == SYS_EVENT_OUTSIDE_RESET)) {
+            || rt_data->nc_event == SYS_EVENT_OUTSIDE_RESET)
+        && hmi_request_program_start_warning_active()) {
         setVarChanInt(0, VAR_CHAN_RUN_ROW, 0, 0);
+        hmi_request_program_start_cancel();
     }
     if(rt_data->sys_state[SYS_IS_ALARMING] || rt_data->sys_state[SYS_IS_SWITCHING_MODE]) return;
     // 正常模式下
