@@ -406,6 +406,11 @@ void hmi_request_program_start_cancel(void)
     }
 }
 
+bool hmi_request_program_start_warning_active(void)
+{
+    return s_program_start_warning_active;
+}
+
 int hmi_mst_build_program(const HmiRequestMstParams *mst, char *out, int outLen)
 {
     if (mst == NULL || out == NULL || outLen <= 0) {

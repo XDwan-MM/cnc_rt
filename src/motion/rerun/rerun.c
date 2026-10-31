@@ -56,6 +56,7 @@ void rerun_data_reset(){
 ///       break_blocj.line_number和置is_rerun为1；
 void rerun_data_reset_keep_breakpoint(){
     if (rerun_data == NULL) return;
+    const bool warning = rerun_data->is_rerun && !rerun_data->is_first_time_click_rerun;
     rerun_data->is_rerun = 0;
     rerun_data->is_mem_rerun = 0;
     rerun_data->rerun_row = 0;
@@ -64,6 +65,10 @@ void rerun_data_reset_keep_breakpoint(){
     rerun_mst_reset();
     delAlarm(ALARM_CH, ALARM_WARNING, 3);
     delAlarm(ALARM_CH, ALARM_ERROR, 4);
+    if(warning && rt_data->current_mode == MODE_MEM)
+    {
+        setVarChanInt(0, VAR_CHAN_RUN_ROW, 0, 0);
+    }
     rerun_persist_force();
 }
 
