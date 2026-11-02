@@ -59,8 +59,6 @@ static bool auto_buf_stop_pipeline_empty(void);
 
 static void auto_check_external_decline_event();
 static bool auto_handle_external_decel_event(SYS_EVENT event);
-static bool auto_external_decel_function_enabled(int function);
-static unsigned long long auto_get_external_decel_signature();
 
 // 阻止缓冲：已弹出的停止块 ID
 static unsigned int s_buf_stop_popped_id = 0;
@@ -76,24 +74,6 @@ static const AUTO_EXTERNAL_DECEL_EVENT auto_external_decel_event_map[] = {
     AUTO_EXT_DECEL_EVENT_PAIR(3, 1, POS), AUTO_EXT_DECEL_EVENT_PAIR(3, 1, NEG),
     AUTO_EXT_DECEL_EVENT_PAIR(3, 2, POS), AUTO_EXT_DECEL_EVENT_PAIR(3, 2, NEG),
     AUTO_EXT_DECEL_EVENT_PAIR(3, 3, POS), AUTO_EXT_DECEL_EVENT_PAIR(3, 3, NEG),
-};
-
-static const SysStateIndex auto_external_decel_state[3][3][2] = {
-    {
-        {SYS_IS_EXTERNAL_DECLINE1_AXIS1_POS, SYS_IS_EXTERNAL_DECLINE1_AXIS1_NEG},
-        {SYS_IS_EXTERNAL_DECLINE2_AXIS1_POS, SYS_IS_EXTERNAL_DECLINE2_AXIS1_NEG},
-        {SYS_IS_EXTERNAL_DECLINE3_AXIS1_POS, SYS_IS_EXTERNAL_DECLINE3_AXIS1_NEG},
-    },
-    {
-        {SYS_IS_EXTERNAL_DECLINE1_AXIS2_POS, SYS_IS_EXTERNAL_DECLINE1_AXIS2_NEG},
-        {SYS_IS_EXTERNAL_DECLINE2_AXIS2_POS, SYS_IS_EXTERNAL_DECLINE2_AXIS2_NEG},
-        {SYS_IS_EXTERNAL_DECLINE3_AXIS2_POS, SYS_IS_EXTERNAL_DECLINE3_AXIS2_NEG},
-    },
-    {
-        {SYS_IS_EXTERNAL_DECLINE1_AXIS3_POS, SYS_IS_EXTERNAL_DECLINE1_AXIS3_NEG},
-        {SYS_IS_EXTERNAL_DECLINE2_AXIS3_POS, SYS_IS_EXTERNAL_DECLINE2_AXIS3_NEG},
-        {SYS_IS_EXTERNAL_DECLINE3_AXIS3_POS, SYS_IS_EXTERNAL_DECLINE3_AXIS3_NEG},
-    },
 };
 
 void handle_auto_cmd(){
@@ -930,72 +910,26 @@ static bool auto_handle_external_decel_event(SYS_EVENT event)
     return false;
 }
 
-// 外部减速功能使能：功能1（下标0）没有独立开关；功能2/3由 ex_dec2/3_enable 控制
-static bool auto_external_decel_function_enabled(int function)
-{
-    switch (function)
-    {
-    case 0:
-        return true;
-    case 1:
-        return rt_data->chan_data[0].ex_dec2_enable;
-    case 2:
-        return rt_data->chan_data[0].ex_dec3_enable;
-    default:
-        return false;
-    }
-}
-
-// 把所有轴、方向、功能的“有效外部减速电平”压缩成一个位图，用于检测变化。
-// 关闭的功能和总开关不参与，避免无关电平变化触发速度重算。
-static unsigned long long auto_get_external_decel_signature()
-{
-    unsigned long long signature = 0;
-    unsigned int bit = 0;
-
-    if (!rt_data->chan_data[0].ex_dec_enable) return 0;
-
-    for (int axis = AXIS_X; axis <= AXIS_Z; axis++)
-    {
-        for (int function = 0; function < AUTO_EXTERNAL_DECEL_FUNCTION_COUNT; function++)
-        {
-            bool function_enabled = auto_external_decel_function_enabled(function);
-            for (int direction = 0; direction < SYS_EXTERNAL_DECEL_DIRECTION_COUNT; direction++)
-            {
-                bool active = function_enabled
-                              && rt_data->sys_state[auto_external_decel_state[axis][function][direction]];
-                if (active) signature |= (1ull << bit);
-                bit++;
-            }
-        }
-    }
-    return signature;
-}
-
+// PLC 已经负责外部减速电平/边沿；
+// 收到事件就直接让当前段重规划。
 static void auto_check_external_decline_event(){
-    static unsigned long long last_signature = 0;
-    static bool signature_valid = false;
-    unsigned long long signature = auto_get_external_decel_signature();
-
-    if (!signature_valid) { last_signature = signature; signature_valid = true; return; }
-    if (signature == last_signature) return;
-    last_signature = signature;
-
     switch (cycle_tp->exec_state)
     {
     case EXEC_RUNNING:
         switch(cycle_tp->exec_cmd){
         case DO_MOVE_CMD:   // RAPID 快速进给
         case DO_CHOP_CMD:   // 切削进给
-            LOG(LOG_LEVEL_INFO, "自动模式外部减速信号变化，按新速度重新规划当前段");
+            LOG(LOG_LEVEL_INFO, "自动模式外部减速事件，按新速度重新规划当前段");
             cycle_tp->running_stage = BLOCK_BREAKPOINT;
             break;
-        default:
+        default:            // 攻丝、探针、暂停等不受外部减速影响
             break;
         }
+        break;
     case EXEC_PAUSING:
     case EXEC_RESET:
     case EXEC_IDLE:
+    default:
         break;
     }
 }
