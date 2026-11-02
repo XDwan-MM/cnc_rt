@@ -264,7 +264,7 @@ void spindle_internal_publish_status(void)
      * PLC 的 SPGET 判 type != DOUBLE_TYPE 而拒绝，实际速度永远读不到。
      */
 #ifdef DEBUG_MODE_ENABLED
-    setVarChanInt(0, VAR_CHAN_S_CODE,
+    setVarChanInt(0, VAR_CHAN_ACT_SPDL_SPEED,
                   (int32_t)g_spindle.velocity_planner.current_vel, 0);
 #else
     const double actual_rpm = spindle_hal_actual_velocity();
@@ -273,7 +273,7 @@ void spindle_internal_publish_status(void)
      * 后续比较（SPGET 会把 NaN 当有效速度）。 */
     if (isfinite(actual_rpm))
     {
-        (void)setVarChanDouble(0, VAR_CHAN_S_CODE, actual_rpm, 0);
+        (void)setVarChanDouble(0, VAR_CHAN_ACT_SPDL_SPEED, actual_rpm, 0);
     }
 #endif
 }
