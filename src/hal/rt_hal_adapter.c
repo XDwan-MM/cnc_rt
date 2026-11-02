@@ -518,10 +518,10 @@ int rt_hal_fault_reset_state(RtHalAxisSlot slot,int32_t* out) {
     else *out=RT_HAL_RESET_NONE;
     return HAL_OK;
 }
-int rt_hal_fault_reset_settled(int* any_timeout) {
+int rt_hal_fault_reset_settled_mask(uint32_t mask,int* any_timeout) {
     int failed=0;
     for(int i=0;i<RT_HAL_AXIS_COUNT;++i) {
-        if(rt_hal_config_hal_axis((RtHalAxisSlot)i)<0)continue;
+        if(!(mask & (1u << i)) || rt_hal_config_hal_axis((RtHalAxisSlot)i)<0)continue;
         int32_t state;
         if(s_req_reset[i]||rt_hal_fault_reset_state((RtHalAxisSlot)i,&state))return 0;
         if(state==RT_HAL_RESET_FAILED)failed=1;
@@ -529,6 +529,9 @@ int rt_hal_fault_reset_settled(int* any_timeout) {
     }
     if(any_timeout)*any_timeout=failed;
     return 1;
+}
+int rt_hal_fault_reset_settled(int* any_timeout) {
+    return rt_hal_fault_reset_settled_mask((1u << RT_HAL_AXIS_COUNT)-1u,any_timeout);
 }
 int rt_hal_spindle_orient_state(RtHalAxisSlot slot,int32_t* out) {
     if(!out||!rt_hal_config_is_spindle(slot))return HAL_ERROR_ARGUMENT;

@@ -304,6 +304,7 @@ void spindle_internal_update_m29(void)
         {
             g_spindle.m29_orient_reference = position;
             g_spindle.m29_orient_reference_valid = true;
+            g_spindle.m29_enable_interrupted = false;
             /* 真正的 CSV→CSP 模式切换会让驱动器取消定向。H1 不支持同模式下
              * 假装正常释放的做法。 */
             if (spindle_hal_mode() == HAL_AXIS_MODE_CSP || spindle_hal_request_mode(HAL_AXIS_MODE_CSP) != HAL_OK)
@@ -338,6 +339,9 @@ void spindle_internal_update_m29(void)
             prepare_failed("CSP准备驱动状态异常");
             return;
         }
+        if (g_spindle.m29_phase == SPINDLE_M29_SWITCHING_CSP &&
+            g_spindle.m29_orient_reference_valid && feedback.drive_state != HAL_DRIVE_OPERATION_ENABLED)
+            g_spindle.m29_enable_interrupted = true;
         if ((feedback.feedback_valid & HAL_FEEDBACK_ERROR_CODE) != 0 && feedback.drive_error_code != 0)
         {
             prepare_failed("CSP准备驱动故障");
@@ -452,6 +456,7 @@ static void begin_preparation(spindle_m29_phase_t phase)
     g_spindle.m29_phase = phase;
     g_spindle.m29_feedback_stable = false;
     g_spindle.m29_orient_reference_valid = false;
+    g_spindle.m29_enable_interrupted = false;
     g_spindle.m29_stop_stable_cycles = 0;
     g_spindle.orient_elapsed_cycles = 0;
     g_spindle.reset_requires_start = false;
@@ -569,13 +574,24 @@ static void update_csp_preparation(void)
     if (!spindle_hal_mode_switch_is_done() || a.drive_state != HAL_DRIVE_OPERATION_ENABLED)
         return;
     const bool feedback_valid = read_feedback(&a);
-    if (feedback_valid && !orient_position_preserved(&a))
+    if (!feedback_valid || a.actual_mode != HAL_AXIS_MODE_CSP || fabs(a.actual_speed_rpm) > M29_ZERO_RPM)
+        return;
+    if (g_spindle.m29_orient_reference_valid && g_spindle.m29_enable_interrupted)
+    {
+        /* 下使能期间允许转动；从重新使能后的物理位置开始保护对齐阶段。 */
+        if (!isfinite(a.coordinate_offset) || !isfinite(a.actual_pos - a.coordinate_offset))
+        {
+            prepare_failed("CSP位置参考无效");
+            return;
+        }
+        g_spindle.m29_orient_reference = a.actual_pos - a.coordinate_offset;
+        g_spindle.m29_enable_interrupted = false;
+    }
+    if (!orient_position_preserved(&a))
     {
         prepare_failed("定向位置在切CSP后发生偏移");
         return;
     }
-    if (!feedback_valid || a.actual_mode != HAL_AXIS_MODE_CSP || fabs(a.actual_speed_rpm) > M29_ZERO_RPM)
-        return;
     if (!start_alignment())
     {
         prepare_failed("软件起点设置被拒绝");

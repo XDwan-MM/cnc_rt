@@ -20,6 +20,14 @@ void h1_test_invalidate_snapshot(void) { s_snap_valid=0; }
 void h1_test_override_spindle_drive_state(int state) {
     s_snap[RT_HAL_AXIS_SP].drive_state=state;
 }
+void h1_test_inject_axis_fault_snapshot(int slot) {
+    s_snap[slot].raw_status |= 0x0008U;
+}
+uint32_t h1_test_pending_fault_reset_mask(void) {
+    uint32_t mask=0;
+    for(int i=0;i<RT_HAL_AXIS_COUNT;++i)if(s_req_reset[i])mask|=1u<<i;
+    return mask;
+}
 
 void h1_test_axis_position_valid(int slot,int valid) {
     if(valid)s_snap[slot].feedback_valid|=HAL_FEEDBACK_POSITION;

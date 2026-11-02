@@ -41,6 +41,9 @@ int main(void) {
     CHECK(state().drive_state!=HAL_DRIVE_OPERATION_ENABLED);
     prepared(HAL_AXIS_MODE_CSV);
     CHECK(state().request_rejection.category==HAL_ISSUE_ENABLE);enable();
+    int reset_failed=-1;
+    CHECK(rt_hal_fault_reset_settled_mask(0,&reset_failed) && !reset_failed);
+    CHECK(!rt_hal_fault_reset_settled_mask(1u<<RT_HAL_AXIS_SP,&reset_failed));
     CHECK(!state().request_rejection.code);
     CHECK(rt_hal_request_spindle_speed(RT_HAL_AXIS_SP,NAN,1)==HAL_ERROR_ARGUMENT);
     CHECK(rt_hal_request_axis_mode(RT_HAL_AXIS_SP,HAL_AXIS_MODE_CSV)==HAL_OK);frames(1);
@@ -84,7 +87,9 @@ int main(void) {
     CHECK(rt_hal_axis_set_pos(RT_HAL_AXIS_SP,3)==HAL_OK);
     CHECK(rt_hal_request_fault_reset(RT_HAL_AXIS_SP)==HAL_OK);frames(1);
     CHECK(rt_hal_axis_set_pos_result(RT_HAL_AXIS_SP,&set_result)==HAL_OK && set_result==HAL_ERROR_STOPPED);
-    frames(6);prepared(HAL_AXIS_MODE_CSV);enable();
+    frames(6);
+    CHECK(rt_hal_fault_reset_settled_mask(1u<<RT_HAL_AXIS_SP,&reset_failed) && !reset_failed);
+    prepared(HAL_AXIS_MODE_CSV);enable();
     CHECK(rt_hal_spindle_request_orient(RT_HAL_AXIS_SP)==HAL_OK);frames(30);
     CHECK(state().control_state==HAL_CONTROL_ORIENT_HOLD);
     HalOrientExitTarget t={HAL_ORIENT_EXIT_SPINDLE_SPEED,0,0};

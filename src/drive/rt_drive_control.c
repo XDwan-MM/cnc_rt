@@ -86,6 +86,9 @@ void alarm_report_hal_error(int32_t rc) {
 /* 是否有一笔故障复位正在等收口。
  * 由 rt_drive_request_fault_reset() 置起，收口或超时后清掉。 */
 static int s_reset_waiting;
+static uint32_t s_reset_axis_mask;    /* 本次已请求复位的轴 */
+static uint32_t s_reset_unknown_mask; /* 状态暂不可读，仍需重新判定 */
+static bool s_reset_request_failed;
 /* 复位未确认成功时的使能锁定：为 1 期间禁止重新上力矩，
  * 只有下一次显式复位（alarm_reset_latch_clear）才解除。 */
 static int s_reset_failed;
@@ -464,10 +467,28 @@ void alarm_poll_hal() {
     /*===3. 持续未使能只做诊断，不把正常使能过渡当报警===*/
     alarm_poll_axis_not_enabled();
 
-    /*===4. 等四轴复位终态；外层另有截止时间防止无限等待===*/
+    /*===4. 只等本次有故障的轴；状态不可读的轴恢复后重新判定===*/
     if (!s_reset_waiting) return;
+    for (int i = 0; i < RT_HAL_AXIS_COUNT; ++i) {
+        const uint32_t bit = 1u << i;
+        RtHalAxisStatus st;
+        if (!(s_reset_unknown_mask & bit) || rt_hal_axis_status((RtHalAxisSlot)i, &st) != HAL_OK)
+            continue;
+        s_reset_unknown_mask &= ~bit;
+        if ((st.raw_status & 0x0008U) || (st.error_code_valid && st.error_code != 0)) {
+            const int rc = rt_hal_request_fault_reset((RtHalAxisSlot)i);
+            if (rc == HAL_OK) s_reset_axis_mask |= bit;
+            else { s_reset_request_failed = true; alarm_report_hal_error(rc); }
+        }
+    }
+    if (s_reset_request_failed) {
+        s_reset_waiting = 0;
+        s_reset_failed = 1;
+        alarm_log_reset_axes("故障复位请求被拒绝");
+        return;
+    }
     int timed_out = 0;
-    const int settled = rt_hal_fault_reset_settled(&timed_out);
+    const int settled = !s_reset_unknown_mask && rt_hal_fault_reset_settled_mask(s_reset_axis_mask, &timed_out);
     struct timespec now;
     clock_gettime(CLOCK_MONOTONIC, &now);
     /* 外层比 HAL 多留 1 秒，仿真调试跟随放宽，正式运行仍为 6 秒。
@@ -498,7 +519,7 @@ void alarm_poll_hal() {
     } else {
         if (!drive_feedback_clear())
             LOG(LOG_LEVEL_WARN, "故障复位已收口，但仍有轴反馈未清（按轴报警 30..33 处理，不锁整机）");
-        LOG(LOG_LEVEL_INFO, "故障复位完成：四轴均已离开复位待处理，恢复轴使能意图管理");
+        LOG(LOG_LEVEL_INFO, "故障复位完成：已请求的轴均已收口，恢复轴使能意图管理");
     }
 }
 
@@ -510,6 +531,8 @@ void rt_drive_request_fault_reset(void)
     /*===1. 重新计时，并解除上一次的失败锁定===*/
     clock_gettime(CLOCK_MONOTONIC, &s_reset_started);
     s_reset_failed = 0;
+    s_reset_axis_mask = s_reset_unknown_mask = 0;
+    s_reset_request_failed = false;
 
     /*===2. 清业务力矩需求与使能状态机，避免旧意图在复位后被沿用===*/
     (void)alarm_spindle_request_torque(false);
@@ -518,12 +541,21 @@ void rt_drive_request_fault_reset(void)
         /* 没绑定 HAL 轴的槽位不能发请求：适配层不会取走它，收口判定永远不成立。 */
         if (rt_hal_config_hal_axis((RtHalAxisSlot)i) < 0) continue;
 
-        /*===3. 对每个已绑定轴：先清执行错误，再请求故障复位===*/
+        /* 清软件执行错误与驱动器故障复位是两件事。 */
         alarm_report_hal_error(rt_hal_clear_execution_error((RtHalAxisSlot)i));
-        alarm_report_hal_error(rt_hal_request_fault_reset((RtHalAxisSlot)i));
+        RtHalAxisStatus st;
+        if (rt_hal_axis_status((RtHalAxisSlot)i, &st) != HAL_OK) {
+            s_reset_unknown_mask |= 1u << i;
+            continue;
+        }
+        if ((st.raw_status & 0x0008U) || (st.error_code_valid && st.error_code != 0)) {
+            const int rc = rt_hal_request_fault_reset((RtHalAxisSlot)i);
+            if (rc == HAL_OK) s_reset_axis_mask |= 1u << i;
+            else { s_reset_request_failed = true; alarm_report_hal_error(rc); }
+        }
     }
 
     /*===4. 进入等待收口，并立刻刷一次驱动故障===*/
-    s_reset_waiting = 1;
+    s_reset_waiting = s_reset_axis_mask || s_reset_unknown_mask || s_reset_request_failed;
     alarm_poll_drive_errors();
 }

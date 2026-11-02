@@ -13,10 +13,13 @@ static void discard_log(const char *format, ...) { (void)format; }
 
 static RT_DATA data;
 RT_DATA *rt_data = &data;
+FIR_MA *filter_ma;
+void fir_ma_reset(FIR_MA *filter, int window_size) { (void)filter; (void)window_size; }
 static RtHalAxisStatus feedback[RT_HAL_AXIS_COUNT];
 static unsigned char f[512];
 static int unreadable = -1;
 static int alarms[256], reset_requests, settled, reset_timeout, request_error;
+static uint32_t reset_request_mask, observed_wait_mask;
 static int enabled[4], estops;
 EVENT_QUEUE *event_queue;
 int update_pos_flag;
@@ -41,12 +44,14 @@ void hal_error_text(int32_t code, char *out, uint32_t size)
 { (void)code; if (size) out[0] = '\0'; }
 int rt_hal_fault_reset_settled(int *timeout)
 { *timeout = reset_timeout; return settled; }
+int rt_hal_fault_reset_settled_mask(uint32_t mask, int *timeout)
+{ observed_wait_mask = mask; *timeout = reset_timeout; return mask == 0 || settled; }
 int rt_hal_fault_reset_state(RtHalAxisSlot slot, int32_t *out)
 { (void)slot; *out = settled ? RT_HAL_RESET_DONE : RT_HAL_RESET_PENDING; return HAL_OK; }
 int rt_hal_config_hal_axis(RtHalAxisSlot slot) { return (int)slot; }
 int rt_hal_config_is_spindle(RtHalAxisSlot slot) { return slot == RT_HAL_AXIS_SP; }
 int rt_hal_request_fault_reset(RtHalAxisSlot slot)
-{ (void)slot; ++reset_requests; return request_error; }
+{ reset_request_mask |= 1u << slot; ++reset_requests; return request_error; }
 /* 这个孤立的报警用例没有启用公共复位协调器。完整的复位行为由
  * tst_hal_h1_spindle 通过真实的 reset.c 覆盖。 */
 bool reset_spindle_torque_allowed(bool ordinary) { return ordinary; }
@@ -108,6 +113,8 @@ int main(void)
     }
     publish();
     assert(healthy() && !spindle_fault());
+    rt_drive_request_fault_reset();
+    assert(reset_requests == 0 && !s_reset_waiting);
     for (int i = 0; i < 5100; ++i) alarm_poll_hal();
     assert(!alarms[132]); // Prolonged absence of enable is diagnostic only.
     for (int i = 0; i < RT_HAL_AXIS_COUNT; ++i) {
@@ -146,13 +153,13 @@ int main(void)
     assert(alarms[30]);
     data.nc_event = SYS_EVENT_HMI_RESET;
     handle_alarm_cmd();
-    assert(reset_requests == 4 && s_reset_waiting && alarms[30]);
+    assert(reset_requests == 1 && reset_request_mask == 1u && s_reset_waiting && alarms[30]);
     memset(enabled, -1, sizeof(enabled));
     hal_axis_intent_poll();
     assert(enabled[0] == -1); // Never cancel an in-flight reset with disable.
     settled = 1; // HAL reset completion and drive fault feedback are separate.
     alarm_poll_hal();
-    assert(!s_reset_waiting && alarms[30]);
+    assert(!s_reset_waiting && alarms[30] && observed_wait_mask == 1u);
     feedback[0].error_code = 0;
     feedback[0].raw_status = 0x08;
     alarm_poll_hal();
@@ -170,7 +177,7 @@ int main(void)
     hal_axis_intent_poll();
     assert(enabled[0] == 1); // Unrelated alarms do not change the enable policy.
     data.sys_state[SYS_IS_ALARMING] = false;
-    puts("PASS: drive-only alarm -> HMI reset -> four requests -> confirmed recovery");
+    puts("PASS: drive-only alarm -> HMI reset -> only faulty axis -> confirmed recovery");
     /* 使能完成后若观察到状态丢失，不会再回放那个旧请求。 */
     feedback[0].enabled=0;
     unsigned before=enable_calls;
@@ -203,11 +210,12 @@ int main(void)
     expire_reset_wait();
     assert(s_reset_failed && alarms[131]);
     unreadable = -1;
+    feedback[0].error_code = 0x1234;
     request_error = HAL_ERROR_NOT_RUNNING;
     settled = 0;
     handle_alarm_cmd();
     assert(alarms[123]);
-    expire_reset_wait();
+    alarm_poll_hal(); /* 请求直接被拒时不必等到总超时。 */
     assert(s_reset_failed && !s_reset_waiting);
     request_error = 0;
     handle_alarm_cmd();
@@ -228,5 +236,22 @@ int main(void)
     alarm_poll_hal();
     assert(!s_reset_failed && !s_reset_waiting && !alarms[131]);
     puts("PASS: residual code / unreadable / rejected reset / HAL timeout / retry / estop");
+    feedback[0].error_code=0x1111; feedback[2].raw_status=0x08;
+    reset_request_mask=0; settled=0;
+    rt_drive_request_fault_reset();
+    assert(reset_request_mask==((1u<<0)|(1u<<2)) && s_reset_waiting);
+    alarm_poll_hal();
+    assert(observed_wait_mask==((1u<<0)|(1u<<2)) && s_reset_waiting);
+    settled=1; alarm_poll_hal(); assert(!s_reset_waiting);
+    feedback[0].error_code=0; feedback[2].raw_status=0x27;
+    unreadable=1; reset_request_mask=0;
+    rt_drive_request_fault_reset();
+    assert(s_reset_waiting && reset_request_mask==0);
+    alarm_poll_hal(); assert(s_reset_waiting);
+    unreadable=-1; feedback[1].raw_status=0x08; settled=0;
+    alarm_poll_hal();
+    assert(s_reset_waiting && reset_request_mask==(1u<<1));
+    settled=1; alarm_poll_hal(); assert(!s_reset_waiting);
+    puts("PASS: multiple faults and unreadable feedback becoming a fault");
     return 0;
 }

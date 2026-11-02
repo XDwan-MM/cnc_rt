@@ -262,6 +262,8 @@ int rt_hal_fault_reset_state(RtHalAxisSlot slot, int32_t* out);
  * @param any_timeout 可为空；非空时带出"至少有一轴失败"
  * @return 1 全部收口（可能有失败）；0 还有轴在等待 */
 int rt_hal_fault_reset_settled(int* any_timeout);
+/* 只等待 mask 中提交过故障复位的轴；其他轴可以继续保持使能。 */
+int rt_hal_fault_reset_settled_mask(uint32_t mask, int* any_timeout);
 
 /* 周期循环异常退出时记录的 HAL 错误码；0 表示没有错误。 */
 int32_t rt_hal_cycle_error(void);

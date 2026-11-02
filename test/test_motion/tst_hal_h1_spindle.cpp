@@ -27,6 +27,8 @@ extern "C" void h1_test_spindle_speed_result(int);
 extern "C" void h1_test_spindle_rejection(int,int);
 extern "C" void rt_test_force_spindle_enable_wait(void);
 extern "C" void h1_test_override_spindle_drive_state(int);
+extern "C" void h1_test_inject_axis_fault_snapshot(int);
+extern "C" uint32_t h1_test_pending_fault_reset_mask(void);
 extern "C" int h1_test_commit(void);
 extern "C" int h1_test_force_disable(void);
 extern "C" int h1_test_spindle_position(uint32_t*,int);
@@ -68,6 +70,7 @@ protected:
     }
     void TearDown() override {
         cycle_tp->plan_block=saved_block;rt_hal_shutdown();
+        unsetenv("CNC_RT_SIM_FAULT");
         if(gree4_fixture)unsetenv("CNC_RT_SIM_GREE4");
     }
     void useGree4() {
@@ -448,17 +451,19 @@ TEST_F(HalH1SpindleTest, M29RejectsPositionShiftAfterRezero) {
     EXPECT_TRUE(spindle_m29_has_error());
     EXPECT_FALSE(motion_spindle_position_active());
 }
-TEST_F(HalH1SpindleTest, M29RejectsPositionShiftBeforeRezero) {
+TEST_F(HalH1SpindleTest, M29RebasesPositionAfterDisableAndReenable) {
     ASSERT_TRUE(spindle_request_m29());
     for(int i=0;i<150 && g_spindle.m29_phase!=SPINDLE_M29_SWITCHING_CSP;++i)frames(1);
     ASSERT_EQ(g_spindle.m29_phase,SPINDLE_M29_SWITCHING_CSP);
-    const double offset=axis().coordinate_offset;
-    for(int i=0;i<40 && !spindle_m29_has_error();++i) {
-        h1_test_spindle_feedback_delta(2,0);frames(1);
-    }
-    EXPECT_TRUE(spindle_m29_has_error());
-    EXPECT_DOUBLE_EQ(axis().coordinate_offset,offset);
-    EXPECT_FALSE(motion_spindle_position_active());
+    for(int i=0;i<20 && axis().drive_state==HAL_DRIVE_OPERATION_ENABLED;++i)frames(1);
+    ASSERT_NE(axis().drive_state,HAL_DRIVE_OPERATION_ENABLED);
+    uint32_t raw=200; /* 失去力矩后移动 2 度，在模拟驱动器中持续生效。 */
+    ASSERT_EQ(h1_test_spindle_position(&raw,1),HAL_OK);
+    frames(60);
+    EXPECT_FALSE(spindle_m29_has_error());
+    EXPECT_TRUE(spindle_m29_is_ready());
+    EXPECT_NEAR(axis().coordinate_offset,-2,.02);
+    EXPECT_TRUE(motion_spindle_position_active());
 }
 TEST_F(HalH1SpindleTest, M29SettlingHasFiniteTimeout) {
     ASSERT_TRUE(spindle_request_m29());
@@ -483,6 +488,66 @@ TEST_F(HalH1SpindleTest, UnexpectedEnableLossDoesNotReplayOldEnable) {
     EXPECT_EQ(axis().execution_error.category,HAL_ISSUE_AXIS_CONDITION);
     ASSERT_TRUE(spindle_request_program_run(SPINDLE_CW,0));frames(20);
     EXPECT_EQ(axis().drive_state,HAL_DRIVE_OPERATION_ENABLED); /* fresh business may explicitly recover */
+}
+TEST_F(HalH1SpindleTest, FaultResetLeavesHealthyFeedAxesEnabled) {
+    for(int i=0;i<3;++i)rt_data->axis_data[i].status.is_disable=false;
+    frames(40);
+    HalAxisSnapshot x={},y={},z={};
+    ASSERT_EQ(rt_hal_axis_snapshot(RT_HAL_AXIS_X,&x),HAL_OK);
+    ASSERT_EQ(rt_hal_axis_snapshot(RT_HAL_AXIS_Y,&y),HAL_OK);
+    ASSERT_EQ(rt_hal_axis_snapshot(RT_HAL_AXIS_Z,&z),HAL_OK);
+    ASSERT_EQ(x.drive_state,HAL_DRIVE_OPERATION_ENABLED);
+    ASSERT_EQ(y.drive_state,HAL_DRIVE_OPERATION_ENABLED);
+    ASSERT_EQ(z.drive_state,HAL_DRIVE_OPERATION_ENABLED);
+    rt_drive_request_fault_reset();
+    EXPECT_EQ(h1_test_pending_fault_reset_mask(),0u); /* 没有故障不发驱动复位 */
+    h1_test_inject_axis_fault_snapshot(RT_HAL_AXIS_X);
+    rt_drive_request_fault_reset();
+    EXPECT_EQ(h1_test_pending_fault_reset_mask(),1u<<RT_HAL_AXIS_X);
+    for(int i=0;i<30;++i) {
+        frames(1);
+        ASSERT_EQ(rt_hal_axis_snapshot(RT_HAL_AXIS_Y,&y),HAL_OK);
+        ASSERT_EQ(rt_hal_axis_snapshot(RT_HAL_AXIS_Z,&z),HAL_OK);
+        EXPECT_EQ(y.drive_state,HAL_DRIVE_OPERATION_ENABLED);
+        EXPECT_EQ(z.drive_state,HAL_DRIVE_OPERATION_ENABLED);
+    }
+    EXPECT_FALSE(alarm_fault_reset_pending());
+}
+TEST_F(HalH1SpindleTest, ActualFaultResetDoesNotInterruptOtherFeedAxes) {
+    rt_hal_shutdown();
+    ASSERT_EQ(setenv("CNC_RT_SIM_FAULT","3",1),0); /* 台架 X 轴从站 */
+    RtHalAxisParams params[RT_HAL_AXIS_COUNT]={};
+    for(int i=0;i<RT_HAL_AXIS_COUNT;++i) {
+        params[i].loaded=1;params[i].max_speed=10000;
+        params[i].scaling.units_per_count=.01;
+        params[i].scaling.feedback_pulses_per_rev=10000;
+        params[i].scaling.command_pulses_per_rev=10000;
+    }
+    ASSERT_EQ(rt_hal_create(params,nullptr,0),HAL_OK);
+    ASSERT_EQ(rt_hal_start(nullptr,0),HAL_OK);
+    ASSERT_EQ(h1_test_begin(),HAL_OK);
+    unsetenv("CNC_RT_SIM_FAULT");
+    for(int i=0;i<3;++i)rt_data->axis_data[i].status.is_disable=false;
+    frames(40);
+    HalAxisSnapshot x={},y={},z={};
+    ASSERT_EQ(rt_hal_axis_snapshot(RT_HAL_AXIS_X,&x),HAL_OK);
+    ASSERT_EQ(rt_hal_axis_snapshot(RT_HAL_AXIS_Y,&y),HAL_OK);
+    ASSERT_EQ(rt_hal_axis_snapshot(RT_HAL_AXIS_Z,&z),HAL_OK);
+    ASSERT_EQ(x.drive_state,HAL_DRIVE_FAULT);
+    ASSERT_EQ(y.drive_state,HAL_DRIVE_OPERATION_ENABLED);
+    ASSERT_EQ(z.drive_state,HAL_DRIVE_OPERATION_ENABLED);
+    rt_drive_request_fault_reset();
+    ASSERT_EQ(h1_test_pending_fault_reset_mask(),1u<<RT_HAL_AXIS_X);
+    for(int i=0;i<50;++i) {
+        frames(1);
+        ASSERT_EQ(rt_hal_axis_snapshot(RT_HAL_AXIS_Y,&y),HAL_OK);
+        ASSERT_EQ(rt_hal_axis_snapshot(RT_HAL_AXIS_Z,&z),HAL_OK);
+        EXPECT_EQ(y.drive_state,HAL_DRIVE_OPERATION_ENABLED);
+        EXPECT_EQ(z.drive_state,HAL_DRIVE_OPERATION_ENABLED);
+    }
+    ASSERT_EQ(rt_hal_axis_snapshot(RT_HAL_AXIS_X,&x),HAL_OK);
+    EXPECT_NE(x.drive_state,HAL_DRIVE_FAULT);
+    EXPECT_FALSE(alarm_fault_reset_pending());
 }
 TEST_F(HalH1SpindleTest, EstopCancelsSpindleBusinessAndDoesNotRestoreIt) {
     orient();rt_data->sys_state[SYS_ESTOP_INPUT]=1;frames(5);
