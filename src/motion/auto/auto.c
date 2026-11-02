@@ -696,7 +696,25 @@ static void auto_update_var(){
     // 运行行号
     if(cycle_tp->exec_state != EXEC_RESET && cycle_tp->plan_block->line_number >= 0)
         setVarChanInt(0, VAR_CHAN_RUN_ROW, cycle_tp->plan_block->line_number, 0);
-    // LOG(LOG_LEVEL_DEBUG, "line number:%d type:%d", cycle_tp->plan_block->line_number, cycle_tp->plan_block->type);
+    // 编程指令F速度
+    switch (cycle_tp->plan_block->type)
+    {
+    case UNKNOWN:
+    case RAPID:
+        break;
+    default:
+        setVarChanDouble(0, VAR_CHAN_PROG_FEEDRATE, cycle_tp->plan_block->feed_vel * TIME_MINUS_2_S, 0);
+        break;
+    }
+    // 编程指令S速度
+    switch (cycle_tp->plan_block->mode)
+    {
+    case PMC_MODE_M_CMD:
+        setVarChanDouble(0, VAR_CHAN_S_CODE, cycle_tp->plan_block->mst_data.spindle.speed, 0);
+        break;
+    default:
+        break;
+    } 
     // 速度
     switch (cycle_tp->plan_block->mode)
     {
@@ -708,6 +726,7 @@ static void auto_update_var(){
     default:
         break;
     }
+    // LOG(LOG_LEVEL_DEBUG, "line number:%d type:%d F:%f", cycle_tp->plan_block->line_number, cycle_tp->plan_block->type, cycle_tp->plan_block->feed_vel);
 }
 
 static void auto_pop_current_block()
