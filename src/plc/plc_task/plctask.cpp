@@ -10,6 +10,19 @@
 #include "parapi.h"
 #include "varapi.h"
 
+namespace {
+// 先用宽整数换算，再统一限制显示值和实际执行目标。
+int timerPresetMs(int value, int unit) {
+    static constexpr int64_t factors[] = {1, 1000, 60000, 3600000};
+    const int64_t factor = unit >= 0 && unit <= 3 ? factors[unit] : 1;
+    return static_cast<int>(std::clamp<int64_t>(static_cast<int64_t>(value) * factor, 0, INT_MAX));
+}
+
+int advanceTimerElapsed(int elapsed, int ticks, int presetMs) {
+    return static_cast<int>(std::clamp<int64_t>(static_cast<int64_t>(elapsed) + ticks, 0, presetMs));
+}
+}
+
 PlcTask::PlcTask() 
     : _ladData(*getLadDataPtr())
     , _regData(*getRegDataPtr()) {
@@ -127,6 +140,14 @@ void PlcTask::initDispatchTable() {
 }
 
 void PlcTask::resetContext() {
+    for (int i = 0; i < REG_T_NUM; ++i) {
+        timers[i] = 0;
+        _stmrArmed[i] = false;
+        // 停止后重新运行，断开定时器重新等待输入导通，不延续旧的延时输出。
+        if (_ladData.timerTypes[i] == T_TYPE_STMR) {
+            _regData.regT[i] = 0;
+        }
+    }
     _edgeStates.clear();
     _edgeIdxs.assign(_ladData.info.instrCount, -1);
     _altStates.assign(_ladData.info.instrCount, 0);
@@ -341,7 +362,7 @@ void PlcTask::updatePlc2CurrEdge() {
 
 void PlcTask::updateTimer() {
     for(int i = 0; i < REG_T_NUM; i++) {
-        if (_ladData.timerTypes[i] != T_TYPE_NONE) {
+        if (_ladData.timerTypes[i] != T_TYPE_NONE && timers[i] < INT_MAX) {
             timers[i]++;
         }
     }
@@ -1164,19 +1185,12 @@ void PlcTask::handleTMRB(const LadInstr& instr) {
     int unit = getValue(_ladData.regs[instr.regIdx + 1]);
     int presetVal = getValue(_ladData.regs[instr.regIdx + 2]);
 
-    int64_t presetMs = presetVal;
-    if (unit == 1)      presetMs *= 1000LL;    // 秒
-    else if (unit == 2) presetMs *= 60000LL;   // 分钟
-    else if (unit == 3) presetMs *= 3600000LL; // 小时
-    _regData.regT[timerId + REG_T_NUM] = static_cast<int>(std::clamp<int64_t>(presetMs, 0, INT_MAX));
+    const int presetMs = timerPresetMs(presetVal, unit);
+    _regData.regT[timerId + REG_T_NUM] = presetMs;
 
     if (logicTop()) {
-        if (_regData.regT[timerId] + timers[timerId] >= presetMs) {
-            _regData.regT[timerId] = presetMs;
-        } else {
-            _regData.regT[timerId] += timers[timerId];
-            replaceLogicTop(false);
-        }
+        _regData.regT[timerId] = advanceTimerElapsed(_regData.regT[timerId], timers[timerId], presetMs);
+        replaceLogicTop(_regData.regT[timerId] >= presetMs);
     } else {
         _regData.regT[timerId] = 0;
         replaceLogicTop(false);
@@ -1189,21 +1203,21 @@ void PlcTask::handleSTMR(const LadInstr& instr) {
     int unit = getValue(_ladData.regs[instr.regIdx + 1]);
     int presetVal = getValue(_ladData.regs[instr.regIdx + 2]);
 
-    int64_t presetMs = presetVal;
-    if (unit == 1)      presetMs *= 1000LL;    // 秒
-    else if (unit == 2) presetMs *= 60000LL;   // 分钟
-    else if (unit == 3) presetMs *= 3600000LL; // 小时
-    _regData.regT[timerId + REG_T_NUM] = static_cast<int>(std::clamp<int64_t>(presetMs, 0, INT_MAX));
+    const int presetMs = timerPresetMs(presetVal, unit);
+    _regData.regT[timerId + REG_T_NUM] = presetMs;
 
     if (logicTop()) {
         _regData.regT[timerId] = 0;
+        _stmrArmed[timerId] = true;
+        replaceLogicTop(true);
+    } else if (_stmrArmed[timerId]) {
+        _regData.regT[timerId] = advanceTimerElapsed(_regData.regT[timerId], timers[timerId], presetMs);
+        const bool delaying = _regData.regT[timerId] < presetMs;
+        _stmrArmed[timerId] = delaying;
+        replaceLogicTop(delaying);
     } else {
-        if (_regData.regT[timerId] + timers[timerId] >= presetMs) {
-            _regData.regT[timerId] = presetMs;
-        } else {
-            _regData.regT[timerId] += timers[timerId];
-            replaceLogicTop(true);
-        }
+        // 首次输入为零或延时已经结束时，调大设定值也不能重新产生输出。
+        replaceLogicTop(false);
     }
     timers[timerId] = 0;
 }
@@ -1216,7 +1230,9 @@ void PlcTask::handleCTR(const LadInstr& instr) {
     int presetVal = getValue(_ladData.regs[instr.regIdx + 1]);
     int beginVal = inputs.cn0 ? 1 : 0;
 
-    if (actPulse) {
+    if (inputs.rst) {
+        setValue(_ladData.regs[instr.regIdx], inputs.upd ? presetVal : beginVal);
+    } else if (actPulse) {
         if (!inputs.upd && currentVal < presetVal) {
             setValue(_ladData.regs[instr.regIdx], currentVal + 1);
         }
@@ -1226,14 +1242,8 @@ void PlcTask::handleCTR(const LadInstr& instr) {
         }
     }
 
-    if (inputs.rst) {
-        if (inputs.upd) {
-            setValue(_ladData.regs[instr.regIdx], presetVal);
-        } else {
-            setValue(_ladData.regs[instr.regIdx], beginVal);
-        }
-    }
-
+    // 输出以本次实际写入后的值为准，计数到达和复位均在本次执行生效。
+    currentVal = getValue(_ladData.regs[instr.regIdx]);
     if (inputs.upd) {
         replaceLogicTop(currentVal <= beginVal);
     } else {
