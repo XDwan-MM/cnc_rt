@@ -50,8 +50,14 @@ void h1_test_spindle_mode_failure(void) {
 void h1_test_request_admission_running(int running) { s_running=running; }
 
 void h1_test_spindle_speed_failure(void) {
+    s_speed_result_id[RT_HAL_AXIS_SP]=s_speed_request_id[RT_HAL_AXIS_SP];
+    s_speed_result[RT_HAL_AXIS_SP]=HAL_ERROR_BUSY;
     s_snap[RT_HAL_AXIS_SP].request_rejection.category=HAL_ISSUE_SPINDLE_SPEED;
     s_snap[RT_HAL_AXIS_SP].request_rejection.code=HAL_ERROR_BUSY;
+}
+void h1_test_spindle_speed_result(int code) {
+    s_speed_result_id[RT_HAL_AXIS_SP]=s_speed_request_id[RT_HAL_AXIS_SP];
+    s_speed_result[RT_HAL_AXIS_SP]=code;
 }
 
 /* 模拟 HAL 在下一拍快照里带出的"每轴最新一条"拒绝记录（退出定向等异步请求）。 */

@@ -538,6 +538,7 @@ static void spindle_process_event(spindle_context_t *context)
         /* 定向接管主轴：清遗留启动/排队请求，命令字段归位到 STOP；"等待新启动"锁由
          * reset_requires_start=false 显式解除，不能靠 start_request_pending 兜底
          * （会挡住定向自己的完成判定）。 */
+        g_spindle_hal.velocity_submitted=false; /* 定向接管后不再消费旧速度回执 */
         spindle_internal_clear_velocity_arrival();   /* 新指令：清旧到速完成 */
         context->start_request_pending = false;
         context->deferred_start_pending = false;
