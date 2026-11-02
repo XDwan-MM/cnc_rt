@@ -68,6 +68,7 @@ private:
     typedef void (PlcTask::*OpHandler)(const LadInstr&);
     OpHandler _dispatchTable[OP_TOTAL];
     int timers[REG_T_NUM] = {0};
+    bool _stmrArmed[REG_T_NUM] = {false}; // 输入导通过后才允许延时断开，到时后解除
     int _subprgBegin[LAD_SUBPRG_MAX_NUM - 3] = {-1};
     int _labelPositions[LAD_MAX_LABEL_NUM] = {-1};
     int _cycleCount = 0;
