@@ -104,6 +104,7 @@ typedef enum
 typedef struct
 {
     bool velocity_submitted; /* 本条 CSV 业务已提交目标，后续须检查异步拒绝。 */
+    uint32_t velocity_request_id; /* 等待的速度请求回执 */
     double target_velocity;                        /**< 最近写入/规划的主轴速度目标，单位 rpm；不是实际速度反馈。 */
     double target_position;                        /**< 最近写入的位置目标，单位为主轴 HAL 使用的位置单位。 */
     int requested_mode;                            /**< 最近一次请求切换到的 HAL 主轴模式，如 CSV 或 CSP。 */

@@ -23,6 +23,7 @@ extern "C" void h1_test_spindle_feedback_delta(double,double);
 extern "C" void h1_test_spindle_mode_feedback_valid(int);
 extern "C" void h1_test_spindle_mode_failure(void);
 extern "C" void h1_test_spindle_speed_failure(void);
+extern "C" void h1_test_spindle_speed_result(int);
 extern "C" void h1_test_spindle_rejection(int,int);
 extern "C" void rt_test_force_spindle_enable_wait(void);
 extern "C" void h1_test_override_spindle_drive_state(int);
@@ -344,6 +345,37 @@ TEST_F(HalH1SpindleTest, M5AfterCsvExitStillDisables) {
     ASSERT_EQ(axis().drive_state,HAL_DRIVE_OPERATION_ENABLED);
     spindle_request_stop();frames(15);
     EXPECT_NE(axis().drive_state,HAL_DRIVE_OPERATION_ENABLED);
+}
+/* 上一轮定向退出后，快照仍带旧的速度拒绝；下一轮 M5 不能把它当成新失败。 */
+TEST_F(HalH1SpindleTest, M5AfterM19ExitIgnoresPriorSpeedRejection) {
+    useGree4();runZero();
+    spindle_request_stop();frames(20);
+    spindle_begin_m19();spindle_request_orientation(true);frames(80);
+    ASSERT_EQ(axis().control_state,HAL_CONTROL_ORIENT_HOLD);
+    spindle_request_orientation(false);frames(30);
+    ASSERT_EQ(axis().drive_state,HAL_DRIVE_OPERATION_ENABLED);
+    h1_test_spindle_rejection(HAL_ISSUE_SPINDLE_SPEED,HAL_ERROR_NOT_ENABLED);
+    spindle_request_stop();frames(1);
+    EXPECT_FALSE(g_spindle.reset_requires_start);
+    frames(20);
+    EXPECT_NE(axis().drive_state,HAL_DRIVE_OPERATION_ENABLED);
+}
+TEST_F(HalH1SpindleTest, CurrentSpeedRequestNotEnabledIsStillReported) {
+    runZero();
+    ASSERT_EQ(axis().motion_block_reasons,0u);
+    h1_test_spindle_speed_result(HAL_ERROR_NOT_ENABLED);
+    frames(1);
+    EXPECT_TRUE(g_spindle.reset_requires_start);
+    EXPECT_FALSE(g_spindle.run_authorized);
+}
+TEST_F(HalH1SpindleTest, EstopCancelsPendingSpeedWithMatchingReceipt) {
+    runZero();
+    uint32_t id=0;int32_t result=-1;
+    ASSERT_EQ(rt_hal_request_spindle_speed_tracked(RT_HAL_AXIS_SP,0,0,&id),HAL_OK);
+    ASSERT_EQ(rt_hal_request_estop(RT_HAL_AXIS_SP),HAL_OK);
+    ASSERT_EQ(h1_test_commit(),HAL_OK);ASSERT_EQ(h1_test_begin(),HAL_OK);
+    ASSERT_EQ(rt_hal_spindle_speed_result(RT_HAL_AXIS_SP,id,&result),HAL_OK);
+    EXPECT_EQ(result,HAL_ERROR_STOPPED);
 }
 TEST_F(HalH1SpindleTest, ManualStartAfterCsvExitConsumesNewRequest) {
     useGree4();orient();spindle_request_orientation(false);frames(30);

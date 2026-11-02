@@ -102,6 +102,8 @@ spindle_orient_release_t spindle_orientation_release(void) {
 /* 退出完成/确认无需退出后的公共收尾；保留 orient_request_pending，
  * 供重复 M19 / M29 在旧保持退出后继续提交新一次定向。 */
 static void spindle_orientation_exit_finished(void) {
+    /* 返回普通速度控制时，不能再认领定向前那笔速度请求。 */
+    g_spindle_hal.velocity_submitted=false;
     g_spindle.orient_submitted=false;
     g_spindle.orient_exit_submitted=false;
     g_spindle.orient_exit_requested=false;

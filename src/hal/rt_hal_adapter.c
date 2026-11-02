@@ -31,6 +31,10 @@ static HalAxisIssue s_rejection[RT_HAL_AXIS_COUNT], s_local_rejection[RT_HAL_AXI
 static uint8_t s_local_rejection_dirty[RT_HAL_AXIS_COUNT];
 static double s_req_pos[RT_HAL_AXIS_COUNT], s_req_setpos[RT_HAL_AXIS_COUNT], s_req_speed[RT_HAL_AXIS_COUNT];
 static int s_req_speed_dir[RT_HAL_AXIS_COUNT];
+/* 速度请求的逐笔回执：运动线程暂存，PDO 线程执行后在下一拍屏障发布。 */
+static uint32_t s_speed_next_id[RT_HAL_AXIS_COUNT], s_speed_request_id[RT_HAL_AXIS_COUNT];
+static uint32_t s_speed_result_id[RT_HAL_AXIS_COUNT];
+static int32_t s_speed_result[RT_HAL_AXIS_COUNT];
 static uint8_t s_req_pos_dirty[RT_HAL_AXIS_COUNT], s_req_setpos_dirty[RT_HAL_AXIS_COUNT], s_req_speed_dirty[RT_HAL_AXIS_COUNT];
 static int32_t s_setpos_result[RT_HAL_AXIS_COUNT];
 static uint8_t s_setpos_result_valid[RT_HAL_AXIS_COUNT];
@@ -75,6 +79,10 @@ static void cancel_setpos(int i) {
 }
 static void clear_axis_requests(int i) {
     cancel_setpos(i);
+    if(s_req_speed_dirty[i]) {
+        s_speed_result_id[i]=s_speed_request_id[i];
+        s_speed_result[i]=HAL_ERROR_STOPPED;
+    }
     s_req_pos_dirty[i]=s_req_setpos_dirty[i]=s_req_speed_dirty[i]=0;
     s_req_estop[i]=s_req_reset[i]=s_req_enable_dirty[i]=s_req_mode_dirty[i]=0;
     s_req_orient_dirty[i]=s_req_exit_dirty[i]=s_req_clear[i]=0;
@@ -86,6 +94,9 @@ static void reset_transport(void) {
     memset(s_rejection,0,sizeof(s_rejection));
     memset(s_local_rejection_dirty,0,sizeof(s_local_rejection_dirty));
     for(int i=0;i<RT_HAL_AXIS_COUNT;++i)clear_axis_requests(i);
+    memset(s_speed_next_id,0,sizeof(s_speed_next_id));
+    memset(s_speed_request_id,0,sizeof(s_speed_request_id));
+    memset(s_speed_result_id,0,sizeof(s_speed_result_id));
     memset(s_setpos_result_valid,0,sizeof(s_setpos_result_valid));
 }
 int rt_hal_create(const RtHalAxisParams* params, char* err, uint32_t err_len) {
@@ -292,7 +303,10 @@ static void take_requests(void) {
          * 仍使能时先被接受，再撤力矩。 */
         if(s_req_speed_dirty[i]) {
             s_req_speed_dirty[i]=0;
-            submitted(i,HAL_ISSUE_SPINDLE_SPEED,hal_rt_spindle_write_speed(s_ctx,id,s_req_speed[i],s_req_speed_dir[i]));
+            const int rc=hal_rt_spindle_write_speed(s_ctx,id,s_req_speed[i],s_req_speed_dir[i]);
+            s_speed_result_id[i]=s_speed_request_id[i];
+            s_speed_result[i]=rc;
+            submitted(i,HAL_ISSUE_SPINDLE_SPEED,rc);
         }
         if(s_req_enable_dirty[i]&&!s_req_enable[i]) {
             cancel_setpos(i);
@@ -546,11 +560,27 @@ int rt_hal_axis_set_pos_result(RtHalAxisSlot slot,int32_t* result) {
     if(!s_setpos_result_valid[slot])return HAL_ERROR_STATE;
     *result=s_setpos_result[slot];return HAL_OK;
 }
-int rt_hal_request_spindle_speed(RtHalAxisSlot slot,double rpm,int dir) {
+int rt_hal_request_spindle_speed_tracked(RtHalAxisSlot slot,double rpm,int dir,uint32_t* request_id) {
     int rc=admission(slot,HAL_ISSUE_SPINDLE_SPEED,1);if(rc)return rc;
     if(!rt_hal_config_is_spindle(slot)||!isfinite(rpm)||rpm<0||dir < -1||dir>1)
         return local_reply(slot,HAL_ISSUE_SPINDLE_SPEED,HAL_ERROR_ARGUMENT);
+    /* 同一拍多次写同一槽位只提交最终目标，共用同一个回执。 */
+    if(!s_req_speed_dirty[slot]) {
+        if(++s_speed_next_id[slot]==0)++s_speed_next_id[slot];
+        s_speed_request_id[slot]=s_speed_next_id[slot];
+    }
+    if(request_id)*request_id=s_speed_request_id[slot];
     s_req_speed[slot]=rpm;s_req_speed_dir[slot]=dir;s_req_speed_dirty[slot]=1;return HAL_OK;
+}
+int rt_hal_request_spindle_speed(RtHalAxisSlot slot,double rpm,int dir) {
+    return rt_hal_request_spindle_speed_tracked(slot,rpm,dir,NULL);
+}
+int rt_hal_spindle_speed_result(RtHalAxisSlot slot,uint32_t request_id,int32_t* result) {
+    if(!slot_ok(slot)||!request_id||!result)return HAL_ERROR_ARGUMENT;
+    if(!s_snap_valid||!s_snap_fresh[slot])return HAL_ERROR_NOT_RUNNING;
+    if(s_speed_result_id[slot]!=request_id)
+        return s_req_speed_dirty[slot] && s_speed_request_id[slot]==request_id ? HAL_ERROR_BUSY : HAL_ERROR_STATE;
+    *result=s_speed_result[slot];return HAL_OK;
 }
 int rt_hal_request_axis_mode(RtHalAxisSlot slot,HalAxisMode mode) {
     int rc=admission(slot,HAL_ISSUE_MODE,1);if(rc)return rc;

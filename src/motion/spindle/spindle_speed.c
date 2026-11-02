@@ -105,10 +105,13 @@ bool spindle_internal_update_velocity(void)
 
     HalAxisSnapshot axis;
     int error=spindle_hal_snapshot(&axis);
-    /* 本条业务提交过速度后才消费速度拒绝槽，避免旧业务的错误污染新请求。 */
+    /* 只消费本条速度请求的回执，不读取其他业务遗留的拒绝槽。 */
     if(error==HAL_OK && g_spindle_hal.velocity_submitted) {
-        if(axis.request_rejection.category==HAL_ISSUE_SPINDLE_SPEED)
-            error=axis.request_rejection.code;
+        int32_t result;
+        const int rc=rt_hal_spindle_speed_result(RT_HAL_AXIS_SP,g_spindle_hal.velocity_request_id,&result);
+        if(rc==HAL_ERROR_BUSY)return false;
+        error=rc==HAL_OK?result:rc;
+        g_spindle_hal.velocity_submitted=false;
         if(error==HAL_OK && axis.execution_error.category==HAL_ISSUE_SPINDLE_SPEED)
             error=axis.execution_error.code;
     }
@@ -144,10 +147,11 @@ bool spindle_internal_update_velocity(void)
      * EtherCAT 60FF 由主站发送周期统一完成。
      */
     g_spindle_hal.target_velocity = planner->current_vel;
-    const int rc=rt_hal_request_spindle_speed(RT_HAL_AXIS_SP,
+    const int rc=rt_hal_request_spindle_speed_tracked(RT_HAL_AXIS_SP,
                                        fabs((double)g_spindle_hal.target_velocity),
                                        g_spindle_hal.target_velocity > 0 ? 1 :
-                                       (g_spindle_hal.target_velocity < 0 ? -1 : 0));
+                                       (g_spindle_hal.target_velocity < 0 ? -1 : 0),
+                                       &g_spindle_hal.velocity_request_id);
     if(rc!=HAL_OK) {
         spindle_internal_fail_velocity(rc);
         return false;
