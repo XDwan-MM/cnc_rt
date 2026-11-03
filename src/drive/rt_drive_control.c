@@ -15,10 +15,12 @@
 #include "rt_hal_adapter.h"
 #include "reset.h"
 #include "rt_hal_config.h"
+#include "emcmot.h"
 #include "../common/debug_mode.h"
 #include <alarmapi.h>
 #include <hmisysapi.h>
 #include <time.h>
+#include <math.h>
 
 /* 下面这组 include 与文件开头重复（靠 include guard 兜住）。
  * 整理时请以文件开头那组为准，这里的副本不要单独维护。 */
@@ -180,6 +182,10 @@ static HalAxisMode s_enable_mode[RT_HAL_AXIS_COUNT];
  * 连续这么多拍既没有使能动作、也没有 ENABLE 拒绝时，重新提交一次。 */
 #define ENABLE_WAIT_RETRY_CYCLES 10U
 static unsigned s_enable_wait_cycles[RT_HAL_AXIS_COUNT];
+/* 该轴曾因报警/急停被强制下使能：重新上使能前必须先把命令位置基准
+ * 对齐到实际位置，否则会用下使能前的旧命令位置把轴“拉回”去，
+ * 表现为复位/松开急停时抖一下。 */
+static uint8_t s_pos_realign[RT_HAL_AXIS_COUNT];
 /* 进入粘滞失败时留一条日志；否则现场只能看到"轴一直不使能"，不知道卡在哪一步。 */
 static void enable_mark_failed(int i, const char* why, int code) {
     if(s_enable_stage[i]!=ENABLE_FAILED)
@@ -213,8 +219,12 @@ static void reset_enable_business(void) {
 }
 void hal_axis_intent_poll(void) {
 
-    /*===1. 急停闸门：急停一按下，立刻作废主轴力矩需求===*/
-    const int estop=rt_data->sys_state[SYS_ESTOP_INPUT];
+    /*===1. 急停闸门：按下急停、以及松开后尚未复位期间，都不许任何驱动器动作。
+     * SYS_IS_ESTOP_ACTIVE 只有显式复位（handle_alarm_cmd 的 HMI_RESET 分支）才清除，
+     * 所以松开急停后轴保持停止/下使能，重新使能完全交给复位流程。否则会在松开
+     * 瞬间用急停前的命令位置重新上使能，表现为“抖一下”。===*/
+    const int estop=rt_data->sys_state[SYS_ESTOP_INPUT] ||
+                    rt_data->sys_state[SYS_IS_ESTOP_ACTIVE];
     if(estop) s_spindle_torque_demand=false;
 
     /*===2. 复位期允许量：受控停车过程中必须保留力矩才能减速===*/
@@ -250,6 +260,7 @@ void hal_axis_intent_poll(void) {
         /*===6. 急停：走 HAL 安全路径，不进入使能状态机===*/
         if(estop) {
             s_enable_stage[i]=ENABLE_IDLE;
+            s_pos_realign[i]=1;          /* 急停下使能，恢复前要重新对齐位置 */
             (void)rt_hal_request_estop(slot);
             continue;
         }
@@ -259,6 +270,7 @@ void hal_axis_intent_poll(void) {
             /* 反馈出现 Fault：先把该轴打到 ENABLE_FAILED 并下使能。
              * 反过来不成立——Fault 消失不代表拿到了新的恢复授权。 */
             if(s_enable_stage[i]!=ENABLE_FAILED)(void)rt_hal_request_axis_enable(slot,0);
+            s_pos_realign[i]=1;              /* 故障强制下使能，恢复前要重新对齐位置 */
             enable_mark_failed(i,"轴反馈故障",0);
             continue;
         }
@@ -273,6 +285,23 @@ void hal_axis_intent_poll(void) {
             /* 无力矩状态下可以先做模式准备：新一次的主轴模式业务从这里进入。 */
             if(changed)s_enable_stage[i]=ENABLE_IDLE;
             continue;
+        }
+
+        /*===8.2 上使能前对齐命令位置===
+         * 轴因报警/急停被下使能后，实际位置会在下使能期间变化。若直接拿旧
+         * 命令位置重新上使能，HAL 上使能那拍虽然会预置目标=实际位置，但下
+         * 一拍又会被 RT 的旧命令位置覆盖，表现为抖一下。这里只在“重新上使能
+         * 序列启动”那一拍对齐一次（进给轴；主轴角度基准由 M19/M29 维护）。===*/
+        if(s_pos_realign[i] && slot!=RT_HAL_AXIS_SP && intent==1 &&
+           s_enable_stage[i]==ENABLE_IDLE) {
+            const double cmd=rt_data->axis_data[i].motor_cmd_pos;
+            const double act=rt_data->axis_data[i].motor_act_pos;
+            emcmot_rebuild_axis_position_from_feedback(i);
+            s_pos_realign[i]=0;
+            if(fabs(cmd-act)>1e-6)
+                LOG(LOG_LEVEL_INFO,
+                    "轴槽 %d 上使能前对齐命令位置：cmd=%.4f act=%.4f 偏差=%.4f",
+                    i,cmd,act,cmd-act);
         }
 
         /*===8.5 完成态复核：COMPLETE 只是业务镜像。若 HAL 已经登记了停止约束，

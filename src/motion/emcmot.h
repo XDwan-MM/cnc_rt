@@ -37,6 +37,11 @@ bool motion_spindle_position_active(void);
 void motion_spindle_release_position(void);
 int motion_spindle_prepare_velocity(void);
 
+/* 重新上使能前，把该轴的命令位置基准重建为最新实际位置，并同步手轮基准。
+ * 用于报警/急停下使能后的恢复：避免用下使能前的旧命令位置把轴拉回去。
+ * 只应作用于进给轴；主轴角度基准由 M19/M29 自己维护。 */
+void emcmot_rebuild_axis_position_from_feedback(int axis);
+
 #ifdef UNIT_TEST
 void emcmot_test_rebuild_axis_positions_from_feedback();
 void emcmot_test_spindle_position_period(void);

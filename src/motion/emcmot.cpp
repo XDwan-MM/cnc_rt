@@ -610,6 +610,16 @@ static void rebuild_axis_position_from_feedback(int i)
     rt_data->axis_data[i].fb_pos_no_comp = uncompensated_pos;
 }
 
+/* 供驱动层在“重新上使能前”调用：单轴重建 + 手轮基准同步。
+ * 与复位路径的 rebuild_axis_positions_from_feedback() 保持同一套语义，
+ * 但不影响其他轴（其他轴可能已经在使能状态）。 */
+void emcmot_rebuild_axis_position_from_feedback(int axis)
+{
+    if (axis < 0 || axis >= SYS_AXES_NUM) return;
+    rebuild_axis_position_from_feedback(axis);
+    handwheel_resync_position();
+}
+
 static void rebuild_axis_positions_from_feedback(bool spindle_valid)
 {
     // 进给轴恢复不依赖主轴位置反馈是否可用。
