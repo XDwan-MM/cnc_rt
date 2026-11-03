@@ -146,6 +146,22 @@ int main(void) {
     CHECK(s_servo[SIM_SLAVE_SPINDLE].target_pos==held_raw);
     CHECK(fabs(state().actual_pos)<1e-6 && fabs(state().command_pos)<1e-6);
     rt_hal_shutdown();unsetenv("CNC_RT_SIM_GREE4");
+
+    /* 模拟收帧故障：真实 PDO 循环应闭锁、作废快照并清除待下发请求。 */
+    CHECK(rt_hal_create(params,NULL,0)==HAL_OK);
+    CHECK(rt_hal_start(NULL,0)==HAL_OK);
+    s_snap_valid=s_io_ready=1;
+    s_snap_fresh[RT_HAL_AXIS_SP]=1;
+    s_req_enable_dirty[RT_HAL_AXIS_SP]=1;
+    s_opened=0; /* 模拟驱动层收帧失败 */
+    CHECK(rt_hal_pdo_loop()==HAL_ERROR_BUS);
+    CHECK(rt_hal_cycle_error()==HAL_ERROR_BUS);
+    CHECK(!s_snap_valid && !s_io_ready && !s_snap_fresh[RT_HAL_AXIS_SP]);
+    CHECK(!s_req_enable_dirty[RT_HAL_AXIS_SP]);
+    CHECK(rt_hal_axis_snapshot(RT_HAL_AXIS_SP,&out)==HAL_ERROR_NOT_RUNNING);
+    CHECK(rt_hal_lost_slave()==-1);
+    CHECK(hal_rt_wait_cycle(s_ctx)==HAL_ERROR_BUS); /* 持续闭锁 */
+    rt_hal_shutdown();
     printf("HAL H1 transport: %u checks passed\n",checks);
     return 0;
 }

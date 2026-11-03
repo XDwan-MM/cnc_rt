@@ -262,6 +262,7 @@ int ethercat_close(void) {
 }
 
 int Master_SlaveCount(void) { return s_opened ? s_slave_count : 0; }
+int Master_LostSlave(void) { return -1; }
 
 const char* Master_StartupError(void) { return ""; }
 

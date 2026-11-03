@@ -456,6 +456,11 @@ int rt_hal_pdo_loop(void) {
 }
 
 int32_t rt_hal_cycle_error(void) { return s_cycle_error; }
+int rt_hal_lost_slave(void) {
+    int32_t pos = -1;
+    if (!s_ctx || hal_bus_lost_slave(s_ctx, &pos) != HAL_OK) return -1;
+    return pos;
+}
 int rt_hal_axis_snapshot(RtHalAxisSlot slot,HalAxisSnapshot* out) {
     if(!slot_ok(slot)||!out)return HAL_ERROR_ARGUMENT;
     if(!s_snap_valid||!s_snap_fresh[slot])return HAL_ERROR_NOT_RUNNING;

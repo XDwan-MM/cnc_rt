@@ -267,6 +267,8 @@ int rt_hal_fault_reset_settled_mask(uint32_t mask, int* any_timeout);
 
 /* 周期循环异常退出时记录的 HAL 错误码；0 表示没有错误。 */
 int32_t rt_hal_cycle_error(void);
+/* 总线故障后可查；无可靠站号时返回 -1。 */
+int rt_hal_lost_slave(void);
 
 /* ==========================================================================
  * 七、IO 映像

@@ -264,6 +264,9 @@ int32_t hal_io_image_size(const HalContext* c, uint32_t* x_size, uint32_t* y_siz
  */
 int32_t hal_bus_health(const HalContext* c, HalCBusHealth* out);
 
+/* 不经过故障门控：供总线闭锁后查询。-1 表示尚无已确认的断联位置。 */
+int32_t hal_bus_lost_slave(const HalContext* c, int32_t* slave_pos);
+
 /**
  * @brief 读一个从站的身份信息。
  *

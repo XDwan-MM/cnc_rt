@@ -215,19 +215,47 @@ int main() {
         getSysCommInt(SYS_CLOSE_RT, &sys_close_rt, 0);
         if(sys_close_rt) break;
 
-        if (__atomic_load_n(&pdo_unexpected_exit, __ATOMIC_ACQUIRE)) {
+        const int pdo_state = __atomic_load_n(&pdo_unexpected_exit, __ATOMIC_ACQUIRE);
+        if (pdo_state == 1) {
             LOG(LOG_LEVEL_ERR, "PDO 意外退出：按故障收尾（停机流程由主线程执行）");
             fault_exit = 1;
             break;
+        }
+        if (pdo_state == 2) {
+            /* SDK 回调可能在 PDO 已退出之后才取得详情，所以持续查询。 */
+            static int reported_slave = -1;
+            const int slave = rt_hal_lost_slave();
+            if (slave >= 0 && slave < (int)HAL_C_MAX_DEV) {
+                /* 报警被清除或报警表暂满时，故障未消失便继续尝试。 */
+                setAlarm(ALARM_ETHCAT_SV, ALARM_ERROR, 200 + slave);
+                if (reported_slave != slave) {
+                    LOG(LOG_LEVEL_ERR, "第 %d 个从站断联（SDK 位置 %d），总线闭锁，等待关闭 RT", slave + 1, slave);
+                    reported_slave = slave;
+                }
+            }
         }
         sleep(1);
     }
     #else
     while (!main_exit_flag) {
-        if (__atomic_load_n(&pdo_unexpected_exit, __ATOMIC_ACQUIRE)) {
+        const int pdo_state = __atomic_load_n(&pdo_unexpected_exit, __ATOMIC_ACQUIRE);
+        if (pdo_state == 1) {
             LOG(LOG_LEVEL_ERR, "PDO 意外退出：按故障收尾（停机流程由主线程执行）");
             fault_exit = 1;
             break;
+        }
+        if (pdo_state == 2) {
+            /* SDK 回调可能在 PDO 已退出之后才取得详情，所以持续查询。 */
+            static int reported_slave = -1;
+            const int slave = rt_hal_lost_slave();
+            if (slave >= 0 && slave < (int)HAL_C_MAX_DEV) {
+                /* 报警被清除或报警表暂满时，故障未消失便继续尝试。 */
+                setAlarm(ALARM_ETHCAT_SV, ALARM_ERROR, 200 + slave);
+                if (reported_slave != slave) {
+                    LOG(LOG_LEVEL_ERR, "第 %d 个从站断联（SDK 位置 %d），总线闭锁，等待关闭 RT", slave + 1, slave);
+                    reported_slave = slave;
+                }
+            }
         }
         sleep(1);
     }

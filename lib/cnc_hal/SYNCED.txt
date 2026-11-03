@@ -1,9 +1,10 @@
-同步自   : /mnt/e/数控系统项目/1.项目代码/cnc_hal
+同步自   : /home/mxh/NCProject/cnc_hal
 提交     : 0159bbb
+工作树   : 有未提交修改
 提交说明 : 删除不需要的测试用例
-同步时间 : 2026-10-28T13:35:25+08:00
-静态库源 : /mnt/e/数控系统项目/1.项目代码/cnc_hal/build/all/libcnc_hal.a
-静态库   : libcnc_hal.a sha256=7ff0f9f03769477391fcf476a1c5952f50282859742a4b26ce01f4a04db46137
+同步时间 : 2026-11-02T18:32:58+08:00
+静态库源 : /home/mxh/NCProject/cnc_hal/build/all/libcnc_hal.a
+静态库   : libcnc_hal.a sha256=dab7d431ba47a936f4c42fc22f44dbfd7dcaffaf87f6d349961c05656c299d4e
 ABI      : 10u.0u
 公共头   : 5 个
 内部头   : 9 个

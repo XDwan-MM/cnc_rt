@@ -42,6 +42,8 @@ const char* Master_StartupError(void);
  * @return 从站数。
  */
 int Master_SlaveCount(void);
+/* 已确认的零基位置；-1 未知，-2 为面板断联但位置需由配置确定。 */
+int Master_LostSlave(void);
 
 /**
  * @brief 执行一笔 SDO 传输（非实时线程）。

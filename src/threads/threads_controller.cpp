@@ -210,7 +210,8 @@ void* pdo_thread_func(void*) {
     /* 正常停止 = 主线程已置 thread_exit_flag；除此之外任何退出（哪怕 rc 是 0 或
      * STOPPED）都必须告诉主线程：本线程不再 post 信号量，只能由主线程统一收尾。 */
     if (!__atomic_load_n(&thread_exit_flag, __ATOMIC_ACQUIRE)) {
-        __atomic_store_n(&pdo_unexpected_exit, 1, __ATOMIC_RELEASE);
+        /* 总线故障保留进程供界面报警和关闭；其他异常仍按原逻辑退出。 */
+        __atomic_store_n(&pdo_unexpected_exit, rc == HAL_ERROR_BUS ? 2 : 1, __ATOMIC_RELEASE);
         LOG(LOG_LEVEL_ERR, "PDO 循环意外退出：rc=%d（未收到关闭请求）", rc);
     }
     return NULL;
