@@ -491,6 +491,29 @@ static void alarm_poll_axis_not_enabled(void) {
     }
 }
 
+/* 轴在“已使能”状态下意外退出 Operation Enabled：HAL 记为
+ * AXIS_CONDITION / NOT_ENABLED（典型是硬件急停直接切 STO/快停，驱动器先掉使能）。
+ * 这类事件必须锁成“需复位”：否则松开急停后可能直接重新上使能 → 飞车风险。
+ * 报警用现有的 ETHCAT_SV 132（轴未使能或运动许可未就绪）。 */
+static void alarm_poll_oe_loss(void) {
+    static uint8_t s_reported[RT_HAL_AXIS_COUNT];
+    for(int i=0;i<RT_HAL_AXIS_COUNT;++i) {
+        HalAxisSnapshot a;
+        if(rt_hal_axis_snapshot((RtHalAxisSlot)i,&a)!=HAL_OK) continue;
+        const int oe_lost = (a.execution_error.category==HAL_ISSUE_AXIS_CONDITION &&
+                             a.execution_error.code==HAL_ERROR_NOT_ENABLED);
+        if(!oe_lost) { s_reported[i]=0; continue; }
+        if(s_reported[i]) continue;
+        s_reported[i]=1;
+        s_enable_stage[i]=ENABLE_FAILED;   /* 粘滞：只有显式复位能解除 */
+        s_pos_realign[i]=1;
+        setAlarm(ALARM_ETHCAT_SV, ALARM_ERROR, 132);
+        LOG(LOG_LEVEL_ERR,
+            "轴槽 %d 意外退出使能（sw=0x%04X 0x603F=0x%08X）：已锁为需复位，松开急停不会自动上使能",
+            i,(unsigned)a.raw_status,(unsigned)a.drive_error_code);
+    }
+}
+
 /* 每拍检查 HAL 侧状态并推进复位等待。由运动线程调用：
  * 只读适配层快照，不直接碰 HalContext。 */
 void alarm_poll_hal() {
@@ -500,6 +523,9 @@ void alarm_poll_hal() {
 
     /*===2. 驱动器故障码（0x603F）→ is_error===*/
     alarm_poll_drive_errors();
+
+    /*===2.5 轴意外退出使能（OE 丢失）：锁成需复位并报警===*/
+    alarm_poll_oe_loss();
 
     /*===3. 持续未使能只做诊断，不把正常使能过渡当报警===*/
     alarm_poll_axis_not_enabled();
