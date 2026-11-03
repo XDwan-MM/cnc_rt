@@ -227,9 +227,18 @@ int main() {
             const int slave = rt_hal_lost_slave();
             if (slave >= 0 && slave < (int)HAL_C_MAX_DEV) {
                 /* 报警被清除或报警表暂满时，故障未消失便继续尝试。 */
-                setAlarm(ALARM_ETHCAT_SV, ALARM_ERROR, 200 + slave);
+                const int alarm_no = 200 + slave;
+                const int set_rc = setAlarm(ALARM_ETHCAT_SV, ALARM_ERROR, alarm_no);
+                /* 定位到具体从站后，撤掉笼统的 120（HAL 总线错误）：
+                 * 120 由 PDO 线程先入表，两条并存时界面会先显示它，
+                 * 反而看不到更具体的“第 N 个从站断连”。 */
+                delAlarm(ALARM_ETHCAT_SV, ALARM_ERROR, 120);
                 if (reported_slave != slave) {
-                    LOG(LOG_LEVEL_ERR, "第 %d 个从站断联（SDK 位置 %d），总线闭锁，等待关闭 RT", slave + 1, slave);
+                    if (reported_slave >= 0)
+                        delAlarm(ALARM_ETHCAT_SV, ALARM_ERROR, 200 + reported_slave);
+                    LOG(LOG_LEVEL_ERR,
+                        "第 %d 个从站断联（SDK 位置 %d）→ 报警 %d（setAlarm rc=%d），总线闭锁，等待关闭 RT",
+                        slave + 1, slave, alarm_no, set_rc);
                     reported_slave = slave;
                 }
             }
@@ -250,9 +259,18 @@ int main() {
             const int slave = rt_hal_lost_slave();
             if (slave >= 0 && slave < (int)HAL_C_MAX_DEV) {
                 /* 报警被清除或报警表暂满时，故障未消失便继续尝试。 */
-                setAlarm(ALARM_ETHCAT_SV, ALARM_ERROR, 200 + slave);
+                const int alarm_no = 200 + slave;
+                const int set_rc = setAlarm(ALARM_ETHCAT_SV, ALARM_ERROR, alarm_no);
+                /* 定位到具体从站后，撤掉笼统的 120（HAL 总线错误）：
+                 * 120 由 PDO 线程先入表，两条并存时界面会先显示它，
+                 * 反而看不到更具体的“第 N 个从站断连”。 */
+                delAlarm(ALARM_ETHCAT_SV, ALARM_ERROR, 120);
                 if (reported_slave != slave) {
-                    LOG(LOG_LEVEL_ERR, "第 %d 个从站断联（SDK 位置 %d），总线闭锁，等待关闭 RT", slave + 1, slave);
+                    if (reported_slave >= 0)
+                        delAlarm(ALARM_ETHCAT_SV, ALARM_ERROR, 200 + reported_slave);
+                    LOG(LOG_LEVEL_ERR,
+                        "第 %d 个从站断联（SDK 位置 %d）→ 报警 %d（setAlarm rc=%d），总线闭锁，等待关闭 RT",
+                        slave + 1, slave, alarm_no, set_rc);
                     reported_slave = slave;
                 }
             }

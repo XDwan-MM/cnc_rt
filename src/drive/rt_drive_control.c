@@ -265,13 +265,25 @@ void hal_axis_intent_poll(void) {
             continue;
         }
 
-        /*===7. 反馈报故障：下使能并打入粘滞失败，等显式恢复===*/
+        /*===7. 反馈报故障：下使能；只有真的 Fault 位才锁粘滞失败===*/
         if(rt_data->axis_data[i].status.is_error && !off) {
-            /* 反馈出现 Fault：先把该轴打到 ENABLE_FAILED 并下使能。
-             * 反过来不成立——Fault 消失不代表拿到了新的恢复授权。 */
+            /* 区分两种“报错”：
+             *   a) 状态字 Fault 位仍置位 → 真故障，锁 ENABLE_FAILED，等显式复位；
+             *   b) 驱动已回 READY、只剩 0x603F 残留码 → 只保持下使能，不锁失败。
+             * 现场“要按两次复位才能上使能”就是 b) 被误当成 a)：故障复位
+             * 刚收口那一拍 0x603F 还没清掉，使能状态机被锁死，只能再复位一次。 */
+            RtHalAxisStatus st;
+            const int unreadable=(rt_hal_axis_status(slot,&st)!=HAL_OK);
+            const int real_fault=unreadable||((st.raw_status&0x0008U)!=0);
             if(s_enable_stage[i]!=ENABLE_FAILED)(void)rt_hal_request_axis_enable(slot,0);
-            s_pos_realign[i]=1;              /* 故障强制下使能，恢复前要重新对齐位置 */
-            enable_mark_failed(i,"轴反馈故障",0);
+            if(real_fault) {
+                s_pos_realign[i]=1;          /* 故障强制下使能，恢复前要重新对齐位置 */
+                enable_mark_failed(i,"轴反馈故障",0);
+            } else {
+                /* 残留故障码：保持下使能，等它清掉后自动重新走使能序列。 */
+                s_enable_stage[i]=ENABLE_IDLE;
+                s_enable_intent[i]=-1;       /* 清意图，故障码清掉后 changed 重新成立 */
+            }
             continue;
         }
 
@@ -285,23 +297,6 @@ void hal_axis_intent_poll(void) {
             /* 无力矩状态下可以先做模式准备：新一次的主轴模式业务从这里进入。 */
             if(changed)s_enable_stage[i]=ENABLE_IDLE;
             continue;
-        }
-
-        /*===8.2 上使能前对齐命令位置===
-         * 轴因报警/急停被下使能后，实际位置会在下使能期间变化。若直接拿旧
-         * 命令位置重新上使能，HAL 上使能那拍虽然会预置目标=实际位置，但下
-         * 一拍又会被 RT 的旧命令位置覆盖，表现为抖一下。这里只在“重新上使能
-         * 序列启动”那一拍对齐一次（进给轴；主轴角度基准由 M19/M29 维护）。===*/
-        if(s_pos_realign[i] && slot!=RT_HAL_AXIS_SP && intent==1 &&
-           s_enable_stage[i]==ENABLE_IDLE) {
-            const double cmd=rt_data->axis_data[i].motor_cmd_pos;
-            const double act=rt_data->axis_data[i].motor_act_pos;
-            emcmot_rebuild_axis_position_from_feedback(i);
-            s_pos_realign[i]=0;
-            if(fabs(cmd-act)>1e-6)
-                LOG(LOG_LEVEL_INFO,
-                    "轴槽 %d 上使能前对齐命令位置：cmd=%.4f act=%.4f 偏差=%.4f",
-                    i,cmd,act,cmd-act);
         }
 
         /*===8.5 完成态复核：COMPLETE 只是业务镜像。若 HAL 已经登记了停止约束，
@@ -356,6 +351,19 @@ void hal_axis_intent_poll(void) {
                axis.drive_state==HAL_DRIVE_OPERATION_ENABLED && axis.actual_mode==s_enable_mode[i] &&
                !(axis.motion_block_reasons&HAL_BLOCK_NOT_ENABLED)) {
                 s_enable_stage[i]=ENABLE_COMPLETE;continue;
+            }
+            /* 真正提交使能字之前才做位置对齐（之前放在序列启动那拍太早）。
+             * 不用额外等拍：HAL 的 DS402 使能阶梯本身要经过
+             * SWITCH_ON → ENABLE_OP 好几拍，而且每一拍都会先把 0x607A
+             * 预置成当前实际位置再发控制字，目标天然先于使能生效。 */
+            if(s_pos_realign[i] && slot!=RT_HAL_AXIS_SP) {
+                const double cmd=rt_data->axis_data[i].motor_cmd_pos;
+                const double act=rt_data->axis_data[i].motor_act_pos;
+                emcmot_rebuild_axis_position_from_feedback(i);
+                s_pos_realign[i]=0;
+                LOG(LOG_LEVEL_INFO,
+                    "轴槽 %d 上使能前对齐命令位置：cmd=%.4f act=%.4f 偏差=%.4f",
+                    i,cmd,act,cmd-act);
             }
             if(rt_hal_request_axis_enable(slot,1)==HAL_OK) {
                 s_enable_stage[i]=ENABLE_WAIT;s_enable_wait_cycles[i]=0;

@@ -26,6 +26,8 @@
 #include <alarmapi.h>
 #include <hmisysapi.h>
 #include <math.h>
+#include <stdarg.h>
+#include <stdio.h>
 
 static void update_spindle_position_permission(void);
 static void chan_do_period();
@@ -369,7 +371,9 @@ static void read_from_hal()
 static void report_axis_position_rejection(int axis, RtHalAxisSlot slot, int stage_rc)
 {
     static int s_last[3] = {0, 0, 0};
-    HalAxisSnapshot a;
+    static int s_wait_code[3] = {0, 0, 0};
+    static unsigned s_wait_cycles[3] = {0, 0, 0};
+    HalAxisSnapshot a{};   /* 值初始化：快照失败时也能安全打印 */
     int code = stage_rc;
     int category = stage_rc ? HAL_ISSUE_POSITION : 0;
 
@@ -387,6 +391,32 @@ static void report_axis_position_rejection(int axis, RtHalAxisSlot slot, int sta
         }
     } else if (!code) {
         return;
+    }
+    /* 轴还没使能、或使能/模式动作正占用时的拒绝，是复位与上使能流程的正常现象
+     * （HAL 明确返回 NOT_ENABLED / BUSY / MODE_MISMATCH）。这类拒绝在复位过程中会在
+     * 262→8→0 之间来回跳，按“码变化”打 ERROR 就会一直刷屏。这里限频成 WARN：
+     * 同一等待原因首次一条，之后每 1000 拍一条；轴已使能仍被拒才是真故障，保持 ERROR。 */
+    {
+        const int not_enabled = (a.drive_state != HAL_DRIVE_OPERATION_ENABLED);
+        const int expected = not_enabled &&
+            (code == HAL_ERROR_NOT_ENABLED || code == HAL_ERROR_BUSY ||
+             code == HAL_ERROR_MODE_MISMATCH);
+        if (expected) {
+            if (code != s_wait_code[axis]) {
+                s_wait_code[axis] = code;
+                s_wait_cycles[axis] = 0;
+            } else if ((++s_wait_cycles[axis] % 1000u) != 0u) {
+                return;
+            }
+            LOG(LOG_LEVEL_WARN,
+                "轴槽 %d 位置请求等待使能/模式（正常过渡，已限频）：code=%d drive=%d "
+                "mode=%d/%d block=0x%x cmd=%.4f act=%.4f",
+                (int)slot, code, (int)a.drive_state,
+                (int)a.actual_mode, (int)a.target_mode,
+                (unsigned)a.motion_block_reasons, a.command_pos, a.actual_pos);
+            return;
+        }
+        s_wait_code[axis] = 0;
     }
     if (code == s_last[axis]) return;
     s_last[axis] = code;
@@ -692,6 +722,26 @@ static void update_spindle_position_permission(void)
         alarm_report_hal_error(rc!=HAL_OK?rc:HAL_ERROR_STATE);
     }
 }
+/* M19/M29 准备 CSV 时的“等待类”拒绝会每拍复发（例如主轴还在减速），
+ * 这里限频：同一原因首次打一条 WARN，之后每 1000 拍（约 1 s）打一条；
+ * 原因变化或准备成功时重新计数。真正的错误仍走 LOG_LEVEL_ERR 立即打印。 */
+static int s_prep_wait_reason;
+static unsigned s_prep_wait_cycles;
+static void prep_wait_log(int reason, const char* fmt, ...)
+{
+    if(reason!=s_prep_wait_reason) {
+        s_prep_wait_reason=reason;
+        s_prep_wait_cycles=0;
+    } else if((++s_prep_wait_cycles%1000u)!=0u) {
+        return;
+    }
+    char text[192];
+    va_list ap;
+    va_start(ap,fmt);
+    vsnprintf(text,sizeof(text),fmt,ap);
+    va_end(ap);
+    LOG(LOG_LEVEL_WARN,"%s",text);
+}
 int motion_spindle_prepare_velocity(void)
 {
     HalAxisSnapshot a;
@@ -703,18 +753,18 @@ int motion_spindle_prepare_velocity(void)
         return -1;
     }
     if(motion_csp_stop_pending()) {
-        LOG(LOG_LEVEL_ERR,"M19前准备CSV被拒：CSP停车在途");
+        prep_wait_log(1,"M19前准备CSV被拒：CSP停车在途");
         return 0;
     }
     if(cycle_tp && cycle_tp->exec_state!=EXEC_IDLE &&
        (cycle_tp->exec_cmd==DO_TAP_CMD || cycle_tp->exec_cmd==DO_MOVE_CMD ||
         cycle_tp->exec_cmd==DO_CHOP_CMD || cycle_tp->exec_cmd==DO_SKIP_CMD)) {
-        LOG(LOG_LEVEL_ERR,"M19前准备CSV被拒：运动未空闲 cmd=%d state=%d",
+        prep_wait_log(2,"M19前准备CSV被拒：运动未空闲 cmd=%d state=%d",
             (int)cycle_tp->exec_cmd,(int)cycle_tp->exec_state);
         return 0;
     }
     if(fabs(a.actual_speed_rpm)>1.0) {
-        LOG(LOG_LEVEL_ERR,"M19前准备CSV被拒：主轴未停稳 rpm=%.3f",a.actual_speed_rpm);
+        prep_wait_log(3,"M19前准备CSV被拒：主轴未停稳 rpm=%.3f",a.actual_speed_rpm);
         return 0;
     }
     if(a.drive_state==HAL_DRIVE_OPERATION_ENABLED) {
@@ -724,7 +774,7 @@ int motion_spindle_prepare_velocity(void)
             return -1;
         }
         if(fabs(a.command_pos-a.actual_pos)>10.0) {
-            LOG(LOG_LEVEL_ERR,"M19前准备CSV被拒：位置误差过大 cmd=%.4f act=%.4f err=%.4f",
+            prep_wait_log(4,"M19前准备CSV被拒：位置误差过大 cmd=%.4f act=%.4f err=%.4f",
                 a.command_pos,a.actual_pos,fabs(a.command_pos-a.actual_pos));
             return 0;
         }
@@ -732,6 +782,7 @@ int motion_spindle_prepare_velocity(void)
         LOG(LOG_LEVEL_ERR,"M19前准备CSV被拒：驱动状态=%d",(int)a.drive_state);
         return -1;
     }
+    s_prep_wait_reason=0;
     s_position_active=false;
     return 1;
 }

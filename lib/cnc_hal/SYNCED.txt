@@ -1,10 +1,9 @@
 同步自   : /home/mxh/NCProject/cnc_hal
-提交     : 0159bbb
-工作树   : 有未提交修改
-提交说明 : 删除不需要的测试用例
-同步时间 : 2026-11-02T18:32:58+08:00
+提交     : ad61b22
+提交说明 : 修复：从站数量不一致时按剩余站数反推断联从站
+同步时间 : 2026-11-03T19:01:55+08:00
 静态库源 : /home/mxh/NCProject/cnc_hal/build/all/libcnc_hal.a
-静态库   : libcnc_hal.a sha256=dab7d431ba47a936f4c42fc22f44dbfd7dcaffaf87f6d349961c05656c299d4e
+静态库   : libcnc_hal.a sha256=62b0fcadca6c975b4d7502cebe3e552792ab68dbf4c8fbfdd692c98a575b0dfc
 ABI      : 10u.0u
 公共头   : 5 个
 内部头   : 9 个
