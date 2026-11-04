@@ -367,18 +367,20 @@ static void read_from_hal()
 
 /* XYZ 位置请求是"暂存成功即返回"，HAL 的真正拒绝要下一拍快照才可见。
  * 没有这条诊断时，表现为"G 代码在等位置、轴一动不动、也没有报警"。
- * 每个轴只在错误码变化时打一条，避免刷屏。 */
+ * 使能、模式切换期间的短暂拒绝先等待；持续拒绝或其他错误才留诊断。 */
 static void report_axis_position_rejection(int axis, RtHalAxisSlot slot, int stage_rc)
 {
     static int s_last[3] = {0, 0, 0};
-    static int s_wait_code[3] = {0, 0, 0};
     static unsigned s_wait_cycles[3] = {0, 0, 0};
+    static bool s_wait_reported[3] = {false, false, false};
     HalAxisSnapshot a{};   /* 值初始化：快照失败时也能安全打印 */
     int code = stage_rc;
     int category = stage_rc ? HAL_ISSUE_POSITION : 0;
+    bool execution_failure = false;
 
     if (axis < 0 || axis > 2) return;
-    if (rt_hal_axis_snapshot(slot, &a) == HAL_OK) {
+    const bool snapshot_valid = rt_hal_axis_snapshot(slot, &a) == HAL_OK;
+    if (snapshot_valid) {
         if (!code && a.request_rejection.category == HAL_ISSUE_POSITION &&
             a.request_rejection.code) {
             code = (int)a.request_rejection.code;
@@ -388,36 +390,31 @@ static void report_axis_position_rejection(int axis, RtHalAxisSlot slot, int sta
             a.execution_error.code) {
             code = (int)a.execution_error.code;
             category = HAL_ISSUE_POSITION;
+            execution_failure = true;
         }
     } else if (!code) {
         return;
     }
-    /* 轴还没使能、或使能/模式动作正占用时的拒绝，是复位与上使能流程的正常现象
-     * （HAL 明确返回 NOT_ENABLED / BUSY / MODE_MISMATCH）。这类拒绝在复位过程中会在
-     * 262→8→0 之间来回跳，按“码变化”打 ERROR 就会一直刷屏。这里限频成 WARN：
-     * 同一等待原因首次一条，之后每 1000 拍一条；轴已使能仍被拒才是真故障，保持 ERROR。 */
-    {
-        const int not_enabled = (a.drive_state != HAL_DRIVE_OPERATION_ENABLED);
-        const int expected = not_enabled &&
-            (code == HAL_ERROR_NOT_ENABLED || code == HAL_ERROR_BUSY ||
-             code == HAL_ERROR_MODE_MISMATCH);
-        if (expected) {
-            if (code != s_wait_code[axis]) {
-                s_wait_code[axis] = code;
-                s_wait_cycles[axis] = 0;
-            } else if ((++s_wait_cycles[axis] % 1000u) != 0u) {
-                return;
-            }
-            LOG(LOG_LEVEL_WARN,
-                "轴槽 %d 位置请求等待使能/模式（正常过渡，已限频）：code=%d drive=%d "
-                "mode=%d/%d block=0x%x cmd=%.4f act=%.4f",
-                (int)slot, code, (int)a.drive_state,
-                (int)a.actual_mode, (int)a.target_mode,
-                (unsigned)a.motion_block_reasons, a.command_pos, a.actual_pos);
-            return;
-        }
-        s_wait_code[axis] = 0;
+    /* BUSY/未使能/模式不匹配可能只是跨拍交接。连续 1000 拍仍被拒才打印一次，
+     * 包括轴已使能后的旧拒绝；避免上一拍 BUSY 被本拍 drive=5 误报为 ERROR。
+     * HAL 执行错误和其他错误不受此等待影响，仍立即诊断。 */
+    const bool transient = snapshot_valid && !execution_failure &&
+        (code == HAL_ERROR_NOT_ENABLED || code == HAL_ERROR_BUSY ||
+         code == HAL_ERROR_MODE_MISMATCH);
+    if (transient) {
+        if (s_wait_cycles[axis] < 1000u) ++s_wait_cycles[axis];
+        if (s_wait_cycles[axis] < 1000u || s_wait_reported[axis]) return;
+        s_wait_reported[axis] = true;
+        LOG(LOG_LEVEL_WARN,
+            "轴槽 %d 位置请求持续未受理：code=%d drive=%d mode=%d/%d "
+            "block=0x%x cmd=%.4f act=%.4f",
+            (int)slot, code, (int)a.drive_state, (int)a.actual_mode,
+            (int)a.target_mode, (unsigned)a.motion_block_reasons,
+            a.command_pos, a.actual_pos);
+        return;
     }
+    s_wait_cycles[axis] = 0;
+    s_wait_reported[axis] = false;
     if (code == s_last[axis]) return;
     s_last[axis] = code;
     if (code) {

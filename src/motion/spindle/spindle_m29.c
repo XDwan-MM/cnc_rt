@@ -486,7 +486,8 @@ static bool orient_position_preserved(const HalAxisSnapshot *a)
      * 该式对 set_pos 不变（actual 与 offset 同步平移），因此判失败即真实位置
      * 在 CSV→CSP 交接期间发生了变化；失败时把实际量打出来供现场判读。 */
     const double physical = isfinite(a->coordinate_offset) ? a->actual_pos - a->coordinate_offset : NAN;
-    if (!g_spindle.m29_orient_reference_valid)
+    /* 中途下使能后，定向参考不能约束重新使能及对齐过程的位置。 */
+    if (!g_spindle.m29_orient_reference_valid || g_spindle.m29_enable_interrupted)
         return true;
     if (isfinite(physical) && fabs(physical - g_spindle.m29_orient_reference) <= M29_ORIENT_POSITION_TOL)
         return true;
@@ -529,7 +530,7 @@ static void update_alignment(void)
             return;
         }
         g_spindle.m29_expected_offset = a.coordinate_offset;
-        /* 不要求反馈在请求后完全不动，仍保留物理位置连续性保护。 */
+        /* 无下使能的定向交接仍检查连续性；有下使能时依靠对齐、停稳条件收口。 */
         if (rt_hal_request_axis_pos(RT_HAL_AXIS_SP, 0) != HAL_OK)
             prepare_failed("保持目标被拒绝");
         else
@@ -576,17 +577,6 @@ static void update_csp_preparation(void)
     const bool feedback_valid = read_feedback(&a);
     if (!feedback_valid || a.actual_mode != HAL_AXIS_MODE_CSP || fabs(a.actual_speed_rpm) > M29_ZERO_RPM)
         return;
-    if (g_spindle.m29_orient_reference_valid && g_spindle.m29_enable_interrupted)
-    {
-        /* 下使能期间允许转动；从重新使能后的物理位置开始保护对齐阶段。 */
-        if (!isfinite(a.coordinate_offset) || !isfinite(a.actual_pos - a.coordinate_offset))
-        {
-            prepare_failed("CSP位置参考无效");
-            return;
-        }
-        g_spindle.m29_orient_reference = a.actual_pos - a.coordinate_offset;
-        g_spindle.m29_enable_interrupted = false;
-    }
     if (!orient_position_preserved(&a))
     {
         prepare_failed("定向位置在切CSP后发生偏移");

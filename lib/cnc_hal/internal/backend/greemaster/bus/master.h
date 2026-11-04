@@ -42,7 +42,7 @@ const char* Master_StartupError(void);
  * @return 从站数。
  */
 int Master_SlaveCount(void);
-/* 已确认的零基位置；-1 未知，-2 为面板断联但位置需由配置确定。 */
+/* 3-1-2 错误的 SDK 零基站位；-1 表示未知或不适用。 */
 int Master_LostSlave(void);
 
 /**

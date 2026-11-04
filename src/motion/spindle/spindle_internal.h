@@ -148,7 +148,7 @@ typedef struct
     bool m29_hold_submitted;          /* 设零确认后已提交 CSP 零位置保持请求 */
     double m29_expected_offset;       /* PDO 确认设零成功后的实际偏置，仅作诊断 */
     bool m29_orient_reference_valid;  /* 仅带定向流程校验切模式前后的位置连续性 */
-    bool m29_enable_interrupted;      /* 参考建立后发生过下使能，需重新建立参考 */
+    bool m29_enable_interrupted;      /* 定向参考建立后曾下使能，本次不比较定向位置连续性 */
     double m29_orient_reference;      /* 切模式前的反馈位置，不含软件偏置 */
     double m29_settle_min, m29_settle_max; /* 稳定窗口内反馈位置的极值，单位度 */
     uint32_t m29_stop_stable_cycles; /**< M29 停稳判定连续成立的控制周期数，周期为 1 ms。 */

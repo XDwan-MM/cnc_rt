@@ -1,9 +1,9 @@
 同步自   : /home/mxh/NCProject/cnc_hal
-提交     : 397f7b7
-提交说明 : 修复：断联位置不可靠时保持未知，不再误报第一个从站
-同步时间 : 2026-11-04T08:41:41+08:00
+提交     : 02c99c4
+提交说明 : 修复从站断联错误位置上报
+同步时间 : 2026-11-04T10:28:45+08:00
 静态库源 : /home/mxh/NCProject/cnc_hal/build/all/libcnc_hal.a
-静态库   : libcnc_hal.a sha256=51fb24c5029796510ffca45723991296bf6cbbaf3d8e345fed888a4345710d1c
+静态库   : libcnc_hal.a sha256=f4a8b755eec185d1616687e8d617ab9dd1040cec2566aa2d391bdb65eac5e618
 ABI      : 10u.0u
 公共头   : 5 个
 内部头   : 9 个

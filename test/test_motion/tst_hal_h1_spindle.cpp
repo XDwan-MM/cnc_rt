@@ -445,13 +445,33 @@ TEST_F(HalH1SpindleTest, M29MovingFeedbackCannotPassSettlingWindow) {
     EXPECT_EQ(g_spindle.m29_phase,SPINDLE_M29_ORIENT_SETTLING);
     frames(100);EXPECT_TRUE(spindle_m29_is_ready());
 }
-TEST_F(HalH1SpindleTest, M29RejectsPositionShiftAfterRezero) {
+TEST_F(HalH1SpindleTest, M29RejectsShiftWhenEnableWasNotInterrupted) {
     ASSERT_TRUE(spindle_request_m29());
     for(int i=0;i<150 && g_spindle.m29_phase!=SPINDLE_M29_ALIGNING;++i)frames(1);
     ASSERT_EQ(g_spindle.m29_phase,SPINDLE_M29_ALIGNING);
+    /* 定向参考有效且未发生下使能时，连续性保护仍然生效。 */
+    g_spindle.m29_enable_interrupted=false;
     h1_test_spindle_feedback_delta(2,0);frames(1);
     EXPECT_TRUE(spindle_m29_has_error());
     EXPECT_FALSE(motion_spindle_position_active());
+}
+TEST_F(HalH1SpindleTest, M29DoesNotCheckOrientationPositionAfterReenable) {
+    ASSERT_TRUE(spindle_request_m29());
+    for(int i=0;i<150 && g_spindle.m29_phase!=SPINDLE_M29_ALIGNING;++i)frames(1);
+    ASSERT_EQ(g_spindle.m29_phase,SPINDLE_M29_ALIGNING);
+    ASSERT_TRUE(g_spindle.m29_enable_interrupted);
+    for(int i=0;i<10 && !g_spindle.m29_hold_submitted;++i)frames(1);
+    ASSERT_TRUE(g_spindle.m29_hold_submitted);
+    /* 复现现场：对齐阶段变化超过 0.5 度且转速尚未降下来。 */
+    for(int i=0;i<20;++i) {
+        h1_test_spindle_feedback_delta(.7031,37);frames(1);
+        EXPECT_FALSE(spindle_m29_has_error());
+        EXPECT_EQ(g_spindle.m29_phase,SPINDLE_M29_ALIGNING);
+        EXPECT_FALSE(spindle_m29_is_ready()); /* 不以放宽检查代替停稳 */
+    }
+    frames(60);
+    EXPECT_FALSE(spindle_m29_has_error());
+    EXPECT_TRUE(spindle_m29_is_ready());
 }
 TEST_F(HalH1SpindleTest, M29RebasesPositionAfterDisableAndReenable) {
     ASSERT_TRUE(spindle_request_m29());
