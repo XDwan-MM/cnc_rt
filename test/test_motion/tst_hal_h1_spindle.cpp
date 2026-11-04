@@ -26,6 +26,7 @@ extern "C" void h1_test_spindle_speed_failure(void);
 extern "C" void h1_test_spindle_speed_result(int);
 extern "C" void h1_test_spindle_rejection(int,int);
 extern "C" void rt_test_force_spindle_enable_wait(void);
+extern "C" void rt_test_reset_oe_state(void);
 extern "C" void h1_test_override_spindle_drive_state(int);
 extern "C" void h1_test_inject_axis_fault_snapshot(int);
 extern "C" uint32_t h1_test_pending_fault_reset_mask(void);
@@ -41,6 +42,7 @@ protected:
         ASSERT_TRUE(testEnvReady());
         saved_block=cycle_tp->plan_block;
         rt_hal_shutdown();
+        rt_test_reset_oe_state(); /* 每个用例模拟独立 RT 进程启动 */
         std::memset(rt_data->sys_state,0,sizeof(rt_data->sys_state));
         rt_data->nc_event=SYS_EVENT_NONE;
         reset_data_reset();
@@ -486,8 +488,11 @@ TEST_F(HalH1SpindleTest, UnexpectedEnableLossDoesNotReplayOldEnable) {
     runZero();ASSERT_EQ(h1_test_force_disable(),0);frames(15);
     EXPECT_NE(axis().drive_state,HAL_DRIVE_OPERATION_ENABLED);
     EXPECT_EQ(axis().execution_error.category,HAL_ISSUE_AXIS_CONDITION);
-    ASSERT_TRUE(spindle_request_program_run(SPINDLE_CW,0));frames(20);
-    EXPECT_EQ(axis().drive_state,HAL_DRIVE_OPERATION_ENABLED); /* fresh business may explicitly recover */
+    (void)spindle_request_program_run(SPINDLE_CW,0);frames(20);
+    EXPECT_NE(axis().drive_state,HAL_DRIVE_OPERATION_ENABLED); /* 新业务不能代替复位 */
+    rt_drive_request_fault_reset();frames(10);
+    ASSERT_TRUE(spindle_request_program_run(SPINDLE_CW,0));frames(40);
+    EXPECT_EQ(axis().drive_state,HAL_DRIVE_OPERATION_ENABLED);
 }
 TEST_F(HalH1SpindleTest, FaultResetLeavesHealthyFeedAxesEnabled) {
     for(int i=0;i<3;++i)rt_data->axis_data[i].status.is_disable=false;

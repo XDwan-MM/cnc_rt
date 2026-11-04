@@ -59,7 +59,7 @@ const char *mode_names[] = {"编辑", "AUTO", "MDI", "DNC", "手轮", "手动", 
 void emcmotTrajPlan()
 {
     // 主站未进入OP或当前周期通信失败时，跳过本周期运动计算。
-    if (op_flag == 0)
+    if (__atomic_load_n(&op_flag, __ATOMIC_ACQUIRE) == 0)
     {
         return;
     }

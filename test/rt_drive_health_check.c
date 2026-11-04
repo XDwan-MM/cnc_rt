@@ -21,11 +21,16 @@ static int unreadable = -1;
 static int alarms[256], reset_requests, settled, reset_timeout, request_error;
 static uint32_t reset_request_mask, observed_wait_mask;
 static int enabled[4], estops;
+static int mock_oe_loss[4], alarm_drop, alarm_attempts, rebuild_count;
+void emcmot_rebuild_axis_position_from_feedback(int axis) {
+    ++rebuild_count;
+    rt_data->axis_data[axis].motor_cmd_pos=rt_data->axis_data[axis].motor_act_pos;
+}
 EVENT_QUEUE *event_queue;
 int update_pos_flag;
 
 int setAlarm(int type, int level, int id)
-{ (void)type; (void)level; alarms[id] = 1; return 0; }
+{ (void)type; (void)level; if(id==132) { ++alarm_attempts; if(alarm_drop) return -1; } alarms[id] = 1; return 0; }
 int delAlarm(int type, int level, int id)
 { (void)type; (void)level; alarms[id] = 0; return 0; }
 int cleanAllAlarm(int type, int level)
@@ -58,15 +63,21 @@ bool reset_spindle_torque_allowed(bool ordinary) { return ordinary; }
 bool reset_spindle_business_allowed(void) { return true; }
 bool reset_spindle_disable_needed(void) { return false; }
 void reset_spindle_disable_submitted(int rc) { (void)rc; }
-static unsigned enable_calls;
+static unsigned enable_calls, axis_enable_calls[4];
 int rt_hal_request_axis_enable(RtHalAxisSlot slot, int on)
-{ ++enable_calls;enabled[slot] = on;feedback[slot].enabled=on;return HAL_OK; }
+{ ++enable_calls; ++axis_enable_calls[slot]; enabled[slot] = on;feedback[slot].enabled=on;return HAL_OK; }
 int rt_hal_clear_execution_error(RtHalAxisSlot slot) { (void)slot; return HAL_OK; }
 int rt_hal_request_axis_mode(RtHalAxisSlot slot, HalAxisMode mode) { (void)slot;(void)mode;return HAL_OK; }
 int rt_hal_axis_snapshot(RtHalAxisSlot slot, HalAxisSnapshot* out) {
     if ((int)slot==unreadable)return HAL_ERROR_NOT_RUNNING;
     memset(out,0,sizeof(*out));
     out->feedback_valid=HAL_FEEDBACK_STATUS|HAL_FEEDBACK_MODE;
+    if(feedback[slot].position_valid) out->feedback_valid |= HAL_FEEDBACK_POSITION;
+    out->actual_pos=feedback[slot].actual_pos;
+    if(mock_oe_loss[slot]) {
+        out->execution_error.category=HAL_ISSUE_AXIS_CONDITION;
+        out->execution_error.code=HAL_ERROR_NOT_ENABLED;
+    }
     out->drive_state=feedback[slot].enabled?HAL_DRIVE_OPERATION_ENABLED:HAL_DRIVE_READY;
     out->actual_mode=out->target_mode=HAL_AXIS_MODE_CSP;
     out->mode_setting_state=HAL_MODE_SETTING_READY;
@@ -109,6 +120,7 @@ int main(void)
     memset(&data, 0, sizeof(data));
     for (int i = 0; i < RT_HAL_AXIS_COUNT; ++i) {
         feedback[i].error_code_valid = 1;
+        feedback[i].position_valid = 1;
         feedback[i].raw_status = 0x27;
     }
     publish();
@@ -186,10 +198,13 @@ int main(void)
     puts("PASS: completed enable loss does not automatically re-enable");
     feedback[0].error_code=0xDEAD;publish();hal_axis_intent_poll();
     assert(enabled[0]==0);
-    before=enable_calls;feedback[0].error_code=0;publish();
-    for(int n=0;n<10;++n)hal_axis_intent_poll();
-    assert(enable_calls==before && enabled[0]==0);
-    puts("PASS: drive feedback clearing is not a new enable authorization");
+    before=enable_calls; feedback[0].error_code=0; feedback[0].actual_pos=5.0;
+    data.axis_data[0].motor_cmd_pos=1.0;
+    const int old_rebuilds=rebuild_count;
+    publish(); for(int n=0;n<10;++n)hal_axis_intent_poll();
+    assert(enable_calls>before && enabled[0]==1);
+    assert(rebuild_count>old_rebuilds && data.axis_data[0].motor_cmd_pos==5.0);
+    puts("PASS: residual code disable realigns to new feedback before re-enable");
 
     feedback[0].error_code = 0xFF43;
     publish();
@@ -252,6 +267,38 @@ int main(void)
     alarm_poll_hal();
     assert(s_reset_waiting && reset_request_mask==(1u<<1));
     settled=1; alarm_poll_hal(); assert(!s_reset_waiting);
+    assert(s_pos_realign[1]); /* 先不可读、后来才发现故障也要重建位置 */
     puts("PASS: multiple faults and unreadable feedback becoming a fault");
+
+    for(int i=0;i<4;++i) { feedback[i].raw_status=0x27; feedback[i].error_code=0; }
+    publish(); s_reset_waiting=s_reset_failed=0;
+    data.sys_state[SYS_ESTOP_INPUT]=data.sys_state[SYS_IS_ESTOP_ACTIVE]=0;
+    feedback[0].enabled=0; s_enable_stage[0]=ENABLE_COMPLETE; s_enable_intent[0]=1;
+    mock_oe_loss[0]=1; alarm_drop=1; alarm_attempts=0;
+    alarm_poll_hal(); assert((s_oe_latched&1u) && alarm_attempts==1 && !alarms[132]);
+    alarm_drop=0; alarm_poll_hal(); assert(alarm_attempts==2 && alarms[132]);
+    data.axis_data[0].status.is_disable=1; hal_axis_intent_poll();
+    data.axis_data[0].status.is_disable=0; alarm_axis_mode_requested(0,HAL_AXIS_MODE_CSP);
+    before=axis_enable_calls[0]; for(int n=0;n<5;++n)hal_axis_intent_poll();
+    assert(axis_enable_calls[0]==before && (s_oe_latched&1u));
+    alarm_reset_latch_clear(); assert(s_oe_latched&1u); /* 通用重置入口不能绕过 HMI 复位 */
+    mock_oe_loss[0]=0; data.nc_event=SYS_EVENT_HMI_RESET; handle_alarm_cmd();
+    assert(!(s_oe_latched&1u)); alarm_poll_hal();
+    for(int n=0;n<5;++n)hal_axis_intent_poll();
+    assert(axis_enable_calls[0]>before);
+    puts("PASS: unexpected enable loss stays locked until HMI reset; alarm retries");
+
+    s_pos_realign[0]=1; s_enable_stage[0]=ENABLE_MODE_WAIT; s_enable_mode[0]=HAL_AXIS_MODE_CSP;
+    s_enable_intent[0]=1; feedback[0].enabled=0; feedback[0].position_valid=0;
+    before=axis_enable_calls[0]; hal_axis_intent_poll();
+    assert(axis_enable_calls[0]==before && s_enable_stage[0]==ENABLE_FAILED && s_pos_realign[0]);
+    puts("PASS: invalid position feedback prevents re-enable");
+
+    data.sys_state[SYS_IS_READY]=1; data.axis_data[AXIS_SP].status.spindle_wants_torque=1;
+    f[1]|=1u<<7; f[0]|=1u<<6; rt_drive_publish_bus_fault();
+    assert(!data.sys_state[SYS_IS_READY] && data.sys_state[SYS_IS_ALARMING]);
+    assert(!data.axis_data[AXIS_SP].status.spindle_wants_torque);
+    assert(!(f[1]&(1u<<7)) && !(f[0]&(1u<<6)) && (f[1]&1));
+    puts("PASS: bus fault revokes ready and feedback-health indications");
     return 0;
 }

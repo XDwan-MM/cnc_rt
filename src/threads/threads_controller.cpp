@@ -207,6 +207,9 @@ void* pdo_thread_func(void*) {
     /* 正常停止（rc == HAL_ERROR_STOPPED，即已请求停止）不算报警：
      * 否则每次正常退出都会留下报警 122，把真正的故障淹掉。 */
     if (rc && rc != HAL_ERROR_STOPPED) alarm_report_hal_error(rc);
+    if (rc == HAL_ERROR_BUS && !__atomic_load_n(&thread_exit_flag, __ATOMIC_ACQUIRE)) {
+        rt_drive_publish_bus_fault();
+    }
     /* 正常停止 = 主线程已置 thread_exit_flag；除此之外任何退出（哪怕 rc 是 0 或
      * STOPPED）都必须告诉主线程：本线程不再 post 信号量，只能由主线程统一收尾。 */
     if (!__atomic_load_n(&thread_exit_flag, __ATOMIC_ACQUIRE)) {

@@ -46,6 +46,8 @@ void alarm_axis_mode_requested(int slot, int mode);
  * 会被 PDO 线程直接调用：周期循环一退出，运动线程就卡在 sem_wait 上，
  * alarm_poll_hal 不再运行，只有发现错误的一方自己能把它报出去。 */
 void alarm_report_hal_error(int32_t rc);
+/* 仅在 PDO 故障退出、业务周期停下之后调用。 */
+void rt_drive_publish_bus_fault(void);
 
 /* 报警事件触发的故障复位入口：只发请求并记录等待状态，
  * 不清运行轨迹，也不结束 NC 复位。 */

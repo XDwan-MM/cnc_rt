@@ -232,7 +232,8 @@ int main() {
                 /* 定位到具体从站后，撤掉笼统的 120（HAL 总线错误）：
                  * 120 由 PDO 线程先入表，两条并存时界面会先显示它，
                  * 反而看不到更具体的“第 N 个从站断连”。 */
-                delAlarm(ALARM_ETHCAT_SV, ALARM_ERROR, 120);
+                if (set_rc == 0 || set_rc == -8) /* 成功或已存在才撤掉兜底报警 */
+                    delAlarm(ALARM_ETHCAT_SV, ALARM_ERROR, 120);
                 if (reported_slave != slave) {
                     if (reported_slave >= 0)
                         delAlarm(ALARM_ETHCAT_SV, ALARM_ERROR, 200 + reported_slave);
@@ -241,6 +242,9 @@ int main() {
                         slave + 1, slave, alarm_no, set_rc);
                     reported_slave = slave;
                 }
+            } else {
+                /* 位置未确认时持续保留总线报警，也涵盖报警表暂满后的重试。 */
+                setAlarm(ALARM_ETHCAT_SV, ALARM_ERROR, 120);
             }
         }
         sleep(1);
@@ -264,7 +268,8 @@ int main() {
                 /* 定位到具体从站后，撤掉笼统的 120（HAL 总线错误）：
                  * 120 由 PDO 线程先入表，两条并存时界面会先显示它，
                  * 反而看不到更具体的“第 N 个从站断连”。 */
-                delAlarm(ALARM_ETHCAT_SV, ALARM_ERROR, 120);
+                if (set_rc == 0 || set_rc == -8) /* 成功或已存在才撤掉兜底报警 */
+                    delAlarm(ALARM_ETHCAT_SV, ALARM_ERROR, 120);
                 if (reported_slave != slave) {
                     if (reported_slave >= 0)
                         delAlarm(ALARM_ETHCAT_SV, ALARM_ERROR, 200 + reported_slave);
@@ -273,6 +278,9 @@ int main() {
                         slave + 1, slave, alarm_no, set_rc);
                     reported_slave = slave;
                 }
+            } else {
+                /* 位置未确认时持续保留总线报警，也涵盖报警表暂满后的重试。 */
+                setAlarm(ALARM_ETHCAT_SV, ALARM_ERROR, 120);
             }
         }
         sleep(1);

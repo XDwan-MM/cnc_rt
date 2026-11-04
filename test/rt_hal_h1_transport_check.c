@@ -155,6 +155,7 @@ int main(void) {
     s_req_enable_dirty[RT_HAL_AXIS_SP]=1;
     s_opened=0; /* 模拟驱动层收帧失败 */
     CHECK(rt_hal_pdo_loop()==HAL_ERROR_BUS);
+    CHECK(__atomic_load_n(&op_flag,__ATOMIC_ACQUIRE)==0);
     CHECK(rt_hal_cycle_error()==HAL_ERROR_BUS);
     CHECK(!s_snap_valid && !s_io_ready && !s_snap_fresh[RT_HAL_AXIS_SP]);
     CHECK(!s_req_enable_dirty[RT_HAL_AXIS_SP]);

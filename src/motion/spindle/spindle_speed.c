@@ -67,8 +67,8 @@ void spindle_internal_fail_velocity(int result)
     HalAxisSnapshot axis;
     const int snap_rc=spindle_hal_snapshot(&axis);
     LOG(LOG_LEVEL_ERR,
-        "主轴速度业务失败：rc=%d snap=%d mode=%d/%d drive=%d block=0x%x rpm=%.1f planner=%.1f/%.1f run=%d orient=%d pending=%d m29=%d reset_lock=%d rej=%d/%d exec=%d/%d",
-        result,snap_rc,
+        "主轴速度业务失败：rc=%d snap=%d ctl=%d mode=%d/%d drive=%d block=0x%x rpm=%.1f planner=%.1f/%.1f run=%d orient=%d pending=%d m29=%d reset_lock=%d rej=%d/%d exec=%d/%d",
+        result,snap_rc,snap_rc==HAL_OK?(int)axis.control_state:-1,
         snap_rc==HAL_OK?(int)axis.actual_mode:-1,snap_rc==HAL_OK?(int)axis.target_mode:-1,
         snap_rc==HAL_OK?(int)axis.drive_state:-1,
         snap_rc==HAL_OK?(unsigned)axis.motion_block_reasons:0u,
@@ -147,6 +147,13 @@ bool spindle_internal_update_velocity(void)
      * EtherCAT 60FF 由主站发送周期统一完成。
      */
     g_spindle_hal.target_velocity = planner->current_vel;
+    /* 定向类动作（定向/保持/退出/交接）在途时，写速度必被 HAL 以 BUSY 拒；
+     * 这是过渡态而非业务故障（现场 M19/M03/G4 循环中按复位就撞过）。本拍不写，
+     * 等定向动作收口后再写；其他动作（使能/模式）保持原逻辑，不遮蔽拒绝。 */
+    if(axis.control_state==HAL_CONTROL_ORIENTING||
+       axis.control_state==HAL_CONTROL_ORIENT_HOLD||
+       axis.control_state==HAL_CONTROL_EXITING_ORIENT||
+       axis.control_state==HAL_CONTROL_ORIENT_HANDOVER_UNKNOWN)return true;
     const int rc=rt_hal_request_spindle_speed_tracked(RT_HAL_AXIS_SP,
                                        fabs((double)g_spindle_hal.target_velocity),
                                        g_spindle_hal.target_velocity > 0 ? 1 :

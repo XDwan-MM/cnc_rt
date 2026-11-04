@@ -207,13 +207,13 @@ int rt_hal_start(char* err, uint32_t err_len) {
     /* emcmotTrajPlan() 用 op_flag 做总门控。
          * "主站已经进 OP"这件事只有这里知道，所以置位不能提前到
          * hal_context_start 返回之前。 */
-    op_flag = 1;
+    __atomic_store_n(&op_flag, 1, __ATOMIC_RELEASE);
     return HAL_OK;
 }
 void rt_hal_shutdown(void) {
     if (!s_ctx) return;
 
-    op_flag = 0;   /* 先关总门控：避免还在跑的周期继续按旧状态下发指令 */
+    __atomic_store_n(&op_flag, 0, __ATOMIC_RELEASE); /* 先关总门控 */
 
     /* 本函数不 join PDO 线程。调用方必须先让周期循环退出，
          * 否则这里会拆掉别人还在使用的 context。 */
@@ -449,6 +449,7 @@ int rt_hal_pdo_loop(void) {
         s_cycle_error = rc;
         log_hs("周期循环", -1, rc);
     }
+    __atomic_store_n(&op_flag, 0, __ATOMIC_RELEASE);
     s_snap_valid=s_io_ready=0;
     memset(s_snap_fresh,0,sizeof(s_snap_fresh));
     for(int i=0;i<RT_HAL_AXIS_COUNT;++i)clear_axis_requests(i);

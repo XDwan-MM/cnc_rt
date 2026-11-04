@@ -19,6 +19,7 @@
 #include "../common/debug_mode.h"
 #include <alarmapi.h>
 #include <hmisysapi.h>
+#include <regapi.h>
 #include <time.h>
 #include <math.h>
 
@@ -85,6 +86,18 @@ void alarm_report_hal_error(int32_t rc) {
     setAlarm(ALARM_ETHCAT_SV, ALARM_ERROR, id);
 }
 
+/* PDO 已退出后运动/PLC 不再刷新，撤销总线相关就绪指示。
+ * 位置和速度保留最后值，由总线报警说明反馈已失效，不伪造零速。 */
+void rt_drive_publish_bus_fault(void) {
+    if (!rt_data) return;
+    rt_data->sys_state[SYS_IS_READY] = false;
+    rt_data->sys_state[SYS_IS_ALARMING] = true;
+    rt_data->axis_data[AXIS_SP].status.spindle_wants_torque = false;
+    clearRegBit(REG_F, 1, 7);
+    clearRegBit(REG_F, 0, 6);
+    setRegBit(REG_F, 1, 0);
+}
+
 /* 是否有一笔故障复位正在等收口。
  * 由 rt_drive_request_fault_reset() 置起，收口或超时后清掉。 */
 static int s_reset_waiting;
@@ -98,6 +111,15 @@ static struct timespec s_reset_started;
 /* 唯一的正常业务力矩需求。业务侧只改这里；
  * rt_data 里的 spindle_wants_torque 是只读投影，不参与任何决策。 */
 static bool s_spindle_torque_demand;
+/* 独立于使能状态机：只有明确的 HMI 故障复位才能解除意外掉使能锁。 */
+static uint32_t s_oe_latched;
+static uint8_t s_oe_reported[RT_HAL_AXIS_COUNT];
+#ifdef UNIT_TEST
+void rt_test_reset_oe_state(void) {
+    s_oe_latched=0;
+    for (int i=0;i<RT_HAL_AXIS_COUNT;++i) s_oe_reported[i]=0;
+}
+#endif
 /* 业务侧出现过"撤力矩→再要力矩"的边沿。只靠每拍比较 intent 会漏掉同一拍内的
  * 翻转（停车收口撤力矩、紧接着 M19 又要力矩），导致使能管理停在 COMPLETE 而
  * 硬件其实已经下使能。该标志强制下一次 poll 重新走一次完整序列。 */
@@ -113,7 +135,8 @@ bool alarm_spindle_request_torque(bool needed)
     }
 
     /*===2. 授予要过闸：复位状态、急停、轴屏蔽、轴故障，缺一不可===*/
-    if (!reset_spindle_business_allowed() || s_reset_waiting || s_reset_failed ||
+    if ((s_oe_latched & (1u << RT_HAL_AXIS_SP)) ||
+        !reset_spindle_business_allowed() || s_reset_waiting || s_reset_failed ||
         rt_data->sys_state[SYS_ESTOP_INPUT] || rt_data->sys_state[SYS_IS_ESTOP_ACTIVE] ||
         rt_data->axis_data[AXIS_SP].status.is_disable ||
         rt_data->axis_data[AXIS_SP].status.is_error) return false;
@@ -209,6 +232,7 @@ void rt_test_force_spindle_enable_wait(void) {
 #endif
 void alarm_axis_mode_requested(int slot,int mode) {
     if(slot<0||slot>=RT_HAL_AXIS_COUNT)return;
+    if(s_oe_latched & (1u << slot)) return;
     s_enable_mode[slot]=mode;
     s_enable_stage[slot]=ENABLE_MODE_NEXT;
 }
@@ -265,6 +289,12 @@ void hal_axis_intent_poll(void) {
             continue;
         }
 
+        /* 掉使能锁不受屏蔽开关、模式请求或意图边沿影响。 */
+        if(s_oe_latched & (1u << i)) {
+            s_enable_stage[i]=ENABLE_FAILED;
+            continue;
+        }
+
         /*===7. 反馈报故障：下使能；只有真的 Fault 位才锁粘滞失败===*/
         if(rt_data->axis_data[i].status.is_error && !off) {
             /* 区分两种“报错”：
@@ -275,7 +305,10 @@ void hal_axis_intent_poll(void) {
             RtHalAxisStatus st;
             const int unreadable=(rt_hal_axis_status(slot,&st)!=HAL_OK);
             const int real_fault=unreadable||((st.raw_status&0x0008U)!=0);
-            if(s_enable_stage[i]!=ENABLE_FAILED)(void)rt_hal_request_axis_enable(slot,0);
+            if(s_enable_stage[i]!=ENABLE_FAILED) {
+                s_pos_realign[i]=1; /* 故障码引发的撤力矩同样可能产生漂移。 */
+                (void)rt_hal_request_axis_enable(slot,0);
+            }
             if(real_fault) {
                 s_pos_realign[i]=1;          /* 故障强制下使能，恢复前要重新对齐位置 */
                 enable_mark_failed(i,"轴反馈故障",0);
@@ -357,8 +390,13 @@ void hal_axis_intent_poll(void) {
              * SWITCH_ON → ENABLE_OP 好几拍，而且每一拍都会先把 0x607A
              * 预置成当前实际位置再发控制字，目标天然先于使能生效。 */
             if(s_pos_realign[i] && slot!=RT_HAL_AXIS_SP) {
+                if (!(axis.feedback_valid & HAL_FEEDBACK_POSITION) || !isfinite(axis.actual_pos)) {
+                    enable_mark_failed(i,"重新使能前位置反馈无效",HAL_ERROR_NOT_RUNNING);
+                    continue;
+                }
                 const double cmd=rt_data->axis_data[i].motor_cmd_pos;
-                const double act=rt_data->axis_data[i].motor_act_pos;
+                const double act=axis.actual_pos;
+                rt_data->axis_data[i].motor_act_pos=act;
                 emcmot_rebuild_axis_position_from_feedback(i);
                 s_pos_realign[i]=0;
                 LOG(LOG_LEVEL_INFO,
@@ -496,22 +534,24 @@ static void alarm_poll_axis_not_enabled(void) {
  * 这类事件必须锁成“需复位”：否则松开急停后可能直接重新上使能 → 飞车风险。
  * 报警用现有的 ETHCAT_SV 132（轴未使能或运动许可未就绪）。 */
 static void alarm_poll_oe_loss(void) {
-    static uint8_t s_reported[RT_HAL_AXIS_COUNT];
     for(int i=0;i<RT_HAL_AXIS_COUNT;++i) {
         HalAxisSnapshot a;
         if(rt_hal_axis_snapshot((RtHalAxisSlot)i,&a)!=HAL_OK) continue;
         const int oe_lost = (a.execution_error.category==HAL_ISSUE_AXIS_CONDITION &&
                              a.execution_error.code==HAL_ERROR_NOT_ENABLED);
-        if(!oe_lost) { s_reported[i]=0; continue; }
-        if(s_reported[i]) continue;
-        s_reported[i]=1;
-        s_enable_stage[i]=ENABLE_FAILED;   /* 粘滞：只有显式复位能解除 */
-        s_pos_realign[i]=1;
-        setAlarm(ALARM_ETHCAT_SV, ALARM_ERROR, 132);
-        LOG(LOG_LEVEL_ERR,
-            "轴槽 %d 意外退出使能（sw=0x%04X 0x603F=0x%08X）：已锁为需复位，松开急停不会自动上使能",
-            i,(unsigned)a.raw_status,(unsigned)a.drive_error_code);
+        if(!oe_lost) { s_oe_reported[i]=0; continue; }
+        if(!s_oe_reported[i]) {
+            s_oe_reported[i]=1;
+            s_oe_latched |= 1u << i;
+            s_enable_stage[i]=ENABLE_FAILED;
+            s_pos_realign[i]=1;
+            LOG(LOG_LEVEL_ERR,
+                "轴槽 %d 意外退出使能（sw=0x%04X 0x603F=0x%08X）：已锁为需复位",
+                i,(unsigned)a.raw_status,(unsigned)a.drive_error_code);
+        }
     }
+    /* 包括报警表暂满、报警被外部清除的情况：锁仍在就持续发布。 */
+    if(s_oe_latched) setAlarm(ALARM_ETHCAT_SV, ALARM_ERROR, 132);
 }
 
 /* 每拍检查 HAL 侧状态并推进复位等待。由运动线程调用：
@@ -539,6 +579,7 @@ void alarm_poll_hal() {
             continue;
         s_reset_unknown_mask &= ~bit;
         if ((st.raw_status & 0x0008U) || (st.error_code_valid && st.error_code != 0)) {
+            s_pos_realign[i]=1;
             const int rc = rt_hal_request_fault_reset((RtHalAxisSlot)i);
             if (rc == HAL_OK) s_reset_axis_mask |= bit;
             else { s_reset_request_failed = true; alarm_report_hal_error(rc); }
@@ -596,6 +637,8 @@ void rt_drive_request_fault_reset(void)
     s_reset_failed = 0;
     s_reset_axis_mask = s_reset_unknown_mask = 0;
     s_reset_request_failed = false;
+    /* 此入口仅由 HMI 故障复位触发；普通急停/模式转换不得解除。 */
+    s_oe_latched = 0;
 
     /*===2. 清业务力矩需求与使能状态机，避免旧意图在复位后被沿用===*/
     (void)alarm_spindle_request_torque(false);
@@ -615,6 +658,9 @@ void rt_drive_request_fault_reset(void)
             const int rc = rt_hal_request_fault_reset((RtHalAxisSlot)i);
             if (rc == HAL_OK) s_reset_axis_mask |= 1u << i;
             else { s_reset_request_failed = true; alarm_report_hal_error(rc); }
+            /* HAL 收到故障复位会对该轴 cancel_targets + invalidate_mode + 下使能；
+             * 它可能当时正在运动，恢复后必须重新对齐位置，否则会冲回旧目标。 */
+            s_pos_realign[i]=1;
         }
     }
 
